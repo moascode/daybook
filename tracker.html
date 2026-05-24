@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daybook — Project Tracker</title>
+  <style>
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface-2:   #21262d;
+      --border:      #30363d;
+      --text:        #e6edf3;
+      --muted:       #7d8590;
+      --green:       #1D9E75;
+      --green-dim:   rgba(29, 158, 117, 0.12);
+      --green-glow:  rgba(29, 158, 117, 0.25);
+      --amber:       #d97706;
+      --amber-dim:   rgba(217, 119, 6, 0.12);
+      --blue:        #378ADD;
+      --blue-dim:    rgba(55, 138, 221, 0.12);
+      --purple:      #a78bfa;
+      --purple-dim:  rgba(167, 139, 250, 0.12);
+      --red:         #f85149;
+      --red-dim:     rgba(248, 81, 73, 0.12);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────── */
+    .sidebar {
+      width: 268px;
+      min-width: 268px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .sidebar-top {
+      padding: 24px 20px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      background: var(--green);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .logo-text {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 1px;
+    }
+
+    .overall-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .stat-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--green);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .overall-bar-wrap {
+      margin-top: 2px;
+    }
+
+    .overall-bar-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+
+    .bar {
+      height: 5px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.35s ease;
+    }
+
+    .phase-nav {
+      flex: 1;
+      padding: 10px 8px;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      padding: 10px 12px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12.5px;
+      transition: background 0.12s, color 0.12s;
+      text-decoration: none;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+    }
+
+    .nav-item:hover { background: var(--surface-2); color: var(--text); }
+
+    .nav-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+
+    .nav-item.s-complete   .nav-dot { background: var(--green); }
+    .nav-item.s-progress   .nav-dot { background: var(--amber); }
+    .nav-item.s-not-started .nav-dot { background: var(--border); }
+
+    .nav-name { flex: 1; }
+
+    .nav-pct {
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .nav-milestone {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .footer-note {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .reset-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .reset-btn:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── MAIN ───────────────────────────────── */
+    .main {
+      flex: 1;
+      padding: 36px 44px 80px;
+      max-width: 800px;
+    }
+
+    .intro-banner {
+      background: var(--green-dim);
+      border: 1px solid var(--green-glow);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .intro-icon { font-size: 20px; }
+    .intro-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .intro-desc { font-size: 13px; color: var(--muted); }
+
+    /* ── PHASE CARD ─────────────────────────── */
+    .phase-card {
+      margin-bottom: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      border-left: 3px solid var(--border);
+    }
+
+    .phase-card[data-type="action"]   { border-left-color: var(--amber); }
+    .phase-card[data-type="dev"]      { border-left-color: var(--blue); }
+    .phase-card[data-type="arch"]     { border-left-color: var(--green); }
+    .phase-card[data-type="ai"]       { border-left-color: var(--purple); }
+    .phase-card[data-type="cloud"]    { border-left-color: var(--green); }
+    .phase-card[data-type="advanced"] { border-left-color: var(--red); }
+
+    .phase-header {
+      padding: 18px 22px 14px;
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .phase-num {
+      width: 34px;
+      height: 34px;
+      border-radius: 7px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .phase-card[data-type="action"]   .phase-num { background: var(--amber-dim);  color: var(--amber);  border-color: var(--amber); }
+    .phase-card[data-type="ai"]       .phase-num { background: var(--purple-dim); color: var(--purple); border-color: var(--purple); }
+    .phase-card[data-type="cloud"]    .phase-num { background: var(--green-dim);  color: var(--green);  border-color: var(--green); }
+    .phase-card[data-type="advanced"] .phase-num { background: var(--red-dim);    color: var(--red);    border-color: var(--red); }
+    .phase-card.s-complete            .phase-num { background: var(--green-dim);  color: var(--green);  border-color: var(--green); }
+
+    .phase-meta { flex: 1; min-width: 0; }
+
+    .phase-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+
+    .phase-title { font-size: 15px; font-weight: 600; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 8px;
+      border-radius: 100px;
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .pill-action   { background: var(--amber-dim);  color: var(--amber); }
+    .pill-dev      { background: var(--blue-dim);   color: var(--blue); }
+    .pill-arch     { background: var(--green-dim);  color: var(--green); }
+    .pill-ai       { background: var(--purple-dim); color: var(--purple); }
+    .pill-cloud    { background: var(--green-dim);  color: var(--green); }
+    .pill-advanced { background: var(--red-dim);    color: var(--red); }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 500;
+      margin-left: auto;
+    }
+
+    .status-pill.s-not-started { background: var(--surface-2); color: var(--muted); }
+    .status-pill.s-progress    { background: var(--amber-dim); color: var(--amber); }
+    .status-pill.s-complete    { background: var(--green-dim); color: var(--green); }
+
+    .phase-desc {
+      font-size: 12.5px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .phase-prog-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .phase-bar { flex: 1; height: 3px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+    .phase-bar-fill { height: 100%; border-radius: 2px; transition: width 0.35s ease; }
+    .phase-card[data-type="action"]   .phase-bar-fill { background: var(--amber); }
+    .phase-card[data-type="dev"]      .phase-bar-fill { background: var(--blue); }
+    .phase-card[data-type="arch"]     .phase-bar-fill { background: var(--green); }
+    .phase-card[data-type="ai"]       .phase-bar-fill { background: var(--purple); }
+    .phase-card[data-type="cloud"]    .phase-bar-fill { background: var(--green); }
+    .phase-card[data-type="advanced"] .phase-bar-fill { background: var(--red); }
+    .phase-card.s-complete            .phase-bar-fill { background: var(--green); }
+
+    .phase-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    .chevron {
+      color: var(--muted);
+      font-size: 11px;
+      transition: transform 0.2s ease;
+      align-self: center;
+      margin-left: 4px;
+    }
+
+    .phase-card.collapsed .chevron { transform: rotate(-90deg); }
+
+    /* ── TASK BODY ──────────────────────────── */
+    .phase-body { border-top: 1px solid var(--border); }
+    .phase-card.collapsed .phase-body { display: none; }
+
+    .section-heading {
+      padding: 12px 22px 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+    }
+
+    .task-list { padding: 4px 0; }
+
+    .task-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      padding: 7px 22px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+
+    .task-row:hover { background: var(--surface-2); }
+
+    .task-row input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin-top: 2px;
+      flex-shrink: 0;
+      accent-color: var(--green);
+      cursor: pointer;
+    }
+
+    .phase-card[data-type="action"] .task-row input[type="checkbox"] { accent-color: var(--amber); }
+    .phase-card[data-type="ai"]     .task-row input[type="checkbox"] { accent-color: var(--purple); }
+
+    .task-label { font-size: 13px; color: var(--text); }
+    .task-row.done .task-label { color: var(--muted); text-decoration: line-through; }
+    .task-note-text { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    /* ── MILESTONE BANNER ───────────────────── */
+    .milestone {
+      margin-bottom: 20px;
+      border-radius: 10px;
+      padding: 16px 22px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .milestone.alpha   { background: var(--blue-dim);   border: 1px solid rgba(55,138,221,0.25); }
+    .milestone.v1      { background: var(--green-dim);  border: 1px solid rgba(29,158,117,0.25); }
+    .milestone.v2      { background: var(--purple-dim); border: 1px solid rgba(167,139,250,0.25); }
+    .milestone.v3      { background: var(--amber-dim);  border: 1px solid rgba(217,119,6,0.25); }
+    .milestone.v4plus  { background: var(--red-dim);    border: 1px solid rgba(248,81,73,0.25); }
+
+    .ms-icon { font-size: 26px; flex-shrink: 0; }
+
+    .ms-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+    }
+
+    .ms-title { font-size: 15px; font-weight: 700; margin-top: 2px; }
+    .milestone.alpha  .ms-title { color: var(--blue); }
+    .milestone.v1     .ms-title { color: var(--green); }
+    .milestone.v2     .ms-title { color: var(--purple); }
+    .milestone.v3     .ms-title { color: var(--amber); }
+    .milestone.v4plus .ms-title { color: var(--red); }
+
+    .ms-desc { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+    .ms-status {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 100px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+    }
+
+    /* ── SCROLLBAR ──────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-top">
+    <div class="logo">
+      <div class="logo-mark">📓</div>
+      <div>
+        <div class="logo-text">Daybook</div>
+        <div class="logo-sub">Project Tracker</div>
+      </div>
+    </div>
+    <div class="overall-stats">
+      <div class="stat-box">
+        <div class="stat-value" id="stat-pct">0%</div>
+        <div class="stat-label">Complete</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="stat-tasks" style="color: var(--text)">0/0</div>
+        <div class="stat-label">Tasks done</div>
+      </div>
+    </div>
+    <div class="overall-bar-wrap">
+      <div class="overall-bar-label">
+        <span>Overall progress</span>
+        <span id="stat-phase">—</span>
+      </div>
+      <div class="bar"><div class="bar-fill" id="overall-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+  <nav class="phase-nav" id="phase-nav"></nav>
+  <div class="sidebar-footer">
+    <div class="footer-note">Progress saved in your browser</div>
+    <button class="reset-btn" onclick="resetAll()">Reset all progress</button>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main" id="main"></main>
+
+<script>
+// ── DATA ───────────────────────────────────────────────────────────────
+
+const PHASES = [
+  {
+    id: 'ph0', num: 0, name: 'Foundation Setup', type: 'action',
+    desc: 'Everything you must do manually before a single line of code is written.',
+    tasks: [
+      { id: 'p0a', t: 'Create Anthropic account + add payment method + set $10 spend limit', note: 'Only needed for AI features in Phase 5. Account is confirmed active.' },
+      { id: 'p0c', t: 'Install Node.js 20+ (LTS) from nodejs.org', note: 'Required to run npm, Vite, and the dev server. Must be installed before Phase 1.' },
+      { id: 'p0d', t: 'Install Git' },
+      { id: 'p0e', t: 'Install Claude Code CLI — npm install -g @anthropic-ai/claude-code' },
+      { id: 'p0f', t: 'Create GitHub account + create private repo named daybook' },
+      { id: 'p0h', t: 'Clone the repo to your machine and open it in Claude Code' },
+    ]
+  },
+  {
+    id: 'ph1', num: 1, name: 'Core Scaffold', type: 'dev',
+    desc: 'Vite project, database layer, layout shell, and reusable UI primitives.',
+    tasks: [
+      { id: 'p1a', t: 'Init Vite project: npm create vite@latest (React + TypeScript template)' },
+      { id: 'p1b', t: 'Install all approved packages from CLAUDE.md Section 4' },
+      { id: 'p1c', t: 'Configure Tailwind CSS (tailwind.config.js, postcss.config.js)' },
+      { id: 'p1d', t: 'Configure path alias @/ → src/ in vite.config.ts and tsconfig.json' },
+      { id: 'p1e', t: 'Create PGlite singleton in src/db/index.ts' },
+      { id: 'p1f', t: 'Define Drizzle schema: tasks, accounts, categories, transactions, settings tables' },
+      { id: 'p1g', t: 'Write DB init function: run CREATE TABLE IF NOT EXISTS on first load' },
+      { id: 'p1h', t: 'Seed default expense and income categories if the table is empty' },
+      { id: 'p1i', t: 'Build layout shell: AppShell, Sidebar, TopBar components' },
+      { id: 'p1j', t: 'Build UI primitives: Button, Input, Textarea, Select, Modal, Badge, EmptyState' },
+      { id: 'p1k', t: 'Set up React Router with placeholder routes (/tasks, /wallet, /wallet/accounts, /wallet/dashboard)' },
+      { id: 'p1l', t: 'Set up Zustand stores: tasks.store.ts, wallet.store.ts, app.store.ts' },
+      { id: 'p1m', t: 'Add cn() and formatMYR() helpers to src/lib/utils.ts' },
+    ]
+  },
+  {
+    id: 'ph2', num: 2, name: 'Tasks Module', type: 'dev',
+    desc: 'Full Workflowy-style bullet tree: inline editing, keyboard shortcuts, DnD, zoom-in.',
+    tasks: [
+      { id: 'p2a', t: 'useTasks hook: CRUD operations + sort order rebalance (batch DB update)' },
+      { id: 'p2b', t: 'BulletTree: recursive container, loads root-level tasks from DB on mount' },
+      { id: 'p2c', t: 'BulletNode: renders collapse toggle (▶/▼), bullet dot, content, options menu' },
+      { id: 'p2d', t: 'BulletEditor: contenteditable div with useLayoutEffect caret position management' },
+      { id: 'p2e', t: 'BulletNote: expandable textarea revealed by clicking the note icon' },
+      { id: 'p2f', t: 'Keyboard: Enter → new sibling below; Tab → indent; Shift+Tab → outdent' },
+      { id: 'p2g', t: 'Keyboard: Backspace on empty line → delete + move cursor up' },
+      { id: 'p2h', t: 'Keyboard: Ctrl+Enter → toggle complete; Ctrl+. → collapse/expand' },
+      { id: 'p2i', t: 'Zoom-in: clicking bullet dot sets that task as root; breadcrumb shows path back' },
+      { id: 'p2j', t: 'Floating-point sort order with midpoint insertion; rebalance when gap < 0.001' },
+      { id: 'p2k', t: 'Drag-and-drop: @dnd-kit with custom nested collision detection (allow cross-level reordering)' },
+      { id: 'p2l', t: 'Hide completed toggle in toolbar; completed tasks display with strikethrough' },
+    ]
+  },
+  {
+    id: 'ph3', num: 3, name: 'Wallet Module', type: 'dev',
+    desc: 'Accounts, transactions (including transfers), CSV import with dedup, and dashboard charts.',
+    tasks: [
+      { id: 'p3a', t: 'useWallet hook: account + transaction CRUD; balance computed from DB query' },
+      { id: 'p3b', t: 'AccountsPage + AccountCard: list accounts with live balance (income − expense, transfers excluded)' },
+      { id: 'p3c', t: 'AccountForm: create/edit modal (name, type, currency, color, icon)' },
+      { id: 'p3d', t: 'TransactionList: transactions grouped by day with DailyGroup date headers and daily totals' },
+      { id: 'p3e', t: 'TransactionForm: create/edit; for transfer type show destination_account selector, hide category' },
+      { id: 'p3f', t: 'Filter bar: date range, type (income/expense/transfer), category, account, tag' },
+      { id: 'p3g', t: 'CSV import: PapaParse auto-detects columns; computes import_hash = SHA-256(date|amount|merchant)' },
+      { id: 'p3h', t: 'CsvReviewTable: editable rows, exclude checkboxes; duplicate rows pre-unchecked' },
+      { id: 'p3i', t: 'Dashboard: cash flow bar chart — income vs expense by week (Recharts)' },
+      { id: 'p3j', t: 'Dashboard: spending by category pie chart + spending by account bar chart (Recharts)' },
+      { id: 'p3k', t: 'Dashboard: top merchants list + date range selector (this month / last month / custom)' },
+    ]
+  },
+];
+
+const MILESTONE_ALPHA = {
+  id: 'ms-alpha', cls: 'alpha', icon: '💻',
+  label: 'Alpha milestone',
+  title: 'Core app fully working on your machine',
+  desc: 'Tasks and Wallet work locally. You are the only user. Data lives in your browser via IndexedDB. No internet needed.'
+};
+
+const PHASES_2 = [
+  {
+    id: 'ph4', num: 4, name: 'Home Network + Multi-User', type: 'arch',
+    desc: 'Introduce a backend so the app runs on your home machine and any device on your WiFi can access it with its own account.',
+    tasks: [
+      { id: 'p4a', t: 'Add Node.js backend (Express or Fastify) to the repo alongside the React app' },
+      { id: 'p4b', t: 'Replace PGlite with SQLite file via better-sqlite3 (or local PostgreSQL) on the server' },
+      { id: 'p4c', t: 'Add user_id column to tasks, accounts, and transactions tables' },
+      { id: 'p4d', t: 'Implement auth: username + password sign-in, JWT or session cookies' },
+      { id: 'p4e', t: 'Build user management: invite/create accounts, per-user data isolation enforced server-side' },
+      { id: 'p4f', t: 'Serve the Vite production build from the Node server (no separate static host)' },
+      { id: 'p4g', t: 'Set a static local IP for the server on your home router (e.g. 192.168.1.100)' },
+      { id: 'p4h', t: 'Test from a second device (phone, tablet) connected to your home WiFi' },
+      { id: 'p4i', t: 'Data migration script: export PGlite data from browser IndexedDB → import into new server DB' },
+    ]
+  },
+];
+
+const MILESTONE_V1 = {
+  id: 'ms-v1', cls: 'v1', icon: '🏠',
+  label: 'v1 Delivery',
+  title: 'Daybook on your home network — multi-user',
+  desc: 'Any device on your WiFi can log in and use Daybook. Data stays on your hardware. No cloud required.'
+};
+
+const PHASES_3 = [
+  {
+    id: 'ph5', num: 5, name: 'AI Features', type: 'ai',
+    desc: 'Claude integration: daily briefing, natural-language task and transaction entry, CSV categorisation, financial insights.',
+    tasks: [
+      { id: 'p5a0', t: 'Get your Anthropic API key from console.anthropic.com — you will enter it in the app on first launch', note: 'Free to get. You already have an Anthropic account — just copy the key from the API Keys page.' },
+      { id: 'p5a', t: 'ApiKeySetup component: first-run screen to enter Anthropic API key; stored in settings table' },
+      { id: 'p5b', t: 'API key proxied through the backend — never exposed in the browser bundle' },
+      { id: 'p5c', t: 'claude.ts: Anthropic SDK client, model routing (Haiku → simple, Sonnet → complex)' },
+      { id: 'p5d', t: 'claude-prompts.ts: all system prompts with prompt caching (cache_control: ephemeral)' },
+      { id: 'p5e', t: 'useClaude hook: streaming responses, loading state, abort controller, error handling' },
+      { id: 'p5f', t: 'Natural language → task creation: Haiku, JSON output, max 300 tokens' },
+      { id: 'p5g', t: 'Natural language → transaction entry: Haiku, JSON output, max 200 tokens' },
+      { id: 'p5h', t: 'CSV batch categorisation: one Haiku call for all rows, max 500 tokens' },
+      { id: 'p5i', t: 'ClaudePanel: slide-in chat panel (Ctrl+K), can discuss tasks and finances' },
+      { id: 'p5j', t: 'DailyBriefing: one-click Sonnet summary of tasks + finances, max 800 tokens' },
+      { id: 'p5k', t: 'Financial insights: ask Sonnet to surface patterns, anomalies, budget suggestions' },
+      { id: 'p5l', t: 'Verify prompt caching is active (check API response headers for cache hits)' },
+    ]
+  },
+];
+
+const MILESTONE_V2 = {
+  id: 'ms-v2', cls: 'v2', icon: '🤖',
+  label: 'v2 Delivery',
+  title: 'AI-powered Daybook',
+  desc: 'Speak naturally to add tasks and expenses. Get daily briefings. Claude understands your complete picture.'
+};
+
+const PHASES_4 = [
+  {
+    id: 'ph6', num: 6, name: 'Cloud Migration', type: 'cloud',
+    desc: 'Move from your home server to Supabase + Vercel. Proper auth, RLS, and a public URL accessible from anywhere.',
+    tasks: [
+      { id: 'p6a0', t: 'Create Vercel account — sign up with GitHub at vercel.com', note: 'Free tier is sufficient. Not needed until you are ready to deploy.' },
+      { id: 'p6a', t: 'Create Supabase project; copy connection string + anon key' },
+      { id: 'p6b', t: 'Migrate schema to Supabase Postgres (already Postgres-compatible from PGlite design)' },
+      { id: 'p6c', t: 'Data migration: dump home server DB → import into Supabase' },
+      { id: 'p6d', t: 'Enable Supabase Auth (email/password); wire up sign-in/sign-up flow' },
+      { id: 'p6e', t: 'Write Row-Level Security policies: users can only read and write their own rows' },
+      { id: 'p6f', t: 'Create Vercel project; connect GitHub repo; configure SUPABASE env vars' },
+      { id: 'p6g', t: 'Create Vercel Edge Function to proxy Anthropic API (key never in the browser)' },
+      { id: 'p6h', t: 'Update all Claude API calls to route through the Edge Function' },
+      { id: 'p6i', t: 'Deploy to Vercel; verify app loads at daybook.vercel.app' },
+      { id: 'p6j', t: 'Invite another user via Supabase Auth; verify data isolation is working (RLS)' },
+    ]
+  },
+];
+
+const MILESTONE_V3 = {
+  id: 'ms-v3', cls: 'v3', icon: '☁️',
+  label: 'v3 Delivery',
+  title: 'Daybook in the cloud',
+  desc: 'Hosted on Vercel. Data on Supabase. Accessible from anywhere with an internet connection.'
+};
+
+const PHASES_5 = [
+  {
+    id: 'ph7', num: 7, name: 'Advanced Features', type: 'advanced',
+    desc: 'Pick-and-choose enhancements. No fixed order — ship what matters most to you.',
+    sections: [
+      {
+        heading: 'Wallet Enhancements',
+        tasks: [
+          { id: 'p7a', t: 'Budgets: set monthly spend limits per category with progress bars' },
+          { id: 'p7b', t: 'Recurring transactions: auto-create bills and salary on a schedule' },
+          { id: 'p7c', t: 'Goals & savings: track progress toward a financial target' },
+          { id: 'p7d', t: 'Advanced reports: year-on-year comparison, fully custom date ranges' },
+          { id: 'p7e', t: 'Data export: download all data as JSON or CSV (safety net before clearing browser storage)' },
+          { id: 'p7f', t: 'Bill reminders: flag when a recurring bill is coming due' },
+        ]
+      },
+      {
+        heading: 'Tasks Enhancements',
+        tasks: [
+          { id: 'p7g', t: 'Full-text search across all tasks and notes' },
+          { id: 'p7h', t: 'Due dates and reminders on individual tasks' },
+          { id: 'p7i', t: 'Task templates: save a bullet structure and stamp it out for recurring projects' },
+          { id: 'p7j', t: 'Tags system: cross-module tagging across tasks and transactions' },
+        ]
+      },
+      {
+        heading: 'AI Upgrades',
+        tasks: [
+          { id: 'p7k', t: 'Spending forecasts: predict next month\'s expenditure based on historical patterns' },
+          { id: 'p7l', t: 'Anomaly detection: flag transactions that look unusual compared to the norm' },
+          { id: 'p7m', t: 'Weekly AI digest: auto-generated summary of the week\'s tasks and finances' },
+        ]
+      },
+      {
+        heading: 'Platform & Polish',
+        tasks: [
+          { id: 'p7n', t: 'PWA: install Daybook to your home screen; offline mode' },
+          { id: 'p7o', t: 'Dark mode + light mode + system preference auto-detect' },
+          { id: 'p7p', t: 'Mobile-responsive layout for phone use' },
+          { id: 'p7q', t: 'Power-user keyboard shortcuts for every action' },
+        ]
+      },
+      {
+        heading: 'New Modules',
+        tasks: [
+          { id: 'p7r', t: 'Journal module: daily freeform notes linked to a date' },
+          { id: 'p7s', t: 'Habits module: daily habit tracking with streaks and completion rate' },
+          { id: 'p7t', t: 'Contacts module: lightweight personal CRM — notes on people, follow-up reminders' },
+        ]
+      }
+    ]
+  },
+];
+
+const MILESTONE_V4 = {
+  id: 'ms-v4', cls: 'v4plus', icon: '⚡',
+  label: 'v4+ Ongoing',
+  title: 'Power Daybook — ship what matters',
+  desc: 'Pick one feature at a time. Ship it. Daybook grows with you indefinitely.'
+};
+
+const ALL_PHASES = [...PHASES, ...PHASES_2, ...PHASES_3, ...PHASES_4, ...PHASES_5];
+
+// ── STATE ──────────────────────────────────────────────────────────────
+
+// Tasks confirmed done — merged into saved state once via migration flag _m1
+// User can still manually uncheck any of these; their explicit choice wins on subsequent loads.
+const CONFIRMED_DONE = { p0a: true, p0c: true, p0d: true, p0e: true, p0f: true, p0h: true };
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem('daybook-tracker-v1');
+    const saved = raw ? JSON.parse(raw) : {};
+    if (!saved['_m1']) {
+      // First time seeing this migration — merge defaults in, user values take priority
+      const merged = { ...CONFIRMED_DONE, ...saved, _m1: true };
+      localStorage.setItem('daybook-tracker-v1', JSON.stringify(merged));
+      return merged;
+    }
+    return saved;
+  }
+  catch { return { ...CONFIRMED_DONE, _m1: true }; }
+}
+function saveState() { localStorage.setItem('daybook-tracker-v1', JSON.stringify(state)); }
+
+let state = loadState();
+
+function isChecked(id) { return !!state[id]; }
+function isCollapsed(id) { return state['col-' + id] === true; }
+
+function toggle(id, event) {
+  if (event) event.stopPropagation();
+  state[id] = !state[id];
+  saveState();
+  render();
+}
+
+function toggleCollapse(phaseId) {
+  state['col-' + phaseId] = !isCollapsed(phaseId);
+  saveState();
+  render();
+}
+
+function resetAll() {
+  if (!confirm('Reset all progress? This cannot be undone.')) return;
+  state = {};
+  saveState();
+  render();
+}
+
+// ── CALCULATIONS ───────────────────────────────────────────────────────
+
+function phaseTaskIds(phase) {
+  if (phase.sections) return phase.sections.flatMap(s => s.tasks.map(t => t.id));
+  return (phase.tasks || []).map(t => t.id);
+}
+
+function phaseStats(phase) {
+  const ids = phaseTaskIds(phase);
+  const checked = ids.filter(isChecked).length;
+  const total = ids.length;
+  const pct = total ? Math.round((checked / total) * 100) : 0;
+  return { checked, total, pct };
+}
+
+function phaseStatus(phase) {
+  const { checked, total, pct } = phaseStats(phase);
+  if (pct === 100 && total > 0) return 's-complete';
+  if (checked > 0) return 's-progress';
+  return 's-not-started';
+}
+
+function statusLabel(s) {
+  return { 's-complete': 'Complete', 's-progress': 'In Progress', 's-not-started': 'Not Started' }[s];
+}
+
+function overallStats() {
+  const allIds = ALL_PHASES.flatMap(phaseTaskIds);
+  const checked = allIds.filter(isChecked).length;
+  const total = allIds.length;
+  const pct = total ? Math.round((checked / total) * 100) : 0;
+  return { checked, total, pct };
+}
+
+function currentPhaseLabel() {
+  for (const p of ALL_PHASES) {
+    const s = phaseStatus(p);
+    if (s === 's-progress') return `Phase ${p.num} active`;
+    if (s === 's-not-started') return `Phase ${p.num} next`;
+  }
+  return 'All done!';
+}
+
+// ── RENDER HELPERS ─────────────────────────────────────────────────────
+
+function pillClass(type) {
+  return { action: 'pill-action', dev: 'pill-dev', arch: 'pill-arch', ai: 'pill-ai', cloud: 'pill-cloud', advanced: 'pill-advanced' }[type] || 'pill-dev';
+}
+
+function pillLabel(type) {
+  return { action: 'Your Action', dev: 'Dev', arch: 'Architecture', ai: 'AI', cloud: 'Cloud', advanced: 'v4+' }[type] || 'Dev';
+}
+
+function renderTaskRow(task) {
+  const done = isChecked(task.id);
+  return `<label class="task-row${done ? ' done' : ''}" onclick="toggle('${task.id}', event)">
+    <input type="checkbox" ${done ? 'checked' : ''} onclick="toggle('${task.id}', event)">
+    <div>
+      <div class="task-label">${task.t}</div>
+      ${task.note ? `<div class="task-note-text">${task.note}</div>` : ''}
+    </div>
+  </label>`;
+}
+
+function renderPhaseCard(phase) {
+  const stats = phaseStats(phase);
+  const status = phaseStatus(phase);
+  const collapsed = isCollapsed(phase.id);
+
+  let bodyHtml = '';
+  if (phase.sections) {
+    bodyHtml = phase.sections.map(s => `
+      <div class="section-heading">${s.heading}</div>
+      <div class="task-list">${s.tasks.map(renderTaskRow).join('')}</div>
+    `).join('');
+  } else {
+    bodyHtml = `<div class="task-list">${(phase.tasks || []).map(renderTaskRow).join('')}</div>`;
+  }
+
+  return `<div class="phase-card ${status}${collapsed ? ' collapsed' : ''}" data-type="${phase.type}" id="${phase.id}">
+    <div class="phase-header" onclick="toggleCollapse('${phase.id}')">
+      <div class="phase-num">${phase.num}</div>
+      <div class="phase-meta">
+        <div class="phase-title-row">
+          <span class="phase-title">${phase.name}</span>
+          <span class="pill ${pillClass(phase.type)}">${pillLabel(phase.type)}</span>
+          <span class="status-pill ${status}">${statusLabel(status)}</span>
+        </div>
+        <div class="phase-desc">${phase.desc}</div>
+        <div class="phase-prog-row">
+          <div class="phase-bar"><div class="phase-bar-fill" style="width:${stats.pct}%"></div></div>
+          <div class="phase-count">${stats.checked}/${stats.total} tasks</div>
+        </div>
+      </div>
+      <div class="chevron">▼</div>
+    </div>
+    <div class="phase-body">${bodyHtml}</div>
+  </div>`;
+}
+
+function renderMilestone(m) {
+  return `<div class="milestone ${m.cls}" id="${m.id}">
+    <div class="ms-icon">${m.icon}</div>
+    <div>
+      <div class="ms-label">${m.label}</div>
+      <div class="ms-title">${m.title}</div>
+      <div class="ms-desc">${m.desc}</div>
+    </div>
+    <div class="ms-status">${m.cls.toUpperCase().replace('PLUS','+')} </div>
+  </div>`;
+}
+
+function renderSidebar() {
+  const items = ALL_PHASES.map(p => {
+    const stats = phaseStats(p);
+    const status = phaseStatus(p);
+    return `<button class="nav-item ${status}" onclick="scrollToPhase('${p.id}')">
+      <div class="nav-dot"></div>
+      <span class="nav-name">Phase ${p.num} — ${p.name}</span>
+      <span class="nav-pct">${stats.pct}%</span>
+    </button>`;
+  });
+  document.getElementById('phase-nav').innerHTML = items.join('');
+}
+
+function renderMain() {
+  const parts = [
+    `<div class="intro-banner">
+      <div class="intro-icon">📋</div>
+      <div>
+        <div class="intro-title">Building Daybook</div>
+        <div class="intro-desc">Check off tasks as you complete them. Progress is automatically saved in your browser. Click any phase header to collapse it.</div>
+      </div>
+    </div>`,
+    ...PHASES.map(renderPhaseCard),
+    renderMilestone(MILESTONE_ALPHA),
+    ...PHASES_2.map(renderPhaseCard),
+    renderMilestone(MILESTONE_V1),
+    ...PHASES_3.map(renderPhaseCard),
+    renderMilestone(MILESTONE_V2),
+    ...PHASES_4.map(renderPhaseCard),
+    renderMilestone(MILESTONE_V3),
+    ...PHASES_5.map(renderPhaseCard),
+    renderMilestone(MILESTONE_V4),
+  ];
+  document.getElementById('main').innerHTML = parts.join('');
+}
+
+function updateStats() {
+  const { checked, total, pct } = overallStats();
+  document.getElementById('stat-pct').textContent = pct + '%';
+  document.getElementById('stat-tasks').textContent = checked + '/' + total;
+  document.getElementById('overall-fill').style.width = pct + '%';
+  document.getElementById('stat-phase').textContent = currentPhaseLabel();
+}
+
+function scrollToPhase(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function render() {
+  renderSidebar();
+  renderMain();
+  updateStats();
+}
+
+render();
+</script>
+</body>
+</html>
