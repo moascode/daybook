@@ -4,32 +4,35 @@ import { seedCategories } from './seed'
 let dbInstance: PGlite | null = null
 let initPromise: Promise<PGlite> | null = null
 
+// PGlite is PostgreSQL — use Postgres functions, not SQLite.
+// IDs: replace(gen_random_uuid()::text, '-', '') → 32-char lowercase hex (matches generateId())
+// Timestamps: to_char(now(), 'YYYY-MM-DD HH24:MI:SS') → matches the format our app expects
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tasks (
-  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  id            TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
   parent_id     TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   content       TEXT NOT NULL DEFAULT '',
   note          TEXT DEFAULT '',
   is_completed  INTEGER DEFAULT 0,
   is_collapsed  INTEGER DEFAULT 0,
-  sort_order    REAL NOT NULL DEFAULT 0,
-  created_at    TEXT DEFAULT (datetime('now')),
-  updated_at    TEXT DEFAULT (datetime('now'))
+  sort_order    DOUBLE PRECISION NOT NULL DEFAULT 0,
+  created_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
 
 CREATE TABLE IF NOT EXISTS accounts (
-  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  id          TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
   name        TEXT NOT NULL,
   description TEXT DEFAULT '',
   currency    TEXT NOT NULL DEFAULT 'MYR',
   type        TEXT NOT NULL DEFAULT 'cash',
   color       TEXT DEFAULT '#1D9E75',
   icon        TEXT DEFAULT 'wallet',
-  created_at  TEXT DEFAULT (datetime('now'))
+  created_at  TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
 
 CREATE TABLE IF NOT EXISTS categories (
-  id    TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  id    TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
   name  TEXT NOT NULL,
   icon  TEXT DEFAULT 'tag',
   color TEXT DEFAULT '#378ADD',
@@ -37,19 +40,19 @@ CREATE TABLE IF NOT EXISTS categories (
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
-  id                     TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  id                     TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
   account_id             TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
   date                   TEXT NOT NULL,
   merchant               TEXT DEFAULT '',
   description            TEXT DEFAULT '',
-  amount                 REAL NOT NULL,
+  amount                 DOUBLE PRECISION NOT NULL,
   type                   TEXT NOT NULL DEFAULT 'expense',
   category_id            TEXT REFERENCES categories(id) ON DELETE SET NULL,
   tag                    TEXT DEFAULT '',
   import_hash            TEXT DEFAULT '',
-  created_at             TEXT DEFAULT (datetime('now')),
-  updated_at             TEXT DEFAULT (datetime('now'))
+  created_at             TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at             TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
 
 CREATE TABLE IF NOT EXISTS settings (
