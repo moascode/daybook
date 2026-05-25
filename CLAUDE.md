@@ -699,12 +699,18 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  0 — Setup
-Phase status:   Complete
+Current phase:  3 — Alpha (post-UAT polish)
+Phase status:   Complete + UAT fixes applied
 Last session:   2026-05-25
-Last completed: All Phase 0 prerequisites confirmed done (Node.js installed, repo cloned, tools ready)
-Next task:      Phase 1 — scaffold the project: npm create vite, install packages, configure aliases
-Blockers:       None — ready to start Phase 1
+Last completed: Alpha UAT pass — all user-reported bugs fixed and verified in browser:
+                - BulletEditor blinking: fixed with debounce + DOM-sync-when-unfocused pattern
+                - Task completion: visible checkbox added to every bullet row
+                - Wallet navigation: single sidebar "Wallet" entry + in-page WalletTabNav tabs
+                - README.md created
+                - docs/UAT-FEEDBACK.md created
+                Commits: 57403e3 (schema fix), 32570b1 (UAT fixes)
+Next task:      Phase 4 — Home network + multi-user (Node backend, SQLite file, auth)
+Blockers:       None — Alpha is feature-complete, UAT-verified, and builds cleanly
 ```
 
 ---
