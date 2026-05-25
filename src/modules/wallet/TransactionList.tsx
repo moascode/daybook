@@ -1,0 +1,241 @@
+import { useMemo, useState } from 'react'
+import { format, parseISO } from 'date-fns'
+import { Trash2, ArrowRightLeft } from 'lucide-react'
+import { cn, formatMYR } from '@/lib/utils'
+import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
+import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
+
+interface TransactionListProps {
+  transactions: Transaction[]
+  accounts: Account[]
+  categories: Category[]
+  onEdit: (transaction: Transaction) => void
+  onDelete: (id: string) => void
+}
+
+function groupByDay(transactions: Transaction[]): DailyGroup[] {
+  const grouped = new Map<string, Transaction[]>()
+
+  for (const t of transactions) {
+    const existing = grouped.get(t.date)
+    if (existing) {
+      existing.push(t)
+    } else {
+      grouped.set(t.date, [t])
+    }
+  }
+
+  const groups: DailyGroup[] = []
+  for (const [date, txns] of grouped) {
+    let totalIncome = 0
+    let totalExpense = 0
+    for (const t of txns) {
+      if (t.type === 'income') totalIncome += t.amount
+      else if (t.type === 'expense') totalExpense += t.amount
+      // transfers excluded
+    }
+    groups.push({ date, transactions: txns, totalIncome, totalExpense })
+  }
+
+  // Sort by date descending
+  groups.sort((a, b) => b.date.localeCompare(a.date))
+  return groups
+}
+
+function TransactionRow({
+  transaction,
+  accounts,
+  categories,
+  onEdit,
+  onRequestDelete,
+}: {
+  transaction: Transaction
+  accounts: Account[]
+  categories: Category[]
+  onEdit: (t: Transaction) => void
+  onRequestDelete: (t: Transaction) => void
+}) {
+  const account = accounts.find((a) => a.id === transaction.accountId)
+  const destAccount = transaction.destinationAccountId
+    ? accounts.find((a) => a.id === transaction.destinationAccountId)
+    : null
+  const category = transaction.categoryId
+    ? categories.find((c) => c.id === transaction.categoryId)
+    : null
+
+  const amountColor =
+    transaction.type === 'income'
+      ? 'text-green-600'
+      : transaction.type === 'expense'
+        ? 'text-red-600'
+        : 'text-blue-600'
+
+  const amountPrefix =
+    transaction.type === 'income' ? '+' : transaction.type === 'expense' ? '-' : ''
+
+  return (
+    <div
+      className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50 cursor-pointer"
+      onClick={() => onEdit(transaction)}
+    >
+      {/* Type indicator */}
+      <div
+        className={cn(
+          'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold',
+          transaction.type === 'income'
+            ? 'bg-green-50 text-green-600'
+            : transaction.type === 'expense'
+              ? 'bg-red-50 text-red-600'
+              : 'bg-blue-50 text-blue-600'
+        )}
+      >
+        {transaction.type === 'transfer' ? (
+          <ArrowRightLeft className="h-3.5 w-3.5" />
+        ) : transaction.type === 'income' ? (
+          '+'
+        ) : (
+          '-'
+        )}
+      </div>
+
+      {/* Details */}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium text-gray-900">
+            {transaction.merchant || transaction.description || 'Untitled'}
+          </span>
+          {category && (
+            <Badge color={category.color} className="flex-shrink-0">
+              {category.name}
+            </Badge>
+          )}
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+          {account && <span>{account.name}</span>}
+          {destAccount && (
+            <>
+              <ArrowRightLeft className="h-3 w-3" />
+              <span>{destAccount.name}</span>
+            </>
+          )}
+          {transaction.description && transaction.merchant && (
+            <span className="truncate">- {transaction.description}</span>
+          )}
+          {transaction.tag && (
+            <Badge variant="default" className="text-[10px]">
+              {transaction.tag}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Amount */}
+      <span className={cn('flex-shrink-0 text-sm font-semibold', amountColor)}>
+        {amountPrefix}{formatMYR(transaction.amount)}
+      </span>
+
+      {/* Delete button — visible on hover */}
+      <div
+        className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onRequestDelete(transaction)}
+          aria-label="Delete transaction"
+        >
+          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function TransactionList({
+  transactions,
+  accounts,
+  categories,
+  onEdit,
+  onDelete,
+}: TransactionListProps) {
+  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
+  const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
+
+  function handleConfirmDelete() {
+    if (deleteTarget) {
+      onDelete(deleteTarget.id)
+      setDeleteTarget(null)
+    }
+  }
+
+  if (dailyGroups.length === 0) {
+    return (
+      <div className="py-12 text-center text-sm text-gray-400">
+        No transactions found for the selected filters.
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div className="space-y-1">
+        {dailyGroups.map((group) => (
+          <div key={group.date}>
+            {/* Day header */}
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                {format(parseISO(group.date), 'dd MMM yyyy')}
+              </span>
+              <div className="flex items-center gap-3 text-xs">
+                {group.totalIncome > 0 && (
+                  <span className="text-green-600">
+                    +{formatMYR(group.totalIncome)}
+                  </span>
+                )}
+                {group.totalExpense > 0 && (
+                  <span className="text-red-600">
+                    -{formatMYR(group.totalExpense)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Transactions in this day */}
+            <div className="divide-y divide-gray-100">
+              {group.transactions.map((t) => (
+                <TransactionRow
+                  key={t.id}
+                  transaction={t}
+                  accounts={accounts}
+                  categories={categories}
+                  onEdit={onEdit}
+                  onRequestDelete={setDeleteTarget}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Delete confirmation */}
+      <Modal
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="Delete Transaction"
+        description={`Delete transaction "${deleteTarget?.merchant || deleteTarget?.description || 'Untitled'}" for ${deleteTarget ? formatMYR(deleteTarget.amount) : ''}?`}
+      >
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirmDelete}>
+            Delete
+          </Button>
+        </div>
+      </Modal>
+    </>
+  )
+}
