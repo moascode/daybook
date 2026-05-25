@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useWallet } from '@/hooks/useWallet'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { WalletTabNav } from '@/modules/wallet/WalletTabNav'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown } from 'lucide-react'
 import { format, parseISO, endOfWeek, eachWeekOfInterval } from 'date-fns'
 import {
@@ -170,18 +171,26 @@ export function Dashboard() {
       .slice(0, 10)
   }, [transactions])
 
-  if (transactions.length === 0 && accounts.length === 0) {
-    return (
-      <EmptyState
-        icon={<LayoutDashboard className="h-12 w-12" />}
-        title="No data yet"
-        description="Add accounts and transactions to see your financial dashboard."
-      />
-    )
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="p-6">
+      {/* Section header */}
+      <div className="mb-4">
+        <h1 className="text-xl font-bold text-gray-900">Wallet</h1>
+      </div>
+
+      {/* Tab navigation */}
+      <WalletTabNav />
+
+      {/* Empty state */}
+      {transactions.length === 0 && accounts.length === 0 ? (
+        <EmptyState
+          icon={<LayoutDashboard className="h-12 w-12" />}
+          title="No data yet"
+          description="Add accounts and transactions to see your financial dashboard."
+        />
+      ) : (
+
+      <div className="space-y-6">
       {/* Date range selector */}
       <div className="flex items-center gap-3">
         <div className="flex rounded-lg border border-gray-200 bg-white">
@@ -329,6 +338,8 @@ export function Dashboard() {
             ))}
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   )

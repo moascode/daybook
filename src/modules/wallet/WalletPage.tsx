@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
+import { WalletTabNav } from '@/modules/wallet/WalletTabNav'
 import { useWallet } from '@/hooks/useWallet'
 import { cn, formatMYR } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
@@ -110,27 +111,25 @@ export function WalletPage() {
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Transactions</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Track your income, expenses, and transfers.
-          </p>
-        </div>
+      {/* Section header */}
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Wallet</h1>
         <div className="flex items-center gap-2">
           <Link to="/wallet/import">
-            <Button variant="secondary">
+            <Button variant="secondary" size="sm">
               <Upload className="h-4 w-4" />
               Import CSV
             </Button>
           </Link>
-          <Button onClick={openCreateForm}>
+          <Button size="sm" onClick={openCreateForm}>
             <Plus className="h-4 w-4" />
             Add Transaction
           </Button>
         </div>
       </div>
+
+      {/* Tab navigation */}
+      <WalletTabNav />
 
       {/* Filter bar */}
       <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">

@@ -2,7 +2,17 @@ import { useState, useCallback } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { ChevronRight, ChevronDown, Circle, MoreHorizontal, Trash2, StickyNote, GripVertical } from 'lucide-react'
+import {
+  ChevronRight,
+  ChevronDown,
+  Circle,
+  MoreHorizontal,
+  Trash2,
+  StickyNote,
+  GripVertical,
+  Check,
+  CheckSquare,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BulletEditor } from './BulletEditor'
 import { BulletNote } from './BulletNote'
@@ -71,7 +81,6 @@ export function BulletNode({
   const handleSaveNote = useCallback(
     (id: string, note: string) => {
       onUpdateNote(id, note)
-      // Hide note area if content was cleared
       if (note.length === 0) {
         setShowNote(false)
       }
@@ -85,18 +94,19 @@ export function BulletNode({
       style={style}
       className={cn(
         'group',
-        isDragging && 'opacity-50',
+        isDragging && 'opacity-40 bg-blue-50 rounded-lg',
       )}
     >
-      {/* Main bullet line */}
+      {/* ── Main bullet line ─────────────────────────────────────── */}
       <div
-        className="flex items-center gap-0.5 py-0.5 hover:bg-gray-50 rounded"
+        className="flex items-center gap-0.5 py-0.5 rounded hover:bg-gray-50/80 transition-colors"
         style={{ paddingLeft: depth * 24 }}
       >
-        {/* Drag handle */}
+        {/* Drag handle — visible on hover */}
         <button
-          className="flex-shrink-0 w-5 h-6 flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing"
+          className="flex-shrink-0 w-5 h-6 flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing touch-none"
           aria-label="Drag to reorder"
+          title="Drag to reorder"
           {...attributes}
           {...listeners}
         >
@@ -112,7 +122,7 @@ export function BulletNode({
               : 'text-transparent pointer-events-none',
           )}
           onClick={() => onToggleCollapse(task.id)}
-          aria-label={task.isCollapsed ? 'Expand' : 'Collapse'}
+          aria-label={task.isCollapsed ? 'Expand children' : 'Collapse children'}
           tabIndex={-1}
         >
           {hasChildren && (
@@ -122,14 +132,31 @@ export function BulletNode({
           )}
         </button>
 
-        {/* Bullet dot — click to zoom in */}
+        {/* ── Checkbox — click to mark complete ─────────────────── */}
+        <button
+          className={cn(
+            'flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all flex-none',
+            task.isCompleted
+              ? 'bg-brand-500 border-brand-500 text-white'
+              : 'border-gray-300 text-transparent hover:border-brand-400 hover:text-brand-300',
+          )}
+          onClick={() => onToggleComplete(task.id)}
+          aria-label={task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
+          title={task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
+          tabIndex={-1}
+        >
+          <Check className="h-2.5 w-2.5" strokeWidth={3} />
+        </button>
+
+        {/* Bullet dot — click to zoom in to this task */}
         <button
           className={cn(
             'flex-shrink-0 w-5 h-6 flex items-center justify-center rounded transition-colors',
-            'text-gray-400 hover:text-brand-500',
+            'text-gray-300 hover:text-brand-400',
           )}
           onClick={() => onZoomIn(task.id)}
           aria-label="Zoom into task"
+          title="Focus on this task"
           tabIndex={-1}
         >
           <Circle className={cn(
@@ -153,6 +180,19 @@ export function BulletNode({
           autoFocus={autoFocus}
         />
 
+        {/* Note indicator dot — visible when note exists */}
+        {task.note.length > 0 && !showNote && (
+          <button
+            className="flex-shrink-0 w-4 h-4 flex items-center justify-center text-amber-400 hover:text-amber-600 transition-colors"
+            onClick={handleToggleNote}
+            aria-label="Show note"
+            title="Show note"
+            tabIndex={-1}
+          >
+            <div className="h-1.5 w-1.5 rounded-full bg-current" />
+          </button>
+        )}
+
         {/* Options menu */}
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
@@ -167,10 +207,20 @@ export function BulletNode({
 
           <DropdownMenu.Portal>
             <DropdownMenu.Content
-              className="z-50 min-w-[160px] rounded-lg border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
+              className="z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
               sideOffset={4}
               align="end"
             >
+              {/* Mark complete / incomplete */}
+              <DropdownMenu.Item
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 outline-none cursor-pointer hover:bg-gray-100 focus:bg-gray-100"
+                onSelect={() => onToggleComplete(task.id)}
+              >
+                <CheckSquare className="h-4 w-4" />
+                {task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
+              </DropdownMenu.Item>
+
+              {/* Add / hide note */}
               <DropdownMenu.Item
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 outline-none cursor-pointer hover:bg-gray-100 focus:bg-gray-100"
                 onSelect={handleToggleNote}
@@ -181,19 +231,20 @@ export function BulletNode({
 
               <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />
 
+              {/* Delete */}
               <DropdownMenu.Item
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-red-600 outline-none cursor-pointer hover:bg-red-50 focus:bg-red-50"
                 onSelect={() => onDelete(task.id)}
               >
                 <Trash2 className="h-4 w-4" />
-                Delete
+                Delete task
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </div>
 
-      {/* Note */}
+      {/* Note field */}
       {showNote && (
         <BulletNote
           taskId={task.id}

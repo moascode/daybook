@@ -1,4 +1,4 @@
-import { useRef, useLayoutEffect, useCallback, type KeyboardEvent } from 'react'
+import { useRef, useLayoutEffect, useCallback, useEffect, type KeyboardEvent } from 'react'
 import { cn } from '@/lib/utils'
 
 interface BulletEditorProps {
@@ -24,7 +24,6 @@ function getCaretOffset(el: HTMLElement): number {
   if (!sel || sel.rangeCount === 0) return -1
 
   const range = sel.getRangeAt(0)
-  // Only measure if the selection is inside our element
   if (!el.contains(range.startContainer)) return -1
 
   const preRange = document.createRange()
@@ -41,8 +40,6 @@ function setCaretOffset(el: HTMLElement, offset: number) {
   if (!sel) return
 
   const range = document.createRange()
-
-  // Walk text nodes to find the right position
   let remaining = offset
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
   let node = walker.nextNode()
@@ -60,7 +57,7 @@ function setCaretOffset(el: HTMLElement, offset: number) {
     node = walker.nextNode()
   }
 
-  // If offset exceeds content, place caret at end
+  // Offset exceeds content — place caret at end
   range.selectNodeContents(el)
   range.collapse(false)
   sel.removeAllRanges()
@@ -81,31 +78,40 @@ export function BulletEditor({
   autoFocus,
 }: BulletEditorProps) {
   const ref = useRef<HTMLDivElement>(null)
+  // Track current content locally — avoids triggering re-renders on every keystroke.
+  // The store is only updated via debounce (on typing pause) or flush (on blur / action keys).
+  const localContent = useRef(content)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Saved caret position for restoring after external content sync
   const caretRef = useRef<number>(-1)
 
-  // Save and restore caret position across re-renders.
-  // This is CRITICAL for contenteditable — without it, the cursor jumps on every keystroke.
+  // ── Sync from store to DOM ───────────────────────────────────────────────
+  // Only overwrite the DOM when the editor is NOT focused (i.e. an external
+  // update arrived — e.g. another component updated the task).
+  // While the user is actively typing we NEVER touch textContent, which is
+  // the root cause of the cursor-jump / blinking bug.
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
 
-    // Only sync textContent if it actually differs from React state
-    // (e.g. after an external store update).
-    if (el.textContent !== content) {
-      el.textContent = content
+    if (document.activeElement !== el) {
+      if (el.textContent !== content) {
+        // Preserve caret if somehow we are about to clobber while focused
+        const savedCaret = caretRef.current
+        el.textContent = content
+        if (savedCaret >= 0 && document.activeElement === el) {
+          setCaretOffset(el, savedCaret)
+        }
+      }
+      localContent.current = content
     }
-
-    // Restore caret if we have a saved position
-    if (caretRef.current >= 0 && document.activeElement === el) {
-      setCaretOffset(el, caretRef.current)
-    }
+    // If focused → user is actively editing. Don't touch the DOM at all.
   }, [content])
 
-  // Auto-focus on mount when requested
+  // ── Auto-focus on mount ──────────────────────────────────────────────────
   useLayoutEffect(() => {
     if (autoFocus && ref.current) {
       ref.current.focus()
-      // Place caret at end
       const range = document.createRange()
       range.selectNodeContents(ref.current)
       range.collapse(false)
@@ -117,17 +123,44 @@ export function BulletEditor({
     }
   }, [autoFocus])
 
+  // ── Cleanup debounce on unmount ──────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    }
+  }, [])
+
+  // ── Flush pending update to the store immediately ────────────────────────
+  const flushUpdate = useCallback(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+      debounceTimer.current = null
+    }
+    onUpdate(taskId, localContent.current)
+  }, [taskId, onUpdate])
+
+  // ── Input handler — debounce DB writes ──────────────────────────────────
   const handleInput = useCallback(() => {
     const el = ref.current
     if (!el) return
 
-    // Save caret position before the state update triggers a re-render
     caretRef.current = getCaretOffset(el)
+    localContent.current = el.textContent ?? ''
 
-    const newContent = el.textContent ?? ''
-    onUpdate(taskId, newContent)
+    // Debounce: write to DB only after 400 ms of inactivity.
+    // This eliminates the re-render cascade that caused blinking.
+    if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    debounceTimer.current = setTimeout(() => {
+      onUpdate(taskId, localContent.current)
+    }, 400)
   }, [taskId, onUpdate])
 
+  // ── Blur handler — flush immediately when the user leaves the field ──────
+  const handleBlur = useCallback(() => {
+    flushUpdate()
+  }, [flushUpdate])
+
+  // ── Keyboard handler ─────────────────────────────────────────────────────
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       const el = ref.current
@@ -135,16 +168,18 @@ export function BulletEditor({
 
       const isMod = e.metaKey || e.ctrlKey
 
-      // Ctrl/Cmd + Enter → toggle complete
+      // Cmd/Ctrl + Enter → toggle complete
       if (isMod && e.key === 'Enter') {
         e.preventDefault()
+        flushUpdate()
         onToggleComplete(taskId)
         return
       }
 
-      // Ctrl/Cmd + . → toggle collapse
+      // Cmd/Ctrl + . → toggle collapse
       if (isMod && e.key === '.') {
         e.preventDefault()
+        flushUpdate()
         onToggleCollapse(taskId)
         return
       }
@@ -152,6 +187,7 @@ export function BulletEditor({
       // Enter → create new sibling below
       if (e.key === 'Enter' && !e.shiftKey && !isMod) {
         e.preventDefault()
+        flushUpdate() // save before creating sibling
         onEnter(taskId)
         return
       }
@@ -159,6 +195,7 @@ export function BulletEditor({
       // Tab → indent
       if (e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault()
+        flushUpdate()
         onIndent(taskId)
         return
       }
@@ -166,24 +203,26 @@ export function BulletEditor({
       // Shift+Tab → outdent
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault()
+        flushUpdate()
         onOutdent(taskId)
         return
       }
 
-      // Backspace on empty → delete
+      // Backspace on empty → delete task
       if (e.key === 'Backspace') {
         const text = el.textContent ?? ''
         if (text.length === 0) {
           e.preventDefault()
+          flushUpdate()
           onBackspaceEmpty(taskId)
           return
         }
       }
     },
-    [taskId, onEnter, onBackspaceEmpty, onIndent, onOutdent, onToggleComplete, onToggleCollapse],
+    [taskId, onEnter, onBackspaceEmpty, onIndent, onOutdent, onToggleComplete, onToggleCollapse, flushUpdate],
   )
 
-  // Prevent pasting rich text — paste as plain text only
+  // Prevent rich-text paste — plain text only
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
       e.preventDefault()
@@ -201,11 +240,13 @@ export function BulletEditor({
       role="textbox"
       aria-label="Task content"
       className={cn(
-        'flex-1 outline-none text-sm text-gray-900 leading-6 min-w-0 break-words',
-        'focus:bg-white focus:rounded px-1 -mx-1',
+        'flex-1 outline-none text-sm text-gray-900 leading-6 min-w-0 break-words cursor-text',
+        'px-1 -mx-1 rounded',
+        'focus:bg-blue-50/40',
         isCompleted && 'line-through text-gray-400',
       )}
       onInput={handleInput}
+      onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
     />

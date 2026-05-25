@@ -1,12 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { CheckSquare, Wallet, LayoutDashboard, CreditCard } from 'lucide-react'
+import { CheckSquare, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare },
-  { to: '/wallet', label: 'Transactions', icon: Wallet },
-  { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard },
-  { to: '/wallet/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/tasks', label: 'Tasks', icon: CheckSquare, end: true },
+  { to: '/wallet', label: 'Wallet', icon: Wallet, end: false },
 ]
 
 export function Sidebar() {
@@ -28,6 +26,7 @@ export function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            end={item.end}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
