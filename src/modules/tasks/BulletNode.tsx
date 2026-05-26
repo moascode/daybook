@@ -4,14 +4,13 @@ import { CSS } from '@dnd-kit/utilities'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
   ChevronRight,
-  ChevronDown,
-  Circle,
   MoreHorizontal,
   Trash2,
   StickyNote,
   GripVertical,
   Check,
   CheckSquare,
+  Target,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BulletEditor } from './BulletEditor'
@@ -62,28 +61,15 @@ export function BulletNode({
     isDragging,
   } = useSortable({
     id: task.id,
-    data: {
-      depth,
-      parentId: task.parentId,
-      sortOrder: task.sortOrder,
-    },
+    data: { depth, parentId: task.parentId, sortOrder: task.sortOrder },
   })
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  }
-
-  const handleToggleNote = useCallback(() => {
-    setShowNote((prev) => !prev)
-  }, [])
+  const handleToggleNote = useCallback(() => setShowNote((v) => !v), [])
 
   const handleSaveNote = useCallback(
     (id: string, note: string) => {
       onUpdateNote(id, note)
-      if (note.length === 0) {
-        setShowNote(false)
-      }
+      if (note.length === 0) setShowNote(false)
     },
     [onUpdateNote],
   )
@@ -91,160 +77,174 @@ export function BulletNode({
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={cn(
-        'group',
-        isDragging && 'opacity-40 bg-blue-50 rounded-lg',
-      )}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn('group/node select-none', isDragging && 'opacity-40')}
     >
-      {/* ── Main bullet line ─────────────────────────────────────── */}
+      {/* ── Row ─────────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-0.5 py-0.5 rounded hover:bg-gray-50/80 transition-colors"
-        style={{ paddingLeft: depth * 24 }}
+        className={cn(
+          'relative flex items-start rounded-md transition-colors',
+          'hover:bg-gray-50',
+          task.isCompleted && 'opacity-60',
+        )}
+        style={{ paddingLeft: depth * 22 }}
       >
-        {/* Drag handle — visible on hover */}
+        {/* Drag handle — far left, only on hover */}
         <button
-          className="flex-shrink-0 w-5 h-6 flex items-center justify-center text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing touch-none"
+          className={cn(
+            'absolute top-0 flex h-full w-5 items-center justify-center',
+            'text-gray-300 opacity-0 group-hover/node:opacity-100',
+            'transition-opacity cursor-grab active:cursor-grabbing touch-none',
+            'rounded-l-md hover:text-gray-500',
+          )}
+          style={{ left: depth * 22 - (depth > 0 ? 20 : 0) }}
           aria-label="Drag to reorder"
           title="Drag to reorder"
           {...attributes}
           {...listeners}
+          tabIndex={-1}
         >
-          <GripVertical className="h-3.5 w-3.5" />
+          <GripVertical className="h-3 w-3" />
         </button>
 
-        {/* Collapse toggle */}
+        {/* Collapse chevron — aligned to the bullet column */}
         <button
           className={cn(
-            'flex-shrink-0 w-5 h-6 flex items-center justify-center rounded transition-colors',
+            'flex h-7 w-5 shrink-0 items-center justify-center rounded transition-colors',
             hasChildren
-              ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'
+              ? 'text-gray-300 hover:text-gray-600 cursor-pointer'
               : 'text-transparent pointer-events-none',
           )}
-          onClick={() => onToggleCollapse(task.id)}
-          aria-label={task.isCollapsed ? 'Expand children' : 'Collapse children'}
+          onClick={() => hasChildren && onToggleCollapse(task.id)}
+          aria-label={task.isCollapsed ? 'Expand' : 'Collapse'}
           tabIndex={-1}
         >
           {hasChildren && (
-            task.isCollapsed
-              ? <ChevronRight className="h-3.5 w-3.5" />
-              : <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronRight
+              className={cn(
+                'h-3 w-3 transition-transform duration-200',
+                !task.isCollapsed && 'rotate-90',
+              )}
+            />
           )}
         </button>
 
-        {/* ── Checkbox — click to mark complete ─────────────────── */}
+        {/* ── Circular checkbox ─────────────────────────────── */}
         <button
           className={cn(
-            'flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-all flex-none',
+            'mt-1.5 mr-2 h-[15px] w-[15px] shrink-0 rounded-full border-[1.5px]',
+            'flex items-center justify-center transition-all duration-150',
             task.isCompleted
-              ? 'bg-brand-500 border-brand-500 text-white'
-              : 'border-gray-300 text-transparent hover:border-brand-400 hover:text-brand-300',
+              ? 'border-brand-500 bg-brand-500 shadow-sm'
+              : 'border-gray-300 bg-white hover:border-brand-400',
           )}
           onClick={() => onToggleComplete(task.id)}
           aria-label={task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
-          title={task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
+          title={task.isCompleted ? 'Mark incomplete (click)' : 'Mark complete (click or Cmd+Enter)'}
           tabIndex={-1}
         >
-          <Check className="h-2.5 w-2.5" strokeWidth={3} />
-        </button>
-
-        {/* Bullet dot — click to zoom in to this task */}
-        <button
-          className={cn(
-            'flex-shrink-0 w-5 h-6 flex items-center justify-center rounded transition-colors',
-            'text-gray-300 hover:text-brand-400',
+          {task.isCompleted && (
+            <Check className="h-2 w-2 text-white" strokeWidth={3.5} />
           )}
-          onClick={() => onZoomIn(task.id)}
-          aria-label="Zoom into task"
-          title="Focus on this task"
-          tabIndex={-1}
-        >
-          <Circle className={cn(
-            'h-2 w-2',
-            hasChildren ? 'fill-current' : '',
-          )} />
         </button>
 
-        {/* Content editor */}
-        <BulletEditor
-          taskId={task.id}
-          content={task.content}
-          isCompleted={task.isCompleted}
-          onUpdate={onUpdate}
-          onEnter={onEnter}
-          onBackspaceEmpty={onBackspaceEmpty}
-          onIndent={onIndent}
-          onOutdent={onOutdent}
-          onToggleComplete={onToggleComplete}
-          onToggleCollapse={onToggleCollapse}
-          autoFocus={autoFocus}
-        />
+        {/* ── Text editor ──────────────────────────────────── */}
+        <div className="min-w-0 flex-1 py-0.5">
+          <BulletEditor
+            taskId={task.id}
+            content={task.content}
+            isCompleted={task.isCompleted}
+            onUpdate={onUpdate}
+            onEnter={onEnter}
+            onBackspaceEmpty={onBackspaceEmpty}
+            onIndent={onIndent}
+            onOutdent={onOutdent}
+            onToggleComplete={onToggleComplete}
+            onToggleCollapse={onToggleCollapse}
+            autoFocus={autoFocus}
+          />
+        </div>
 
-        {/* Note indicator dot — visible when note exists */}
-        {task.note.length > 0 && !showNote && (
+        {/* ── Hover actions ────────────────────────────────── */}
+        <div
+          className={cn(
+            'flex shrink-0 items-center gap-0.5 py-0.5',
+            'opacity-0 group-hover/node:opacity-100 transition-opacity duration-100',
+          )}
+        >
+          {/* Note indicator or toggle */}
           <button
-            className="flex-shrink-0 w-4 h-4 flex items-center justify-center text-amber-400 hover:text-amber-600 transition-colors"
+            className={cn(
+              'flex h-6 w-6 items-center justify-center rounded transition-colors',
+              showNote || task.note.length > 0
+                ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50'
+                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100',
+            )}
             onClick={handleToggleNote}
-            aria-label="Show note"
-            title="Show note"
+            title={showNote ? 'Hide note' : task.note ? 'Show note' : 'Add note'}
             tabIndex={-1}
           >
-            <div className="h-1.5 w-1.5 rounded-full bg-current" />
+            <StickyNote className="h-3.5 w-3.5" />
           </button>
-        )}
 
-        {/* Options menu */}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-300 opacity-0 group-hover:opacity-100 hover:text-gray-500 hover:bg-gray-200 transition-all"
-              aria-label="Task options"
-              tabIndex={-1}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </DropdownMenu.Trigger>
-
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              className="z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white p-1 shadow-lg animate-in fade-in-0 zoom-in-95"
-              sideOffset={4}
-              align="end"
-            >
-              {/* Mark complete / incomplete */}
-              <DropdownMenu.Item
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 outline-none cursor-pointer hover:bg-gray-100 focus:bg-gray-100"
-                onSelect={() => onToggleComplete(task.id)}
+          {/* Options dropdown */}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                className="flex h-6 w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Task options"
+                tabIndex={-1}
               >
-                <CheckSquare className="h-4 w-4" />
-                {task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
-              </DropdownMenu.Item>
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenu.Trigger>
 
-              {/* Add / hide note */}
-              <DropdownMenu.Item
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-700 outline-none cursor-pointer hover:bg-gray-100 focus:bg-gray-100"
-                onSelect={handleToggleNote}
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl shadow-gray-200/60 animate-in fade-in-0 zoom-in-95"
+                sideOffset={4}
+                align="end"
               >
-                <StickyNote className="h-4 w-4" />
-                {showNote ? 'Hide note' : 'Add note'}
-              </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={() => onToggleComplete(task.id)}
+                >
+                  <CheckSquare className="h-3.5 w-3.5 text-gray-400" />
+                  {task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
+                </DropdownMenu.Item>
 
-              <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={() => onZoomIn(task.id)}
+                >
+                  <Target className="h-3.5 w-3.5 text-gray-400" />
+                  Focus on this task
+                </DropdownMenu.Item>
 
-              {/* Delete */}
-              <DropdownMenu.Item
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-red-600 outline-none cursor-pointer hover:bg-red-50 focus:bg-red-50"
-                onSelect={() => onDelete(task.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete task
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={handleToggleNote}
+                >
+                  <StickyNote className="h-3.5 w-3.5 text-gray-400" />
+                  {showNote ? 'Hide note' : 'Add note'}
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"
+                  onSelect={() => onDelete(task.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete task
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
       </div>
 
-      {/* Note field */}
+      {/* ── Note ────────────────────────────────────────────── */}
       {showNote && (
         <BulletNote
           taskId={task.id}

@@ -253,28 +253,30 @@ export function TasksPage() {
   const isEmpty = currentLevelTasks.length === 0
 
   return (
-    <div className="mx-auto max-w-3xl">
-      {/* Toolbar */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        {/* Breadcrumb navigation */}
-        <div className="flex items-center gap-1 text-sm min-w-0">
+    <div className="mx-auto max-w-2xl">
+      {/* ── Toolbar ─────────────────────────────────────────── */}
+      <div className="mb-5 flex items-center justify-between gap-3">
+
+        {/* Breadcrumb */}
+        <div className="flex min-w-0 items-center gap-0.5 text-sm">
           <button
             onClick={() => setRootId(null)}
-            className={`flex-shrink-0 rounded px-1.5 py-0.5 transition-colors ${
+            className={`flex shrink-0 items-center justify-center h-7 w-7 rounded-md transition-colors ${
               rootId === null
-                ? 'text-gray-900 font-medium'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                ? 'text-gray-900 bg-gray-100'
+                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
             }`}
+            title="All tasks"
           >
-            <Home className="h-4 w-4" />
+            <Home className="h-3.5 w-3.5" />
           </button>
 
           {breadcrumb.map((task) => (
-            <span key={task.id} className="flex items-center gap-1 min-w-0">
-              <ChevronRight className="h-3 w-3 flex-shrink-0 text-gray-400" />
+            <span key={task.id} className="flex min-w-0 items-center gap-0.5">
+              <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
               <button
                 onClick={() => setRootId(task.id)}
-                className="truncate rounded px-1.5 py-0.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors max-w-[150px]"
+                className="max-w-[160px] truncate rounded-md px-1.5 py-0.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 text-xs"
                 title={task.content}
               >
                 {task.content || 'Untitled'}
@@ -284,42 +286,37 @@ export function TasksPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Button
-            variant="ghost"
-            size="sm"
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
             onClick={handleToggleHideCompleted}
             title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
           >
-            {hideCompleted ? (
-              <Eye className="h-4 w-4" />
-            ) : (
-              <EyeOff className="h-4 w-4" />
-            )}
+            {hideCompleted ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             {hideCompleted ? 'Show done' : 'Hide done'}
-          </Button>
+          </button>
 
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleAddRootTask}
-          >
-            <Plus className="h-4 w-4" />
-            Add task
+          <Button size="sm" onClick={handleAddRootTask}>
+            <Plus className="h-3.5 w-3.5" />
+            New task
           </Button>
         </div>
       </div>
 
-      {/* Task tree or empty state */}
+      {/* ── Content ─────────────────────────────────────────── */}
       {isEmpty ? (
         <EmptyState
-          icon={<CheckSquare className="h-12 w-12" />}
-          title="No tasks yet"
-          description="Create your first task to get started."
+          icon={<CheckSquare className="h-10 w-10" />}
+          title={rootId ? 'No tasks here' : 'No tasks yet'}
+          description={
+            rootId
+              ? 'Press Enter or click "New task" to add items here.'
+              : 'Create your first task to get started.'
+          }
           action={
             <Button size="sm" onClick={handleAddRootTask}>
-              <Plus className="h-4 w-4" />
-              Add task
+              <Plus className="h-3.5 w-3.5" />
+              New task
             </Button>
           }
         />

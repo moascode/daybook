@@ -5,27 +5,18 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
 import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
-import { WalletTabNav } from '@/modules/wallet/WalletTabNav'
 import { useWallet } from '@/hooks/useWallet'
 import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
 
 export function AccountsPage() {
-  const {
-    accounts,
-    loadAccounts,
-    addAccount,
-    updateAccount,
-    deleteAccount,
-  } = useWallet()
+  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount } = useWallet()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
 
-  useEffect(() => {
-    loadAccounts()
-  }, [loadAccounts])
+  useEffect(() => { loadAccounts() }, [loadAccounts])
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
     await addAccount(data)
@@ -43,40 +34,31 @@ export function AccountsPage() {
     setDeleteTarget(null)
   }, [deleteTarget, deleteAccount])
 
-  function openCreateForm() {
-    setEditingAccount(null)
-    setFormOpen(true)
-  }
-
-  function openEditForm(account: Account) {
-    setEditingAccount(account)
-    setFormOpen(true)
-  }
+  function openCreateForm() { setEditingAccount(null); setFormOpen(true) }
+  function openEditForm(account: Account) { setEditingAccount(account); setFormOpen(true) }
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      {/* Section header */}
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Wallet</h1>
+    <div className="max-w-5xl mx-auto">
+      {/* Page sub-header */}
+      <div className="mb-5 flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Accounts</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Manage your accounts and balances</p>
+        </div>
         <Button size="sm" onClick={openCreateForm}>
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
           Add Account
         </Button>
       </div>
 
-      {/* Tab navigation */}
-      <WalletTabNav />
-
-      {/* Account grid */}
       {accounts.length === 0 ? (
         <EmptyState
-          icon={<CreditCard className="h-12 w-12" />}
+          icon={<CreditCard className="h-10 w-10" />}
           title="No accounts yet"
           description="Create your first account to start tracking your finances."
           action={
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4" />
-              Add Account
+            <Button size="sm" onClick={openCreateForm}>
+              <Plus className="h-3.5 w-3.5" /> Add Account
             </Button>
           }
         />
@@ -93,18 +75,13 @@ export function AccountsPage() {
         </div>
       )}
 
-      {/* Create/Edit form modal */}
       <AccountForm
         open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) setEditingAccount(null)
-        }}
+        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingAccount(null) }}
         account={editingAccount}
         onSubmit={editingAccount ? handleEdit : handleAdd}
       />
 
-      {/* Delete confirmation */}
       <Modal
         open={!!deleteTarget}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
@@ -112,15 +89,8 @@ export function AccountsPage() {
         description={`Are you sure you want to delete "${deleteTarget?.name}"? All transactions in this account will be permanently deleted.`}
       >
         <div className="flex justify-end gap-3 pt-2">
-          <Button
-            variant="secondary"
-            onClick={() => setDeleteTarget(null)}
-          >
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleDelete}>
-            Delete Account
-          </Button>
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="danger" onClick={handleDelete}>Delete Account</Button>
         </div>
       </Modal>
     </div>

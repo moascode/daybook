@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react'
 import { useWallet } from '@/hooks/useWallet'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { WalletTabNav } from '@/modules/wallet/WalletTabNav'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown } from 'lucide-react'
 import { format, parseISO, endOfWeek, eachWeekOfInterval } from 'date-fns'
 import {
@@ -172,15 +171,7 @@ export function Dashboard() {
   }, [transactions])
 
   return (
-    <div className="p-6">
-      {/* Section header */}
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Wallet</h1>
-      </div>
-
-      {/* Tab navigation */}
-      <WalletTabNav />
-
+    <div className="max-w-5xl mx-auto">
       {/* Empty state */}
       {transactions.length === 0 && accounts.length === 0 ? (
         <EmptyState
@@ -344,3 +335,4 @@ export function Dashboard() {
     </div>
   )
 }
+

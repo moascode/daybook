@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { CheckSquare, Wallet } from 'lucide-react'
+import { CheckSquare, Wallet, FlaskConical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, end: true },
   { to: '/wallet', label: 'Wallet', icon: Wallet, end: false },
+  { to: '/uat', label: 'UAT Tests', icon: FlaskConical, end: true },
 ]
 
 export function Sidebar() {

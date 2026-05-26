@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Upload, FileText, AlertCircle, CheckCircle2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
-import { WalletTabNav } from '@/modules/wallet/WalletTabNav'
 import { useWallet } from '@/hooks/useWallet'
 import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
 import { CsvReviewTable } from './CsvReviewTable'
@@ -15,6 +14,7 @@ type ImportStep = 'upload' | 'mapping' | 'review' | 'done'
 export function CsvImport() {
   const navigate = useNavigate()
   const { accounts, loadAccounts, loadCategories, categories, importTransactions } = useWallet()
+
   const [step, setStep] = useState<ImportStep>('upload')
   const [file, setFile] = useState<File | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
@@ -25,6 +25,10 @@ export function CsvImport() {
   const [parseErrors, setParseErrors] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
+
+  // Ref to trigger the hidden file input programmatically — avoids the
+  // HTML quirk where a <button> inside a <label> blocks the file picker.
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     loadAccounts()
@@ -43,9 +47,7 @@ export function CsvImport() {
     setHeaders(parsed.headers)
     setRawRows(parsed.rows)
     setParseErrors(parsed.errors)
-
-    const detectedMapping = detectColumns(parsed.headers)
-    setMapping(detectedMapping)
+    setMapping(detectColumns(parsed.headers))
     setStep('mapping')
   }, [])
 
@@ -102,10 +104,17 @@ export function CsvImport() {
   }, [importRows, selectedAccountId, importTransactions])
 
   const updateRow = useCallback((index: number, updates: Partial<ImportRow>) => {
-    setImportRows((prev) =>
-      prev.map((row, i) => (i === index ? { ...row, ...updates } : row)),
-    )
+    setImportRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)))
   }, [])
+
+  const resetToUpload = () => {
+    setStep('upload')
+    setFile(null)
+    setImportRows([])
+    setHeaders([])
+    setRawRows([])
+    setResult(null)
+  }
 
   const headerOptions = [
     { value: '', label: '— None —' },
@@ -115,82 +124,85 @@ export function CsvImport() {
   const duplicateCount = importRows.filter((r) => r.isDuplicate).length
 
   return (
-    <div className="p-6">
-      {/* Section header */}
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Wallet</h1>
-      </div>
+    <div className="max-w-3xl mx-auto">
 
-      {/* Tab navigation */}
-      <WalletTabNav />
-
-      {/* ── Upload step ──────────────────────────────── */}
+      {/* ── Upload ───────────────────────────────────────────── */}
       {step === 'upload' && (
-        <div className="mx-auto max-w-xl pt-4">
-          <h2 className="mb-6 text-base font-semibold text-gray-900">Import Transactions from CSV</h2>
+        <>
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-gray-900">Import from CSV</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Bank statements, transaction exports (.csv)</p>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileInput}
+            className="hidden"
+          />
+
+          {/* Drop zone */}
           <div
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
-            className="flex flex-col items-center rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center transition-colors hover:border-brand-400"
+            className="flex flex-col items-center rounded-2xl border-2 border-dashed border-gray-200 bg-white p-14 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/30 cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
           >
-            <Upload className="mb-4 h-10 w-10 text-gray-300" />
-            <p className="mb-2 text-sm font-medium text-gray-700">
-              Drop a CSV file here, or click to browse
-            </p>
-            <p className="mb-4 text-xs text-gray-400">
-              Supported: bank statements, transaction exports (.csv)
-            </p>
-            <label>
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleFileInput}
-                className="hidden"
-              />
-              <Button variant="secondary" size="sm" className="cursor-pointer" onClick={() => {}}>
-                Choose File
-              </Button>
-            </label>
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
+              <Upload className="h-6 w-6 text-gray-400" />
+            </div>
+            <p className="mb-1 text-sm font-semibold text-gray-700">Drop a CSV file here</p>
+            <p className="mb-5 text-xs text-gray-400">or click anywhere in this area to browse</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
+            >
+              Choose File
+            </Button>
           </div>
-        </div>
+        </>
       )}
 
-      {/* ── Column mapping step ──────────────────────── */}
+      {/* ── Column mapping ────────────────────────────────────── */}
       {step === 'mapping' && (
-        <div className="mx-auto max-w-xl pt-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">Map Columns</h2>
-            <button onClick={() => setStep('upload')} className="text-gray-400 hover:text-gray-600">
-              <X className="h-5 w-5" />
+        <>
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Map Columns</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Tell us which CSV column maps to which field</p>
+            </div>
+            <button onClick={resetToUpload} className="text-gray-400 hover:text-gray-600 transition-colors">
+              <X className="h-4 w-4" />
             </button>
           </div>
 
           {file && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
-              <FileText className="h-4 w-4 text-gray-400" />
-              <span className="text-sm text-gray-600">{file.name}</span>
-              <span className="text-xs text-gray-400">({rawRows.length} rows)</span>
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+              <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              <span className="text-sm text-gray-700 font-medium">{file.name}</span>
+              <span className="text-xs text-gray-400 ml-auto">{rawRows.length} rows</span>
             </div>
           )}
 
           {parseErrors.length > 0 && (
-            <div className="mb-4 rounded-lg bg-amber-50 p-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-amber-700">
-                <AlertCircle className="h-4 w-4" />
-                {parseErrors.length} parsing warning(s)
-              </div>
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
+              <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+              <span className="text-sm text-amber-700">{parseErrors.length} parsing warning(s)</span>
             </div>
           )}
 
           <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-5">
             <Select
-              label="Date column"
+              label="Date column *"
               options={headerOptions}
               value={mapping.date ?? ''}
               onChange={(e) => setMapping((m) => ({ ...m, date: e.target.value || null }))}
             />
             <Select
-              label="Amount column"
+              label="Amount column *"
               options={headerOptions}
               value={mapping.amount ?? ''}
               onChange={(e) => setMapping((m) => ({ ...m, amount: e.target.value || null }))}
@@ -208,7 +220,7 @@ export function CsvImport() {
               onChange={(e) => setMapping((m) => ({ ...m, description: e.target.value || null }))}
             />
             <Select
-              label="Import into account"
+              label="Import into account *"
               options={accounts.map((a) => ({ value: a.id, label: a.name }))}
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
@@ -216,35 +228,36 @@ export function CsvImport() {
           </div>
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setStep('upload')}>
-              Back
-            </Button>
+            <Button variant="secondary" size="sm" onClick={resetToUpload}>Back</Button>
             <Button
+              size="sm"
               onClick={handleProceedToReview}
               disabled={!mapping.date || !mapping.amount || !selectedAccountId}
             >
-              Review Rows
+              Review Rows →
             </Button>
           </div>
-        </div>
+        </>
       )}
 
-      {/* ── Review step ────────────────────────────────*/}
+      {/* ── Review ────────────────────────────────────────────── */}
       {step === 'review' && (
-        <div>
+        <>
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-gray-900">Review Import</h2>
-              <p className="text-sm text-gray-500">
-                {includedCount} to import, {duplicateCount} duplicate(s) skipped
+              <p className="text-xs text-gray-500 mt-0.5">
+                {includedCount} to import · {duplicateCount} duplicate{duplicateCount !== 1 ? 's' : ''} skipped
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setStep('mapping')}>
-                Back
-              </Button>
-              <Button size="sm" onClick={handleImport} disabled={importing || includedCount === 0}>
-                {importing ? 'Importing...' : `Import ${includedCount} Transactions`}
+              <Button variant="secondary" size="sm" onClick={() => setStep('mapping')}>Back</Button>
+              <Button
+                size="sm"
+                onClick={handleImport}
+                disabled={importing || includedCount === 0}
+              >
+                {importing ? 'Importing…' : `Import ${includedCount} Transactions`}
               </Button>
             </div>
           </div>
@@ -253,32 +266,28 @@ export function CsvImport() {
             rows={importRows}
             categories={categories}
             onRowChange={updateRow}
-            onToggleInclude={(index) =>
-              updateRow(index, { included: !importRows[index].included })
-            }
+            onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
           />
-        </div>
+        </>
       )}
 
-      {/* ── Done step ──────────────────────────────────*/}
+      {/* ── Done ──────────────────────────────────────────────── */}
       {step === 'done' && (
-        <div className="mx-auto max-w-md pt-12 text-center">
-          <CheckCircle2 className="mx-auto mb-4 h-12 w-12 text-green-500" />
+        <div className="mx-auto max-w-sm pt-12 text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+            <CheckCircle2 className="h-8 w-8 text-green-600" />
+          </div>
           <h2 className="text-lg font-semibold text-gray-900">Import Complete</h2>
           {result && (
-            <div className="mt-3 space-y-1 text-sm text-gray-600">
-              <p>{result.imported} transaction(s) imported</p>
-              {result.skipped > 0 && <p>{result.skipped} duplicate(s) skipped</p>}
+            <div className="mt-3 space-y-1 text-sm text-gray-500">
+              <p><span className="font-semibold text-gray-800">{result.imported}</span> transaction{result.imported !== 1 ? 's' : ''} imported</p>
+              {result.skipped > 0 && <p>{result.skipped} duplicate{result.skipped !== 1 ? 's' : ''} skipped</p>}
               {result.excluded > 0 && <p>{result.excluded} excluded by you</p>}
             </div>
           )}
-          <div className="mt-6 flex justify-center gap-3">
-            <Button variant="secondary" onClick={() => { setStep('upload'); setFile(null); setImportRows([]) }}>
-              Import Another
-            </Button>
-            <Button onClick={() => navigate('/wallet')}>
-              View Transactions
-            </Button>
+          <div className="mt-7 flex justify-center gap-3">
+            <Button variant="secondary" size="sm" onClick={resetToUpload}>Import Another</Button>
+            <Button size="sm" onClick={() => navigate('/wallet')}>View Transactions</Button>
           </div>
         </div>
       )}
