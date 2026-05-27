@@ -203,6 +203,7 @@ export function Dashboard() {
           <div className="flex items-center gap-2">
             <input
               type="date"
+              aria-label="From"
               value={customFrom}
               onChange={(e) => setCustomFrom(e.target.value)}
               className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
@@ -210,6 +211,7 @@ export function Dashboard() {
             <span className="text-gray-400">to</span>
             <input
               type="date"
+              aria-label="To"
               value={customTo}
               onChange={(e) => setCustomTo(e.target.value)}
               className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"

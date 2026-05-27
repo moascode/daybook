@@ -77,6 +77,7 @@ function TransactionRow({
 
   return (
     <div
+      data-testid="transaction-row"
       className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50 cursor-pointer"
       onClick={() => onEdit(transaction)}
     >

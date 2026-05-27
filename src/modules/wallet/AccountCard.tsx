@@ -65,6 +65,7 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
 
   return (
     <div
+      data-testid="account-card"
       className={cn(
         'group relative overflow-hidden rounded-xl border border-gray-200 bg-white',
         'transition-shadow hover:shadow-md cursor-pointer'

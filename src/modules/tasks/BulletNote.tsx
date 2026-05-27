@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Textarea } from '@/components/ui/Textarea'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,10 @@ interface BulletNoteProps {
 
 export function BulletNote({ taskId, note, depth, onSave }: BulletNoteProps) {
   const [value, setValue] = useState(note)
+
+  useEffect(() => {
+    setValue(note)
+  }, [note])
 
   const handleBlur = useCallback(() => {
     if (value !== note) {

@@ -77,6 +77,8 @@ export function BulletNode({
   return (
     <div
       ref={setNodeRef}
+      data-testid="bullet-node"
+      data-task-id={task.id}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn('group/node select-none', isDragging && 'opacity-40')}
     >
@@ -89,15 +91,16 @@ export function BulletNode({
         )}
         style={{ paddingLeft: depth * 22 }}
       >
-        {/* Drag handle — far left, only on hover */}
+        {/* Drag handle — positioned left of content, never interferes with collapse/checkbox */}
         <button
           className={cn(
-            'absolute top-0 flex h-full w-5 items-center justify-center',
+            'absolute top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center',
             'text-gray-300 opacity-0 group-hover/node:opacity-100',
             'transition-opacity cursor-grab active:cursor-grabbing touch-none',
-            'rounded-l-md hover:text-gray-500',
+            'rounded hover:text-gray-500 pointer-events-none group-hover/node:pointer-events-auto',
+            'z-0',
           )}
-          style={{ left: depth * 22 - (depth > 0 ? 20 : 0) }}
+          style={{ left: -28 }}
           aria-label="Drag to reorder"
           title="Drag to reorder"
           {...attributes}

@@ -177,9 +177,10 @@ function buildTests(): TestDef[] {
     const deleted = [root.id, child.id, grandchild.id, greatGrandchild.id]
     assert(!tasks.some((t) => deleted.includes(t.id)), 'all 4 levels deleted from store')
     const db = await getDB()
+    const placeholders = deleted.map((_, i) => `$${i + 1}`).join(', ')
     const result = await db.query<{ cnt: string }>(
-      `SELECT COUNT(*) as cnt FROM tasks WHERE id = ANY($1)`,
-      [deleted],
+      `SELECT COUNT(*) as cnt FROM tasks WHERE id IN (${placeholders})`,
+      deleted,
     )
     assertEqual(Number(result.rows[0].cnt), 0, 'all 4 levels deleted from DB')
   })
@@ -298,7 +299,8 @@ function buildTests(): TestDef[] {
 
     // Cleanup
     await deleteTask(trigger.id)
-    await db.query(`DELETE FROM tasks WHERE id = ANY($1)`, [ids])
+    const cleanupPlaceholders = ids.map((_, i) => `$${i + 1}`).join(', ')
+    await db.query(`DELETE FROM tasks WHERE id IN (${cleanupPlaceholders})`, ids)
     await loadTasks()
   }, true)
 

@@ -35,6 +35,14 @@ export function CsvImport() {
     loadCategories()
   }, [loadAccounts, loadCategories])
 
+  // Expose file handler for E2E testing (Playwright can't reliably trigger React onChange on hidden file inputs)
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as any).__testCsvFileSelect = (file: File) => handleFileSelect(file)
+      return () => { delete (window as any).__testCsvFileSelect }
+    }
+  }, [handleFileSelect])
+
   useEffect(() => {
     if (accounts.length > 0 && !selectedAccountId) {
       setSelectedAccountId(accounts[0].id)

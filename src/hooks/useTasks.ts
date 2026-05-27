@@ -319,7 +319,8 @@ export function useTasks() {
     (taskId: string | null): Task[] => {
       if (!taskId) return []
 
-      const allTasks = store.tasks
+      // Always read fresh from the store so callers holding a stale ref still get current data.
+      const allTasks = useTasksStore.getState().tasks
       const path: Task[] = []
       let current = allTasks.find((t) => t.id === taskId)
 
@@ -332,7 +333,7 @@ export function useTasks() {
 
       return path
     },
-    [store.tasks],
+    [],
   )
 
   /**

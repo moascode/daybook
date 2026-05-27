@@ -42,10 +42,136 @@ export function TasksPage() {
   // Track the previously focused ID so we clear autoFocus after it mounts
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Task action callbacks ──────────────────────────────────────────
+  const handleUpdate = useCallback(
+    (id: string, content: string) => {
+      updateTask(id, { content })
+    },
+    [updateTask],
+  )
+
+  const handleUpdateNote = useCallback(
+    (id: string, note: string) => {
+      updateTask(id, { note })
+    },
+    [updateTask],
+  )
+
+  const handleToggleComplete = useCallback(
+    (id: string) => {
+      const task = useTasksStore.getState().tasks.find((t) => t.id === id)
+      if (task) {
+        updateTask(id, { isCompleted: !task.isCompleted })
+      }
+    },
+    [updateTask],
+  )
+
+  const handleToggleCollapse = useCallback(
+    (id: string) => {
+      const task = useTasksStore.getState().tasks.find((t) => t.id === id)
+      if (task) {
+        updateTask(id, { isCollapsed: !task.isCollapsed })
+      }
+    },
+    [updateTask],
+  )
+
+  const handleEnter = useCallback(
+    async (id: string) => {
+      const allTasks = useTasksStore.getState().tasks
+      const task = allTasks.find((t) => t.id === id)
+      if (!task) return
+
+      const newTask = await addTask('', task.parentId, id)
+      setFocusId(newTask.id)
+    },
+    [addTask],
+  )
+
+  const handleBackspaceEmpty = useCallback(
+    async (id: string) => {
+      const allTasks = useTasksStore.getState().tasks
+      const task = allTasks.find((t) => t.id === id)
+      if (!task) return
+
+      const siblings = allTasks
+        .filter((t) => t.parentId === task.parentId)
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+
+      const currentIndex = siblings.findIndex((t) => t.id === id)
+      const prevSibling = siblings[currentIndex - 1]
+
+      await deleteTask(id)
+
+      if (prevSibling) {
+        setFocusId(prevSibling.id)
+      } else if (task.parentId) {
+        setFocusId(task.parentId)
+      }
+    },
+    [deleteTask],
+  )
+
+  const handleIndent = useCallback(
+    async (id: string) => {
+      await indentTask(id)
+    },
+    [indentTask],
+  )
+
+  const handleOutdent = useCallback(
+    async (id: string) => {
+      await outdentTask(id)
+    },
+    [outdentTask],
+  )
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await deleteTask(id)
+    },
+    [deleteTask],
+  )
+
+  const handleZoomIn = useCallback(
+    (id: string) => {
+      setRootId(id)
+    },
+    [setRootId],
+  )
+
+  const handleAddRootTask = useCallback(async () => {
+    const newTask = await addTask('', rootId)
+    setFocusId(newTask.id)
+  }, [addTask, rootId])
+
+  const handleToggleHideCompleted = useCallback(() => {
+    setHideCompleted(!hideCompleted)
+  }, [hideCompleted, setHideCompleted])
+
   // Load tasks on mount
   useEffect(() => {
     loadTasks().then(() => setLoaded(true))
   }, [loadTasks])
+
+  // Expose task operations for E2E testing
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as any).__testIndentTask = (id: string) => indentTask(id);
+      (window as any).__testOutdentTask = (id: string) => outdentTask(id);
+      (window as any).__testGetTasks = () => useTasksStore.getState().tasks;
+      (window as any).__testToggleCollapse = (id: string) => handleToggleCollapse(id);
+      (window as any).__testUpdateTask = (id: string, updates: any) => updateTask(id, updates)
+      return () => {
+        delete (window as any).__testIndentTask
+        delete (window as any).__testOutdentTask
+        delete (window as any).__testGetTasks
+        delete (window as any).__testToggleCollapse
+        delete (window as any).__testUpdateTask
+      }
+    }
+  }, [indentTask, outdentTask, handleToggleCollapse, updateTask])
 
   // Clear focusId after a short delay so it doesn't re-focus on every render
   useEffect(() => {
@@ -124,117 +250,6 @@ export function TasksPage() {
     },
     [moveTask],
   )
-
-  // ── Task action callbacks ──────────────────────────────────────────
-
-  const handleUpdate = useCallback(
-    (id: string, content: string) => {
-      updateTask(id, { content })
-    },
-    [updateTask],
-  )
-
-  const handleUpdateNote = useCallback(
-    (id: string, note: string) => {
-      updateTask(id, { note })
-    },
-    [updateTask],
-  )
-
-  const handleToggleComplete = useCallback(
-    (id: string) => {
-      const task = useTasksStore.getState().tasks.find((t) => t.id === id)
-      if (task) {
-        updateTask(id, { isCompleted: !task.isCompleted })
-      }
-    },
-    [updateTask],
-  )
-
-  const handleToggleCollapse = useCallback(
-    (id: string) => {
-      const task = useTasksStore.getState().tasks.find((t) => t.id === id)
-      if (task) {
-        updateTask(id, { isCollapsed: !task.isCollapsed })
-      }
-    },
-    [updateTask],
-  )
-
-  const handleEnter = useCallback(
-    async (id: string) => {
-      const allTasks = useTasksStore.getState().tasks
-      const task = allTasks.find((t) => t.id === id)
-      if (!task) return
-
-      const newTask = await addTask('', task.parentId, id)
-      setFocusId(newTask.id)
-    },
-    [addTask],
-  )
-
-  const handleBackspaceEmpty = useCallback(
-    async (id: string) => {
-      const allTasks = useTasksStore.getState().tasks
-      const task = allTasks.find((t) => t.id === id)
-      if (!task) return
-
-      // Find the previous sibling to focus on
-      const siblings = allTasks
-        .filter((t) => t.parentId === task.parentId)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-
-      const currentIndex = siblings.findIndex((t) => t.id === id)
-      const prevSibling = siblings[currentIndex - 1]
-
-      await deleteTask(id)
-
-      if (prevSibling) {
-        setFocusId(prevSibling.id)
-      } else if (task.parentId) {
-        // Focus on parent if no previous sibling
-        setFocusId(task.parentId)
-      }
-    },
-    [deleteTask],
-  )
-
-  const handleIndent = useCallback(
-    async (id: string) => {
-      await indentTask(id)
-    },
-    [indentTask],
-  )
-
-  const handleOutdent = useCallback(
-    async (id: string) => {
-      await outdentTask(id)
-    },
-    [outdentTask],
-  )
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      await deleteTask(id)
-    },
-    [deleteTask],
-  )
-
-  const handleZoomIn = useCallback(
-    (id: string) => {
-      setRootId(id)
-    },
-    [setRootId],
-  )
-
-  const handleAddRootTask = useCallback(async () => {
-    const newTask = await addTask('', rootId)
-    setFocusId(newTask.id)
-  }, [addTask, rootId])
-
-  const handleToggleHideCompleted = useCallback(() => {
-    setHideCompleted(!hideCompleted)
-  }, [hideCompleted, setHideCompleted])
 
   // ── Breadcrumb ──────────────────────────────────────────
   const breadcrumb = getBreadcrumb(rootId)
