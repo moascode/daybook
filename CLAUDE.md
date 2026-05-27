@@ -33,6 +33,7 @@
 8. **Ask, don't assume.** If a feature spec is ambiguous, ask the user. Don't invent behaviour.
 9. **Keep `.env.local` out of git.** It is in `.gitignore`. Never log or expose API keys.
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
+11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npx playwright test` to confirm no regressions. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
 
 ---
 
@@ -700,17 +701,17 @@ chore: update CLAUDE.md with Phase 2 status
 
 ```
 Current phase:  3 — Alpha (post-UAT polish)
-Phase status:   Complete + UAT fixes applied
-Last session:   2026-05-25
-Last completed: Alpha UAT pass — all user-reported bugs fixed and verified in browser:
-                - BulletEditor blinking: fixed with debounce + DOM-sync-when-unfocused pattern
-                - Task completion: visible checkbox added to every bullet row
-                - Wallet navigation: single sidebar "Wallet" entry + in-page WalletTabNav tabs
-                - README.md created
-                - docs/UAT-FEEDBACK.md created
-                Commits: 57403e3 (schema fix), 32570b1 (UAT fixes)
+Phase status:   Complete + UAT fixes applied + e2e test suite established
+Last session:   2026-05-28
+Last completed: - Added e2e testing rule (Rule 11) to CLAUDE.md — every new feature requires
+                  a Playwright test; full suite must pass before any feature is marked complete
+                - Updated tracker.html with e2e testing tasks per phase
+                - Prior session (2026-05-25): Alpha UAT pass — BulletEditor blinking fixed,
+                  task checkboxes added, wallet navigation redesigned, README created
+                  Commits: 57403e3 (schema fix), 32570b1 (UAT fixes)
+                  faf6929 (e2e test fixes), d8fe428 (quality redesign / UAT pass 2)
 Next task:      Phase 4 — Home network + multi-user (Node backend, SQLite file, auth)
-Blockers:       None — Alpha is feature-complete, UAT-verified, and builds cleanly
+Blockers:       None — Alpha is feature-complete, UAT-verified, e2e suite green, builds cleanly
 ```
 
 ---
@@ -778,3 +779,47 @@ Phase 7  →  ★ v4+ Advanced features, ongoing
 | Phase 4 architecture | Local Node.js backend + SQLite file | Home network multi-user requires a real server — PGlite is per-browser only. SQLite file keeps it simple before committing to Postgres |
 | AI key in Phase 4 | Proxied through local backend | Backend is already running for auth; routing AI calls through it costs nothing extra and removes browser key exposure |
 | Cloud (Phase 6) ordering | After AI (Phase 5) | Moving to Supabase while still adding features creates churn. Better to stabilise features on the home server first, then migrate once |
+
+---
+
+## 16. E2E Testing Conventions
+
+### Rule (from Section 2, Rule 11)
+Every new feature or behaviour change **must** have a Playwright test. Run `npx playwright test` before marking any feature complete.
+
+### File naming
+```
+e2e/
+  01-tasks.spec.ts          ← Tasks module tests
+  02-wallet-accounts.spec.ts
+  03-wallet-transactions.spec.ts
+  04-wallet-csv.spec.ts
+  05-wallet-dashboard.spec.ts
+  06-uat-runner.spec.ts      ← Full UAT smoke test
+  NN-description.spec.ts     ← New specs follow this pattern (two-digit prefix)
+  helpers.ts                 ← Shared test utilities (newAppPage, etc.)
+  fixtures/                  ← Test CSV files and other test data
+```
+
+### Conventions
+- Each spec file gets an isolated browser context (fresh IndexedDB) via `newAppPage()`.
+- Use `test.describe.configure({ mode: 'serial' })` when tests build state sequentially.
+- Prefer assertions on visible UI text (`getByText`, `getByRole`) over CSS selectors.
+- For async DB operations, `await page.waitForTimeout(500)` is acceptable only when no reliable DOM signal exists; prefer `waitForSelector` or `waitForResponse`.
+- Do not skip (`test.skip`) a failing test to make CI green — fix it or file it as a known issue with a comment explaining why.
+
+### When to add tests
+| Scenario | Action |
+|---|---|
+| New page or route | New spec file `NN-feature.spec.ts` |
+| New form or user interaction | New `test()` block in the relevant spec |
+| Bug fix | Add a regression test that would have caught the bug |
+| Refactor (no behaviour change) | Run existing suite; no new tests needed unless coverage gaps are found |
+
+### Running tests
+```bash
+npx playwright test              # Full suite (headless)
+npx playwright test e2e/01-tasks # Single file
+npx playwright test --headed     # Watch mode (headed)
+npx playwright show-report       # View last HTML report
+```

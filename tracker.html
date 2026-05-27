@@ -580,6 +580,9 @@ const PHASES = [
       { id: 'p3i', t: 'Dashboard: cash flow bar chart — income vs expense by week (Recharts)' },
       { id: 'p3j', t: 'Dashboard: spending by category pie chart + spending by account bar chart (Recharts)' },
       { id: 'p3k', t: 'Dashboard: top merchants list + date range selector (this month / last month / custom)' },
+      { id: 'p3l', t: 'E2E tests: Tasks module — bullet CRUD, keyboard shortcuts, indent/outdent, collapse, zoom-in (e2e/01-tasks.spec.ts)', note: 'Playwright suite. Run: npx playwright test' },
+      { id: 'p3m', t: 'E2E tests: Wallet — accounts CRUD, transaction CRUD, CSV import with dedup, dashboard charts (e2e/02–05.spec.ts)', note: 'Full Playwright coverage for all wallet flows.' },
+      { id: 'p3n', t: 'E2E tests: UAT smoke runner — end-to-end happy path covering all modules (e2e/06-uat-runner.spec.ts)' },
     ]
   },
 ];
@@ -605,6 +608,7 @@ const PHASES_2 = [
       { id: 'p4g', t: 'Set a static local IP for the server on your home router (e.g. 192.168.1.100)' },
       { id: 'p4h', t: 'Test from a second device (phone, tablet) connected to your home WiFi' },
       { id: 'p4i', t: 'Data migration script: export PGlite data from browser IndexedDB → import into new server DB' },
+      { id: 'p4j', t: 'E2E tests: update suite for new auth flow — sign-in, sign-up, per-user data isolation', note: 'Rule 11: every new feature requires a Playwright test. Run npx playwright test before marking phase complete.' },
     ]
   },
 ];
@@ -634,6 +638,7 @@ const PHASES_3 = [
       { id: 'p5j', t: 'DailyBriefing: one-click Sonnet summary of tasks + finances, max 800 tokens' },
       { id: 'p5k', t: 'Financial insights: ask Sonnet to surface patterns, anomalies, budget suggestions' },
       { id: 'p5l', t: 'Verify prompt caching is active (check API response headers for cache hits)' },
+      { id: 'p5m', t: 'E2E tests: AI features — natural language task entry, transaction entry, CSV categorisation, daily briefing', note: 'Rule 11: every new feature requires a Playwright test. Run npx playwright test before marking phase complete.' },
     ]
   },
 ];
@@ -661,6 +666,7 @@ const PHASES_4 = [
       { id: 'p6h', t: 'Update all Claude API calls to route through the Edge Function' },
       { id: 'p6i', t: 'Deploy to Vercel; verify app loads at daybook.vercel.app' },
       { id: 'p6j', t: 'Invite another user via Supabase Auth; verify data isolation is working (RLS)' },
+      { id: 'p6k', t: 'E2E tests: cloud deployment — sign-in via Supabase Auth, RLS isolation, Edge Function AI proxy', note: 'Rule 11: every new feature requires a Playwright test. Run npx playwright test before marking phase complete.' },
     ]
   },
 ];
@@ -737,23 +743,36 @@ const ALL_PHASES = [...PHASES, ...PHASES_2, ...PHASES_3, ...PHASES_4, ...PHASES_
 
 // ── STATE ──────────────────────────────────────────────────────────────
 
-// Tasks confirmed done — merged into saved state once via migration flag _m1
+// Tasks confirmed done — merged into saved state once via migration flags.
 // User can still manually uncheck any of these; their explicit choice wins on subsequent loads.
-const CONFIRMED_DONE = { p0a: true, p0c: true, p0d: true, p0e: true, p0f: true, p0h: true };
+const CONFIRMED_DONE_M1 = { p0a: true, p0c: true, p0d: true, p0e: true, p0f: true, p0h: true };
+
+// m2: Phase 1, 2, and 3 are fully complete (Alpha milestone reached + UAT verified).
+const CONFIRMED_DONE_M2 = {
+  p1a: true, p1b: true, p1c: true, p1d: true, p1e: true, p1f: true, p1g: true,
+  p1h: true, p1i: true, p1j: true, p1k: true, p1l: true, p1m: true,
+  p2a: true, p2b: true, p2c: true, p2d: true, p2e: true, p2f: true, p2g: true,
+  p2h: true, p2i: true, p2j: true, p2k: true, p2l: true,
+  p3a: true, p3b: true, p3c: true, p3d: true, p3e: true, p3f: true, p3g: true,
+  p3h: true, p3i: true, p3j: true, p3k: true, p3l: true, p3m: true, p3n: true,
+};
 
 function loadState() {
   try {
     const raw = localStorage.getItem('daybook-tracker-v1');
     const saved = raw ? JSON.parse(raw) : {};
+    let current = saved;
     if (!saved['_m1']) {
-      // First time seeing this migration — merge defaults in, user values take priority
-      const merged = { ...CONFIRMED_DONE, ...saved, _m1: true };
-      localStorage.setItem('daybook-tracker-v1', JSON.stringify(merged));
-      return merged;
+      current = { ...CONFIRMED_DONE_M1, ...current, _m1: true };
     }
-    return saved;
+    if (!saved['_m2']) {
+      // Phases 1–3 are complete — mark all tasks done; user's explicit unchecks take priority
+      current = { ...CONFIRMED_DONE_M2, ...current, _m2: true };
+    }
+    if (current !== saved) localStorage.setItem('daybook-tracker-v1', JSON.stringify(current));
+    return current;
   }
-  catch { return { ...CONFIRMED_DONE, _m1: true }; }
+  catch { return { ...CONFIRMED_DONE_M1, ...CONFIRMED_DONE_M2, _m1: true, _m2: true }; }
 }
 function saveState() { localStorage.setItem('daybook-tracker-v1', JSON.stringify(state)); }
 
