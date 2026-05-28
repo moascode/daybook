@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Plus, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -33,6 +33,8 @@ export function WalletPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, net: 0 })
+  const filtersRef = useRef(filters)
+  filtersRef.current = filters
 
   useEffect(() => {
     const accountParam = searchParams.get('account')
@@ -54,20 +56,20 @@ export function WalletPage() {
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     await addTransaction(data)
-    await loadTransactions(filters)
-  }, [addTransaction, loadTransactions, filters])
+    await loadTransactions(filtersRef.current)
+  }, [addTransaction, loadTransactions])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
     if (!editingTransaction) return
     await updateTransaction(editingTransaction.id, data)
     setEditingTransaction(null)
-    await loadTransactions(filters)
-  }, [editingTransaction, updateTransaction, loadTransactions, filters])
+    await loadTransactions(filtersRef.current)
+  }, [editingTransaction, updateTransaction, loadTransactions])
 
   const handleDeleteTransaction = useCallback(async (id: string) => {
     await deleteTransaction(id)
-    await loadTransactions(filters)
-  }, [deleteTransaction, loadTransactions, filters])
+    await loadTransactions(filtersRef.current)
+  }, [deleteTransaction, loadTransactions])
 
   function openEditForm(transaction: Transaction) {
     setEditingTransaction(transaction)

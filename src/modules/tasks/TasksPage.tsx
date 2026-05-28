@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -11,13 +11,51 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
-import { Plus, Eye, EyeOff, ChevronRight, Home } from 'lucide-react'
+import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { CheckSquare } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTasksStore } from '@/stores/tasks.store'
+import { useToastStore } from '@/stores/toast.store'
 import { BulletTree } from './BulletTree'
+import { cn } from '@/lib/utils'
+import type { Task } from '@/types/tasks.types'
+
+// ── Search helpers ──────────────────────────────────
+
+function getTaskPath(task: Task, allTasks: Task[]): string {
+  const parts: string[] = []
+  let parentId = task.parentId
+
+  while (parentId) {
+    const parent = allTasks.find((t) => t.id === parentId)
+    if (!parent) break
+    parts.unshift(parent.content || 'Untitled')
+    parentId = parent.parentId
+  }
+
+  return parts.length > 0 ? parts.join(' › ') : 'Home'
+}
+
+function highlight(text: string, query: string): React.ReactNode {
+  if (!query || !text) return text || ''
+  const lower = text.toLowerCase()
+  const q = query.toLowerCase()
+  const idx = lower.indexOf(q)
+  if (idx === -1) return text
+
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded-[2px] bg-yellow-100 text-yellow-900 not-italic">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
+// ── Component ─────────────────────────────────────
 
 export function TasksPage() {
   const {
@@ -30,39 +68,80 @@ export function TasksPage() {
     addTask,
     updateTask,
     deleteTask,
+    restoreDeleted,
     moveTask,
     indentTask,
     outdentTask,
     getBreadcrumb,
   } = useTasks()
 
+  const { addToast, removeToast } = useToastStore()
+
   const [loaded, setLoaded] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Track the previously focused ID so we clear autoFocus after it mounts
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const undoToastIdRef = useRef<string | null>(null)
+
+  // ── Search results ────────────────────────────────
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return []
+    return tasks
+      .filter(
+        (t) =>
+          t.content.toLowerCase().includes(q) ||
+          t.note.toLowerCase().includes(q),
+      )
+      .slice(0, 50)
+  }, [tasks, searchQuery])
+
+  // ── Undo toast helper ─────────────────────────────
+  const showDeleteToast = useCallback(() => {
+    if (undoToastIdRef.current) removeToast(undoToastIdRef.current)
+    undoToastIdRef.current = addToast({
+      message: 'Task deleted',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          restoreDeleted()
+          undoToastIdRef.current = null
+        },
+      },
+      duration: 5000,
+    })
+  }, [addToast, removeToast, restoreDeleted])
+
+  // ── Keyboard shortcuts (global) ───────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // ── Task action callbacks ──────────────────────────────────────────
   const handleUpdate = useCallback(
-    (id: string, content: string) => {
-      updateTask(id, { content })
-    },
+    (id: string, content: string) => updateTask(id, { content }),
     [updateTask],
   )
 
   const handleUpdateNote = useCallback(
-    (id: string, note: string) => {
-      updateTask(id, { note })
-    },
+    (id: string, note: string) => updateTask(id, { note }),
     [updateTask],
   )
 
   const handleToggleComplete = useCallback(
     (id: string) => {
       const task = useTasksStore.getState().tasks.find((t) => t.id === id)
-      if (task) {
-        updateTask(id, { isCompleted: !task.isCompleted })
-      }
+      if (task) updateTask(id, { isCompleted: !task.isCompleted })
     },
     [updateTask],
   )
@@ -70,9 +149,7 @@ export function TasksPage() {
   const handleToggleCollapse = useCallback(
     (id: string) => {
       const task = useTasksStore.getState().tasks.find((t) => t.id === id)
-      if (task) {
-        updateTask(id, { isCollapsed: !task.isCollapsed })
-      }
+      if (task) updateTask(id, { isCollapsed: !task.isCollapsed })
     },
     [updateTask],
   )
@@ -82,7 +159,6 @@ export function TasksPage() {
       const allTasks = useTasksStore.getState().tasks
       const task = allTasks.find((t) => t.id === id)
       if (!task) return
-
       const newTask = await addTask('', task.parentId, id)
       setFocusId(newTask.id)
     },
@@ -103,6 +179,7 @@ export function TasksPage() {
       const prevSibling = siblings[currentIndex - 1]
 
       await deleteTask(id)
+      showDeleteToast()
 
       if (prevSibling) {
         setFocusId(prevSibling.id)
@@ -110,45 +187,31 @@ export function TasksPage() {
         setFocusId(task.parentId)
       }
     },
-    [deleteTask],
+    [deleteTask, showDeleteToast],
   )
 
-  const handleIndent = useCallback(
-    async (id: string) => {
-      await indentTask(id)
-    },
-    [indentTask],
-  )
-
-  const handleOutdent = useCallback(
-    async (id: string) => {
-      await outdentTask(id)
-    },
-    [outdentTask],
-  )
+  const handleIndent = useCallback(async (id: string) => { await indentTask(id) }, [indentTask])
+  const handleOutdent = useCallback(async (id: string) => { await outdentTask(id) }, [outdentTask])
 
   const handleDelete = useCallback(
     async (id: string) => {
       await deleteTask(id)
+      showDeleteToast()
     },
-    [deleteTask],
+    [deleteTask, showDeleteToast],
   )
 
-  const handleZoomIn = useCallback(
-    (id: string) => {
-      setRootId(id)
-    },
-    [setRootId],
-  )
+  const handleZoomIn = useCallback((id: string) => { setRootId(id) }, [setRootId])
 
   const handleAddRootTask = useCallback(async () => {
     const newTask = await addTask('', rootId)
     setFocusId(newTask.id)
   }, [addTask, rootId])
 
-  const handleToggleHideCompleted = useCallback(() => {
-    setHideCompleted(!hideCompleted)
-  }, [hideCompleted, setHideCompleted])
+  const handleToggleHideCompleted = useCallback(
+    () => setHideCompleted(!hideCompleted),
+    [hideCompleted, setHideCompleted],
+  )
 
   // Load tasks on mount
   useEffect(() => {
@@ -158,11 +221,11 @@ export function TasksPage() {
   // Expose task operations for E2E testing
   useEffect(() => {
     if (import.meta.env.DEV) {
-      (window as any).__testIndentTask = (id: string) => indentTask(id);
-      (window as any).__testOutdentTask = (id: string) => outdentTask(id);
-      (window as any).__testGetTasks = () => useTasksStore.getState().tasks;
-      (window as any).__testToggleCollapse = (id: string) => handleToggleCollapse(id);
-      (window as any).__testUpdateTask = (id: string, updates: any) => updateTask(id, updates)
+      (window as any).__testIndentTask = (id: string) => indentTask(id)
+      ;(window as any).__testOutdentTask = (id: string) => outdentTask(id)
+      ;(window as any).__testGetTasks = () => useTasksStore.getState().tasks
+      ;(window as any).__testToggleCollapse = (id: string) => handleToggleCollapse(id)
+      ;(window as any).__testUpdateTask = (id: string, updates: any) => updateTask(id, updates)
       return () => {
         delete (window as any).__testIndentTask
         delete (window as any).__testOutdentTask
@@ -173,33 +236,21 @@ export function TasksPage() {
     }
   }, [indentTask, outdentTask, handleToggleCollapse, updateTask])
 
-  // Clear focusId after a short delay so it doesn't re-focus on every render
   useEffect(() => {
     if (focusId) {
-      focusTimeoutRef.current = setTimeout(() => {
-        setFocusId(null)
-      }, 100)
+      focusTimeoutRef.current = setTimeout(() => setFocusId(null), 100)
     }
     return () => {
-      if (focusTimeoutRef.current) {
-        clearTimeout(focusTimeoutRef.current)
-      }
+      if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current)
     }
   }, [focusId])
 
   // ── DnD sensors ──────────────────────────────────────────
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Require 8px of movement before drag starts (prevents accidental drags)
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  // ── DnD handler ──────────────────────────────────────────
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
@@ -213,7 +264,6 @@ export function TasksPage() {
       const overTask = allTasks.find((t) => t.id === overId)
       if (!activeTask || !overTask) return
 
-      // Move within the same parent level
       const parentId = overTask.parentId
       const siblings = allTasks
         .filter((t) => t.parentId === parentId)
@@ -223,22 +273,17 @@ export function TasksPage() {
 
       let newSortOrder: number
       if (overIndex === 0) {
-        // Dropped before the first item
         newSortOrder = siblings[0].sortOrder / 2
       } else if (overIndex === siblings.length - 1) {
-        // Dropped after the last item
         newSortOrder = siblings[siblings.length - 1].sortOrder + 1.0
       } else {
-        // Dropped between two items — determine if before or after the over item
         const activeIndex = siblings.findIndex((t) => t.id === activeId)
         if (activeIndex < overIndex) {
-          // Moving down — place after over
           const next = siblings[overIndex + 1]
           newSortOrder = next
             ? (overTask.sortOrder + next.sortOrder) / 2
             : overTask.sortOrder + 1.0
         } else {
-          // Moving up — place before over
           const prev = siblings[overIndex - 1]
           newSortOrder = prev
             ? (prev.sortOrder + overTask.sortOrder) / 2
@@ -251,10 +296,9 @@ export function TasksPage() {
     [moveTask],
   )
 
-  // ── Breadcrumb ──────────────────────────────────────────
+  // ── Render ──────────────────────────────────────────
   const breadcrumb = getBreadcrumb(rootId)
 
-  // ── Render ──────────────────────────────────────────
   if (!loaded) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -263,15 +307,14 @@ export function TasksPage() {
     )
   }
 
-  // Check if there are any tasks at the current root level
   const currentLevelTasks = tasks.filter((t) => t.parentId === rootId)
   const isEmpty = currentLevelTasks.length === 0
+  const isSearching = searchQuery.trim().length > 0
 
   return (
     <div className="mx-auto max-w-2xl">
       {/* ── Toolbar ─────────────────────────────────────────── */}
-      <div className="mb-5 flex items-center justify-between gap-3">
-
+      <div className="mb-3 flex items-center justify-between gap-3">
         {/* Breadcrumb */}
         <div className="flex min-w-0 items-center gap-0.5 text-sm">
           <button
@@ -318,45 +361,126 @@ export function TasksPage() {
         </div>
       </div>
 
-      {/* ── Content ─────────────────────────────────────────── */}
-      {isEmpty ? (
-        <EmptyState
-          icon={<CheckSquare className="h-10 w-10" />}
-          title={rootId ? 'No tasks here' : 'No tasks yet'}
-          description={
-            rootId
-              ? 'Press Enter or click "New task" to add items here.'
-              : 'Create your first task to get started.'
-          }
-          action={
-            <Button size="sm" onClick={handleAddRootTask}>
-              <Plus className="h-3.5 w-3.5" />
-              New task
-            </Button>
-          }
+      {/* ── Search bar ──────────────────────────────────────── */}
+      <div className="relative mb-4">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+        <input
+          ref={searchInputRef}
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setSearchQuery('')
+              searchInputRef.current?.blur()
+            }
+          }}
+          placeholder="Search tasks… (⌘F)"
+          className={cn(
+            'w-full rounded-lg border bg-white py-2 pl-9 pr-8 text-sm text-gray-800 placeholder-gray-400 outline-none transition-all',
+            isSearching
+              ? 'border-brand-400 ring-2 ring-brand-500/20'
+              : 'border-gray-200 hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20',
+          )}
         />
+        {isSearching && (
+          <button
+            onClick={() => { setSearchQuery(''); searchInputRef.current?.focus() }}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 hover:text-gray-700"
+            aria-label="Clear search"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* ── Search results ──────────────────────────────────── */}
+      {isSearching ? (
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+          {searchResults.length === 0 ? (
+            <div className="py-12 text-center text-sm text-gray-400">
+              No tasks found matching &ldquo;{searchQuery}&rdquo;
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {searchResults.map((task) => (
+                <button
+                  key={task.id}
+                  className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                  onClick={() => {
+                    setRootId(task.parentId)
+                    setFocusId(task.id)
+                    setSearchQuery('')
+                  }}
+                >
+                  <p className="mb-0.5 text-xs text-gray-400">
+                    {getTaskPath(task, tasks)}
+                  </p>
+                  <p
+                    className={cn(
+                      'text-sm text-gray-800',
+                      task.isCompleted && 'line-through opacity-50',
+                    )}
+                  >
+                    {highlight(task.content || 'Untitled', searchQuery.trim())}
+                  </p>
+                  {task.note &&
+                    task.note.toLowerCase().includes(searchQuery.trim().toLowerCase()) && (
+                      <p className="mt-0.5 text-xs text-gray-400 line-clamp-1">
+                        {highlight(task.note, searchQuery.trim())}
+                      </p>
+                    )}
+                </button>
+              ))}
+              <div className="px-4 py-2 text-xs text-gray-400">
+                {searchResults.length === 50
+                  ? '50+ results — refine your search'
+                  : `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`}
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <BulletTree
-            parentId={rootId}
-            depth={0}
-            focusId={focusId}
-            onUpdate={handleUpdate}
-            onUpdateNote={handleUpdateNote}
-            onToggleComplete={handleToggleComplete}
-            onToggleCollapse={handleToggleCollapse}
-            onEnter={handleEnter}
-            onBackspaceEmpty={handleBackspaceEmpty}
-            onIndent={handleIndent}
-            onOutdent={handleOutdent}
-            onDelete={handleDelete}
-            onZoomIn={handleZoomIn}
+        /* ── Tree ───────────────────────────────────────────── */
+        isEmpty ? (
+          <EmptyState
+            icon={<CheckSquare className="h-10 w-10" />}
+            title={rootId ? 'No tasks here' : 'No tasks yet'}
+            description={
+              rootId
+                ? 'Press Enter or click "New task" to add items here.'
+                : 'Create your first task to get started.'
+            }
+            action={
+              <Button size="sm" onClick={handleAddRootTask}>
+                <Plus className="h-3.5 w-3.5" />
+                New task
+              </Button>
+            }
           />
-        </DndContext>
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <BulletTree
+              parentId={rootId}
+              depth={0}
+              focusId={focusId}
+              onUpdate={handleUpdate}
+              onUpdateNote={handleUpdateNote}
+              onToggleComplete={handleToggleComplete}
+              onToggleCollapse={handleToggleCollapse}
+              onEnter={handleEnter}
+              onBackspaceEmpty={handleBackspaceEmpty}
+              onIndent={handleIndent}
+              onOutdent={handleOutdent}
+              onDelete={handleDelete}
+              onZoomIn={handleZoomIn}
+            />
+          </DndContext>
+        )
       )}
     </div>
   )

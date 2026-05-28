@@ -4,6 +4,8 @@ import { useTasksStore } from '@/stores/tasks.store'
 import { generateId, nowISO } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
 
+const ROOT_ID_KEY = 'daybook.rootId'
+
 /** DB row shape — column names match the SQL schema. */
 interface TaskRow {
   id: string
@@ -41,7 +43,6 @@ function computeSortOrder(siblings: Task[], afterId: string | null): number {
     return 1.0
   }
 
-  // If no afterId, insert at the end
   if (afterId === null) {
     const last = siblings[siblings.length - 1]
     return last.sortOrder + 1.0
@@ -49,7 +50,6 @@ function computeSortOrder(siblings: Task[], afterId: string | null): number {
 
   const afterIndex = siblings.findIndex((t) => t.id === afterId)
   if (afterIndex === -1) {
-    // afterId not found among siblings — append at end
     const last = siblings[siblings.length - 1]
     return last.sortOrder + 1.0
   }
@@ -58,18 +58,40 @@ function computeSortOrder(siblings: Task[], afterId: string | null): number {
   const nextTask = siblings[afterIndex + 1]
 
   if (!nextTask) {
-    // Inserting at the end
     return afterTask.sortOrder + 1.0
   }
 
-  // Midpoint insertion
   return (afterTask.sortOrder + nextTask.sortOrder) / 2
+}
+
+/** Sort a root task + its descendants so parents always precede their children. */
+function sortParentsFirst(root: Task, descendants: Task[]): Task[] {
+  const result: Task[] = [root]
+  const byParent = new Map<string, Task[]>()
+
+  for (const d of descendants) {
+    const pid = d.parentId ?? ''
+    if (!byParent.has(pid)) byParent.set(pid, [])
+    byParent.get(pid)!.push(d)
+  }
+
+  const queue: string[] = [root.id]
+  while (queue.length > 0) {
+    const pid = queue.shift()!
+    for (const child of byParent.get(pid) ?? []) {
+      result.push(child)
+      queue.push(child.id)
+    }
+  }
+
+  return result
 }
 
 export function useTasks() {
   const store = useTasksStore()
 
-  /** Load all tasks from the database into the Zustand store. */
+  /** Load all tasks from the database into the Zustand store.
+   *  Also restores the last-used rootId from localStorage if that task still exists. */
   const loadTasks = useCallback(async () => {
     const db = await getDB()
     const result = await db.query<TaskRow>(
@@ -77,14 +99,33 @@ export function useTasks() {
     )
     const tasks = result.rows.map(rowToTask)
     store.setTasks(tasks)
+
+    const savedRootId = localStorage.getItem(ROOT_ID_KEY)
+    if (savedRootId && tasks.some((t) => t.id === savedRootId)) {
+      store.setRootId(savedRootId)
+    } else if (savedRootId) {
+      localStorage.removeItem(ROOT_ID_KEY)
+    }
   }, [store])
+
+  /** Set the zoom root and persist it to localStorage. */
+  const setRootId = useCallback(
+    (id: string | null) => {
+      store.setRootId(id)
+      if (id === null) {
+        localStorage.removeItem(ROOT_ID_KEY)
+      } else {
+        localStorage.setItem(ROOT_ID_KEY, id)
+      }
+    },
+    [store],
+  )
 
   /**
    * Add a new task.
    * @param content — initial text content
    * @param parentId — parent task ID, or null for root level
    * @param afterId — insert after this sibling (null = append at end)
-   * @returns the created Task
    */
   const addTask = useCallback(
     async (
@@ -95,7 +136,6 @@ export function useTasks() {
       const db = await getDB()
       const allTasks = useTasksStore.getState().tasks
 
-      // Get siblings at the same level
       const siblings = allTasks
         .filter((t) => t.parentId === parentId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -123,8 +163,6 @@ export function useTasks() {
       }
 
       useTasksStore.getState().addTask(newTask)
-
-      // Check if rebalance is needed
       await maybeRebalance(parentId)
 
       return newTask
@@ -132,10 +170,7 @@ export function useTasks() {
     [],
   )
 
-  /**
-   * Update one or more fields of a task.
-   * Accepts partial Task fields using camelCase names — maps to DB column names internally.
-   */
+  /** Update one or more fields of a task. */
   const updateTask = useCallback(
     async (
       id: string,
@@ -146,7 +181,6 @@ export function useTasks() {
       const db = await getDB()
       const now = nowISO()
 
-      // Build SET clauses dynamically
       const setClauses: string[] = ['updated_at = $1']
       const params: unknown[] = [now]
       let paramIndex = 2
@@ -186,7 +220,6 @@ export function useTasks() {
       const sql = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`
       await db.query(sql, params)
 
-      // Update Zustand store
       useTasksStore.getState().updateTask(id, {
         ...updates,
         updatedAt: now,
@@ -196,26 +229,66 @@ export function useTasks() {
   )
 
   /**
-   * Delete a task from DB and store. CASCADE in DB handles children.
-   * We must also remove children from the Zustand store manually.
+   * Delete a task. Saves a snapshot to the store for 5-second undo.
+   * CASCADE in DB handles children; we also remove descendants from the store.
    */
   const deleteTask = useCallback(async (id: string) => {
     const db = await getDB()
-
-    // Collect all descendant IDs so we can remove them from the store
     const allTasks = useTasksStore.getState().tasks
+    const taskToDelete = allTasks.find((t) => t.id === id)
+    if (!taskToDelete) return
+
     const idsToRemove = collectDescendantIds(id, allTasks)
+    const descendants = allTasks.filter((t) => idsToRemove.has(t.id) && t.id !== id)
+
+    // Save snapshot for undo (auto-clears after 5 seconds)
+    useTasksStore.getState().setLastDeleted({ task: taskToDelete, descendants })
+    setTimeout(() => {
+      const current = useTasksStore.getState().lastDeleted
+      if (current?.task.id === id) {
+        useTasksStore.getState().setLastDeleted(null)
+      }
+    }, 5000)
 
     await db.query('DELETE FROM tasks WHERE id = $1', [id])
 
-    // Remove the task and all its descendants from the store
     const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
     useTasksStore.getState().setTasks(remaining)
   }, [])
 
-  /**
-   * Move a task to a new parent and/or sort position (for DnD).
-   */
+  /** Re-insert the last deleted task and its descendants. */
+  const restoreDeleted = useCallback(async () => {
+    const { lastDeleted } = useTasksStore.getState()
+    if (!lastDeleted) return
+
+    useTasksStore.getState().setLastDeleted(null)
+
+    const db = await getDB()
+    const ordered = sortParentsFirst(lastDeleted.task, lastDeleted.descendants)
+
+    for (const t of ordered) {
+      await db.query(
+        `INSERT INTO tasks (id, parent_id, content, note, is_completed, is_collapsed, sort_order, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          t.id,
+          t.parentId,
+          t.content,
+          t.note,
+          t.isCompleted ? 1 : 0,
+          t.isCollapsed ? 1 : 0,
+          t.sortOrder,
+          t.createdAt,
+          t.updatedAt,
+        ],
+      )
+    }
+
+    await loadTasks()
+  }, [loadTasks])
+
+  /** Move a task to a new parent and/or sort position (for DnD). */
   const moveTask = useCallback(
     async (id: string, newParentId: string | null, newSortOrder: number) => {
       const db = await getDB()
@@ -237,27 +310,22 @@ export function useTasks() {
     [],
   )
 
-  /**
-   * Indent a task — make it a child of its previous sibling.
-   * Returns true if the indent was successful, false if not possible.
-   */
+  /** Indent a task — make it a child of its previous sibling. */
   const indentTask = useCallback(
     async (id: string): Promise<boolean> => {
       const allTasks = useTasksStore.getState().tasks
       const task = allTasks.find((t) => t.id === id)
       if (!task) return false
 
-      // Get siblings at the same level
       const siblings = allTasks
         .filter((t) => t.parentId === task.parentId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
 
       const currentIndex = siblings.findIndex((t) => t.id === id)
-      if (currentIndex <= 0) return false // Can't indent the first item
+      if (currentIndex <= 0) return false
 
       const newParent = siblings[currentIndex - 1]
 
-      // Get the new parent's existing children to find the right sort order
       const newSiblings = allTasks
         .filter((t) => t.parentId === newParent.id)
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -267,7 +335,6 @@ export function useTasks() {
           ? newSiblings[newSiblings.length - 1].sortOrder + 1.0
           : 1.0
 
-      // Uncollapse the new parent so the moved task is visible
       if (newParent.isCollapsed) {
         await updateTask(newParent.id, { isCollapsed: false })
       }
@@ -278,20 +345,16 @@ export function useTasks() {
     [moveTask, updateTask],
   )
 
-  /**
-   * Outdent a task — move it to be a sibling of its parent (after the parent).
-   * Returns true if the outdent was successful, false if not possible.
-   */
+  /** Outdent a task — move it to be a sibling of its parent (after the parent). */
   const outdentTask = useCallback(
     async (id: string): Promise<boolean> => {
       const allTasks = useTasksStore.getState().tasks
       const task = allTasks.find((t) => t.id === id)
-      if (!task || !task.parentId) return false // Can't outdent root-level items
+      if (!task || !task.parentId) return false
 
       const parent = allTasks.find((t) => t.id === task.parentId)
       if (!parent) return false
 
-      // Get the parent's siblings to find the right sort order
       const parentSiblings = allTasks
         .filter((t) => t.parentId === parent.parentId)
         .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -312,14 +375,11 @@ export function useTasks() {
     [moveTask],
   )
 
-  /**
-   * Get the breadcrumb path from root to a given task ID.
-   */
+  /** Get the breadcrumb path from root to a given task ID. */
   const getBreadcrumb = useCallback(
     (taskId: string | null): Task[] => {
       if (!taskId) return []
 
-      // Always read fresh from the store so callers holding a stale ref still get current data.
       const allTasks = useTasksStore.getState().tasks
       const path: Task[] = []
       let current = allTasks.find((t) => t.id === taskId)
@@ -336,10 +396,7 @@ export function useTasks() {
     [],
   )
 
-  /**
-   * Get children of a parent, sorted by sortOrder.
-   * Respects hideCompleted setting.
-   */
+  /** Get children of a parent, sorted by sortOrder. Respects hideCompleted. */
   const getChildren = useCallback(
     (parentId: string | null): Task[] => {
       const { tasks, hideCompleted } = useTasksStore.getState()
@@ -354,9 +411,7 @@ export function useTasks() {
     [],
   )
 
-  /**
-   * Check if a task has children.
-   */
+  /** Check if a task has children. */
   const hasChildren = useCallback((taskId: string): boolean => {
     const { tasks } = useTasksStore.getState()
     return tasks.some((t) => t.parentId === taskId)
@@ -366,12 +421,13 @@ export function useTasks() {
     tasks: store.tasks,
     rootId: store.rootId,
     hideCompleted: store.hideCompleted,
-    setRootId: store.setRootId,
+    setRootId,
     setHideCompleted: store.setHideCompleted,
     loadTasks,
     addTask,
     updateTask,
     deleteTask,
+    restoreDeleted,
     moveTask,
     indentTask,
     outdentTask,
@@ -384,10 +440,7 @@ export function useTasks() {
 // ── Helpers ──────────────────────────────────────────
 
 /** Collect the given ID plus all descendant IDs recursively. */
-function collectDescendantIds(
-  id: string,
-  allTasks: Task[],
-): Set<string> {
+function collectDescendantIds(id: string, allTasks: Task[]): Set<string> {
   const ids = new Set<string>([id])
   const queue = [id]
 
@@ -429,7 +482,6 @@ async function maybeRebalance(parentId: string | null) {
   const db = await getDB()
   const now = nowISO()
 
-  // Batch-update all siblings to integer sort orders
   for (let i = 0; i < siblings.length; i++) {
     const newOrder = i + 1
     if (siblings[i].sortOrder !== newOrder) {

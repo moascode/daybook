@@ -8,16 +8,45 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const dbReady = useAppStore((s) => s.dbReady)
   const setDbReady = useAppStore((s) => s.setDbReady)
+  const theme = useAppStore((s) => s.theme)
+  const setTheme = useAppStore((s) => s.setTheme)
 
   useEffect(() => {
     getDB()
-      .then(() => setDbReady(true))
+      .then(async (db) => {
+        setDbReady(true)
+        const result = await db.query<{ value: string }>(
+          "SELECT value FROM settings WHERE key = 'theme'",
+        )
+        const saved = result.rows[0]?.value
+        if (saved === 'light' || saved === 'dark' || saved === 'system') {
+          setTheme(saved)
+        }
+      })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'
         console.error('DB init failed:', err)
         setError(message)
       })
-  }, [setDbReady])
+  }, [setDbReady, setTheme])
+
+  // Apply dark class based on theme setting
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'dark') {
+      root.classList.add('dark')
+    } else if (theme === 'light') {
+      root.classList.remove('dark')
+    } else {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)')
+      mq.matches ? root.classList.add('dark') : root.classList.remove('dark')
+      const handler = (e: MediaQueryListEvent) => {
+        e.matches ? root.classList.add('dark') : root.classList.remove('dark')
+      }
+      mq.addEventListener('change', handler)
+      return () => mq.removeEventListener('change', handler)
+    }
+  }, [theme])
 
   if (error) {
     return (
