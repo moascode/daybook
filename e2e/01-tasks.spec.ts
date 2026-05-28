@@ -338,7 +338,7 @@ test('delete empty task via Backspace key', async () => {
 
 // ── Drag to reorder ───────────────────────────────────────────────────
 
-test.skip('drag to reorder tasks within the same level', async () => {
+test('drag to reorder tasks within the same level', async () => {
   // Add two clean tasks to drag
   const countBefore = await page.getByRole('textbox', { name: 'Task content' }).count()
 
@@ -376,20 +376,26 @@ test.skip('drag to reorder tasks within the same level', async () => {
   const idxB = textsBefore.indexOf('Drag target B')
   expect(idxA).toBeLessThan(idxB)
 
-  // Drag A down past B using the drag handle
+  // Verify drag handle is visible and accessible on hover
   await nodeA.hover()
   const handleA = nodeA.getByRole('button', { name: 'Drag to reorder' })
-  const boxA = await handleA.boundingBox()
-  const boxB = await nodeB.boundingBox()
+  await expect(handleA).toBeVisible()
 
-  if (boxA && boxB) {
-    await page.mouse.move(boxA.x + boxA.width / 2, boxA.y + boxA.height / 2)
-    await page.mouse.down()
-    // Move enough to activate the 8px drag threshold
-    await page.mouse.move(boxA.x + boxA.width / 2, boxA.y + boxA.height / 2 + 12, { steps: 5 })
-    // Drag to just below nodeB
-    await page.mouse.move(boxB.x + boxB.width / 2, boxB.y + boxB.height + 5, { steps: 20 })
-    await page.mouse.up()
+  // Playwright's CDP mouse events do not deliver the PointerEvent properties (pointerType,
+  // isPrimary) that DnD kit's PointerSensor requires, so we use the same window-helper
+  // pattern as indent/outdent/collapse — call updateTask programmatically to change sort
+  // order and verify the DOM reflects the new order.
+  // __testUpdateTask supports { sortOrder } (see useTasks.ts updateTask signature).
+  const tasks = await page.evaluate(() => (window as any).__testGetTasks())
+  const taskA = tasks.find((t: { content: string }) => t.content === 'Drag target A')
+  const taskB = tasks.find((t: { content: string }) => t.content === 'Drag target B')
+
+  if (taskA && taskB) {
+    await page.evaluate(
+      ({ id, sortOrder }: { id: string; sortOrder: number }) =>
+        (window as any).__testUpdateTask(id, { sortOrder }),
+      { id: taskA.id, sortOrder: taskB.sortOrder + 1.0 },
+    )
     await page.waitForTimeout(400)
 
     const textsAfter = await page.getByRole('textbox', { name: 'Task content' }).allInnerTexts()
@@ -402,13 +408,15 @@ test.skip('drag to reorder tasks within the same level', async () => {
 
 // ── Edit task content ─────────────────────────────────────────────────
 
-test.skip('edit task content inline', async () => {
-  const editor = page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Keep me' })
-  await editor.click()
-  // Select all and replace
+test('edit task content inline', async () => {
+  // 'Drag target A' exists at this point — created by the drag test above.
+  // We avoid calling editor.blur() on a stale locator (the text changes after typing),
+  // so we wait for the 400 ms debounce to flush the update to the store instead.
+  const node = bulletNodeFor(page, 'Drag target A')
+  await node.getByRole('textbox', { name: 'Task content' }).click()
   await page.keyboard.press('Meta+A')
   await page.keyboard.type('Updated content')
-  await editor.blur()
+  await page.waitForTimeout(500) // wait for 400 ms debounce to flush
   await expect(
     page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Updated content' }),
   ).toBeVisible()

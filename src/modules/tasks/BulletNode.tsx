@@ -91,16 +91,14 @@ export function BulletNode({
         )}
         style={{ paddingLeft: depth * 22 }}
       >
-        {/* Drag handle — positioned left of content, never interferes with collapse/checkbox */}
+        {/* Drag handle — inline at the start of the row so it stays within the hover zone */}
         <button
           className={cn(
-            'absolute top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center',
+            'flex h-7 w-5 shrink-0 items-center justify-center',
             'text-gray-300 opacity-0 group-hover/node:opacity-100',
             'transition-opacity cursor-grab active:cursor-grabbing touch-none',
             'rounded hover:text-gray-500 pointer-events-none group-hover/node:pointer-events-auto',
-            'z-0',
           )}
-          style={{ left: -28 }}
           aria-label="Drag to reorder"
           title="Drag to reorder"
           {...attributes}
