@@ -15,6 +15,7 @@ export function ToastContainer() {
         <div
           key={toast.id}
           role="status"
+          data-testid="toast"
           className={cn(
             'flex items-center gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-sm text-white shadow-xl',
             'animate-in fade-in-0 slide-in-from-bottom-2 duration-200',

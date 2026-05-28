@@ -21,7 +21,13 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use pre-installed Chromium when available (cloud/CI environment)
+        ...(process.env.PLAYWRIGHT_BROWSERS_PATH
+          ? { executablePath: `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1194/chrome-linux/chrome` }
+          : {}),
+      },
     },
   ],
   webServer: {
