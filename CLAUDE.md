@@ -701,21 +701,27 @@ chore: update CLAUDE.md with Phase 2 status
 
 ```
 Current phase:  3+ — Alpha UX Polish
-Phase status:   Tier 1 complete and merged; Tier 2 and 3 queued
+Phase status:   Tier 1 + Tier 2 complete; Tier 3 queued (tests pre-skipped)
 Last session:   2026-05-28
-Last completed: - Phase 3+ Tier 1 UX improvements shipped (PR #1):
-                    • Task search bar (Ctrl+F, live filter, breadcrumb paths, click-to-navigate)
-                    • Task delete undo (5-sec toast, Undo button, restores full subtree)
-                    • Zoom persist (rootId saved to localStorage, restored on reload)
-                    • Net worth banner (total balance on Accounts page)
-                    • Settings page (/settings): API key, theme, currency; persists to DB
-                    • Toast system (useToastStore + ToastContainer)
-                - 5 new Playwright specs (e2e/07–11): full 171-test suite green
-                - Fixed WalletPage CRUD handlers (stale-closure race condition on tag filter)
-                - tracker.html updated: Phase 3+ added with Tier 1/2/3 sections
-Next task:      Phase 3+ Tier 2 — drag-and-drop reorder, due dates, budget tracking,
-                recurring transactions, data export  (OR skip to Phase 4 for multi-user)
-Blockers:       None — Tier 1 complete, e2e suite green, no known regressions
+Last completed: - Phase 3+ Tier 2 features shipped:
+                    • Task due dates (date field per task, sortable, overdue indicator)
+                    • Wallet budgets (/wallet/budgets): monthly limits per category,
+                      progress bars, over-budget alerts, full CRUD
+                    • Recurring transactions (/wallet/recurring): weekly/monthly rules
+                      with merchant, amount, next-due date; full CRUD
+                    • Data export: CSV and JSON download from wallet page
+                - Schema additions: `tasks.due_date`, `budgets`, `recurring_transactions`
+                - New components: BudgetsPage, RecurringPage, export panel in WalletPage
+                - Bug fixes:
+                    • PGlite relaxedDurability:false — writes now flush to IndexedDB
+                      before next page reload (fixes race with page.goto in tests)
+                    • Account/Transaction forms now await onSubmit before closing modal
+                    • Helpers wait for dialog to close after submit
+                - 4 new Playwright specs (e2e/12–15): full 213-test suite green,
+                  53 Tier 3 tests skipped as expected
+Next task:      Phase 3+ Tier 3 — un-skip and implement (drag-reorder, templates,
+                PWA, mobile responsive)  OR  skip to Phase 4 for multi-user
+Blockers:       None — Tier 2 complete, e2e suite green, no known regressions
 ```
 
 ---

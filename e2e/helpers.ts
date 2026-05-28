@@ -60,6 +60,7 @@ export async function fillAccountForm(
     await dialog.getByLabel('Currency').fill(fields.currency)
   }
   await dialog.getByRole('button', { name: /Create Account|Save Changes/ }).click()
+  await expect(dialog).toBeHidden()
 }
 
 /** Fill the TransactionForm modal and submit it */
@@ -92,4 +93,5 @@ export async function fillTransactionForm(
   if (fields.category) await dialog.locator('#category').selectOption(fields.category)
   if (fields.tag) await dialog.locator('#tag').fill(fields.tag)
   await dialog.getByRole('button', { name: /Add Transaction|Save Changes/ }).click()
+  await expect(dialog).toBeHidden()
 }

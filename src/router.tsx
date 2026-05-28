@@ -6,6 +6,8 @@ import { WalletPage } from '@/modules/wallet/WalletPage'
 import { AccountsPage } from '@/modules/wallet/AccountsPage'
 import { Dashboard } from '@/modules/wallet/Dashboard'
 import { CsvImport } from '@/modules/wallet/CsvImport'
+import { BudgetsPage } from '@/modules/wallet/BudgetsPage'
+import { RecurringPage } from '@/modules/wallet/RecurringPage'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { UATPage } from '@/modules/uat/UATPage'
 
@@ -23,6 +25,8 @@ export const router = createBrowserRouter([
           { index: true, element: <WalletPage /> },
           { path: 'accounts', element: <AccountsPage /> },
           { path: 'dashboard', element: <Dashboard /> },
+          { path: 'budgets', element: <BudgetsPage /> },
+          { path: 'recurring', element: <RecurringPage /> },
           { path: 'import', element: <CsvImport /> },
         ],
       },

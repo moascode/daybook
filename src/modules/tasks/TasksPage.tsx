@@ -11,7 +11,7 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
-import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare } from 'lucide-react'
+import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare, CalendarClock } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useTasks } from '@/hooks/useTasks'
@@ -80,6 +80,7 @@ export function TasksPage() {
   const [loaded, setLoaded] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortByDue, setSortByDue] = useState(false)
 
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -202,6 +203,11 @@ export function TasksPage() {
   )
 
   const handleZoomIn = useCallback((id: string) => { setRootId(id) }, [setRootId])
+
+  const handleSetDueDate = useCallback(
+    (id: string, date: string | null) => updateTask(id, { dueDate: date }),
+    [updateTask],
+  )
 
   const handleAddRootTask = useCallback(async () => {
     const newTask = await addTask('', rootId)
@@ -346,6 +352,20 @@ export function TasksPage() {
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-1.5">
           <button
+            onClick={() => setSortByDue((v) => !v)}
+            title={sortByDue ? 'Revert to default order' : 'Sort by due date'}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+              sortByDue
+                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+            )}
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            Sort by due date
+          </button>
+
+          <button
             onClick={handleToggleHideCompleted}
             title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
@@ -468,6 +488,7 @@ export function TasksPage() {
               parentId={rootId}
               depth={0}
               focusId={focusId}
+              sortByDue={sortByDue}
               onUpdate={handleUpdate}
               onUpdateNote={handleUpdateNote}
               onToggleComplete={handleToggleComplete}
@@ -478,6 +499,7 @@ export function TasksPage() {
               onOutdent={handleOutdent}
               onDelete={handleDelete}
               onZoomIn={handleZoomIn}
+              onSetDueDate={handleSetDueDate}
             />
           </DndContext>
         )

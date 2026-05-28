@@ -9,6 +9,8 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { newAppPage, openTaskMenu } from './helpers'
 
+test.skip(true, 'Tier 3 — not yet implemented')
+
 test.describe.configure({ mode: 'serial' })
 
 let page: Page

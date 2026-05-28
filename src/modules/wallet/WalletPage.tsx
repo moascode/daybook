@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -27,10 +27,12 @@ export function WalletPage() {
     updateTransaction,
     deleteTransaction,
     getFilteredSummary,
+    exportTransactions,
   } = useWallet()
 
   const [searchParams] = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, net: 0 })
   const filtersRef = useRef(filters)
@@ -81,6 +83,11 @@ export function WalletPage() {
     setFormOpen(true)
   }
 
+  const handleExport = useCallback(async (format: 'csv' | 'json') => {
+    await exportTransactions(format)
+    setExportOpen(false)
+  }, [exportTransactions])
+
   const typeOptions = [
     { value: 'all', label: 'All Types' },
     { value: 'income', label: 'Income' },
@@ -107,6 +114,31 @@ export function WalletPage() {
           <p className="text-xs text-gray-500 mt-0.5">Track income, expenses, and transfers</p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="relative">
+            <Button variant="secondary" size="sm" onClick={() => setExportOpen((o) => !o)}>
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
+            {exportOpen && (
+              <div
+                data-testid="export-panel"
+                className="absolute right-0 top-full mt-1 z-10 w-44 rounded-xl border border-gray-200 bg-white shadow-lg p-2 flex flex-col gap-1"
+              >
+                <button
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  onClick={() => handleExport('csv')}
+                >
+                  Export CSV
+                </button>
+                <button
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  onClick={() => handleExport('json')}
+                >
+                  Export JSON
+                </button>
+              </div>
+            )}
+          </div>
           <Button size="sm" onClick={openCreateForm}>
             <Plus className="h-3.5 w-3.5" />
             Add Transaction

@@ -59,12 +59,38 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- Tier 2: budget tracking (one row per category; limit is always monthly)
+CREATE TABLE IF NOT EXISTS budgets (
+  id           TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
+  category_id  TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  limit_amount DOUBLE PRECISION NOT NULL,
+  created_at   TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at   TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  UNIQUE (category_id)
+);
+
+-- Tier 2: recurring transaction rules
+CREATE TABLE IF NOT EXISTS recurring_transactions (
+  id            TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
+  account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  amount        DOUBLE PRECISION NOT NULL,
+  merchant      TEXT DEFAULT '',
+  type          TEXT NOT NULL DEFAULT 'expense',
+  category_id   TEXT REFERENCES categories(id) ON DELETE SET NULL,
+  frequency     TEXT NOT NULL DEFAULT 'monthly',
+  next_due_date TEXT NOT NULL,
+  created_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+);
 `
 
 async function initDB(): Promise<PGlite> {
   if (dbInstance) return dbInstance
 
-  const db = new PGlite('idb://daybook')
+  // relaxedDurability:false → each write awaits IndexedDB flush so a full
+  // page reload immediately after a write sees the data.
+  const db = new PGlite('idb://daybook', { relaxedDurability: false })
   await db.waitReady
 
   // PGlite uses Postgres SQL syntax, but we're using it as a local SQLite-like store.
@@ -77,6 +103,9 @@ async function initDB(): Promise<PGlite> {
   if (count === 0) {
     await seedCategories(db)
   }
+
+  // Tier 2 migration: add due_date to existing tasks tables
+  await db.exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date TEXT DEFAULT NULL;`)
 
   // Set defaults in settings if not present
   await db.exec(`

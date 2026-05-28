@@ -62,7 +62,7 @@ test('save a monthly recurring expense (Netflix, MYR 55)', async () => {
   await dialog.getByLabel(/Amount/i).fill('55')
   await dialog.locator('#account, [name="account"]').selectOption('Recurring Bank')
   await dialog.getByLabel(/Merchant|Description/i).first().fill('Netflix')
-  await dialog.locator('#frequency, [name="frequency"]').selectOption({ label: /Monthly/i })
+  await dialog.locator('#frequency, [name="frequency"]').selectOption('monthly')
   await dialog.getByLabel(/Next due|Start date/i).fill('2026-06-01')
   await dialog.getByRole('button', { name: /Save|Create/i }).click()
   await expect(page.getByTestId('recurring-row').filter({ hasText: 'Netflix' })).toBeVisible()
@@ -89,7 +89,7 @@ test('save a weekly recurring expense (Coffee Weekly, MYR 20)', async () => {
   await dialog.getByLabel(/Amount/i).fill('20')
   await dialog.locator('#account, [name="account"]').selectOption('Recurring Bank')
   await dialog.getByLabel(/Merchant|Description/i).first().fill('Coffee Weekly')
-  await dialog.locator('#frequency, [name="frequency"]').selectOption({ label: /Weekly/i })
+  await dialog.locator('#frequency, [name="frequency"]').selectOption('weekly')
   await dialog.getByLabel(/Next due|Start date/i).fill('2026-06-07')
   await dialog.getByRole('button', { name: /Save|Create/i }).click()
   await expect(page.getByTestId('recurring-row').filter({ hasText: 'Coffee Weekly' })).toBeVisible()
@@ -97,7 +97,7 @@ test('save a weekly recurring expense (Coffee Weekly, MYR 20)', async () => {
 
 test('weekly rule row shows "Weekly" frequency', async () => {
   const row = page.getByTestId('recurring-row').filter({ hasText: 'Coffee Weekly' })
-  await expect(row.getByText(/Weekly/i)).toBeVisible()
+  await expect(row.getByText('Weekly', { exact: true })).toBeVisible()
 })
 
 // ── Edit rule ──────────────────────────────────────────────────────────

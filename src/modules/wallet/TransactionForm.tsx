@@ -14,7 +14,7 @@ interface TransactionFormProps {
   accounts: Account[]
   categories: Category[]
   defaultAccountId?: string | null
-  onSubmit: (data: TransactionFormData) => void
+  onSubmit: (data: TransactionFormData) => void | Promise<void>
 }
 
 export interface TransactionFormData {
@@ -116,7 +116,7 @@ export function TransactionForm({
     return Object.keys(errs).length === 0
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!validate()) return
 
@@ -125,13 +125,11 @@ export function TransactionForm({
       merchant: form.merchant.trim(),
       description: form.description.trim(),
       tag: form.tag.trim(),
-      // Clear category for transfers
       categoryId: form.type === 'transfer' ? null : (form.categoryId || null),
-      // Clear destination for non-transfers
       destinationAccountId: form.type === 'transfer' ? form.destinationAccountId : null,
     }
 
-    onSubmit(data)
+    await onSubmit(data)
     onOpenChange(false)
   }
 

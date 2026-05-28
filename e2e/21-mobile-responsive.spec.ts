@@ -10,6 +10,8 @@ import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
 import { waitForApp } from './helpers'
 
+test.skip(true, 'Tier 3 — not yet implemented')
+
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 
 // ── No horizontal overflow ─────────────────────────────────────────────

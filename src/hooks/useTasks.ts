@@ -15,6 +15,7 @@ interface TaskRow {
   is_completed: number
   is_collapsed: number
   sort_order: number
+  due_date: string | null
   created_at: string
   updated_at: string
 }
@@ -29,6 +30,7 @@ function rowToTask(row: TaskRow): Task {
     isCompleted: row.is_completed === 1,
     isCollapsed: row.is_collapsed === 1,
     sortOrder: row.sort_order,
+    dueDate: row.due_date ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -158,6 +160,7 @@ export function useTasks() {
         isCompleted: false,
         isCollapsed: false,
         sortOrder,
+        dueDate: null,
         createdAt: now,
         updatedAt: now,
       }
@@ -175,7 +178,7 @@ export function useTasks() {
     async (
       id: string,
       updates: Partial<
-        Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder'>
+        Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>
       >,
     ) => {
       const db = await getDB()
@@ -213,6 +216,11 @@ export function useTasks() {
       if (updates.sortOrder !== undefined) {
         setClauses.push(`sort_order = $${paramIndex}`)
         params.push(updates.sortOrder)
+        paramIndex++
+      }
+      if ('dueDate' in updates) {
+        setClauses.push(`due_date = $${paramIndex}`)
+        params.push(updates.dueDate ?? null)
         paramIndex++
       }
 
@@ -268,8 +276,8 @@ export function useTasks() {
 
     for (const t of ordered) {
       await db.query(
-        `INSERT INTO tasks (id, parent_id, content, note, is_completed, is_collapsed, sort_order, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO tasks (id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO NOTHING`,
         [
           t.id,
@@ -279,6 +287,7 @@ export function useTasks() {
           t.isCompleted ? 1 : 0,
           t.isCollapsed ? 1 : 0,
           t.sortOrder,
+          t.dueDate ?? null,
           t.createdAt,
           t.updatedAt,
         ],
