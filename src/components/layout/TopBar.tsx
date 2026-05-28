@@ -6,6 +6,7 @@ const routeTitles: Record<string, string> = {
   '/wallet/accounts':   'Wallet',
   '/wallet/dashboard':  'Wallet',
   '/wallet/import':     'Wallet',
+  '/settings':          'Settings',
   '/uat':               'UAT Tests',
 }
 

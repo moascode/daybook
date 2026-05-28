@@ -1,22 +1,34 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, CreditCard } from 'lucide-react'
+import { Plus, CreditCard, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
 import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
 import { useWallet } from '@/hooks/useWallet'
+import { formatMYR } from '@/lib/utils'
 import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
 
 export function AccountsPage() {
-  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount } = useWallet()
+  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalance } = useWallet()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
+  const [netWorth, setNetWorth] = useState<number | null>(null)
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
+
+  // Compute net worth whenever accounts list changes
+  useEffect(() => {
+    if (accounts.length === 0) { setNetWorth(0); return }
+    let cancelled = false
+    Promise.all(accounts.map((a) => getAccountBalance(a.id))).then((balances) => {
+      if (!cancelled) setNetWorth(balances.reduce((sum, b) => sum + b, 0))
+    })
+    return () => { cancelled = true }
+  }, [accounts, getAccountBalance])
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
     await addAccount(data)
@@ -50,6 +62,26 @@ export function AccountsPage() {
           Add Account
         </Button>
       </div>
+
+      {/* Net worth banner */}
+      {accounts.length > 0 && (
+        <div className="mb-5 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
+              Total Net Worth
+            </p>
+            <p className="mt-1.5 text-2xl font-bold text-brand-900">
+              {netWorth === null ? '…' : formatMYR(netWorth)}
+            </p>
+            <p className="mt-1 text-xs text-brand-700/60">
+              {accounts.length} account{accounts.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100">
+            <Coins className="h-6 w-6 text-brand-600" />
+          </div>
+        </div>
+      )}
 
       {accounts.length === 0 ? (
         <EmptyState

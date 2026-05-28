@@ -1,11 +1,10 @@
 import { NavLink } from 'react-router-dom'
-import { CheckSquare, Wallet, FlaskConical } from 'lucide-react'
+import { CheckSquare, Wallet, Settings, FlaskConical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const navItems = [
+const mainNavItems = [
   { to: '/tasks', label: 'Tasks', icon: CheckSquare, end: true },
   { to: '/wallet', label: 'Wallet', icon: Wallet, end: false },
-  { to: '/uat', label: 'UAT Tests', icon: FlaskConical, end: true },
 ]
 
 export function Sidebar() {
@@ -21,9 +20,9 @@ export function Sidebar() {
         </span>
       </div>
 
-      {/* Navigation */}
+      {/* Main navigation */}
       <nav className="flex-1 space-y-0.5 px-3 pt-2">
-        {navItems.map((item) => (
+        {mainNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -41,11 +40,45 @@ export function Sidebar() {
             {item.label}
           </NavLink>
         ))}
+
+        {/* Dev-only UAT link */}
+        {import.meta.env.DEV && (
+          <NavLink
+            to="/uat"
+            end
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-brand-50 text-brand-700'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              )
+            }
+          >
+            <FlaskConical className="h-4 w-4 flex-shrink-0" />
+            UAT Tests
+          </NavLink>
+        )}
       </nav>
 
-      {/* Footer */}
-      <div className="border-t border-gray-200 px-5 py-4">
-        <p className="text-xs text-gray-400">Daybook Alpha</p>
+      {/* Bottom: Settings */}
+      <div className="border-t border-gray-200 px-3 py-3">
+        <NavLink
+          to="/settings"
+          end
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              isActive
+                ? 'bg-brand-50 text-brand-700'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+            )
+          }
+        >
+          <Settings className="h-4 w-4 flex-shrink-0" />
+          Settings
+        </NavLink>
+        <p className="mt-2 px-3 text-xs text-gray-400">Daybook Alpha</p>
       </div>
     </aside>
   )
