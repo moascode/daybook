@@ -116,7 +116,7 @@ export function detectColumns(headers: string[]): ColumnMapping {
   // Find description column — skip if same as merchant
   for (const keyword of DESCRIPTION_KEYWORDS) {
     const idx = lowerHeaders.findIndex(
-      (h) => (h === keyword || h.includes(keyword)) && headers[idx] !== mapping.merchant
+      (h, i) => (h === keyword || h.includes(keyword)) && headers[i] !== mapping.merchant
     )
     if (idx !== -1) {
       mapping.description = headers[idx]

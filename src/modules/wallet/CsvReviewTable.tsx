@@ -87,15 +87,9 @@ export function CsvReviewTable({
 
               {/* Merchant */}
               <td className="px-3 py-2">
-                <Input
-                  value={row.merchant}
-                  onChange={(e) =>
-                    onRowChange(index, { merchant: e.target.value })
-                  }
-                  className="text-xs"
-                  disabled={!row.included}
-                  placeholder="Merchant name"
-                />
+                <span className={cn('text-sm text-gray-900', !row.included && 'opacity-60')}>
+                  {row.merchant || <span className="text-gray-400">—</span>}
+                </span>
               </td>
 
               {/* Amount */}

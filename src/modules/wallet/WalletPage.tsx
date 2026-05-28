@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Upload, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -105,12 +105,6 @@ export function WalletPage() {
           <p className="text-xs text-gray-500 mt-0.5">Track income, expenses, and transfers</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/wallet/import">
-            <Button variant="secondary" size="sm">
-              <Upload className="h-3.5 w-3.5" />
-              Import CSV
-            </Button>
-          </Link>
           <Button size="sm" onClick={openCreateForm}>
             <Plus className="h-3.5 w-3.5" />
             Add Transaction

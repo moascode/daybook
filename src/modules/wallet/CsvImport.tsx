@@ -13,7 +13,7 @@ type ImportStep = 'upload' | 'mapping' | 'review' | 'done'
 
 export function CsvImport() {
   const navigate = useNavigate()
-  const { accounts, loadAccounts, loadCategories, categories, importTransactions } = useWallet()
+  const { accounts, loadAccounts, loadCategories, categories, importTransactions, setFilters } = useWallet()
 
   const [step, setStep] = useState<ImportStep>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -29,6 +29,17 @@ export function CsvImport() {
   // Ref to trigger the hidden file input programmatically — avoids the
   // HTML quirk where a <button> inside a <label> blocks the file picker.
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Must be declared before the useEffect that references it in its deps array.
+  const handleFileSelect = useCallback(async (selectedFile: File) => {
+    setFile(selectedFile)
+    const parsed = await parseCSV(selectedFile)
+    setHeaders(parsed.headers)
+    setRawRows(parsed.rows)
+    setParseErrors(parsed.errors)
+    setMapping(detectColumns(parsed.headers))
+    setStep('mapping')
+  }, [])
 
   useEffect(() => {
     loadAccounts()
@@ -48,16 +59,6 @@ export function CsvImport() {
       setSelectedAccountId(accounts[0].id)
     }
   }, [accounts, selectedAccountId])
-
-  const handleFileSelect = useCallback(async (selectedFile: File) => {
-    setFile(selectedFile)
-    const parsed = await parseCSV(selectedFile)
-    setHeaders(parsed.headers)
-    setRawRows(parsed.rows)
-    setParseErrors(parsed.errors)
-    setMapping(detectColumns(parsed.headers))
-    setStep('mapping')
-  }, [])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -295,7 +296,7 @@ export function CsvImport() {
           )}
           <div className="mt-7 flex justify-center gap-3">
             <Button variant="secondary" size="sm" onClick={resetToUpload}>Import Another</Button>
-            <Button size="sm" onClick={() => navigate('/wallet')}>View Transactions</Button>
+            <Button size="sm" onClick={() => { setFilters({ dateFrom: '', dateTo: '' }); navigate('/wallet') }}>View Transactions</Button>
           </div>
         </div>
       )}
