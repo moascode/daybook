@@ -9,8 +9,6 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { newAppPage, fillAccountForm } from './helpers'
 
-test.skip(true, 'Tier 3 — not yet implemented')
-
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
@@ -34,7 +32,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await dialog.getByLabel(/Amount/i).fill('100')
   await dialog.locator('#account, [name="account"]').selectOption('Bill Account')
   await dialog.getByLabel(/Merchant|Description/i).first().fill('Electricity Bill')
-  await dialog.locator('#frequency, [name="frequency"]').selectOption({ label: /Monthly/i })
+  await dialog.locator('#frequency, [name="frequency"]').selectOption('monthly')
   await dialog.getByLabel(/Next due|Start date/i).fill(daysFromToday(3))
   await dialog.getByRole('button', { name: /Save|Create/i }).click()
 
@@ -44,7 +42,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await dialog2.getByLabel(/Amount/i).fill('200')
   await dialog2.locator('#account, [name="account"]').selectOption('Bill Account')
   await dialog2.getByLabel(/Merchant|Description/i).first().fill('Far Future Bill')
-  await dialog2.locator('#frequency, [name="frequency"]').selectOption({ label: /Monthly/i })
+  await dialog2.locator('#frequency, [name="frequency"]').selectOption('monthly')
   await dialog2.getByLabel(/Next due|Start date/i).fill(daysFromToday(30))
   await dialog2.getByRole('button', { name: /Save|Create/i }).click()
 })

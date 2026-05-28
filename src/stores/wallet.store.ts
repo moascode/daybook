@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Account, Transaction, Category, Budget, RecurringTransaction } from '@/types/wallet.types'
+import type { Account, Transaction, Category, Budget, RecurringTransaction, Goal } from '@/types/wallet.types'
 
 interface WalletFilters {
   dateFrom: string
@@ -16,6 +16,7 @@ interface WalletState {
   categories: Category[]
   budgets: Budget[]
   recurringTransactions: RecurringTransaction[]
+  goals: Goal[]
   filters: WalletFilters
 
   setAccounts: (accounts: Account[]) => void
@@ -23,6 +24,7 @@ interface WalletState {
   setCategories: (categories: Category[]) => void
   setBudgets: (budgets: Budget[]) => void
   setRecurringTransactions: (rts: RecurringTransaction[]) => void
+  setGoals: (goals: Goal[]) => void
   setFilters: (filters: Partial<WalletFilters>) => void
   addAccount: (account: Account) => void
   updateAccount: (id: string, updates: Partial<Account>) => void
@@ -36,6 +38,9 @@ interface WalletState {
   addRecurringTransaction: (rt: RecurringTransaction) => void
   updateRecurringTransaction: (id: string, updates: Partial<RecurringTransaction>) => void
   removeRecurringTransaction: (id: string) => void
+  addGoal: (goal: Goal) => void
+  updateGoal: (id: string, updates: Partial<Goal>) => void
+  removeGoal: (id: string) => void
 }
 
 function getDefaultFilters(): WalletFilters {
@@ -61,6 +66,7 @@ export const useWalletStore = create<WalletState>((set) => ({
   categories: [],
   budgets: [],
   recurringTransactions: [],
+  goals: [],
   filters: getDefaultFilters(),
 
   setAccounts: (accounts) => set({ accounts }),
@@ -68,6 +74,7 @@ export const useWalletStore = create<WalletState>((set) => ({
   setCategories: (categories) => set({ categories }),
   setBudgets: (budgets) => set({ budgets }),
   setRecurringTransactions: (rts) => set({ recurringTransactions: rts }),
+  setGoals: (goals) => set({ goals }),
   setFilters: (updates) =>
     set((s) => ({ filters: { ...s.filters, ...updates } })),
 
@@ -114,4 +121,13 @@ export const useWalletStore = create<WalletState>((set) => ({
     set((s) => ({
       recurringTransactions: s.recurringTransactions.filter((r) => r.id !== id),
     })),
+
+  addGoal: (goal) =>
+    set((s) => ({ goals: [...s.goals, goal] })),
+  updateGoal: (id, updates) =>
+    set((s) => ({
+      goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+    })),
+  removeGoal: (id) =>
+    set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
 }))

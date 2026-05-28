@@ -1,0 +1,17 @@
+{
+  "name": "Daybook",
+  "short_name": "Daybook",
+  "description": "Personal productivity and finance tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1D9E75",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

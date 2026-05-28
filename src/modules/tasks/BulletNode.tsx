@@ -12,6 +12,7 @@ import {
   CheckSquare,
   Target,
   CalendarClock,
+  BookCopy,
 } from 'lucide-react'
 import { format, parseISO, isBefore, startOfDay } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,7 @@ interface BulletNodeProps {
   onDelete: (id: string) => void
   onZoomIn: (id: string) => void
   onSetDueDate: (id: string, date: string | null) => void
+  onSaveAsTemplate: (task: Task) => void
   autoFocus?: boolean
 }
 
@@ -55,6 +57,7 @@ export function BulletNode({
   onDelete,
   onZoomIn,
   onSetDueDate,
+  onSaveAsTemplate,
   autoFocus,
 }: BulletNodeProps) {
   const [showNote, setShowNote] = useState(task.note.length > 0)
@@ -275,6 +278,14 @@ export function BulletNode({
                 >
                   <CalendarClock className="h-3.5 w-3.5 text-gray-400" />
                   Set due date
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={() => onSaveAsTemplate(task)}
+                >
+                  <BookCopy className="h-3.5 w-3.5 text-gray-400" />
+                  Save as template
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />

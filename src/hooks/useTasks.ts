@@ -426,6 +426,50 @@ export function useTasks() {
     return tasks.some((t) => t.parentId === taskId)
   }, [])
 
+  // ── Task templates ─────────────────────────────────
+
+  interface TemplateRow {
+    id: string
+    name: string
+    content: string
+    created_at: string
+  }
+
+  interface TaskTemplate {
+    id: string
+    name: string
+    content: string
+    createdAt: string
+  }
+
+  const loadTemplates = useCallback(async (): Promise<TaskTemplate[]> => {
+    const db = await getDB()
+    const result = await db.query<TemplateRow>(
+      'SELECT * FROM task_templates ORDER BY created_at ASC',
+    )
+    return result.rows.map((r) => ({ id: r.id, name: r.name, content: r.content, createdAt: r.created_at }))
+  }, [])
+
+  const saveTemplate = useCallback(async (name: string, content: string): Promise<TaskTemplate> => {
+    const db = await getDB()
+    const id = generateId()
+    const now = nowISO()
+    await db.query(
+      'INSERT INTO task_templates (id, name, content, created_at) VALUES ($1, $2, $3, $4)',
+      [id, name, content, now],
+    )
+    return { id, name, content, createdAt: now }
+  }, [])
+
+  const deleteTemplate = useCallback(async (id: string): Promise<void> => {
+    const db = await getDB()
+    await db.query('DELETE FROM task_templates WHERE id = $1', [id])
+  }, [])
+
+  const applyTemplate = useCallback(async (template: TaskTemplate, parentId: string | null): Promise<Task> => {
+    return addTask(template.content, parentId, null)
+  }, [addTask])
+
   return {
     tasks: store.tasks,
     rootId: store.rootId,
@@ -443,6 +487,10 @@ export function useTasks() {
     getBreadcrumb,
     getChildren,
     hasChildren,
+    loadTemplates,
+    saveTemplate,
+    deleteTemplate,
+    applyTemplate,
   }
 }
 

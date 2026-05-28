@@ -9,8 +9,6 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
 
-test.skip(true, 'Tier 3 — not yet implemented')
-
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
@@ -73,7 +71,8 @@ test('year-on-year section contains a chart element', async () => {
 test('year-on-year section shows two year labels', async () => {
   const yoySection = page.getByTestId('yoy-chart')
   // Should show at least one calendar year label
-  await expect(yoySection.getByText(/20\d\d/)).toHaveCount({ minimum: 1 })
+  const count = await yoySection.getByText(/20\d\d/).count()
+  expect(count).toBeGreaterThanOrEqual(1)
 })
 
 // ── Custom date range ──────────────────────────────────────────────────

@@ -27,6 +27,7 @@ interface BulletTreeProps {
   onDelete: (id: string) => void
   onZoomIn: (id: string) => void
   onSetDueDate: (id: string, date: string | null) => void
+  onSaveAsTemplate: (task: Task) => void
 }
 
 export function BulletTree({
@@ -45,6 +46,7 @@ export function BulletTree({
   onDelete,
   onZoomIn,
   onSetDueDate,
+  onSaveAsTemplate,
 }: BulletTreeProps) {
   const tasks = useTasksStore((s) => s.tasks)
   const hideCompleted = useTasksStore((s) => s.hideCompleted)
@@ -107,6 +109,7 @@ export function BulletTree({
               onDelete={onDelete}
               onZoomIn={onZoomIn}
               onSetDueDate={onSetDueDate}
+              onSaveAsTemplate={onSaveAsTemplate}
               autoFocus={focusId === task.id}
             />
 
@@ -127,6 +130,7 @@ export function BulletTree({
                 onDelete={onDelete}
                 onZoomIn={onZoomIn}
                 onSetDueDate={onSetDueDate}
+                onSaveAsTemplate={onSaveAsTemplate}
               />
             )}
           </div>

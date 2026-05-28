@@ -58,6 +58,15 @@ export interface RecurringTransaction {
   updatedAt: string
 }
 
+export interface Goal {
+  id: string
+  name: string
+  targetAmount: number
+  accountId: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface DailyGroup {
   date: string
   transactions: Transaction[]

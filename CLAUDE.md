@@ -700,28 +700,34 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  3+ — Alpha UX Polish
-Phase status:   Tier 1 + Tier 2 complete; Tier 3 queued (tests pre-skipped)
+Current phase:  3+ — Alpha UX Polish (Tier 3 complete)
+Phase status:   Tier 1 + Tier 2 + Tier 3 all complete; full e2e suite green
 Last session:   2026-05-28
-Last completed: - Phase 3+ Tier 2 features shipped:
-                    • Task due dates (date field per task, sortable, overdue indicator)
-                    • Wallet budgets (/wallet/budgets): monthly limits per category,
-                      progress bars, over-budget alerts, full CRUD
-                    • Recurring transactions (/wallet/recurring): weekly/monthly rules
-                      with merchant, amount, next-due date; full CRUD
-                    • Data export: CSV and JSON download from wallet page
-                - Schema additions: `tasks.due_date`, `budgets`, `recurring_transactions`
-                - New components: BudgetsPage, RecurringPage, export panel in WalletPage
-                - Bug fixes:
-                    • PGlite relaxedDurability:false — writes now flush to IndexedDB
-                      before next page reload (fixes race with page.goto in tests)
-                    • Account/Transaction forms now await onSubmit before closing modal
-                    • Helpers wait for dialog to close after submit
-                - 4 new Playwright specs (e2e/12–15): full 213-test suite green,
-                  53 Tier 3 tests skipped as expected
-Next task:      Phase 3+ Tier 3 — un-skip and implement (drag-reorder, templates,
-                PWA, mobile responsive)  OR  skip to Phase 4 for multi-user
-Blockers:       None — Tier 2 complete, e2e suite green, no known regressions
+Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
+                    • Wallet goals (/wallet/goals): savings target linked to an account,
+                      progress bar vs live account balance, full CRUD
+                    • Bill reminders on Dashboard: recurring bills due within 7 days,
+                      "due soon"/days-left badge, dismissible (persists via localStorage)
+                    • Advanced reports (/wallet/reports): year-on-year comparison chart
+                      (recharts) + fully custom date-range transaction view
+                    • Task templates: "Save as template" in BulletNode menu, "Templates"
+                      browser dialog to apply/delete; persisted in task_templates table
+                    • PWA: public/manifest.json + public/sw.js, manifest/theme-color/
+                      apple meta tags in index.html, SW registration in main.tsx
+                    • Mobile-responsive layout: hamburger drawer Sidebar + mobile top bar
+                      in AppShell; no horizontal overflow at 390px
+                - Schema additions: `goals`, `task_templates`
+                - New components: GoalsPage, ReportsPage; Goals/Reports tabs in WalletTabNav
+                - useWallet goal CRUD + useTasks template CRUD; wallet.store goals state
+                - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
+                  helpers.waitForApp now checks <main> (aside is hidden on mobile)
+                - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
+Next task:      Phase 4 — Home Network + Multi-User (Node backend, SQLite file, auth,
+                per-user data) for the v1 milestone
+Blockers:       None — all Tier 3+ tiers complete, 266/266 e2e green.
+                Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
+                test-only `window as any` shims) remain across the codebase; not
+                introduced this session and do not affect typecheck or tests.
 ```
 
 ---

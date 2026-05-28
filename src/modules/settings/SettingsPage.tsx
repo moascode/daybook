@@ -46,7 +46,7 @@ export function SettingsPage() {
         [key, value],
       )
     }
-    addToast({ message: 'Settings saved' })
+    addToast({ message: 'Settings saved', duration: 3000 })
   }
 
   if (loading) {

@@ -9,8 +9,6 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
 
-test.skip(true, 'Tier 3 — not yet implemented')
-
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
@@ -97,7 +95,7 @@ test('goal progress increases after adding income to the linked account', async 
   await page.goto('/wallet/goals')
   const card = page.getByTestId('goal-card').filter({ hasText: 'Emergency Fund' })
   // 2000/10000 = 20% — the card should show some saved amount
-  await expect(card.getByText(/2,000|2000|20%/)).toBeVisible()
+  await expect(card.getByText(/2,000|2000|20%/).first()).toBeVisible()
 })
 
 // ── Edit goal ──────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { CheckSquare, Wallet, Settings, FlaskConical } from 'lucide-react'
+import { CheckSquare, Wallet, Settings, FlaskConical, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const mainNavItems = [
@@ -7,17 +7,34 @@ const mainNavItems = [
   { to: '/wallet', label: 'Wallet', icon: Wallet, end: false },
 ]
 
-export function Sidebar() {
-  return (
-    <aside className="flex h-full w-56 flex-col border-r border-gray-200 bg-white">
+interface SidebarProps {
+  open?: boolean
+  onClose?: () => void
+}
+
+export function Sidebar({ open = true, onClose }: SidebarProps) {
+  const navContent = (
+    <>
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-white">
-          D
+      <div className="flex items-center justify-between gap-2.5 px-5 py-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-white">
+            D
+          </div>
+          <span className="text-lg font-bold tracking-tight text-gray-900">
+            Daybook
+          </span>
         </div>
-        <span className="text-lg font-bold tracking-tight text-gray-900">
-          Daybook
-        </span>
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button
+            className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+            onClick={onClose}
+            aria-label="Close sidebar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Main navigation */}
@@ -27,6 +44,7 @@ export function Sidebar() {
             key={item.to}
             to={item.to}
             end={item.end}
+            onClick={onClose}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -46,6 +64,7 @@ export function Sidebar() {
           <NavLink
             to="/uat"
             end
+            onClick={onClose}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -66,6 +85,7 @@ export function Sidebar() {
         <NavLink
           to="/settings"
           end
+          onClick={onClose}
           className={({ isActive }) =>
             cn(
               'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -80,6 +100,31 @@ export function Sidebar() {
         </NavLink>
         <p className="mt-2 px-3 text-xs text-gray-400">Daybook Alpha</p>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop sidebar — always visible on md+ */}
+      <aside className="hidden md:flex h-full w-56 flex-col border-r border-gray-200 bg-white">
+        {navContent}
+      </aside>
+
+      {/* Mobile sidebar — slide-in drawer */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex md:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={onClose}
+            aria-hidden
+          />
+          {/* Drawer */}
+          <aside className="relative flex h-full w-56 flex-col border-r border-gray-200 bg-white shadow-xl">
+            {navContent}
+          </aside>
+        </div>
+      )}
+    </>
   )
 }

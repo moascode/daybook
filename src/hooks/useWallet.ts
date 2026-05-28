@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { getDB } from '@/db'
 import { useWalletStore } from '@/stores/wallet.store'
 import { generateId, nowISO, todayISO } from '@/lib/utils'
-import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency } from '@/types/wallet.types'
+import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal } from '@/types/wallet.types'
 
 // ── DB row types (snake_case from PGlite) ───────────
 
@@ -171,6 +171,32 @@ interface RecurringInput {
   categoryId?: string | null
   frequency: RecurrenceFrequency
   nextDueDate: string
+}
+
+interface GoalInput {
+  name: string
+  targetAmount: number
+  accountId: string
+}
+
+interface GoalRow {
+  id: string
+  name: string
+  target_amount: number
+  account_id: string
+  created_at: string
+  updated_at: string
+}
+
+function mapGoal(row: GoalRow): Goal {
+  return {
+    id: row.id,
+    name: row.name,
+    targetAmount: row.target_amount,
+    accountId: row.account_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
 }
 
 interface TransactionFilters {
@@ -696,6 +722,54 @@ export function useWallet() {
     useWalletStore.getState().removeRecurringTransaction(id)
   }, [])
 
+  // ── Goal CRUD ────────────────────────────────────
+
+  const loadGoals = useCallback(async () => {
+    const db = await getDB()
+    const result = await db.query<GoalRow>('SELECT * FROM goals ORDER BY created_at ASC')
+    const goals = result.rows.map(mapGoal)
+    useWalletStore.getState().setGoals(goals)
+    return goals
+  }, [])
+
+  const addGoal = useCallback(async (data: GoalInput): Promise<Goal> => {
+    const db = await getDB()
+    const id = generateId()
+    const now = nowISO()
+    await db.query(
+      `INSERT INTO goals (id, name, target_amount, account_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)`,
+      [id, data.name, data.targetAmount, data.accountId, now],
+    )
+    const goal: Goal = { id, name: data.name, targetAmount: data.targetAmount, accountId: data.accountId, createdAt: now, updatedAt: now }
+    useWalletStore.getState().addGoal(goal)
+    return goal
+  }, [])
+
+  const updateGoal = useCallback(async (id: string, data: Partial<GoalInput>): Promise<void> => {
+    const db = await getDB()
+    const now = nowISO()
+    const fields: string[] = ['updated_at = $1']
+    const params: (string | number)[] = [now]
+    let idx = 2
+    if (data.name !== undefined) { fields.push(`name = $${idx}`); params.push(data.name); idx++ }
+    if (data.targetAmount !== undefined) { fields.push(`target_amount = $${idx}`); params.push(data.targetAmount); idx++ }
+    if (data.accountId !== undefined) { fields.push(`account_id = $${idx}`); params.push(data.accountId); idx++ }
+    params.push(id)
+    await db.query(`UPDATE goals SET ${fields.join(', ')} WHERE id = $${idx}`, params)
+    const storeUpdate: Partial<Goal> = { updatedAt: now }
+    if (data.name !== undefined) storeUpdate.name = data.name
+    if (data.targetAmount !== undefined) storeUpdate.targetAmount = data.targetAmount
+    if (data.accountId !== undefined) storeUpdate.accountId = data.accountId
+    useWalletStore.getState().updateGoal(id, storeUpdate)
+  }, [])
+
+  const deleteGoal = useCallback(async (id: string): Promise<void> => {
+    const db = await getDB()
+    await db.query('DELETE FROM goals WHERE id = $1', [id])
+    useWalletStore.getState().removeGoal(id)
+  }, [])
+
   // ── Export ───────────────────────────────────────
 
   const exportTransactions = useCallback(async (format: 'csv' | 'json'): Promise<void> => {
@@ -758,6 +832,7 @@ export function useWallet() {
     categories: store.categories,
     budgets: store.budgets,
     recurringTransactions: store.recurringTransactions,
+    goals: store.goals,
     filters: store.filters,
     setFilters: store.setFilters,
 
@@ -767,6 +842,7 @@ export function useWallet() {
     loadCategories,
     loadBudgets,
     loadRecurringTransactions,
+    loadGoals,
 
     // Balance
     getAccountBalance,
@@ -794,6 +870,11 @@ export function useWallet() {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
+
+    // Goal CRUD
+    addGoal,
+    updateGoal,
+    deleteGoal,
 
     // Export
     exportTransactions,

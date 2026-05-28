@@ -83,6 +83,24 @@ CREATE TABLE IF NOT EXISTS recurring_transactions (
   created_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   updated_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
+
+-- Tier 3: savings goals
+CREATE TABLE IF NOT EXISTS goals (
+  id            TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
+  name          TEXT NOT NULL,
+  target_amount DOUBLE PRECISION NOT NULL,
+  account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  created_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at    TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+);
+
+-- Tier 3: task templates
+CREATE TABLE IF NOT EXISTS task_templates (
+  id         TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', ''),
+  name       TEXT NOT NULL,
+  content    TEXT NOT NULL DEFAULT '',
+  created_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+);
 `
 
 async function initDB(): Promise<PGlite> {

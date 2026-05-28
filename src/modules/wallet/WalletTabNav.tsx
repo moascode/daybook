@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { List, CreditCard, BarChart3, Upload, PieChart, RefreshCw } from 'lucide-react'
+import { List, CreditCard, BarChart3, Upload, PieChart, RefreshCw, Target, BarChart2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TABS = [
@@ -8,6 +8,8 @@ const TABS = [
   { to: '/wallet/dashboard',  label: 'Dashboard',    icon: BarChart3,  end: false },
   { to: '/wallet/budgets',    label: 'Budgets',      icon: PieChart,   end: false },
   { to: '/wallet/recurring',  label: 'Recurring',    icon: RefreshCw,  end: false },
+  { to: '/wallet/goals',      label: 'Goals',        icon: Target,     end: false },
+  { to: '/wallet/reports',    label: 'Reports',      icon: BarChart2,  end: false },
   { to: '/wallet/import',     label: 'Import CSV',   icon: Upload,     end: false },
 ] as const
 
