@@ -700,18 +700,22 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  3 — Alpha (post-UAT polish)
-Phase status:   Complete + UAT fixes applied + e2e test suite established
+Current phase:  3+ — Alpha UX Polish
+Phase status:   Tier 1 complete and merged; Tier 2 and 3 queued
 Last session:   2026-05-28
-Last completed: - Added e2e testing rule (Rule 11) to CLAUDE.md — every new feature requires
-                  a Playwright test; full suite must pass before any feature is marked complete
-                - Updated tracker.html with e2e testing tasks per phase
-                - Prior session (2026-05-25): Alpha UAT pass — BulletEditor blinking fixed,
-                  task checkboxes added, wallet navigation redesigned, README created
-                  Commits: 57403e3 (schema fix), 32570b1 (UAT fixes)
-                  faf6929 (e2e test fixes), d8fe428 (quality redesign / UAT pass 2)
-Next task:      Phase 4 — Home network + multi-user (Node backend, SQLite file, auth)
-Blockers:       None — Alpha is feature-complete, UAT-verified, e2e suite green, builds cleanly
+Last completed: - Phase 3+ Tier 1 UX improvements shipped (PR #1):
+                    • Task search bar (Ctrl+F, live filter, breadcrumb paths, click-to-navigate)
+                    • Task delete undo (5-sec toast, Undo button, restores full subtree)
+                    • Zoom persist (rootId saved to localStorage, restored on reload)
+                    • Net worth banner (total balance on Accounts page)
+                    • Settings page (/settings): API key, theme, currency; persists to DB
+                    • Toast system (useToastStore + ToastContainer)
+                - 5 new Playwright specs (e2e/07–11): full 171-test suite green
+                - Fixed WalletPage CRUD handlers (stale-closure race condition on tag filter)
+                - tracker.html updated: Phase 3+ added with Tier 1/2/3 sections
+Next task:      Phase 3+ Tier 2 — drag-and-drop reorder, due dates, budget tracking,
+                recurring transactions, data export  (OR skip to Phase 4 for multi-user)
+Blockers:       None — Tier 1 complete, e2e suite green, no known regressions
 ```
 
 ---

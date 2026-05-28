@@ -594,6 +594,50 @@ const MILESTONE_ALPHA = {
   desc: 'Tasks and Wallet work locally. You are the only user. Data lives in your browser via IndexedDB. No internet needed.'
 };
 
+const PHASES_1B = [
+  {
+    id: 'ph3b', num: '3+', name: 'Alpha UX Polish', type: 'dev',
+    desc: 'Iterative UX improvements post-Alpha, delivered in prioritised tiers. Tier 1 is shipped; Tier 2 and 3 are queued.',
+    sections: [
+      {
+        heading: 'Tier 1 — Core UX Gaps (Complete)',
+        tasks: [
+          { id: 'pt1a', t: 'Task search: always-visible bar, Ctrl+F shortcut, live filter across all zoom levels, breadcrumb paths, click-to-navigate', note: 'e2e/07-task-search.spec.ts — 13 tests' },
+          { id: 'pt1b', t: 'Task delete undo: 5-second toast with Undo button; restores task and all descendants', note: 'e2e/08-task-undo.spec.ts — 7 tests' },
+          { id: 'pt1c', t: 'Zoom persist: save rootId to localStorage and restore on page reload', note: 'e2e/09-zoom-persist.spec.ts — 5 tests' },
+          { id: 'pt1d', t: 'Net worth banner: total balance across all accounts displayed at top of Accounts page', note: 'e2e/10-wallet-net-worth.spec.ts — 7 tests' },
+          { id: 'pt1e', t: 'Settings page (/settings): Anthropic API key (show/hide toggle), theme selector (light/dark/system), default currency; persists to settings DB table', note: 'e2e/11-settings.spec.ts — 12 tests' },
+          { id: 'pt1f', t: 'Toast system: useToastStore + ToastContainer — reusable notification layer; used by delete-undo, ready for all future actions' },
+          { id: 'pt1g', t: 'E2E tests: 5 new Playwright specs (e2e/07–11) covering all Tier 1 features — full 171-test suite green' },
+        ]
+      },
+      {
+        heading: 'Tier 2 — Next Priority',
+        tasks: [
+          { id: 'pt2a', t: 'Tasks: drag-and-drop reorder — move tasks between positions and across indent levels (@dnd-kit already installed; test skipped pending implementation)', note: 'Unblock the 2 skipped DnD tests in e2e/01-tasks.spec.ts' },
+          { id: 'pt2b', t: 'Tasks: due dates — optional date field per task with overdue visual indicator and sort-by-due option' },
+          { id: 'pt2c', t: 'Wallet: budget tracking — set monthly spend limits per category with progress bars and over-budget alerts' },
+          { id: 'pt2d', t: 'Wallet: recurring transactions — define a schedule (weekly/monthly) and auto-create the transaction on due date' },
+          { id: 'pt2e', t: 'Wallet: data export — download all transactions as CSV or JSON (essential safety net before cloud sync exists)' },
+          { id: 'pt2f', t: 'E2E tests for all Tier 2 features before marking any item complete', note: 'Rule 11: every new feature requires a Playwright test.' },
+        ]
+      },
+      {
+        heading: 'Tier 3 — Further Polish',
+        tasks: [
+          { id: 'pt3a', t: 'Wallet: goals & savings tracker — set a target amount, link a dedicated account, track progress over time' },
+          { id: 'pt3b', t: 'Wallet: bill reminders — flag upcoming recurring bills N days before they are due' },
+          { id: 'pt3c', t: 'Wallet: advanced reports — year-on-year spend comparison and fully custom date ranges' },
+          { id: 'pt3d', t: 'Tasks: task templates — save a bullet structure and reuse it for recurring projects' },
+          { id: 'pt3e', t: 'App: PWA — manifest + service worker; install Daybook to home screen; basic offline read-only mode' },
+          { id: 'pt3f', t: 'App: mobile-responsive layout — full usability on phone screen (currently desktop-first only)' },
+          { id: 'pt3g', t: 'E2E tests for all Tier 3 features before marking any item complete', note: 'Rule 11: every new feature requires a Playwright test.' },
+        ]
+      }
+    ]
+  },
+];
+
 const PHASES_2 = [
   {
     id: 'ph4', num: 4, name: 'Home Network + Multi-User', type: 'arch',
@@ -739,7 +783,7 @@ const MILESTONE_V4 = {
   desc: 'Pick one feature at a time. Ship it. Daybook grows with you indefinitely.'
 };
 
-const ALL_PHASES = [...PHASES, ...PHASES_2, ...PHASES_3, ...PHASES_4, ...PHASES_5];
+const ALL_PHASES = [...PHASES, ...PHASES_1B, ...PHASES_2, ...PHASES_3, ...PHASES_4, ...PHASES_5];
 
 // ── STATE ──────────────────────────────────────────────────────────────
 
@@ -757,6 +801,11 @@ const CONFIRMED_DONE_M2 = {
   p3h: true, p3i: true, p3j: true, p3k: true, p3l: true, p3m: true, p3n: true,
 };
 
+// m3: Phase 3+ Tier 1 UX improvements shipped (search, undo, zoom-persist, net worth, settings, toast).
+const CONFIRMED_DONE_M3 = {
+  pt1a: true, pt1b: true, pt1c: true, pt1d: true, pt1e: true, pt1f: true, pt1g: true,
+};
+
 function loadState() {
   try {
     const raw = localStorage.getItem('daybook-tracker-v1');
@@ -768,6 +817,10 @@ function loadState() {
     if (!saved['_m2']) {
       // Phases 1–3 are complete — mark all tasks done; user's explicit unchecks take priority
       current = { ...CONFIRMED_DONE_M2, ...current, _m2: true };
+    }
+    if (!saved['_m3']) {
+      // Phase 3+ Tier 1 complete — mark all Tier 1 UX tasks done
+      current = { ...CONFIRMED_DONE_M3, ...current, _m3: true };
     }
     if (current !== saved) localStorage.setItem('daybook-tracker-v1', JSON.stringify(current));
     return current;
@@ -937,6 +990,7 @@ function renderMain() {
     </div>`,
     ...PHASES.map(renderPhaseCard),
     renderMilestone(MILESTONE_ALPHA),
+    ...PHASES_1B.map(renderPhaseCard),
     ...PHASES_2.map(renderPhaseCard),
     renderMilestone(MILESTONE_V1),
     ...PHASES_3.map(renderPhaseCard),
