@@ -32,3 +32,9 @@ server/data/
 
 # infra/daybook runtime files (pidfile, log, generated session secret)
 .daybook/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
