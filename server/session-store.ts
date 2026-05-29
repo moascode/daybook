@@ -40,7 +40,16 @@ export class SqliteSessionStore extends session.Store {
         this.destroy(sid, () => {})
         return cb(null, null)
       }
-      cb(null, JSON.parse(row.sess) as SessionData)
+      let parsed: SessionData
+      try {
+        parsed = JSON.parse(row.sess) as SessionData
+      } catch {
+        // Corrupt row would otherwise 500 every request for this sid — drop it
+        // and treat as no session.
+        this.destroy(sid, () => {})
+        return cb(null, null)
+      }
+      cb(null, parsed)
     } catch (err) {
       cb(err)
     }

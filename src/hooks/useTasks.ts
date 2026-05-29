@@ -139,7 +139,10 @@ export function useTasks() {
 
       const sortOrder = computeSortOrder(siblings, afterId)
 
-      const row = await api.post<TaskRow>('/tasks', { parentId, content, sortOrder })
+      const row = await api.post<TaskRow | null>('/tasks', { parentId, content, sortOrder })
+      // The server returns null only on an id conflict (ON CONFLICT DO NOTHING);
+      // a fresh create never sends an id, so this is defensive.
+      if (!row) throw new Error('Failed to create task')
       const newTask = rowToTask(row)
 
       useTasksStore.getState().addTask(newTask)

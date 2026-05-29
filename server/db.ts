@@ -143,6 +143,10 @@ const DATA_TABLES = [
   'transactions', 'categories', 'accounts', 'tasks', 'settings',
 ]
 
+// Bump when the data-table DDL above changes (pre-v1: triggers a drop+recreate
+// of the data tables on next boot). Auth tables (users/sessions) are unaffected.
+const SCHEMA_VERSION = 1
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // DAYBOOK_DB_PATH lets tests point at a throwaway file (or ':memory:').
@@ -172,21 +176,18 @@ export function getDb(): DB {
 
   db.exec(AUTH_SQL)
 
-  // Migration guard: a DB created before the auth stage has data tables without
-  // a user_id column. Pre-v1 there is no real data, so drop and recreate them
-  // rather than attempt an in-place ALTER. Triggered only when the legacy shape
-  // is detected.
-  const tasksTable = db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'")
-    .get()
-  if (tasksTable) {
-    const cols = db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
-    const hasUserId = cols.some((c) => c.name === 'user_id')
-    if (!hasUserId) {
-      db.pragma('foreign_keys = OFF')
-      for (const table of DATA_TABLES) db.exec(`DROP TABLE IF EXISTS ${table}`)
-      db.pragma('foreign_keys = ON')
-    }
+  // Schema-version guard. Pre-v1 there is no real data to preserve, so any change
+  // to the data-table DDL (the auth migration, the budgets uniqueness fix, and
+  // future tweaks) is applied by dropping and recreating the data tables rather
+  // than an in-place ALTER. Bump SCHEMA_VERSION whenever the data-table DDL
+  // below changes. (Once v1 carries real data, replace this with real
+  // migrations instead of bumping.)
+  const currentVersion = db.pragma('user_version', { simple: true }) as number
+  if (currentVersion !== SCHEMA_VERSION) {
+    db.pragma('foreign_keys = OFF')
+    for (const table of DATA_TABLES) db.exec(`DROP TABLE IF EXISTS ${table}`)
+    db.pragma('foreign_keys = ON')
+    db.pragma(`user_version = ${SCHEMA_VERSION}`)
   }
 
   db.exec(SCHEMA_SQL)

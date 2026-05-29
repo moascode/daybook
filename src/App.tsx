@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
-import { api, ApiError } from '@/lib/api'
+import { api, ApiError, setUnauthorizedHandler } from '@/lib/api'
 import { useAppStore, type AuthUser } from '@/stores/app.store'
 import { AuthPage } from '@/components/auth/AuthPage'
 
@@ -14,6 +14,15 @@ export default function App() {
   const setTheme = useAppStore((s) => s.setTheme)
   const user = useAppStore((s) => s.user)
   const setUser = useAppStore((s) => s.setUser)
+
+  // If the session expires mid-use, any data request 401s — return to login.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setDbReady(false)
+      setUser(null)
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [setDbReady, setUser])
 
   // Boot: is there a session? Determines whether we show the app or AuthPage.
   useEffect(() => {

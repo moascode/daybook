@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "tsx watch server/index.ts",
-    "dev:all": "tsx server/index.ts & vite",
+    "dev:all": "tsx server/index.ts & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null' EXIT; vite",
     "typecheck:server": "tsc -p server/tsconfig.json",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

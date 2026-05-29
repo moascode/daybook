@@ -4,6 +4,7 @@ import { Upload, FileText, AlertCircle, CheckCircle2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { useWallet } from '@/hooks/useWallet'
+import { useToastStore } from '@/stores/toast.store'
 import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
@@ -14,6 +15,7 @@ type ImportStep = 'upload' | 'mapping' | 'review' | 'done'
 export function CsvImport() {
   const navigate = useNavigate()
   const { accounts, loadAccounts, loadCategories, categories, importTransactions, setFilters } = useWallet()
+  const { addToast } = useToastStore()
 
   const [step, setStep] = useState<ImportStep>('upload')
   const [file, setFile] = useState<File | null>(null)
@@ -103,14 +105,20 @@ export function CsvImport() {
       importHash: r.importHash,
     }))
 
-    const imported = await importTransactions(inputs)
-    const skipped = importRows.filter((r) => r.isDuplicate).length
-    const excluded = importRows.filter((r) => !r.included && !r.isDuplicate).length
+    try {
+      const imported = await importTransactions(inputs)
+      const skipped = importRows.filter((r) => r.isDuplicate).length
+      const excluded = importRows.filter((r) => !r.included && !r.isDuplicate).length
 
-    setResult({ imported, skipped, excluded })
-    setStep('done')
-    setImporting(false)
-  }, [importRows, selectedAccountId, importTransactions])
+      setResult({ imported, skipped, excluded })
+      setStep('done')
+    } catch {
+      // Import is atomic on the server; on failure nothing was saved.
+      addToast({ message: 'Import failed — no transactions were saved.', duration: 4000 })
+    } finally {
+      setImporting(false)
+    }
+  }, [importRows, selectedAccountId, importTransactions, addToast])
 
   const updateRow = useCallback((index: number, updates: Partial<ImportRow>) => {
     setImportRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)))
