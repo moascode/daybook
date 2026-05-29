@@ -38,6 +38,9 @@ LOG_FILE="$RUN_DIR/server.log"
 SECRET_FILE="$RUN_DIR/session-secret"
 PLIST_LABEL="com.daybook.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
+# launchd cannot write into TCC-protected dirs (~/Documents, ~/Desktop, …), so
+# the service log lives in the standard, unprotected ~/Library/Logs.
+SERVICE_LOG="$HOME/Library/Logs/daybook.log"
 
 PORT="${PORT:-3001}"
 HOST="${HOST:-0.0.0.0}"
@@ -209,12 +212,16 @@ cmd_url() {
 }
 
 cmd_logs() {
-  ensure_run_dir
-  touch "$LOG_FILE"
+  # The launchd service and the manual (nohup) start write to different files.
+  local target="$LOG_FILE"
+  [ -f "$PLIST_PATH" ] && target="$SERVICE_LOG"
+  mkdir -p "$(dirname "$target")"
+  touch "$target"
+  info "Tailing ${target/#$HOME/\~}"
   if [ "${1:-}" = "-f" ]; then
-    tail -f "$LOG_FILE"
+    tail -f "$target"
   else
-    tail -n 100 "$LOG_FILE"
+    tail -n 100 "$target"
   fi
 }
 
@@ -242,10 +249,15 @@ cmd_up() {
 cmd_install_service() {
   require_node
   [ -f "$ROOT_DIR/dist/index.html" ] || die "Build first: infra/daybook build  (or: infra/daybook up)"
-  local secret tsx_bin
+  local secret tsx_bin node_bin
   secret="$(ensure_secret)"
   tsx_bin="$ROOT_DIR/node_modules/.bin/tsx"
   [ -x "$tsx_bin" ] || die "tsx not found at $tsx_bin — run: infra/daybook setup"
+  # Use the absolute node binary directly. launchd execs the tsx shim's
+  # "#!/usr/bin/env node" shebang in a context where it can't resolve node
+  # (exit 78); passing the shim as an argument to an absolute node avoids that.
+  node_bin="$(command -v node)"
+  [ -x "$node_bin" ] || die "node not found on PATH — cannot build the service."
 
   # If a backgrounded instance is running, stop it; launchd will own it now.
   if is_running; then
@@ -253,9 +265,10 @@ cmd_install_service() {
     cmd_stop
   fi
 
-  mkdir -p "$HOME/Library/LaunchAgents"
+  mkdir -p "$HOME/Library/LaunchAgents" "$(dirname "$SERVICE_LOG")"
   ensure_run_dir
   info "Writing launchd plist → ${PLIST_PATH/#$HOME/\~}"
+  info "Service log → ${SERVICE_LOG/#$HOME/\~}"
   cat > "$PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -265,6 +278,7 @@ cmd_install_service() {
   <key>WorkingDirectory</key><string>$ROOT_DIR</string>
   <key>ProgramArguments</key>
   <array>
+    <string>$node_bin</string>
     <string>$tsx_bin</string>
     <string>server/index.ts</string>
   </array>
@@ -278,8 +292,8 @@ cmd_install_service() {
   </dict>
   <key>RunAtLoad</key>       <true/>
   <key>KeepAlive</key>       <true/>
-  <key>StandardOutPath</key> <string>$LOG_FILE</string>
-  <key>StandardErrorPath</key><string>$LOG_FILE</string>
+  <key>StandardOutPath</key> <string>$SERVICE_LOG</string>
+  <key>StandardErrorPath</key><string>$SERVICE_LOG</string>
 </dict>
 </plist>
 PLIST
