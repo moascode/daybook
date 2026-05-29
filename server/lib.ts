@@ -49,3 +49,22 @@ export function normalizeBind(v: unknown): unknown {
   if (v === undefined) return null
   return v
 }
+
+/**
+ * True if `id` references a row in `table` owned by `userId`. Null/undefined ids
+ * count as valid (optional references). `table` is always a hardcoded constant.
+ */
+export function userOwns(db: DB, table: string, id: unknown, userId: string): boolean {
+  if (id === null || id === undefined) return true
+  return !!db.prepare(`SELECT 1 FROM ${table} WHERE id = ? AND user_id = ?`).get(id, userId)
+}
+
+/**
+ * Guard cross-tenant foreign-key references: rejects writes where any referenced
+ * account/category belongs to another user. Returns true when every ref is owned
+ * (or absent). Without this, a user could attach their rows to another user's
+ * account/category and, via ON DELETE CASCADE, delete or mutate that user's data.
+ */
+export function ownsAllRefs(db: DB, userId: string, refs: Array<[string, unknown]>): boolean {
+  return refs.every(([table, id]) => userOwns(db, table, id, userId))
+}

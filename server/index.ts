@@ -10,6 +10,11 @@ import { settingsRouter } from './routes/settings.ts'
 import { testRouter } from './routes/test.ts'
 
 const PORT = Number(process.env.PORT ?? 3001)
+
+// A real deployment must set its own secret; never silently use the dev default.
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET must be set in production')
+}
 const SESSION_SECRET = process.env.SESSION_SECRET ?? 'daybook-dev-secret-change-me'
 
 export function createApp(): express.Express {

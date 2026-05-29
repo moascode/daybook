@@ -5,6 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test'
+import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor } from './helpers'
 
 const unique = () => `e2e_auth_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
 
@@ -57,6 +58,36 @@ test('log out returns to the sign-in screen, and the same credentials log back i
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
   await context.close()
+})
+
+test('two users have fully isolated data (the v1 guarantee)', async ({ browser }) => {
+  // User A creates an account and a task. newAppPage signs up a fresh user.
+  const pageA = await newAppPage(browser, '/wallet/accounts')
+  await pageA.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(pageA, { name: 'Alice Private Bank', type: 'bank' })
+  await expect(accountCardFor(pageA, 'Alice Private Bank')).toBeVisible()
+
+  await pageA.getByRole('link', { name: 'Tasks' }).click()
+  await pageA.getByRole('button', { name: 'New task' }).first().click()
+  await expect(pageA.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
+  await pageA.keyboard.type('Alice secret task')
+  await pageA.getByRole('textbox', { name: 'Task content' }).last().blur()
+  await expect(bulletNodeFor(pageA, 'Alice secret task')).toBeVisible()
+
+  // User B is a different fresh user — must see none of A's data.
+  const pageB = await newAppPage(browser, '/wallet/accounts')
+  await expect(pageB.locator('[data-testid="account-card"]')).toHaveCount(0)
+  await expect(accountCardFor(pageB, 'Alice Private Bank')).toHaveCount(0)
+
+  await pageB.getByRole('link', { name: 'Tasks' }).click()
+  await expect(bulletNodeFor(pageB, 'Alice secret task')).toHaveCount(0)
+
+  // A's data is untouched by B's session.
+  await pageA.bringToFront()
+  await expect(bulletNodeFor(pageA, 'Alice secret task')).toBeVisible()
+
+  await pageA.context().close()
+  await pageB.context().close()
 })
 
 test('login with wrong password shows an error', async ({ browser }) => {

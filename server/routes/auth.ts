@@ -7,6 +7,9 @@ import { seedUserDefaults } from '../seed.ts'
 export const authRouter: Router = Router()
 
 const BCRYPT_ROUNDS = 10
+const MAX_USERNAME = 64
+const MAX_PASSWORD = 72 // bcrypt only hashes the first 72 bytes anyway
+const MIN_PASSWORD = 6
 
 interface UserRow {
   id: string
@@ -14,12 +17,30 @@ interface UserRow {
   password_hash: string
 }
 
+// Usernames are case-insensitive — store and compare lowercase.
+const normalizeUsername = (raw: unknown): string => String(raw ?? '').trim().toLowerCase()
+
+// Regenerate the session on auth to avoid session fixation, then persist userId.
+function establishSession(req: import('express').Request, userId: string, done: () => void): void {
+  req.session.regenerate((err) => {
+    if (err) return done()
+    req.session.userId = userId
+    req.session.save(() => done())
+  })
+}
+
 // POST /api/auth/signup — create a user, seed their defaults, log them in.
 authRouter.post('/auth/signup', (req, res) => {
-  const username = String(req.body?.username ?? '').trim()
+  const username = normalizeUsername(req.body?.username)
   const password = String(req.body?.password ?? '')
   if (!username || !password) {
     return res.status(400).json({ error: 'username and password are required' })
+  }
+  if (username.length > MAX_USERNAME) {
+    return res.status(400).json({ error: `username must be at most ${MAX_USERNAME} characters` })
+  }
+  if (password.length < MIN_PASSWORD || password.length > MAX_PASSWORD) {
+    return res.status(400).json({ error: `password must be ${MIN_PASSWORD}-${MAX_PASSWORD} characters` })
   }
 
   const db = getDb()
@@ -36,13 +57,12 @@ authRouter.post('/auth/signup', (req, res) => {
     .get(username, hash) as { id: string; username: string }
 
   seedUserDefaults(db, row.id)
-  req.session.userId = row.id
-  res.status(201).json({ user: row })
+  establishSession(req, row.id, () => res.status(201).json({ user: row }))
 })
 
 // POST /api/auth/login — verify credentials, start a session.
 authRouter.post('/auth/login', (req, res) => {
-  const username = String(req.body?.username ?? '').trim()
+  const username = normalizeUsername(req.body?.username)
   const password = String(req.body?.password ?? '')
 
   const user = getDb()
@@ -53,8 +73,7 @@ authRouter.post('/auth/login', (req, res) => {
     return res.status(401).json({ error: 'invalid username or password' })
   }
 
-  req.session.userId = user.id
-  res.json({ user: { id: user.id, username: user.username } })
+  establishSession(req, user.id, () => res.json({ user: { id: user.id, username: user.username } }))
 })
 
 // POST /api/auth/logout — clear the session.

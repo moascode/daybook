@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS budgets (
   limit_amount REAL NOT NULL,
   created_at   TEXT DEFAULT (datetime('now')),
   updated_at   TEXT DEFAULT (datetime('now')),
-  UNIQUE (category_id)
+  UNIQUE (user_id, category_id)
 );
 
 -- Tier 2: recurring transaction rules

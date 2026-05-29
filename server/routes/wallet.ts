@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getDb } from '../db.ts'
-import { updateRow, normalizeBind } from '../lib.ts'
+import { updateRow, normalizeBind, ownsAllRefs } from '../lib.ts'
 
 export const walletRouter: Router = Router()
 
@@ -159,32 +159,59 @@ walletRouter.get('/transactions/export', (req, res) => {
 })
 
 // Returns the subset of the given hashes that already exist for this user.
+// Batched to stay well under SQLite's bound-parameter limit on large imports.
 walletRouter.post('/transactions/check-duplicates', (req, res) => {
   const hashes: string[] = Array.isArray(req.body?.hashes) ? req.body.hashes : []
   if (hashes.length === 0) return res.json([])
-  const placeholders = hashes.map(() => '?').join(', ')
-  const rows = getDb()
-    .prepare(`SELECT DISTINCT import_hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})`)
-    .all(req.session.userId!, ...hashes) as { import_hash: string }[]
-  res.json(rows.map((r) => r.import_hash))
+  const userId = req.session.userId!
+  const db = getDb()
+  const found = new Set<string>()
+  const BATCH = 500
+  for (let i = 0; i < hashes.length; i += BATCH) {
+    const batch = hashes.slice(i, i + BATCH)
+    const placeholders = batch.map(() => '?').join(', ')
+    const rows = db
+      .prepare(`SELECT DISTINCT import_hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})`)
+      .all(userId, ...batch) as { import_hash: string }[]
+    for (const r of rows) found.add(r.import_hash)
+  }
+  res.json([...found])
 })
 
 // Bulk insert (CSV import). Returns the created rows.
 walletRouter.post('/transactions/import', (req, res) => {
   const items: Record<string, unknown>[] = Array.isArray(req.body) ? req.body : []
   const userId = req.session.userId!
-  const insertMany = getDb().transaction((rows: Record<string, unknown>[]) =>
+  const db = getDb()
+  for (const b of items) {
+    if (!ownsAllRefs(db, userId, [['accounts', b.accountId], ['accounts', b.destinationAccountId], ['categories', b.categoryId]])) {
+      return res.status(400).json({ error: 'invalid account or category reference' })
+    }
+  }
+  const insertMany = db.transaction((rows: Record<string, unknown>[]) =>
     rows.map((b) => insertTransaction(b, userId)),
   )
   res.status(201).json(insertMany(items))
 })
 
 walletRouter.post('/transactions', (req, res) => {
-  res.status(201).json(insertTransaction(req.body ?? {}, req.session.userId!))
+  const b = req.body ?? {}
+  if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['accounts', b.destinationAccountId], ['categories', b.categoryId]])) {
+    return res.status(400).json({ error: 'invalid account or category reference' })
+  }
+  res.status(201).json(insertTransaction(b, req.session.userId!))
 })
 
 walletRouter.patch('/transactions/:id', (req, res) => {
-  const row = updateRow(getDb(), 'transactions', req.params.id, req.session.userId!, TRANSACTION_COLS, req.body ?? {})
+  const b = req.body ?? {}
+  const refs: Array<[string, unknown]> = []
+  if ('accountId' in b) refs.push(['accounts', b.accountId])
+  if ('destinationAccountId' in b) refs.push(['accounts', b.destinationAccountId])
+  if ('categoryId' in b) refs.push(['categories', b.categoryId])
+  if (!ownsAllRefs(getDb(), req.session.userId!, refs)) {
+    return res.status(400).json({ error: 'invalid account or category reference' })
+  }
+  const row = updateRow(getDb(), 'transactions', req.params.id, req.session.userId!, TRANSACTION_COLS, b)
   if (!row) return res.status(404).json({ error: 'transaction not found' })
   res.json(row)
 })
@@ -202,6 +229,9 @@ walletRouter.get('/budgets', (req, res) => {
 
 walletRouter.post('/budgets', (req, res) => {
   const b = req.body ?? {}
+  if (!ownsAllRefs(getDb(), req.session.userId!, [['categories', b.categoryId]])) {
+    return res.status(400).json({ error: 'invalid category reference' })
+  }
   const row = getDb()
     .prepare(
       `INSERT INTO budgets (id, user_id, category_id, limit_amount, created_at, updated_at)
@@ -245,6 +275,9 @@ walletRouter.get('/recurring-transactions', (req, res) => {
 
 walletRouter.post('/recurring-transactions', (req, res) => {
   const b = req.body ?? {}
+  if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['categories', b.categoryId]])) {
+    return res.status(400).json({ error: 'invalid account or category reference' })
+  }
   const row = getDb()
     .prepare(
       `INSERT INTO recurring_transactions
@@ -267,7 +300,14 @@ walletRouter.post('/recurring-transactions', (req, res) => {
 })
 
 walletRouter.patch('/recurring-transactions/:id', (req, res) => {
-  const row = updateRow(getDb(), 'recurring_transactions', req.params.id, req.session.userId!, RECURRING_COLS, req.body ?? {})
+  const b = req.body ?? {}
+  const refs: Array<[string, unknown]> = []
+  if ('accountId' in b) refs.push(['accounts', b.accountId])
+  if ('categoryId' in b) refs.push(['categories', b.categoryId])
+  if (!ownsAllRefs(getDb(), req.session.userId!, refs)) {
+    return res.status(400).json({ error: 'invalid account or category reference' })
+  }
+  const row = updateRow(getDb(), 'recurring_transactions', req.params.id, req.session.userId!, RECURRING_COLS, b)
   if (!row) return res.status(404).json({ error: 'recurring transaction not found' })
   res.json(row)
 })
@@ -291,6 +331,9 @@ walletRouter.get('/goals', (req, res) => {
 
 walletRouter.post('/goals', (req, res) => {
   const b = req.body ?? {}
+  if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId]])) {
+    return res.status(400).json({ error: 'invalid account reference' })
+  }
   const row = getDb()
     .prepare(
       `INSERT INTO goals (id, user_id, name, target_amount, account_id, created_at, updated_at)
@@ -302,7 +345,11 @@ walletRouter.post('/goals', (req, res) => {
 })
 
 walletRouter.patch('/goals/:id', (req, res) => {
-  const row = updateRow(getDb(), 'goals', req.params.id, req.session.userId!, GOAL_COLS, req.body ?? {})
+  const b = req.body ?? {}
+  if ('accountId' in b && !ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId]])) {
+    return res.status(400).json({ error: 'invalid account reference' })
+  }
+  const row = updateRow(getDb(), 'goals', req.params.id, req.session.userId!, GOAL_COLS, b)
   if (!row) return res.status(404).json({ error: 'goal not found' })
   res.json(row)
 })

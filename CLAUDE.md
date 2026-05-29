@@ -771,7 +771,22 @@ Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
 Last session:   2026-05-29
-Last completed: - Phase 4 PR3 — auth + per-user data (v1 milestone):
+Last completed: - Phase 4 review hardening (adversarial security review + fixes):
+                    • IDOR-write fix: inserts/PATCH now verify referenced
+                      accountId/destinationAccountId/categoryId belong to the
+                      caller (server/lib.ts ownsAllRefs) across transactions,
+                      import, budgets, recurring, goals → 400 on cross-user refs.
+                      Closes a cross-tenant cascade-delete vector.
+                    • budgets UNIQUE(category_id) → UNIQUE(user_id, category_id).
+                    • check-duplicates batched (500/query) — param-limit safe.
+                    • Auth: usernames case-insensitive (lowercased), password
+                      length bounds (6–72), session.regenerate() on login/signup
+                      (anti-fixation), startup throws if prod & no SESSION_SECRET.
+                    • New e2e: 22-auth "two users have fully isolated data" drives
+                      the UI to prove user B sees none of user A's accounts/tasks.
+                    • Verified: build green, typecheck:server green, 271/271 e2e
+                      pass, lint 38 pre-existing (no new).
+                - Phase 4 PR3 — auth + per-user data (v1 milestone):
                     • Schema: users + sessions tables; user_id NOT NULL FK on all
                       8 data tables; settings PK now (user_id, key). Startup guard
                       drops+recreates pre-auth data tables (pre-v1, no real data).
