@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
-import { getDB } from '@/db'
+import { api } from '@/lib/api'
 import { useAppStore } from '@/stores/app.store'
 
 export default function App() {
@@ -12,20 +12,18 @@ export default function App() {
   const setTheme = useAppStore((s) => s.setTheme)
 
   useEffect(() => {
-    getDB()
-      .then(async (db) => {
+    api
+      .get<{ key: string; value: string }[]>('/settings')
+      .then((settings) => {
         setDbReady(true)
-        const result = await db.query<{ value: string }>(
-          "SELECT value FROM settings WHERE key = 'theme'",
-        )
-        const saved = result.rows[0]?.value
+        const saved = settings.find((s) => s.key === 'theme')?.value
         if (saved === 'light' || saved === 'dark' || saved === 'system') {
           setTheme(saved)
         }
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'
-        console.error('DB init failed:', err)
+        console.error('Server connection failed:', err)
         setError(message)
       })
   }, [setDbReady, setTheme])

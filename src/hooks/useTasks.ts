@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
-import { getDB } from '@/db'
+import { api } from '@/lib/api'
 import { useTasksStore } from '@/stores/tasks.store'
-import { generateId, nowISO } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
 
 const ROOT_ID_KEY = 'daybook.rootId'
@@ -95,11 +94,8 @@ export function useTasks() {
   /** Load all tasks from the database into the Zustand store.
    *  Also restores the last-used rootId from localStorage if that task still exists. */
   const loadTasks = useCallback(async () => {
-    const db = await getDB()
-    const result = await db.query<TaskRow>(
-      'SELECT * FROM tasks ORDER BY sort_order ASC',
-    )
-    const tasks = result.rows.map(rowToTask)
+    const rows = await api.get<TaskRow[]>('/tasks')
+    const tasks = rows.map(rowToTask)
     store.setTasks(tasks)
 
     const savedRootId = localStorage.getItem(ROOT_ID_KEY)
@@ -135,7 +131,6 @@ export function useTasks() {
       parentId: string | null,
       afterId: string | null = null,
     ): Promise<Task> => {
-      const db = await getDB()
       const allTasks = useTasksStore.getState().tasks
 
       const siblings = allTasks
@@ -143,27 +138,9 @@ export function useTasks() {
         .sort((a, b) => a.sortOrder - b.sortOrder)
 
       const sortOrder = computeSortOrder(siblings, afterId)
-      const id = generateId()
-      const now = nowISO()
 
-      await db.query(
-        `INSERT INTO tasks (id, parent_id, content, note, is_completed, is_collapsed, sort_order, created_at, updated_at)
-         VALUES ($1, $2, $3, '', 0, 0, $4, $5, $5)`,
-        [id, parentId, content, sortOrder, now],
-      )
-
-      const newTask: Task = {
-        id,
-        parentId,
-        content,
-        note: '',
-        isCompleted: false,
-        isCollapsed: false,
-        sortOrder,
-        dueDate: null,
-        createdAt: now,
-        updatedAt: now,
-      }
+      const row = await api.post<TaskRow>('/tasks', { parentId, content, sortOrder })
+      const newTask = rowToTask(row)
 
       useTasksStore.getState().addTask(newTask)
       await maybeRebalance(parentId)
@@ -181,56 +158,11 @@ export function useTasks() {
         Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>
       >,
     ) => {
-      const db = await getDB()
-      const now = nowISO()
-
-      const setClauses: string[] = ['updated_at = $1']
-      const params: unknown[] = [now]
-      let paramIndex = 2
-
-      if (updates.content !== undefined) {
-        setClauses.push(`content = $${paramIndex}`)
-        params.push(updates.content)
-        paramIndex++
-      }
-      if (updates.note !== undefined) {
-        setClauses.push(`note = $${paramIndex}`)
-        params.push(updates.note)
-        paramIndex++
-      }
-      if (updates.isCompleted !== undefined) {
-        setClauses.push(`is_completed = $${paramIndex}`)
-        params.push(updates.isCompleted ? 1 : 0)
-        paramIndex++
-      }
-      if (updates.isCollapsed !== undefined) {
-        setClauses.push(`is_collapsed = $${paramIndex}`)
-        params.push(updates.isCollapsed ? 1 : 0)
-        paramIndex++
-      }
-      if (updates.parentId !== undefined) {
-        setClauses.push(`parent_id = $${paramIndex}`)
-        params.push(updates.parentId)
-        paramIndex++
-      }
-      if (updates.sortOrder !== undefined) {
-        setClauses.push(`sort_order = $${paramIndex}`)
-        params.push(updates.sortOrder)
-        paramIndex++
-      }
-      if ('dueDate' in updates) {
-        setClauses.push(`due_date = $${paramIndex}`)
-        params.push(updates.dueDate ?? null)
-        paramIndex++
-      }
-
-      params.push(id)
-      const sql = `UPDATE tasks SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`
-      await db.query(sql, params)
+      const row = await api.patch<TaskRow>(`/tasks/${id}`, updates)
 
       useTasksStore.getState().updateTask(id, {
         ...updates,
-        updatedAt: now,
+        updatedAt: row.updated_at,
       })
     },
     [],
@@ -241,7 +173,6 @@ export function useTasks() {
    * CASCADE in DB handles children; we also remove descendants from the store.
    */
   const deleteTask = useCallback(async (id: string) => {
-    const db = await getDB()
     const allTasks = useTasksStore.getState().tasks
     const taskToDelete = allTasks.find((t) => t.id === id)
     if (!taskToDelete) return
@@ -258,7 +189,7 @@ export function useTasks() {
       }
     }, 5000)
 
-    await db.query('DELETE FROM tasks WHERE id = $1', [id])
+    await api.delete(`/tasks/${id}`)
 
     const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
     useTasksStore.getState().setTasks(remaining)
@@ -271,27 +202,21 @@ export function useTasks() {
 
     useTasksStore.getState().setLastDeleted(null)
 
-    const db = await getDB()
     const ordered = sortParentsFirst(lastDeleted.task, lastDeleted.descendants)
 
     for (const t of ordered) {
-      await db.query(
-        `INSERT INTO tasks (id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          t.id,
-          t.parentId,
-          t.content,
-          t.note,
-          t.isCompleted ? 1 : 0,
-          t.isCollapsed ? 1 : 0,
-          t.sortOrder,
-          t.dueDate ?? null,
-          t.createdAt,
-          t.updatedAt,
-        ],
-      )
+      await api.post('/tasks', {
+        id: t.id,
+        parentId: t.parentId,
+        content: t.content,
+        note: t.note,
+        isCompleted: t.isCompleted,
+        isCollapsed: t.isCollapsed,
+        sortOrder: t.sortOrder,
+        dueDate: t.dueDate ?? null,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })
     }
 
     await loadTasks()
@@ -300,18 +225,15 @@ export function useTasks() {
   /** Move a task to a new parent and/or sort position (for DnD). */
   const moveTask = useCallback(
     async (id: string, newParentId: string | null, newSortOrder: number) => {
-      const db = await getDB()
-      const now = nowISO()
-
-      await db.query(
-        `UPDATE tasks SET parent_id = $1, sort_order = $2, updated_at = $3 WHERE id = $4`,
-        [newParentId, newSortOrder, now, id],
-      )
+      const row = await api.patch<TaskRow>(`/tasks/${id}`, {
+        parentId: newParentId,
+        sortOrder: newSortOrder,
+      })
 
       useTasksStore.getState().updateTask(id, {
         parentId: newParentId,
         sortOrder: newSortOrder,
-        updatedAt: now,
+        updatedAt: row.updated_at,
       })
 
       await maybeRebalance(newParentId)
@@ -443,27 +365,17 @@ export function useTasks() {
   }
 
   const loadTemplates = useCallback(async (): Promise<TaskTemplate[]> => {
-    const db = await getDB()
-    const result = await db.query<TemplateRow>(
-      'SELECT * FROM task_templates ORDER BY created_at ASC',
-    )
-    return result.rows.map((r) => ({ id: r.id, name: r.name, content: r.content, createdAt: r.created_at }))
+    const rows = await api.get<TemplateRow[]>('/task-templates')
+    return rows.map((r) => ({ id: r.id, name: r.name, content: r.content, createdAt: r.created_at }))
   }, [])
 
   const saveTemplate = useCallback(async (name: string, content: string): Promise<TaskTemplate> => {
-    const db = await getDB()
-    const id = generateId()
-    const now = nowISO()
-    await db.query(
-      'INSERT INTO task_templates (id, name, content, created_at) VALUES ($1, $2, $3, $4)',
-      [id, name, content, now],
-    )
-    return { id, name, content, createdAt: now }
+    const row = await api.post<TemplateRow>('/task-templates', { name, content })
+    return { id: row.id, name: row.name, content: row.content, createdAt: row.created_at }
   }, [])
 
   const deleteTemplate = useCallback(async (id: string): Promise<void> => {
-    const db = await getDB()
-    await db.query('DELETE FROM task_templates WHERE id = $1', [id])
+    await api.delete(`/task-templates/${id}`)
   }, [])
 
   const applyTemplate = useCallback(async (template: TaskTemplate, parentId: string | null): Promise<Task> => {
@@ -536,19 +448,13 @@ async function maybeRebalance(parentId: string | null) {
 
   if (!needsRebalance) return
 
-  const db = await getDB()
-  const now = nowISO()
-
   for (let i = 0; i < siblings.length; i++) {
     const newOrder = i + 1
     if (siblings[i].sortOrder !== newOrder) {
-      await db.query(
-        'UPDATE tasks SET sort_order = $1, updated_at = $2 WHERE id = $3',
-        [newOrder, now, siblings[i].id],
-      )
+      const row = await api.patch<TaskRow>(`/tasks/${siblings[i].id}`, { sortOrder: newOrder })
       useTasksStore.getState().updateTask(siblings[i].id, {
         sortOrder: newOrder,
-        updatedAt: now,
+        updatedAt: row.updated_at,
       })
     }
   }

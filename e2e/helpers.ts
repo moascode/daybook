@@ -8,10 +8,17 @@ export async function waitForApp(page: Page) {
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
 }
 
-/** Create an isolated browser context (fresh IndexedDB) and navigate to the app */
+/**
+ * Create an isolated browser context and navigate to the app.
+ *
+ * Phase 4: data now lives in the shared server SQLite file rather than per-browser
+ * IndexedDB, so we reset the server DB before loading the app. This gives each
+ * page the clean slate it had under the old fresh-IndexedDB-per-context model.
+ */
 export async function newAppPage(browser: Browser, path = '/') {
   const context = await browser.newContext()
   const page = await context.newPage()
+  await page.request.post('http://localhost:5173/api/test/reset')
   await page.goto(path)
   await waitForApp(page)
   return page

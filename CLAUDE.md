@@ -242,12 +242,21 @@ server/
 ├── index.ts                         ← Express app + createApp() + listen
 ├── db.ts                            ← better-sqlite3 instance + schema (SQLite-native)
 ├── seed.ts                          ← Default categories seed (mirrors src/db/seed.ts)
+├── lib.ts                           ← updateRow() dynamic-UPDATE helper + bind coercion
 ├── tsconfig.json                    ← Server typecheck config (run via tsx)
 ├── routes/
-│   └── health.ts                    ← GET /api/health
+│   ├── health.ts                    ← GET /api/health
+│   ├── tasks.ts                     ← /api/tasks, /api/task-templates
+│   ├── wallet.ts                    ← /api/accounts, /transactions, /categories,
+│   │                                   /budgets, /recurring-transactions, /goals
+│   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key
+│   └── test.ts                      ← POST /api/test/reset (only when DAYBOOK_TEST=1)
 └── data/                            ← SQLite DB file (gitignored — never commit)
 ```
 > The browser reaches the server through Vite's `/api` dev proxy → `localhost:3001`.
+> The client talks to it via `src/lib/api.ts`. Reads return snake_case rows
+> (existing client mappers convert them); writes accept camelCase. No PGlite in
+> the browser anymore — `npm run dev` needs the server too (use `dev:all`).
 > Scripts: `npm run server` (watch), `npm run dev:all` (server + Vite),
 > `npm run typecheck:server`.
 
@@ -729,10 +738,34 @@ chore: update CLAUDE.md with Phase 2 status
 
 ```
 Current phase:  4 — Home Network + Multi-User (v1) — IN PROGRESS
-Phase status:   PR1 (server scaffold) done. PR2 (data-layer migration) + PR3
-                (auth + per-user) pending. See docs/phase-4-plan.md.
+Phase status:   PR1 (scaffold) + PR2 (data-layer migration) done. PR3 (auth +
+                per-user) pending. See docs/phase-4-plan.md.
 Last session:   2026-05-29
-Last completed: - Phase 4 PR1 — Node + SQLite server scaffold:
+Last completed: - Phase 4 PR2 — data-layer migration (full REST swap, PGlite removed):
+                    • REST endpoints for every entity: server/routes/tasks.ts
+                      (tasks + templates), wallet.ts (accounts incl. balance,
+                      transactions incl. filters/import/export/check-duplicates,
+                      categories, budgets, recurring, goals), settings.ts.
+                    • server/lib.ts: updateRow() dynamic-UPDATE helper.
+                    • src/lib/api.ts: typed fetch client (credentials:'include'
+                      ready for PR3 cookies). Reads = snake_case rows (client
+                      mappers unchanged); writes = camelCase.
+                    • Rewrote useTasks + useWallet to call the API (store-update
+                      logic + tree/sort/balance helpers unchanged). Migrated
+                      csv.ts checkDuplicates, App.tsx boot, SettingsPage, and the
+                      /uat page's direct-DB checks to the API.
+                    • Removed in-browser PGlite: deleted src/db/, uninstalled
+                      @electric-sql/pglite + unused drizzle-orm/drizzle-kit.
+                    • e2e: test-only POST /api/test/reset (DAYBOOK_TEST=1);
+                      newAppPage resets the server DB per page = old fresh-state-
+                      per-context. Playwright now boots both servers (API on a
+                      throwaway server/data/e2e.db). Fixed a latent config bug —
+                      executablePath must live under launchOptions, not use.
+                    • Fixed fragile 05-dashboard locator (getByText('Dashboard')
+                      matched the "Dashboard Bank" chart label once charts render).
+                    • Verified: client build green, typecheck:server green,
+                      266/266 e2e pass. Lint: 38 pre-existing errors only (no new).
+                - Phase 4 PR1 — Node + SQLite server scaffold:
                     • server/ : Express app (createApp + listen), better-sqlite3
                       instance with SQLite-native schema (all 9 data tables),
                       seed.ts (mirrors src/db/seed.ts), GET /api/health
@@ -766,10 +799,12 @@ Last completed: - Phase 4 PR1 — Node + SQLite server scaffold:
                 - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
                   helpers.waitForApp now checks <main> (aside is hidden on mobile)
                 - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
-Next task:      Phase 4 PR2 — data-layer migration: REST endpoints for all entities,
-                src/lib/api.ts client, rewrite useTasks/useWallet to fetch, remove
-                in-browser PGlite, run e2e against both servers.
-Blockers:       None. PR1 scaffold landed; client still runs on PGlite until PR2.
+Next task:      Phase 4 PR3 — auth + per-user data: users + session tables,
+                bcrypt + express-session, signup/login pages, session middleware,
+                user_id scoping on every table/query, per-user category seed,
+                auth gate in App.tsx, e2e helpers register a fresh user per test.
+Blockers:       None. Client now runs entirely on the Node + SQLite backend
+                (single implicit user until PR3 adds per-user scoping).
                 Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
                 test-only `window as any` shims) remain across the codebase; not
                 introduced this session and do not affect typecheck or tests.

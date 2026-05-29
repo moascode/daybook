@@ -11,7 +11,7 @@
 import { useState, useCallback } from 'react'
 import { useTasks } from '@/hooks/useTasks'
 import { useWallet } from '@/hooks/useWallet'
-import { getDB } from '@/db'
+import { api } from '@/lib/api'
 import { useTasksStore } from '@/stores/tasks.store'
 import { cn } from '@/lib/utils'
 import { CheckCircle2, XCircle, Clock, Play, FlaskConical, ChevronDown, ChevronRight, RotateCcw, AlertTriangle } from 'lucide-react'
@@ -176,13 +176,9 @@ function buildTests(): TestDef[] {
     const tasks = useTasksStore.getState().tasks
     const deleted = [root.id, child.id, grandchild.id, greatGrandchild.id]
     assert(!tasks.some((t) => deleted.includes(t.id)), 'all 4 levels deleted from store')
-    const db = await getDB()
-    const placeholders = deleted.map((_, i) => `$${i + 1}`).join(', ')
-    const result = await db.query<{ cnt: string }>(
-      `SELECT COUNT(*) as cnt FROM tasks WHERE id IN (${placeholders})`,
-      deleted,
-    )
-    assertEqual(Number(result.rows[0].cnt), 0, 'all 4 levels deleted from DB')
+    const allTasks = await api.get<{ id: string }[]>('/tasks')
+    const remaining = allTasks.filter((r) => deleted.includes(r.id)).length
+    assertEqual(remaining, 0, 'all 4 levels deleted from DB')
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -272,16 +268,12 @@ function buildTests(): TestDef[] {
   })
 
   t('Tasks › Sort Order', 'Rebalance triggers when gap < 0.001', async ({ addTask, loadTasks, deleteTask }) => {
-    const db = await getDB()
     const ids = ['uat-rb-1', 'uat-rb-2', 'uat-rb-3']
     const now = new Date().toISOString()
     // Insert directly with a sub-0.001 gap
-    await db.query(`INSERT INTO tasks (id, content, sort_order, note, is_completed, is_collapsed, created_at, updated_at)
-      VALUES ('uat-rb-1', 'UAT rebalance 1', 1.0, '', 0, 0, $1, $1)`, [now])
-    await db.query(`INSERT INTO tasks (id, content, sort_order, note, is_completed, is_collapsed, created_at, updated_at)
-      VALUES ('uat-rb-2', 'UAT rebalance 2', 1.0005, '', 0, 0, $1, $1)`, [now]) // gap = 0.0005 < threshold
-    await db.query(`INSERT INTO tasks (id, content, sort_order, note, is_completed, is_collapsed, created_at, updated_at)
-      VALUES ('uat-rb-3', 'UAT rebalance 3', 1.001, '', 0, 0, $1, $1)`, [now])
+    await api.post('/tasks', { id: 'uat-rb-1', content: 'UAT rebalance 1', sortOrder: 1.0, createdAt: now, updatedAt: now })
+    await api.post('/tasks', { id: 'uat-rb-2', content: 'UAT rebalance 2', sortOrder: 1.0005, createdAt: now, updatedAt: now }) // gap = 0.0005 < threshold
+    await api.post('/tasks', { id: 'uat-rb-3', content: 'UAT rebalance 3', sortOrder: 1.001, createdAt: now, updatedAt: now })
     await loadTasks()
 
     // Adding any task at root triggers maybeRebalance(null)
@@ -299,8 +291,7 @@ function buildTests(): TestDef[] {
 
     // Cleanup
     await deleteTask(trigger.id)
-    const cleanupPlaceholders = ids.map((_, i) => `$${i + 1}`).join(', ')
-    await db.query(`DELETE FROM tasks WHERE id IN (${cleanupPlaceholders})`, ids)
+    for (const id of ids) await api.delete(`/tasks/${id}`)
     await loadTasks()
   }, true)
 
@@ -383,9 +374,8 @@ function buildTests(): TestDef[] {
     await deleteAccount(acct.id)
     const list = await loadAccounts()
     assert(!list.some((a) => a.id === acct.id), 'account deleted')
-    const db = await getDB()
-    const r = await db.query<{ cnt: string }>(`SELECT COUNT(*) as cnt FROM transactions WHERE account_id = $1`, [acct.id])
-    assertEqual(Number(r.rows[0].cnt), 0, 'transactions cascade-deleted')
+    const txns = await api.get<{ id: string }[]>(`/transactions?accountId=${acct.id}`)
+    assertEqual(txns.length, 0, 'transactions cascade-deleted')
   })
 
   // ─────────────────────────────────────────────────────────────
@@ -442,10 +432,10 @@ function buildTests(): TestDef[] {
     const acct = await addAccount({ name: 'UAT Update Txn', type: 'cash' })
     const txn = await addTransaction({ accountId: acct.id, amount: 10, type: 'expense', merchant: 'Before' })
     await updateTransaction(txn.id, { amount: 99.99, merchant: 'After' })
-    const db = await getDB()
-    const r = await db.query<{ amount: number; merchant: string }>(`SELECT amount, merchant FROM transactions WHERE id = $1`, [txn.id])
-    assertClose(r.rows[0].amount, 99.99, 0.001, 'updated amount in DB')
-    assertEqual(r.rows[0].merchant, 'After', 'updated merchant in DB')
+    const all = await api.get<{ id: string; amount: number; merchant: string }[]>('/transactions')
+    const found = all.find((r) => r.id === txn.id)!
+    assertClose(found.amount, 99.99, 0.001, 'updated amount in DB')
+    assertEqual(found.merchant, 'After', 'updated merchant in DB')
     await deleteTransaction(txn.id)
     await deleteAccount(acct.id)
   })
@@ -454,9 +444,8 @@ function buildTests(): TestDef[] {
     const acct = await addAccount({ name: 'UAT Del Txn', type: 'cash' })
     const txn = await addTransaction({ accountId: acct.id, amount: 1, type: 'expense' })
     await deleteTransaction(txn.id)
-    const db = await getDB()
-    const r = await db.query<{ cnt: string }>(`SELECT COUNT(*) as cnt FROM transactions WHERE id = $1`, [txn.id])
-    assertEqual(Number(r.rows[0].cnt), 0, 'transaction gone from DB')
+    const all = await api.get<{ id: string }[]>('/transactions')
+    assertEqual(all.filter((r) => r.id === txn.id).length, 0, 'transaction gone from DB')
     await deleteAccount(acct.id)
   })
 
@@ -473,9 +462,8 @@ function buildTests(): TestDef[] {
     const acct = await addAccount({ name: 'UAT Large Amt', type: 'investment' })
     const txn = await addTransaction({ accountId: acct.id, amount: 1_234_567.89, type: 'income' })
     assertClose(txn.amount, 1_234_567.89, 0.01, 'large amount')
-    const db = await getDB()
-    const r = await db.query<{ amount: number }>(`SELECT amount FROM transactions WHERE id = $1`, [txn.id])
-    assertClose(r.rows[0].amount, 1_234_567.89, 0.01, 'DB large amount')
+    const all = await api.get<{ id: string; amount: number }[]>('/transactions')
+    assertClose(all.find((r) => r.id === txn.id)!.amount, 1_234_567.89, 0.01, 'DB large amount')
     await deleteTransaction(txn.id)
     await deleteAccount(acct.id)
   }, true)
@@ -521,11 +509,9 @@ function buildTests(): TestDef[] {
     const src = await addAccount({ name: 'UAT Xfer NoCount Src', type: 'bank' })
     const dst = await addAccount({ name: 'UAT Xfer NoCount Dst', type: 'cash' })
     const transfer = await addTransaction({ accountId: src.id, destinationAccountId: dst.id, amount: 500, type: 'transfer' })
-    const db = await getDB()
-    const incR = await db.query<{ cnt: string }>(`SELECT COUNT(*) as cnt FROM transactions WHERE type = 'income' AND id = $1`, [transfer.id])
-    const expR = await db.query<{ cnt: string }>(`SELECT COUNT(*) as cnt FROM transactions WHERE type = 'expense' AND id = $1`, [transfer.id])
-    assertEqual(Number(incR.rows[0].cnt), 0, 'transfer not counted as income')
-    assertEqual(Number(expR.rows[0].cnt), 0, 'transfer not counted as expense')
+    const all = await api.get<{ id: string; type: string }[]>('/transactions')
+    assertEqual(all.filter((r) => r.id === transfer.id && r.type === 'income').length, 0, 'transfer not counted as income')
+    assertEqual(all.filter((r) => r.id === transfer.id && r.type === 'expense').length, 0, 'transfer not counted as expense')
     await deleteTransaction(transfer.id)
     await deleteAccount(src.id)
     await deleteAccount(dst.id)
@@ -563,9 +549,8 @@ function buildTests(): TestDef[] {
     const HASH = 'uat-sha256-abc123def456'
     const txn = await addTransaction({ accountId: acct.id, amount: 99, type: 'expense', importHash: HASH })
     assertEqual(txn.importHash, HASH, 'importHash stored')
-    const db = await getDB()
-    const r = await db.query<{ import_hash: string }>(`SELECT import_hash FROM transactions WHERE id = $1`, [txn.id])
-    assertEqual(r.rows[0].import_hash, HASH, 'importHash in DB')
+    const all = await api.get<{ id: string; import_hash: string }[]>('/transactions')
+    assertEqual(all.find((r) => r.id === txn.id)!.import_hash, HASH, 'importHash in DB')
     await deleteTransaction(txn.id)
     await deleteAccount(acct.id)
   })
@@ -574,11 +559,11 @@ function buildTests(): TestDef[] {
     const acct = await addAccount({ name: 'UAT Dedup Acct', type: 'bank' })
     const HASH = 'uat-dedup-hash-xyz789'
     const txn = await addTransaction({ accountId: acct.id, amount: 150, type: 'expense', importHash: HASH })
-    const db = await getDB()
-    const r = await db.query<{ cnt: string }>(`SELECT COUNT(*) as cnt FROM transactions WHERE import_hash = $1`, [HASH])
-    assertEqual(Number(r.rows[0].cnt), 1, 'exactly one record with this hash')
+    const all = await api.get<{ import_hash: string }[]>('/transactions')
+    const cnt = all.filter((r) => r.import_hash === HASH).length
+    assertEqual(cnt, 1, 'exactly one record with this hash')
     // A real import flow checks this before inserting — confirmed detectable
-    assert(Number(r.rows[0].cnt) > 0, 'duplicate hash is detectable')
+    assert(cnt > 0, 'duplicate hash is detectable')
     await deleteTransaction(txn.id)
     await deleteAccount(acct.id)
   }, true)
@@ -592,12 +577,11 @@ function buildTests(): TestDef[] {
     const t1 = await addTransaction({ accountId: acct.id, amount: 100, type: 'expense', date: '2026-01-15' })
     const t2 = await addTransaction({ accountId: acct.id, amount: 200, type: 'expense', date: '2026-02-15' })
     const t3 = await addTransaction({ accountId: acct.id, amount: 300, type: 'expense', date: '2026-03-15' })
-    const db = await getDB()
-    const r = await db.query<{ id: string }>(`SELECT id FROM transactions WHERE date >= $1 AND date <= $2 AND account_id = $3`, ['2026-01-01', '2026-02-28', acct.id])
-    assertEqual(r.rows.length, 2, '2 in Jan-Feb')
-    assert(r.rows.some((row) => row.id === t1.id), 'Jan included')
-    assert(r.rows.some((row) => row.id === t2.id), 'Feb included')
-    assert(!r.rows.some((row) => row.id === t3.id), 'Mar excluded')
+    const r = await api.get<{ id: string }[]>(`/transactions?dateFrom=2026-01-01&dateTo=2026-02-28&accountId=${acct.id}`)
+    assertEqual(r.length, 2, '2 in Jan-Feb')
+    assert(r.some((row) => row.id === t1.id), 'Jan included')
+    assert(r.some((row) => row.id === t2.id), 'Feb included')
+    assert(!r.some((row) => row.id === t3.id), 'Mar excluded')
     for (const txn of [t1, t2, t3]) await deleteTransaction(txn.id)
     await deleteAccount(acct.id)
   })
@@ -606,10 +590,9 @@ function buildTests(): TestDef[] {
     const acct = await addAccount({ name: 'UAT Filter Type', type: 'bank' })
     const inc = await addTransaction({ accountId: acct.id, amount: 1000, type: 'income' })
     const exp = await addTransaction({ accountId: acct.id, amount: 50, type: 'expense' })
-    const db = await getDB()
-    const r = await db.query<{ id: string }>(`SELECT id FROM transactions WHERE type = 'expense' AND account_id = $1`, [acct.id])
-    assertEqual(r.rows.length, 1, 'one expense found')
-    assertEqual(r.rows[0].id, exp.id, 'correct transaction')
+    const r = await api.get<{ id: string }[]>(`/transactions?type=expense&accountId=${acct.id}`)
+    assertEqual(r.length, 1, 'one expense found')
+    assertEqual(r[0].id, exp.id, 'correct transaction')
     await deleteTransaction(inc.id)
     await deleteTransaction(exp.id)
     await deleteAccount(acct.id)
@@ -620,11 +603,10 @@ function buildTests(): TestDef[] {
     const acct2 = await addAccount({ name: 'UAT Filter Acct 2', type: 'bank' })
     const t1 = await addTransaction({ accountId: acct1.id, amount: 100, type: 'expense' })
     const t2 = await addTransaction({ accountId: acct2.id, amount: 200, type: 'expense' })
-    const db = await getDB()
-    const r = await db.query<{ id: string }>(`SELECT id FROM transactions WHERE account_id = $1`, [acct1.id])
-    assertEqual(r.rows.length, 1, 'only one txn for acct1')
-    assertEqual(r.rows[0].id, t1.id, 'acct1 txn found')
-    assert(!r.rows.some((row) => row.id === t2.id), 'acct2 txn not included')
+    const r = await api.get<{ id: string }[]>(`/transactions?accountId=${acct1.id}`)
+    assertEqual(r.length, 1, 'only one txn for acct1')
+    assertEqual(r[0].id, t1.id, 'acct1 txn found')
+    assert(!r.some((row) => row.id === t2.id), 'acct2 txn not included')
     await deleteTransaction(t1.id)
     await deleteTransaction(t2.id)
     await deleteAccount(acct1.id)
