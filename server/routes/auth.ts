@@ -21,11 +21,13 @@ interface UserRow {
 const normalizeUsername = (raw: unknown): string => String(raw ?? '').trim().toLowerCase()
 
 // Regenerate the session on auth to avoid session fixation, then persist userId.
-function establishSession(req: import('express').Request, userId: string, done: () => void): void {
-  req.session.regenerate((err) => {
-    if (err) return done()
+// Surfaces store errors so a failed session write becomes a 500 (never a
+// "logged in" response with no usable session).
+function establishSession(req: import('express').Request, userId: string, done: (err?: unknown) => void): void {
+  req.session.regenerate((regenErr) => {
+    if (regenErr) return done(regenErr)
     req.session.userId = userId
-    req.session.save(() => done())
+    req.session.save((saveErr) => done(saveErr))
   })
 }
 
@@ -57,7 +59,10 @@ authRouter.post('/auth/signup', (req, res) => {
     .get(username, hash) as { id: string; username: string }
 
   seedUserDefaults(db, row.id)
-  establishSession(req, row.id, () => res.status(201).json({ user: row }))
+  establishSession(req, row.id, (err) => {
+    if (err) return res.status(500).json({ error: 'failed to create session' })
+    res.status(201).json({ user: row })
+  })
 })
 
 // POST /api/auth/login — verify credentials, start a session.
@@ -73,7 +78,10 @@ authRouter.post('/auth/login', (req, res) => {
     return res.status(401).json({ error: 'invalid username or password' })
   }
 
-  establishSession(req, user.id, () => res.json({ user: { id: user.id, username: user.username } }))
+  establishSession(req, user.id, (err) => {
+    if (err) return res.status(500).json({ error: 'failed to create session' })
+    res.json({ user: { id: user.id, username: user.username } })
+  })
 })
 
 // POST /api/auth/logout — clear the session.

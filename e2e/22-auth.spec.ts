@@ -5,9 +5,11 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor } from './helpers'
+import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor, fillTransactionForm, transactionRowFor } from './helpers'
 
-const unique = () => `e2e_auth_${Date.now()}_${Math.floor(Math.random() * 1e6)}`
+let seq = 0
+// Monotonic counter (not Math.random) so two rapid calls can never collide.
+const unique = () => `e2e_auth_${Date.now()}_${seq++}`
 
 test('unauthenticated visit shows the sign-in screen, not the app', async ({ browser }) => {
   const context = await browser.newContext()
@@ -60,12 +62,40 @@ test('log out returns to the sign-in screen, and the same credentials log back i
   await context.close()
 })
 
+test('session survives a page reload (cookie keeps you logged in)', async ({ browser }) => {
+  const page = await newAppPage(browser, '/tasks')
+  // Create a marker so we can confirm the SAME user/session resolves after reload.
+  await page.getByRole('button', { name: 'New task' }).first().click()
+  await page.keyboard.type('Persisted task')
+  await page.getByRole('textbox', { name: 'Task content' }).last().blur()
+  await expect(bulletNodeFor(page, 'Persisted task')).toBeVisible()
+
+  await page.reload()
+
+  // Still in the app (not re-gated to sign-in) and the data is still there.
+  await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0)
+  await expect(bulletNodeFor(page, 'Persisted task')).toBeVisible()
+  await page.context().close()
+})
+
 test('two users have fully isolated data (the v1 guarantee)', async ({ browser }) => {
-  // User A creates an account and a task. newAppPage signs up a fresh user.
+  // User A creates an account, a transaction, and a task. newAppPage signs up a fresh user.
   const pageA = await newAppPage(browser, '/wallet/accounts')
   await pageA.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(pageA, { name: 'Alice Private Bank', type: 'bank' })
   await expect(accountCardFor(pageA, 'Alice Private Bank')).toBeVisible()
+
+  await pageA.getByRole('link', { name: 'Transactions' }).click()
+  await pageA.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(pageA, {
+    type: 'Expense',
+    amount: '12.50',
+    account: 'Alice Private Bank',
+    merchant: 'Alice Coffee',
+    category: 'Food & Drink',
+  })
+  await expect(transactionRowFor(pageA, 'Alice Coffee')).toBeVisible()
 
   await pageA.getByRole('link', { name: 'Tasks' }).click()
   await pageA.getByRole('button', { name: 'New task' }).first().click()
@@ -79,8 +109,15 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await expect(pageB.locator('[data-testid="account-card"]')).toHaveCount(0)
   await expect(accountCardFor(pageB, 'Alice Private Bank')).toHaveCount(0)
 
+  await pageB.getByRole('link', { name: 'Transactions' }).click()
+  await expect(transactionRowFor(pageB, 'Alice Coffee')).toHaveCount(0)
+
   await pageB.getByRole('link', { name: 'Tasks' }).click()
   await expect(bulletNodeFor(pageB, 'Alice secret task')).toHaveCount(0)
+
+  // B still has their OWN per-user seeded default categories (not a shared table).
+  const bCategories = await pageB.request.get('http://localhost:5173/api/categories')
+  expect((await bCategories.json()).length).toBe(15)
 
   // A's data is untouched by B's session.
   await pageA.bringToFront()

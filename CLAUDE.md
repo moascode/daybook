@@ -771,7 +771,29 @@ Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
 Last session:   2026-05-29
-Last completed: - Phase 4 review hardening (adversarial security review + fixes):
+Last completed: - Phase 4 full adversarial review (4 agents) round 2 — fixes:
+                    • CsvImport: wrap importTransactions in try/catch/finally +
+                      error toast (was a stuck spinner + unhandled rejection on
+                      atomic-import failure). api.ts: 401 on a non-/auth request
+                      now re-gates to login (App registers the handler) — graceful
+                      session-expiry instead of silent failure.
+                    • auth.ts establishSession: surface regenerate/save errors as
+                      500 (was a "logged in" response with no usable session).
+                    • db.ts: schema-version guard via SQLite user_version (rebuilds
+                      data tables on any DDL change pre-v1) — replaces the
+                      column-sniff; covers the budgets-uniqueness change too.
+                    • session-store: corrupt sess JSON → treat as no session (drop
+                      it) instead of 500-ing every request for that sid.
+                    • useTasks.addTask: null-guard the POST response.
+                    • dev:all kills the API server on exit (trap); 22-auth uses a
+                      monotonic username counter (no random collision).
+                    • New e2e: session-survives-reload; isolation test extended to
+                      transactions + asserts B has its own 15 seeded categories.
+                    • Verified: build green, typecheck:server green, 272/272 e2e
+                      pass, lint 38 pre-existing (no new). Correctness review
+                      confirmed data-layer parity (booleans/nullables/timestamps/
+                      balance/filters/sort/restore/settings all clean).
+                - Phase 4 review hardening (adversarial security review + fixes):
                     • IDOR-write fix: inserts/PATCH now verify referenced
                       accountId/destinationAccountId/categoryId belong to the
                       caller (server/lib.ts ownsAllRefs) across transactions,

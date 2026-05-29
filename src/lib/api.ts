@@ -17,6 +17,14 @@ class ApiError extends Error {
   }
 }
 
+// App registers a handler so that a 401 on any data request (i.e. the session
+// expired mid-use) re-gates to the login screen instead of failing silently.
+// Auth endpoints are excluded — their 401s are expected and handled locally.
+let onUnauthorized: (() => void) | null = null
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -26,6 +34,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   })
 
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith('/auth')) {
+      onUnauthorized?.()
+    }
     throw new ApiError(res.status, `API ${method} ${path} failed: ${res.status}`)
   }
 
