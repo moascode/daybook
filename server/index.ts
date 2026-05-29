@@ -1,5 +1,8 @@
 import express from 'express'
 import session from 'express-session'
+import { existsSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { getDb } from './db.ts'
 import { SqliteSessionStore } from './session-store.ts'
 import { healthRouter } from './routes/health.ts'
@@ -10,6 +13,10 @@ import { settingsRouter } from './routes/settings.ts'
 import { testRouter } from './routes/test.ts'
 
 const PORT = Number(process.env.PORT ?? 3001)
+const HOST = process.env.HOST ?? '0.0.0.0' // bind all interfaces so the LAN can reach it
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const DIST_DIR = resolve(__dirname, '..', 'dist')
 
 // A real deployment must set its own secret; never silently use the dev default.
 if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
@@ -49,6 +56,20 @@ export function createApp(): express.Express {
   app.use('/api', walletRouter)
   app.use('/api', settingsRouter)
 
+  // Production: serve the built frontend from this same process so the SPA and
+  // the API share one origin (no CORS, no separate static server). Skipped in
+  // dev — Vite serves the frontend and proxies /api here. Only active once
+  // `npm run build` has produced dist/.
+  if (existsSync(DIST_DIR)) {
+    app.use(express.static(DIST_DIR))
+    // SPA fallback: any non-API GET that didn't match a static file gets
+    // index.html so client-side routing works on deep links / refresh.
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api')) return next()
+      res.sendFile(resolve(DIST_DIR, 'index.html'))
+    })
+  }
+
   return app
 }
 
@@ -57,7 +78,8 @@ const isMain = process.argv[1] === new URL(import.meta.url).pathname
 if (isMain) {
   getDb() // initialise schema before accepting requests
   const app = createApp()
-  app.listen(PORT, () => {
-    console.log(`Daybook API listening on http://localhost:${PORT}`)
+  app.listen(PORT, HOST, () => {
+    const where = HOST === '0.0.0.0' ? `all interfaces, port ${PORT}` : `${HOST}:${PORT}`
+    console.log(`Daybook listening on ${where}`)
   })
 }

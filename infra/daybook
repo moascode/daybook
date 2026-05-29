@@ -1,0 +1,326 @@
+#!/usr/bin/env bash
+#
+# daybook — infrastructure control tool for serving Daybook on your local network.
+#
+# One Node process serves both the built frontend and the /api backend on a
+# single port (default 3001), bound to all interfaces so any device on your
+# WiFi (e.g. your phone) can reach it.
+#
+# Usage:  infra/daybook <command>
+#
+#   setup              Install dependencies (incl. native modules) + sanity checks
+#   build              Build the frontend into dist/
+#   start              Start the server in the background (writes pidfile + log)
+#   stop               Stop the background server
+#   restart            Stop then start
+#   status             Show whether it's running and the URL to use on your phone
+#   logs [-f]          Show the server log (-f to follow)
+#   update             git pull origin main → setup → build → restart
+#   up                 setup → build → start  (first-run, do-everything)
+#   url                Print the LAN URL to open on your phone
+#   run                Run the server in the FOREGROUND (used by launchd; Ctrl-C to stop)
+#   install-service    Install a launchd service so it starts on boot + auto-restarts
+#   uninstall-service  Remove the launchd service
+#   help               Show this help
+#
+# Environment overrides (optional):
+#   PORT=3001          Port to serve on
+#   HOST=0.0.0.0       Interface to bind (0.0.0.0 = all; use 127.0.0.1 to keep it local)
+#
+set -euo pipefail
+
+# ── Paths ──────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+RUN_DIR="$ROOT_DIR/.daybook"
+PID_FILE="$RUN_DIR/server.pid"
+LOG_FILE="$RUN_DIR/server.log"
+SECRET_FILE="$RUN_DIR/session-secret"
+PLIST_LABEL="com.daybook.server"
+PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
+
+PORT="${PORT:-3001}"
+HOST="${HOST:-0.0.0.0}"
+
+cd "$ROOT_DIR"
+
+# ── Pretty output ────────────────────────────────────────────────────────────
+c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_green=$'\033[32m'; c_yellow=$'\033[33m'; c_red=$'\033[31m'; c_dim=$'\033[2m'
+info()  { printf '%s\n' "${c_dim}›${c_reset} $*"; }
+ok()    { printf '%s\n' "${c_green}✓${c_reset} $*"; }
+warn()  { printf '%s\n' "${c_yellow}!${c_reset} $*"; }
+err()   { printf '%s\n' "${c_red}✗${c_reset} $*" >&2; }
+die()   { err "$*"; exit 1; }
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+ensure_run_dir() { mkdir -p "$RUN_DIR"; }
+
+# Detect the Mac's LAN IP (active interface), best-effort.
+lan_ip() {
+  local ip
+  ip="$(ipconfig getifaddr en0 2>/dev/null || true)"
+  [ -z "$ip" ] && ip="$(ipconfig getifaddr en1 2>/dev/null || true)"
+  if [ -z "$ip" ]; then
+    # Fall back to whatever route the default gateway uses.
+    local iface
+    iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
+    [ -n "$iface" ] && ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+  fi
+  printf '%s' "${ip:-127.0.0.1}"
+}
+
+# A persistent random secret for signing session cookies (generated once).
+ensure_secret() {
+  ensure_run_dir
+  if [ ! -s "$SECRET_FILE" ]; then
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 48 > "$SECRET_FILE"
+    chmod 600 "$SECRET_FILE"
+    info "Generated session secret → ${SECRET_FILE/#$HOME/\~}"
+  fi
+  cat "$SECRET_FILE"
+}
+
+server_pid() {
+  [ -f "$PID_FILE" ] || return 1
+  local pid; pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+  printf '%s' "$pid"
+}
+
+is_running() { server_pid >/dev/null 2>&1; }
+
+require_node() {
+  command -v node >/dev/null 2>&1 || die "Node.js not found. Install Node 20+ (https://nodejs.org)."
+  local major; major="$(node -p 'process.versions.node.split(".")[0]')"
+  [ "$major" -ge 20 ] || die "Node 20+ required; found $(node -v)."
+}
+
+# ── Commands ───────────────────────────────────────────────────────────────
+cmd_setup() {
+  require_node
+  command -v npm >/dev/null 2>&1 || die "npm not found."
+  # Native modules (better-sqlite3, bcrypt) compile from source on install.
+  if ! xcode-select -p >/dev/null 2>&1; then
+    warn "Xcode Command Line Tools not detected — native modules may fail to build."
+    warn "Install with: xcode-select --install"
+  fi
+  info "Installing dependencies (this compiles native modules; first run is slow)…"
+  if [ -f package-lock.json ]; then
+    npm ci
+  else
+    npm install
+  fi
+  ok "Dependencies installed."
+}
+
+cmd_build() {
+  require_node
+  info "Building frontend → dist/ …"
+  npm run build
+  [ -f "$ROOT_DIR/dist/index.html" ] || die "Build finished but dist/index.html is missing."
+  ok "Frontend built."
+}
+
+# Compose the env + command used to launch the server (shared by start/run).
+server_env() {
+  local secret; secret="$(ensure_secret)"
+  SERVER_ENV=(
+    "NODE_ENV=production"
+    "PORT=$PORT"
+    "HOST=$HOST"
+    "SESSION_SECRET=$secret"
+  )
+}
+
+cmd_run() {
+  # Foreground. Used by launchd and for manual debugging.
+  require_node
+  [ -f "$ROOT_DIR/dist/index.html" ] || die "No build found. Run: infra/daybook build"
+  server_env
+  info "Starting Daybook in foreground on $HOST:$PORT (Ctrl-C to stop)…"
+  exec env "${SERVER_ENV[@]}" ./node_modules/.bin/tsx server/index.ts
+}
+
+cmd_start() {
+  require_node
+  if is_running; then
+    warn "Already running (pid $(server_pid))."
+    cmd_url
+    return 0
+  fi
+  [ -f "$ROOT_DIR/dist/index.html" ] || die "No build found. Run: infra/daybook build  (or: infra/daybook up)"
+  ensure_run_dir
+  server_env
+  info "Starting Daybook on $HOST:$PORT …"
+  # Detach so it keeps running after the terminal closes.
+  nohup env "${SERVER_ENV[@]}" ./node_modules/.bin/tsx server/index.ts >>"$LOG_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+  sleep 1.5
+  if is_running; then
+    ok "Started (pid $(cat "$PID_FILE")). Logs: ${LOG_FILE/#$HOME/\~}"
+    cmd_url
+  else
+    err "Server failed to start. Last log lines:"
+    tail -n 20 "$LOG_FILE" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    exit 1
+  fi
+}
+
+cmd_stop() {
+  if ! is_running; then
+    warn "Not running."
+    rm -f "$PID_FILE"
+    return 0
+  fi
+  local pid; pid="$(server_pid)"
+  info "Stopping (pid $pid)…"
+  kill "$pid" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    is_running || break
+    sleep 0.5
+  done
+  if is_running; then
+    warn "Did not exit gracefully; forcing."
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PID_FILE"
+  ok "Stopped."
+}
+
+cmd_restart() { cmd_stop; cmd_start; }
+
+cmd_status() {
+  if is_running; then
+    ok "Running (pid $(server_pid))."
+    cmd_url
+  else
+    warn "Not running."
+  fi
+  if [ -f "$PLIST_PATH" ]; then
+    info "launchd service installed (starts on boot): $PLIST_LABEL"
+  fi
+}
+
+cmd_url() {
+  local ip; ip="$(lan_ip)"
+  printf '%s\n' "  ${c_bold}On this Mac:${c_reset}  http://localhost:$PORT"
+  printf '%s\n' "  ${c_bold}On your phone (same WiFi):${c_reset}  ${c_green}http://$ip:$PORT${c_reset}"
+}
+
+cmd_logs() {
+  ensure_run_dir
+  touch "$LOG_FILE"
+  if [ "${1:-}" = "-f" ]; then
+    tail -f "$LOG_FILE"
+  else
+    tail -n 100 "$LOG_FILE"
+  fi
+}
+
+cmd_update() {
+  info "Pulling latest from origin/main…"
+  git fetch origin main
+  git merge --ff-only origin/main || die "Cannot fast-forward (local changes/divergence). Resolve manually, then retry."
+  cmd_setup
+  cmd_build
+  if is_running || [ -f "$PLIST_PATH" ]; then
+    cmd_restart
+  else
+    info "Not currently running; start with: infra/daybook start"
+  fi
+  ok "Updated."
+}
+
+cmd_up() {
+  cmd_setup
+  cmd_build
+  cmd_start
+}
+
+# ── launchd service (boot persistence + auto-restart) ────────────────────────
+cmd_install_service() {
+  require_node
+  [ -f "$ROOT_DIR/dist/index.html" ] || die "Build first: infra/daybook build  (or: infra/daybook up)"
+  local secret tsx_bin
+  secret="$(ensure_secret)"
+  tsx_bin="$ROOT_DIR/node_modules/.bin/tsx"
+  [ -x "$tsx_bin" ] || die "tsx not found at $tsx_bin — run: infra/daybook setup"
+
+  # If a backgrounded instance is running, stop it; launchd will own it now.
+  if is_running; then
+    info "Stopping the manually-started instance; launchd will manage it from now on."
+    cmd_stop
+  fi
+
+  mkdir -p "$HOME/Library/LaunchAgents"
+  ensure_run_dir
+  info "Writing launchd plist → ${PLIST_PATH/#$HOME/\~}"
+  cat > "$PLIST_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>          <string>$PLIST_LABEL</string>
+  <key>WorkingDirectory</key><string>$ROOT_DIR</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$tsx_bin</string>
+    <string>server/index.ts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>      <string>production</string>
+    <key>PORT</key>          <string>$PORT</string>
+    <key>HOST</key>          <string>$HOST</string>
+    <key>SESSION_SECRET</key><string>$secret</string>
+    <key>PATH</key>          <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>RunAtLoad</key>       <true/>
+  <key>KeepAlive</key>       <true/>
+  <key>StandardOutPath</key> <string>$LOG_FILE</string>
+  <key>StandardErrorPath</key><string>$LOG_FILE</string>
+</dict>
+</plist>
+PLIST
+
+  # Reload cleanly if it was already loaded.
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launchctl load "$PLIST_PATH"
+  sleep 1.5
+  ok "Service installed and started. It will now launch on boot and restart if it crashes."
+  cmd_url
+}
+
+cmd_uninstall_service() {
+  if [ -f "$PLIST_PATH" ]; then
+    launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    rm -f "$PLIST_PATH"
+    ok "Service removed. (The app is no longer set to start on boot.)"
+  else
+    warn "No launchd service installed."
+  fi
+}
+
+cmd_help() {
+  sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+# ── Dispatch ─────────────────────────────────────────────────────────────────
+case "${1:-help}" in
+  setup)             cmd_setup ;;
+  build)             cmd_build ;;
+  start)             cmd_start ;;
+  stop)              cmd_stop ;;
+  restart)           cmd_restart ;;
+  status)            cmd_status ;;
+  logs)              shift; cmd_logs "${1:-}" ;;
+  update)            cmd_update ;;
+  up)                cmd_up ;;
+  url)               cmd_url ;;
+  run)               cmd_run ;;
+  install-service)   cmd_install_service ;;
+  uninstall-service) cmd_uninstall_service ;;
+  help|-h|--help)    cmd_help ;;
+  *)                 err "Unknown command: $1"; echo; cmd_help; exit 1 ;;
+esac

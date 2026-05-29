@@ -29,3 +29,6 @@ playwright-report/
 
 # Phase 4 server — local SQLite database files (never commit user data)
 server/data/
+
+# infra/daybook runtime files (pidfile, log, generated session secret)
+.daybook/
