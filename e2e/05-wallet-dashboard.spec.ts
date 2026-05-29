@@ -56,7 +56,9 @@ test.afterAll(async () => {
 test('navigate to Dashboard tab', async () => {
   await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page).toHaveURL(/\/wallet\/dashboard$/)
-  await expect(page.getByText('Dashboard')).toBeVisible()
+  // Use the role-scoped nav link: once charts render, the account name
+  // "Dashboard Bank" makes a plain getByText('Dashboard') ambiguous.
+  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
 })
 
 // ── Date range selector ─────────────────────────────────────────────────

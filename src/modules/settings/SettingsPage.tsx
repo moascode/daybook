@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Key, Palette, Globe } from 'lucide-react'
-import { getDB } from '@/db'
+import { Eye, EyeOff, Key, Palette, Globe, LogOut, User } from 'lucide-react'
+import { api } from '@/lib/api'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { Button } from '@/components/ui/Button'
@@ -9,7 +9,16 @@ import { Select } from '@/components/ui/Select'
 
 export function SettingsPage() {
   const { theme, setTheme } = useAppStore()
+  const user = useAppStore((s) => s.user)
+  const setUser = useAppStore((s) => s.setUser)
+  const setDbReady = useAppStore((s) => s.setDbReady)
   const { addToast } = useToastStore()
+
+  async function handleLogout() {
+    await api.post('/auth/logout')
+    setDbReady(false)
+    setUser(null)
+  }
 
   const [apiKey, setApiKey] = useState('')
   const [defaultCurrency, setDefaultCurrency] = useState('MYR')
@@ -17,14 +26,10 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getDB()
-      .then((db) =>
-        db.query<{ key: string; value: string }>(
-          "SELECT key, value FROM settings WHERE key IN ('anthropic_api_key', 'default_currency', 'theme')",
-        ),
-      )
-      .then((result) => {
-        for (const row of result.rows) {
+    api
+      .get<{ key: string; value: string }[]>('/settings')
+      .then((rows) => {
+        for (const row of rows) {
           if (row.key === 'anthropic_api_key') setApiKey(row.value)
           if (row.key === 'default_currency') setDefaultCurrency(row.value)
           if (row.key === 'theme') setTheme(row.value as 'light' | 'dark' | 'system')
@@ -34,17 +39,13 @@ export function SettingsPage() {
   }, [setTheme])
 
   async function handleSave() {
-    const db = await getDB()
     const entries: [string, string][] = [
       ['anthropic_api_key', apiKey],
       ['default_currency', defaultCurrency],
       ['theme', theme],
     ]
     for (const [key, value] of entries) {
-      await db.query(
-        'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
-        [key, value],
-      )
+      await api.put(`/settings/${key}`, { value })
     }
     addToast({ message: 'Settings saved', duration: 3000 })
   }
@@ -65,6 +66,23 @@ export function SettingsPage() {
       </div>
 
       <div className="space-y-5">
+        {/* Account section */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <User className="h-4 w-4 text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Account</h3>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Signed in as <span className="font-medium text-gray-900">{user?.username}</span>
+            </p>
+            <Button variant="secondary" onClick={handleLogout}>
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </Button>
+          </div>
+        </section>
+
         {/* AI section */}
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="mb-4 flex items-center gap-2">

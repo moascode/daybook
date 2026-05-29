@@ -1,5 +1,5 @@
 import Papa from 'papaparse'
-import { getDB } from '@/db'
+import { api } from '@/lib/api'
 
 // ── Types ───────────────────────────────────────────
 
@@ -153,24 +153,8 @@ export async function computeImportHash(
 export async function checkDuplicates(hashes: string[]): Promise<Set<string>> {
   if (hashes.length === 0) return new Set()
 
-  const db = await getDB()
-  const duplicates = new Set<string>()
-
-  // Query in batches to avoid hitting parameter limits
-  const batchSize = 50
-  for (let i = 0; i < hashes.length; i += batchSize) {
-    const batch = hashes.slice(i, i + batchSize)
-    const placeholders = batch.map((_, idx) => `$${idx + 1}`).join(', ')
-    const result = await db.query<{ import_hash: string }>(
-      `SELECT import_hash FROM transactions WHERE import_hash IN (${placeholders})`,
-      batch
-    )
-    for (const row of result.rows) {
-      duplicates.add(row.import_hash)
-    }
-  }
-
-  return duplicates
+  const existing = await api.post<string[]>('/transactions/check-duplicates', { hashes })
+  return new Set(existing)
 }
 
 // ── Parse date string to ISO format ─────────────────

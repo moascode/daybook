@@ -127,7 +127,20 @@ Browser (React + Vite)
 |---|---|---|
 | `@anthropic-ai/sdk` | ^0.39 | Anthropic API client |
 
-#### Cloud (Phase 4 only — do not install before Phase 4)
+#### Backend (Phase 4 — Home Network + Multi-User)
+| Package | Version | Purpose |
+|---|---|---|
+| `express` | ^5 | HTTP API server (Node) |
+| `better-sqlite3` | ^12 | Synchronous SQLite driver (server owns the DB file) |
+| `bcrypt` | ^6 | Password hashing (auth stage) |
+| `express-session` | ^1 | Session cookies (auth stage) |
+| `tsx` | ^4 | Run/typecheck the TypeScript server (dev tool) |
+
+> Phase 4 replaces the in-browser PGlite store with a Node + SQLite backend the
+> browser calls over `/api`. `bcrypt` and `express-session` land in the auth
+> stage. See `docs/phase-4-plan.md`.
+
+#### Cloud (Phase 6 only — do not install before Phase 6)
 | Package | Version | Purpose |
 |---|---|---|
 | `@supabase/supabase-js` | ^2.43 | Supabase client |
@@ -223,6 +236,34 @@ daybook/
         └── wallet.types.ts          ← Account, Transaction, Category interfaces
 ```
 
+### Phase 4 backend (`server/`)
+```
+server/
+├── index.ts                         ← Express app + session middleware + createApp() + listen
+├── db.ts                            ← better-sqlite3 instance + schema (users, sessions, data)
+├── seed.ts                          ← seedUserDefaults(): per-user categories + settings
+├── lib.ts                           ← updateRow() (user-scoped) + bind coercion
+├── session-store.ts                 ← SQLite-backed express-session Store
+├── tsconfig.json                    ← Server typecheck config (run via tsx)
+├── routes/
+│   ├── health.ts                    ← GET /api/health (public)
+│   ├── auth.ts                      ← /api/auth/signup|login|logout|me + requireAuth (public)
+│   ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
+│   ├── wallet.ts                    ← /api/accounts, /transactions, /categories,
+│   │                                   /budgets, /recurring-transactions, /goals (auth)
+│   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
+│   └── test.ts                      ← POST /api/test/reset (only when DAYBOOK_TEST=1)
+└── data/                            ← SQLite DB file (gitignored — never commit)
+```
+> The browser reaches the server through Vite's `/api` dev proxy → `localhost:3001`.
+> The client talks to it via `src/lib/api.ts` (credentials:'include' for the
+> session cookie). Reads return snake_case rows (existing client mappers convert
+> them); writes accept camelCase. No PGlite in the browser — `npm run dev` needs
+> the server too (use `dev:all`). Auth: session cookie + bcrypt; `App.tsx` gates
+> the app behind `src/components/auth/AuthPage.tsx`.
+> Scripts: `npm run server` (watch), `npm run dev:all` (server + Vite),
+> `npm run typecheck:server`.
+
 ---
 
 ## 6. Database Schema (Source of Truth)
@@ -311,7 +352,7 @@ CREATE TABLE IF NOT EXISTS settings (
 ```
 
 ### Default category seed data
-Insert these on first launch if categories table is empty:
+Insert these for each new user on signup (Phase 4 — previously seeded globally):
 
 ```
 Expenses: Food & Drink, Transport, Shopping, Bills & Utilities,
@@ -319,6 +360,31 @@ Expenses: Food & Drink, Transport, Shopping, Bills & Utilities,
 
 Income: Salary, Freelance, Investment, Gift, Other Income
 ```
+
+### Phase 4 auth additions (server SQLite — implemented PR3)
+
+```sql
+CREATE TABLE users (
+  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  username      TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,                 -- bcrypt
+  created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE sessions (                        -- express-session store
+  sid TEXT PRIMARY KEY, sess TEXT NOT NULL, expire INTEGER NOT NULL
+);
+```
+
+- Every data table gains `user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+  (tasks, accounts, categories, transactions, budgets, recurring_transactions,
+  goals, task_templates).
+- `settings` is now per-user: primary key is `(user_id, key)`.
+- `categories` and `settings` are seeded per user on signup, not globally.
+- Every server query is scoped by `user_id`; one user can never read or write
+  another's rows.
+- Migration: a pre-auth DB (no `user_id`) has its data tables dropped+recreated
+  on startup (pre-v1, no real data). Otherwise delete `server/data/*.db`.
 
 ---
 
@@ -700,10 +766,91 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  3+ — Alpha UX Polish (Tier 3 complete)
-Phase status:   Tier 1 + Tier 2 + Tier 3 all complete; full e2e suite green
-Last session:   2026-05-28
-Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
+Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending review/merge)
+Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
+                per-user) all done on branch. v1 milestone reached.
+                See docs/phase-4-plan.md.
+Last session:   2026-05-29
+Last completed: - Phase 4 review hardening (adversarial security review + fixes):
+                    • IDOR-write fix: inserts/PATCH now verify referenced
+                      accountId/destinationAccountId/categoryId belong to the
+                      caller (server/lib.ts ownsAllRefs) across transactions,
+                      import, budgets, recurring, goals → 400 on cross-user refs.
+                      Closes a cross-tenant cascade-delete vector.
+                    • budgets UNIQUE(category_id) → UNIQUE(user_id, category_id).
+                    • check-duplicates batched (500/query) — param-limit safe.
+                    • Auth: usernames case-insensitive (lowercased), password
+                      length bounds (6–72), session.regenerate() on login/signup
+                      (anti-fixation), startup throws if prod & no SESSION_SECRET.
+                    • New e2e: 22-auth "two users have fully isolated data" drives
+                      the UI to prove user B sees none of user A's accounts/tasks.
+                    • Verified: build green, typecheck:server green, 271/271 e2e
+                      pass, lint 38 pre-existing (no new).
+                - Phase 4 PR3 — auth + per-user data (v1 milestone):
+                    • Schema: users + sessions tables; user_id NOT NULL FK on all
+                      8 data tables; settings PK now (user_id, key). Startup guard
+                      drops+recreates pre-auth data tables (pre-v1, no real data).
+                    • Auth (session cookies): server/routes/auth.ts —
+                      signup/login/logout/me + requireAuth guard. bcrypt hashes.
+                      express-session with a SQLite-backed store (server/
+                      session-store.ts) — no extra session-store package.
+                    • Every server query scoped by user_id (updateRow takes userId;
+                      all GET/POST/PATCH/DELETE filter/set user_id). Verified one
+                      user cannot read/write another's rows.
+                    • Per-user seeding: seedUserDefaults() seeds 15 categories +
+                      default settings on signup.
+                    • Client: app.store gains user/setUser; App.tsx checks
+                      /auth/me on boot and gates the app behind AuthPage
+                      (src/components/auth/AuthPage.tsx, login/signup). Sign-out
+                      added to Settings. api.ts already sent credentials.
+                    • Packages added: bcrypt ^6, express-session ^1 (+ @types) —
+                      already approved in CLAUDE.md §4.
+                    • e2e: newAppPage signs up a fresh user per page (per-user
+                      isolation = old fresh-DB-per-context); signUpOnPage helper
+                      for custom-context specs (mobile). New e2e/22-auth.spec.ts
+                      (signup/login/logout/gate/wrong-password).
+                    • Verified: client build green, typecheck:server green,
+                      270/270 e2e pass. Lint: 38 pre-existing errors only (no new).
+                - Phase 4 PR2 — data-layer migration (full REST swap, PGlite removed):
+                    • REST endpoints for every entity: server/routes/tasks.ts
+                      (tasks + templates), wallet.ts (accounts incl. balance,
+                      transactions incl. filters/import/export/check-duplicates,
+                      categories, budgets, recurring, goals), settings.ts.
+                    • server/lib.ts: updateRow() dynamic-UPDATE helper.
+                    • src/lib/api.ts: typed fetch client (credentials:'include'
+                      ready for PR3 cookies). Reads = snake_case rows (client
+                      mappers unchanged); writes = camelCase.
+                    • Rewrote useTasks + useWallet to call the API (store-update
+                      logic + tree/sort/balance helpers unchanged). Migrated
+                      csv.ts checkDuplicates, App.tsx boot, SettingsPage, and the
+                      /uat page's direct-DB checks to the API.
+                    • Removed in-browser PGlite: deleted src/db/, uninstalled
+                      @electric-sql/pglite + unused drizzle-orm/drizzle-kit.
+                    • e2e: test-only POST /api/test/reset (DAYBOOK_TEST=1);
+                      newAppPage resets the server DB per page = old fresh-state-
+                      per-context. Playwright now boots both servers (API on a
+                      throwaway server/data/e2e.db). Fixed a latent config bug —
+                      executablePath must live under launchOptions, not use.
+                    • Fixed fragile 05-dashboard locator (getByText('Dashboard')
+                      matched the "Dashboard Bank" chart label once charts render).
+                    • Verified: client build green, typecheck:server green,
+                      266/266 e2e pass. Lint: 38 pre-existing errors only (no new).
+                - Phase 4 PR1 — Node + SQLite server scaffold:
+                    • server/ : Express app (createApp + listen), better-sqlite3
+                      instance with SQLite-native schema (all 9 data tables),
+                      seed.ts (mirrors src/db/seed.ts), GET /api/health
+                    • Vite dev-proxies /api → localhost:3001
+                    • Scripts: server (watch), dev:all, typecheck:server
+                    • SQLite DB file under server/data/ (gitignored)
+                    • Packages added (CLAUDE.md §4 updated): express ^5,
+                      better-sqlite3 ^12, tsx ^4 (+ @types). bcrypt/express-session
+                      deferred to PR3 (auth). Fixed §4 Cloud label (Supabase = Phase 6).
+                    • Verified: better-sqlite3 native build OK, health returns
+                      {status:ok,db:true}, 15 categories + 3 settings seeded,
+                      client `npm run build` still green, eslint clean on server/.
+                - Decisions (owner sign-off): full REST swap (drop PGlite),
+                  Express + better-sqlite3, session-cookie auth, staged delivery.
+                - Earlier (2026-05-28) — Phase 3+ Tier 3 features shipped (e2e 16–21):
                     • Wallet goals (/wallet/goals): savings target linked to an account,
                       progress bar vs live account balance, full CRUD
                     • Bill reminders on Dashboard: recurring bills due within 7 days,
@@ -722,9 +869,13 @@ Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
                 - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
                   helpers.waitForApp now checks <main> (aside is hidden on mobile)
                 - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
-Next task:      Phase 4 — Home Network + Multi-User (Node backend, SQLite file, auth,
-                per-user data) for the v1 milestone
-Blockers:       None — all Tier 3+ tiers complete, 266/266 e2e green.
+Next task:      Phase 5 — AI Features (v2): Claude integration, NL task/transaction
+                entry, daily briefing, financial insights. Route the Anthropic key
+                through the backend (no key in the browser bundle). See §9.3.
+Blockers:       None. v1 (home-network multi-user) is feature-complete on the
+                branch: Node + SQLite backend, session-cookie auth, per-user data.
+                Reminder: a SESSION_SECRET env var should be set in any real
+                (non-dev) deployment; defaults to a dev secret otherwise.
                 Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
                 test-only `window as any` shims) remain across the codebase; not
                 introduced this session and do not affect typecheck or tests.

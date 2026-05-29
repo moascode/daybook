@@ -1,5 +1,4 @@
-import type { PGlite } from '@electric-sql/pglite'
-import { generateId } from '@/lib/utils'
+import type { DB } from './db.ts'
 
 interface SeedCategory {
   name: string
@@ -8,6 +7,8 @@ interface SeedCategory {
   type: 'income' | 'expense' | 'both'
 }
 
+// Mirrors src/db/seed.ts so each new user gets the same default categories the
+// client used in the PGlite era.
 const EXPENSE_CATEGORIES: SeedCategory[] = [
   { name: 'Food & Drink', icon: 'utensils', color: '#ef4444', type: 'expense' },
   { name: 'Transport', icon: 'car', color: '#f97316', type: 'expense' },
@@ -29,18 +30,20 @@ const INCOME_CATEGORIES: SeedCategory[] = [
   { name: 'Other Income', icon: 'plus-circle', color: '#6ee7b7', type: 'income' },
 ]
 
-export async function seedCategories(db: PGlite): Promise<void> {
+/** Seed the default categories + settings for a freshly created user. */
+export function seedUserDefaults(db: DB, userId: string): void {
   const all = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
-
-  const values = all
-    .map((c) => {
-      const id = generateId()
-      return `('${id}', '${c.name}', '${c.icon}', '${c.color}', '${c.type}')`
-    })
-    .join(',\n    ')
-
-  await db.exec(`
-    INSERT INTO categories (id, name, icon, color, type)
-    VALUES ${values};
-  `)
+  const insertCategory = db.prepare(
+    'INSERT INTO categories (user_id, name, icon, color, type) VALUES (?, ?, ?, ?, ?)',
+  )
+  const insertSetting = db.prepare(
+    'INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT (user_id, key) DO NOTHING',
+  )
+  const seed = db.transaction(() => {
+    for (const c of all) insertCategory.run(userId, c.name, c.icon, c.color, c.type)
+    insertSetting.run(userId, 'default_currency', 'MYR')
+    insertSetting.run(userId, 'theme', 'light')
+    insertSetting.run(userId, 'hide_completed', '0')
+  })
+  seed()
 }

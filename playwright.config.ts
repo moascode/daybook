@@ -23,19 +23,37 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Use pre-installed Chromium when available (cloud/CI environment)
+        // Use pre-installed Chromium when available (cloud/CI environment).
+        // executablePath must live under launchOptions — at the top level of
+        // `use` the test runner silently ignores it.
         ...(process.env.PLAYWRIGHT_BROWSERS_PATH
-          ? { executablePath: `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1194/chrome-linux/chrome` }
+          ? { launchOptions: { executablePath: `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1194/chrome-linux/chrome` } }
           : {}),
       },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  webServer: [
+    {
+      // Phase 4 API server, isolated test DB, with the test-only reset route on.
+      command: 'npx tsx server/index.ts',
+      url: 'http://localhost:3001/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      env: {
+        PORT: '3001',
+        DAYBOOK_TEST: '1',
+        DAYBOOK_DB_PATH: 'server/data/e2e.db',
+      },
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+    },
+  ],
 })

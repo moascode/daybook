@@ -26,3 +26,6 @@ dist-ssr
 # Playwright test artifacts
 test-results/
 playwright-report/
+
+# Phase 4 server — local SQLite database files (never commit user data)
+server/data/
