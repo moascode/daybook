@@ -7,7 +7,7 @@ interface SeedCategory {
   type: 'income' | 'expense' | 'both'
 }
 
-// Mirrors src/db/seed.ts so the server seeds the same default categories the
+// Mirrors src/db/seed.ts so each new user gets the same default categories the
 // client used in the PGlite era.
 const EXPENSE_CATEGORIES: SeedCategory[] = [
   { name: 'Food & Drink', icon: 'utensils', color: '#ef4444', type: 'expense' },
@@ -30,13 +30,20 @@ const INCOME_CATEGORIES: SeedCategory[] = [
   { name: 'Other Income', icon: 'plus-circle', color: '#6ee7b7', type: 'income' },
 ]
 
-export function seedCategories(db: DB): void {
+/** Seed the default categories + settings for a freshly created user. */
+export function seedUserDefaults(db: DB, userId: string): void {
   const all = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
-  const insert = db.prepare(
-    'INSERT INTO categories (name, icon, color, type) VALUES (?, ?, ?, ?)',
+  const insertCategory = db.prepare(
+    'INSERT INTO categories (user_id, name, icon, color, type) VALUES (?, ?, ?, ?, ?)',
   )
-  const insertAll = db.transaction((rows: SeedCategory[]) => {
-    for (const c of rows) insert.run(c.name, c.icon, c.color, c.type)
+  const insertSetting = db.prepare(
+    'INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT (user_id, key) DO NOTHING',
+  )
+  const seed = db.transaction(() => {
+    for (const c of all) insertCategory.run(userId, c.name, c.icon, c.color, c.type)
+    insertSetting.run(userId, 'default_currency', 'MYR')
+    insertSetting.run(userId, 'theme', 'light')
+    insertSetting.run(userId, 'hide_completed', '0')
   })
-  insertAll(all)
+  seed()
 }

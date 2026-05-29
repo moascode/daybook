@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Key, Palette, Globe } from 'lucide-react'
+import { Eye, EyeOff, Key, Palette, Globe, LogOut, User } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
@@ -9,7 +9,16 @@ import { Select } from '@/components/ui/Select'
 
 export function SettingsPage() {
   const { theme, setTheme } = useAppStore()
+  const user = useAppStore((s) => s.user)
+  const setUser = useAppStore((s) => s.setUser)
+  const setDbReady = useAppStore((s) => s.setDbReady)
   const { addToast } = useToastStore()
+
+  async function handleLogout() {
+    await api.post('/auth/logout')
+    setDbReady(false)
+    setUser(null)
+  }
 
   const [apiKey, setApiKey] = useState('')
   const [defaultCurrency, setDefaultCurrency] = useState('MYR')
@@ -57,6 +66,23 @@ export function SettingsPage() {
       </div>
 
       <div className="space-y-5">
+        {/* Account section */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <User className="h-4 w-4 text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Account</h3>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              Signed in as <span className="font-medium text-gray-900">{user?.username}</span>
+            </p>
+            <Button variant="secondary" onClick={handleLogout}>
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </Button>
+          </div>
+        </section>
+
         {/* AI section */}
         <section className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="mb-4 flex items-center gap-2">

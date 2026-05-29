@@ -1,32 +1,58 @@
 import { useEffect, useState } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
-import { api } from '@/lib/api'
-import { useAppStore } from '@/stores/app.store'
+import { api, ApiError } from '@/lib/api'
+import { useAppStore, type AuthUser } from '@/stores/app.store'
+import { AuthPage } from '@/components/auth/AuthPage'
 
 export default function App() {
   const [error, setError] = useState<string | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
   const dbReady = useAppStore((s) => s.dbReady)
   const setDbReady = useAppStore((s) => s.setDbReady)
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
+  const user = useAppStore((s) => s.user)
+  const setUser = useAppStore((s) => s.setUser)
 
+  // Boot: is there a session? Determines whether we show the app or AuthPage.
   useEffect(() => {
+    api
+      .get<{ user: AuthUser }>('/auth/me')
+      .then(({ user }) => setUser(user))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError && err.status === 401) {
+          setUser(null) // not logged in — AuthPage will render
+        } else {
+          const message = err instanceof Error ? err.message : 'Unknown error'
+          console.error('Server connection failed:', err)
+          setError(message)
+        }
+      })
+      .finally(() => setAuthChecked(true))
+  }, [setUser])
+
+  // Once authenticated, load the user's saved theme and unblock the app.
+  useEffect(() => {
+    if (!user) {
+      setDbReady(false)
+      return
+    }
     api
       .get<{ key: string; value: string }[]>('/settings')
       .then((settings) => {
-        setDbReady(true)
         const saved = settings.find((s) => s.key === 'theme')?.value
         if (saved === 'light' || saved === 'dark' || saved === 'system') {
           setTheme(saved)
         }
+        setDbReady(true)
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'
-        console.error('Server connection failed:', err)
+        console.error('Failed to load settings:', err)
         setError(message)
       })
-  }, [setDbReady, setTheme])
+  }, [user, setDbReady, setTheme])
 
   // Apply dark class based on theme setting
   useEffect(() => {
@@ -63,7 +89,7 @@ export default function App() {
     )
   }
 
-  if (!dbReady) {
+  if (!authChecked || (user && !dbReady)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-3">
@@ -72,6 +98,10 @@ export default function App() {
         </div>
       </div>
     )
+  }
+
+  if (!user) {
+    return <AuthPage />
   }
 
   return <RouterProvider router={router} />

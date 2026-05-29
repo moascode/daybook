@@ -239,24 +239,28 @@ daybook/
 ### Phase 4 backend (`server/`)
 ```
 server/
-├── index.ts                         ← Express app + createApp() + listen
-├── db.ts                            ← better-sqlite3 instance + schema (SQLite-native)
-├── seed.ts                          ← Default categories seed (mirrors src/db/seed.ts)
-├── lib.ts                           ← updateRow() dynamic-UPDATE helper + bind coercion
+├── index.ts                         ← Express app + session middleware + createApp() + listen
+├── db.ts                            ← better-sqlite3 instance + schema (users, sessions, data)
+├── seed.ts                          ← seedUserDefaults(): per-user categories + settings
+├── lib.ts                           ← updateRow() (user-scoped) + bind coercion
+├── session-store.ts                 ← SQLite-backed express-session Store
 ├── tsconfig.json                    ← Server typecheck config (run via tsx)
 ├── routes/
-│   ├── health.ts                    ← GET /api/health
-│   ├── tasks.ts                     ← /api/tasks, /api/task-templates
+│   ├── health.ts                    ← GET /api/health (public)
+│   ├── auth.ts                      ← /api/auth/signup|login|logout|me + requireAuth (public)
+│   ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
 │   ├── wallet.ts                    ← /api/accounts, /transactions, /categories,
-│   │                                   /budgets, /recurring-transactions, /goals
-│   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key
+│   │                                   /budgets, /recurring-transactions, /goals (auth)
+│   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
 │   └── test.ts                      ← POST /api/test/reset (only when DAYBOOK_TEST=1)
 └── data/                            ← SQLite DB file (gitignored — never commit)
 ```
 > The browser reaches the server through Vite's `/api` dev proxy → `localhost:3001`.
-> The client talks to it via `src/lib/api.ts`. Reads return snake_case rows
-> (existing client mappers convert them); writes accept camelCase. No PGlite in
-> the browser anymore — `npm run dev` needs the server too (use `dev:all`).
+> The client talks to it via `src/lib/api.ts` (credentials:'include' for the
+> session cookie). Reads return snake_case rows (existing client mappers convert
+> them); writes accept camelCase. No PGlite in the browser — `npm run dev` needs
+> the server too (use `dev:all`). Auth: session cookie + bcrypt; `App.tsx` gates
+> the app behind `src/components/auth/AuthPage.tsx`.
 > Scripts: `npm run server` (watch), `npm run dev:all` (server + Vite),
 > `npm run typecheck:server`.
 
@@ -348,7 +352,7 @@ CREATE TABLE IF NOT EXISTS settings (
 ```
 
 ### Default category seed data
-Insert these on first launch if categories table is empty:
+Insert these for each new user on signup (Phase 4 — previously seeded globally):
 
 ```
 Expenses: Food & Drink, Transport, Shopping, Bills & Utilities,
@@ -356,6 +360,31 @@ Expenses: Food & Drink, Transport, Shopping, Bills & Utilities,
 
 Income: Salary, Freelance, Investment, Gift, Other Income
 ```
+
+### Phase 4 auth additions (server SQLite — implemented PR3)
+
+```sql
+CREATE TABLE users (
+  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  username      TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,                 -- bcrypt
+  created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE sessions (                        -- express-session store
+  sid TEXT PRIMARY KEY, sess TEXT NOT NULL, expire INTEGER NOT NULL
+);
+```
+
+- Every data table gains `user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE`
+  (tasks, accounts, categories, transactions, budgets, recurring_transactions,
+  goals, task_templates).
+- `settings` is now per-user: primary key is `(user_id, key)`.
+- `categories` and `settings` are seeded per user on signup, not globally.
+- Every server query is scoped by `user_id`; one user can never read or write
+  another's rows.
+- Migration: a pre-auth DB (no `user_id`) has its data tables dropped+recreated
+  on startup (pre-v1, no real data). Otherwise delete `server/data/*.db`.
 
 ---
 
@@ -737,11 +766,37 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  4 — Home Network + Multi-User (v1) — IN PROGRESS
-Phase status:   PR1 (scaffold) + PR2 (data-layer migration) done. PR3 (auth +
-                per-user) pending. See docs/phase-4-plan.md.
+Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending review/merge)
+Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
+                per-user) all done on branch. v1 milestone reached.
+                See docs/phase-4-plan.md.
 Last session:   2026-05-29
-Last completed: - Phase 4 PR2 — data-layer migration (full REST swap, PGlite removed):
+Last completed: - Phase 4 PR3 — auth + per-user data (v1 milestone):
+                    • Schema: users + sessions tables; user_id NOT NULL FK on all
+                      8 data tables; settings PK now (user_id, key). Startup guard
+                      drops+recreates pre-auth data tables (pre-v1, no real data).
+                    • Auth (session cookies): server/routes/auth.ts —
+                      signup/login/logout/me + requireAuth guard. bcrypt hashes.
+                      express-session with a SQLite-backed store (server/
+                      session-store.ts) — no extra session-store package.
+                    • Every server query scoped by user_id (updateRow takes userId;
+                      all GET/POST/PATCH/DELETE filter/set user_id). Verified one
+                      user cannot read/write another's rows.
+                    • Per-user seeding: seedUserDefaults() seeds 15 categories +
+                      default settings on signup.
+                    • Client: app.store gains user/setUser; App.tsx checks
+                      /auth/me on boot and gates the app behind AuthPage
+                      (src/components/auth/AuthPage.tsx, login/signup). Sign-out
+                      added to Settings. api.ts already sent credentials.
+                    • Packages added: bcrypt ^6, express-session ^1 (+ @types) —
+                      already approved in CLAUDE.md §4.
+                    • e2e: newAppPage signs up a fresh user per page (per-user
+                      isolation = old fresh-DB-per-context); signUpOnPage helper
+                      for custom-context specs (mobile). New e2e/22-auth.spec.ts
+                      (signup/login/logout/gate/wrong-password).
+                    • Verified: client build green, typecheck:server green,
+                      270/270 e2e pass. Lint: 38 pre-existing errors only (no new).
+                - Phase 4 PR2 — data-layer migration (full REST swap, PGlite removed):
                     • REST endpoints for every entity: server/routes/tasks.ts
                       (tasks + templates), wallet.ts (accounts incl. balance,
                       transactions incl. filters/import/export/check-duplicates,
@@ -799,12 +854,13 @@ Last completed: - Phase 4 PR2 — data-layer migration (full REST swap, PGlite r
                 - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
                   helpers.waitForApp now checks <main> (aside is hidden on mobile)
                 - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
-Next task:      Phase 4 PR3 — auth + per-user data: users + session tables,
-                bcrypt + express-session, signup/login pages, session middleware,
-                user_id scoping on every table/query, per-user category seed,
-                auth gate in App.tsx, e2e helpers register a fresh user per test.
-Blockers:       None. Client now runs entirely on the Node + SQLite backend
-                (single implicit user until PR3 adds per-user scoping).
+Next task:      Phase 5 — AI Features (v2): Claude integration, NL task/transaction
+                entry, daily briefing, financial insights. Route the Anthropic key
+                through the backend (no key in the browser bundle). See §9.3.
+Blockers:       None. v1 (home-network multi-user) is feature-complete on the
+                branch: Node + SQLite backend, session-cookie auth, per-user data.
+                Reminder: a SESSION_SECRET env var should be set in any real
+                (non-dev) deployment; defaults to a dev secret otherwise.
                 Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
                 test-only `window as any` shims) remain across the codebase; not
                 introduced this session and do not affect typecheck or tests.

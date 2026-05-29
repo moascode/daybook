@@ -2,7 +2,6 @@ import Database from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { seedCategories } from './seed.ts'
 
 // ─────────────────────────────────────────────────────────────
 // SQLite schema — native dialect (matches CLAUDE.md §6).
@@ -11,12 +10,31 @@ import { seedCategories } from './seed.ts'
 // Booleans: INTEGER (0/1) — SQLite has no BOOLEAN.
 // Timestamps: datetime('now') → 'YYYY-MM-DD HH:MM:SS' (UTC), the format the
 //   app already expects.
-// NOTE (Phase 4): per-user scoping (users table + user_id columns) arrives in
-//   the auth stage. This scaffold sets up the data tables only.
+// Phase 4 auth stage: every data row carries user_id; categories + settings are
+//   per-user (seeded on signup). Sessions persist in the sessions table.
 // ─────────────────────────────────────────────────────────────
+
+// Auth tables — created first because data tables reference users(id).
+const AUTH_SQL = `
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  username      TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  sid    TEXT PRIMARY KEY,
+  sess   TEXT NOT NULL,
+  expire INTEGER NOT NULL
+);
+`
+
+// Data tables. Every row is scoped to a user via user_id (ON DELETE CASCADE).
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS tasks (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   parent_id     TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   content       TEXT NOT NULL DEFAULT '',
   note          TEXT DEFAULT '',
@@ -30,6 +48,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE TABLE IF NOT EXISTS accounts (
   id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
   description TEXT DEFAULT '',
   currency    TEXT NOT NULL DEFAULT 'MYR',
@@ -40,15 +59,17 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 
 CREATE TABLE IF NOT EXISTS categories (
-  id    TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-  name  TEXT NOT NULL,
-  icon  TEXT DEFAULT 'tag',
-  color TEXT DEFAULT '#378ADD',
-  type  TEXT DEFAULT 'both'
+  id      TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name    TEXT NOT NULL,
+  icon    TEXT DEFAULT 'tag',
+  color   TEXT DEFAULT '#378ADD',
+  type    TEXT DEFAULT 'both'
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
   id                     TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id                TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   account_id             TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   destination_account_id TEXT REFERENCES accounts(id) ON DELETE SET NULL,
   date                   TEXT NOT NULL,
@@ -64,13 +85,16 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key     TEXT NOT NULL,
+  value   TEXT NOT NULL,
+  PRIMARY KEY (user_id, key)
 );
 
 -- Tier 2: budget tracking (one row per category; limit is always monthly)
 CREATE TABLE IF NOT EXISTS budgets (
   id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   category_id  TEXT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
   limit_amount REAL NOT NULL,
   created_at   TEXT DEFAULT (datetime('now')),
@@ -81,6 +105,7 @@ CREATE TABLE IF NOT EXISTS budgets (
 -- Tier 2: recurring transaction rules
 CREATE TABLE IF NOT EXISTS recurring_transactions (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   amount        REAL NOT NULL,
   merchant      TEXT DEFAULT '',
@@ -95,6 +120,7 @@ CREATE TABLE IF NOT EXISTS recurring_transactions (
 -- Tier 3: savings goals
 CREATE TABLE IF NOT EXISTS goals (
   id            TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   target_amount REAL NOT NULL,
   account_id    TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -105,11 +131,17 @@ CREATE TABLE IF NOT EXISTS goals (
 -- Tier 3: task templates
 CREATE TABLE IF NOT EXISTS task_templates (
   id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
   content    TEXT NOT NULL DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
 `
+
+const DATA_TABLES = [
+  'task_templates', 'goals', 'recurring_transactions', 'budgets',
+  'transactions', 'categories', 'accounts', 'tasks', 'settings',
+]
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -138,22 +170,26 @@ export function getDb(): DB {
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
 
-  db.exec(SCHEMA_SQL)
+  db.exec(AUTH_SQL)
 
-  // Seed default categories on first run (global for now; becomes per-user in
-  // the auth stage).
-  const { count } = db.prepare('SELECT count(*) AS count FROM categories').get() as { count: number }
-  if (count === 0) {
-    seedCategories(db)
+  // Migration guard: a DB created before the auth stage has data tables without
+  // a user_id column. Pre-v1 there is no real data, so drop and recreate them
+  // rather than attempt an in-place ALTER. Triggered only when the legacy shape
+  // is detected.
+  const tasksTable = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tasks'")
+    .get()
+  if (tasksTable) {
+    const cols = db.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]
+    const hasUserId = cols.some((c) => c.name === 'user_id')
+    if (!hasUserId) {
+      db.pragma('foreign_keys = OFF')
+      for (const table of DATA_TABLES) db.exec(`DROP TABLE IF EXISTS ${table}`)
+      db.pragma('foreign_keys = ON')
+    }
   }
 
-  // Default settings.
-  const insertSetting = db.prepare(
-    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO NOTHING',
-  )
-  insertSetting.run('default_currency', 'MYR')
-  insertSetting.run('theme', 'light')
-  insertSetting.run('hide_completed', '0')
+  db.exec(SCHEMA_SQL)
 
   dbInstance = db
   return db

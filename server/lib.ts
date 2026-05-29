@@ -12,12 +12,13 @@ export function updateRow<T = Record<string, unknown>>(
   db: DB,
   table: string,
   id: string,
+  userId: string,
   columnMap: Record<string, string>,
   body: Record<string, unknown>,
   opts: { touchUpdatedAt?: boolean } = {},
 ): T | undefined {
   const sets: string[] = []
-  const params: Record<string, unknown> = { id }
+  const params: Record<string, unknown> = { id, userId }
 
   for (const [key, col] of Object.entries(columnMap)) {
     if (key in body) {
@@ -26,16 +27,19 @@ export function updateRow<T = Record<string, unknown>>(
     }
   }
 
+  // Scope by user_id so one user can never update another's rows.
+  const where = 'WHERE id = @id AND user_id = @userId'
+
   if (opts.touchUpdatedAt !== false) {
     sets.push(`updated_at = datetime('now')`)
   }
 
   if (sets.length === 0) {
-    return db.prepare(`SELECT * FROM ${table} WHERE id = @id`).get(params) as T | undefined
+    return db.prepare(`SELECT * FROM ${table} ${where}`).get(params) as T | undefined
   }
 
   return db
-    .prepare(`UPDATE ${table} SET ${sets.join(', ')} WHERE id = @id RETURNING *`)
+    .prepare(`UPDATE ${table} SET ${sets.join(', ')} ${where} RETURNING *`)
     .get(params) as T | undefined
 }
 

@@ -8,17 +8,36 @@ export async function waitForApp(page: Page) {
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
 }
 
+let userSeq = 0
+
 /**
- * Create an isolated browser context and navigate to the app.
+ * Sign up a fresh user on an existing page's context (sets the session cookie),
+ * for specs that build their own context — e.g. a custom mobile viewport — and
+ * navigate themselves. Call before page.goto().
+ */
+export async function signUpOnPage(page: Page) {
+  const username = `e2e_${Date.now()}_${userSeq++}`
+  await page.request.post('http://localhost:5173/api/auth/signup', {
+    data: { username, password: 'test-password' },
+  })
+}
+
+/**
+ * Create an isolated browser context, sign up a brand-new user, and navigate to
+ * the app already authenticated.
  *
- * Phase 4: data now lives in the shared server SQLite file rather than per-browser
- * IndexedDB, so we reset the server DB before loading the app. This gives each
- * page the clean slate it had under the old fresh-IndexedDB-per-context model.
+ * Phase 4: data lives in the shared server DB scoped per user, so a fresh user
+ * per page is what now gives each test the clean slate it had under the old
+ * fresh-IndexedDB-per-context model. The signup sets the session cookie in the
+ * browser context, so the subsequent navigation loads logged in.
  */
 export async function newAppPage(browser: Browser, path = '/') {
   const context = await browser.newContext()
   const page = await context.newPage()
-  await page.request.post('http://localhost:5173/api/test/reset')
+  const username = `e2e_${Date.now()}_${userSeq++}`
+  await page.request.post('http://localhost:5173/api/auth/signup', {
+    data: { username, password: 'test-password' },
+  })
   await page.goto(path)
   await waitForApp(page)
   return page

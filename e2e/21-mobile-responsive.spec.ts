@@ -8,7 +8,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { waitForApp } from './helpers'
+import { waitForApp, signUpOnPage } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 
@@ -17,6 +17,7 @@ const MOBILE_VIEWPORT = { width: 390, height: 844 }
 test('tasks page renders without horizontal scroll on 390 px viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/tasks')
   await waitForApp(page)
 
@@ -29,6 +30,7 @@ test('tasks page renders without horizontal scroll on 390 px viewport', async ({
 test('wallet page renders without horizontal scroll on 390 px viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/wallet')
   await waitForApp(page)
 
@@ -43,6 +45,7 @@ test('wallet page renders without horizontal scroll on 390 px viewport', async (
 test('main navigation is accessible on mobile (hamburger menu or visible nav links)', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/tasks')
   await waitForApp(page)
 
@@ -60,6 +63,7 @@ test('main navigation is accessible on mobile (hamburger menu or visible nav lin
 test('tapping the mobile menu button reveals navigation links', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/tasks')
   await waitForApp(page)
 
@@ -82,6 +86,7 @@ test('tapping the mobile menu button reveals navigation links', async ({ browser
 test('can add a task on mobile viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/tasks')
   await waitForApp(page)
 
@@ -99,6 +104,7 @@ test('can add a task on mobile viewport', async ({ browser }: { browser: Browser
 test('wallet "Add Transaction" button is tappable on mobile viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/wallet')
   await waitForApp(page)
 
@@ -113,6 +119,7 @@ test('wallet "Add Transaction" button is tappable on mobile viewport', async ({ 
 test('task content text is at least 14 px on mobile viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
+  await signUpOnPage(page)
   await page.goto('/tasks')
   await waitForApp(page)
 
