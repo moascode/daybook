@@ -13,6 +13,7 @@
 #   start              Start the server in the background (writes pidfile + log)
 #   stop               Stop the background server
 #   restart            Stop then start
+#   reload             Rebuild, then restart whichever instance is running (launchd or manual)
 #   status             Show whether it's running and the URL to use on your phone
 #   logs [-f]          Show the server log (-f to follow)
 #   update             git pull origin main → setup → build → restart
@@ -91,6 +92,8 @@ server_pid() {
 }
 
 is_running() { server_pid >/dev/null 2>&1; }
+
+launchd_loaded() { launchctl list 2>/dev/null | grep -q "$PLIST_LABEL"; }
 
 require_node() {
   command -v node >/dev/null 2>&1 || die "Node.js not found. Install Node 20+ (https://nodejs.org)."
@@ -192,6 +195,30 @@ cmd_stop() {
 }
 
 cmd_restart() { cmd_stop; cmd_start; }
+
+# Rebuild the frontend, then restart whichever instance is actually serving.
+# When launchd owns the process, `restart` (which only tracks the manual
+# pidfile) would start a second instance and collide on the port — so detect
+# the launchd service and kickstart it instead.
+cmd_reload() {
+  cmd_build
+  if [ -f "$PLIST_PATH" ]; then
+    info "Restarting launchd service ($PLIST_LABEL)…"
+    if launchd_loaded; then
+      launchctl kickstart -k "gui/$(id -u)/$PLIST_LABEL"
+    else
+      launchctl load "$PLIST_PATH"
+    fi
+    sleep 1.5
+    ok "Reloaded (launchd-managed)."
+    cmd_url
+  elif is_running; then
+    cmd_restart
+  else
+    warn "No running server and no launchd service — starting a background instance."
+    cmd_start
+  fi
+}
 
 cmd_status() {
   if is_running; then
@@ -327,6 +354,7 @@ case "${1:-help}" in
   start)             cmd_start ;;
   stop)              cmd_stop ;;
   restart)           cmd_restart ;;
+  reload)            cmd_reload ;;
   status)            cmd_status ;;
   logs)              shift; cmd_logs "${1:-}" ;;
   update)            cmd_update ;;

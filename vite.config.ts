@@ -11,9 +11,12 @@ export default defineConfig({
   },
   server: {
     // Proxy API calls to the Node server (Phase 4 home-network backend).
+    // Target is overridable so the e2e suite can point the dev server at its
+    // own isolated API instance (different port) instead of the always-on
+    // local/LAN server on 3001.
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.DAYBOOK_API_TARGET ?? 'http://localhost:3001',
         changeOrigin: true,
       },
     },

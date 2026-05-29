@@ -83,10 +83,14 @@ export function CsvImport() {
 
   const handleProceedToReview = useCallback(async () => {
     if (!mapping.date || !mapping.amount) return
-    const rows = await buildImportRows(rawRows, mapping)
-    setImportRows(rows)
-    setStep('review')
-  }, [rawRows, mapping])
+    try {
+      const rows = await buildImportRows(rawRows, mapping)
+      setImportRows(rows)
+      setStep('review')
+    } catch {
+      addToast({ message: 'Could not prepare the import — please try again.', duration: 4000 })
+    }
+  }, [rawRows, mapping, addToast])
 
   const handleImport = useCallback(async () => {
     if (!selectedAccountId) return
