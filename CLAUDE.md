@@ -127,7 +127,20 @@ Browser (React + Vite)
 |---|---|---|
 | `@anthropic-ai/sdk` | ^0.39 | Anthropic API client |
 
-#### Cloud (Phase 4 only — do not install before Phase 4)
+#### Backend (Phase 4 — Home Network + Multi-User)
+| Package | Version | Purpose |
+|---|---|---|
+| `express` | ^5 | HTTP API server (Node) |
+| `better-sqlite3` | ^12 | Synchronous SQLite driver (server owns the DB file) |
+| `bcrypt` | ^6 | Password hashing (auth stage) |
+| `express-session` | ^1 | Session cookies (auth stage) |
+| `tsx` | ^4 | Run/typecheck the TypeScript server (dev tool) |
+
+> Phase 4 replaces the in-browser PGlite store with a Node + SQLite backend the
+> browser calls over `/api`. `bcrypt` and `express-session` land in the auth
+> stage. See `docs/phase-4-plan.md`.
+
+#### Cloud (Phase 6 only — do not install before Phase 6)
 | Package | Version | Purpose |
 |---|---|---|
 | `@supabase/supabase-js` | ^2.43 | Supabase client |
@@ -222,6 +235,21 @@ daybook/
         ├── tasks.types.ts           ← Task, BulletNode interfaces
         └── wallet.types.ts          ← Account, Transaction, Category interfaces
 ```
+
+### Phase 4 backend (`server/`)
+```
+server/
+├── index.ts                         ← Express app + createApp() + listen
+├── db.ts                            ← better-sqlite3 instance + schema (SQLite-native)
+├── seed.ts                          ← Default categories seed (mirrors src/db/seed.ts)
+├── tsconfig.json                    ← Server typecheck config (run via tsx)
+├── routes/
+│   └── health.ts                    ← GET /api/health
+└── data/                            ← SQLite DB file (gitignored — never commit)
+```
+> The browser reaches the server through Vite's `/api` dev proxy → `localhost:3001`.
+> Scripts: `npm run server` (watch), `npm run dev:all` (server + Vite),
+> `npm run typecheck:server`.
 
 ---
 
@@ -700,10 +728,26 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  3+ — Alpha UX Polish (Tier 3 complete)
-Phase status:   Tier 1 + Tier 2 + Tier 3 all complete; full e2e suite green
-Last session:   2026-05-28
-Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
+Current phase:  4 — Home Network + Multi-User (v1) — IN PROGRESS
+Phase status:   PR1 (server scaffold) done. PR2 (data-layer migration) + PR3
+                (auth + per-user) pending. See docs/phase-4-plan.md.
+Last session:   2026-05-29
+Last completed: - Phase 4 PR1 — Node + SQLite server scaffold:
+                    • server/ : Express app (createApp + listen), better-sqlite3
+                      instance with SQLite-native schema (all 9 data tables),
+                      seed.ts (mirrors src/db/seed.ts), GET /api/health
+                    • Vite dev-proxies /api → localhost:3001
+                    • Scripts: server (watch), dev:all, typecheck:server
+                    • SQLite DB file under server/data/ (gitignored)
+                    • Packages added (CLAUDE.md §4 updated): express ^5,
+                      better-sqlite3 ^12, tsx ^4 (+ @types). bcrypt/express-session
+                      deferred to PR3 (auth). Fixed §4 Cloud label (Supabase = Phase 6).
+                    • Verified: better-sqlite3 native build OK, health returns
+                      {status:ok,db:true}, 15 categories + 3 settings seeded,
+                      client `npm run build` still green, eslint clean on server/.
+                - Decisions (owner sign-off): full REST swap (drop PGlite),
+                  Express + better-sqlite3, session-cookie auth, staged delivery.
+                - Earlier (2026-05-28) — Phase 3+ Tier 3 features shipped (e2e 16–21):
                     • Wallet goals (/wallet/goals): savings target linked to an account,
                       progress bar vs live account balance, full CRUD
                     • Bill reminders on Dashboard: recurring bills due within 7 days,
@@ -722,9 +766,10 @@ Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
                 - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
                   helpers.waitForApp now checks <main> (aside is hidden on mobile)
                 - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
-Next task:      Phase 4 — Home Network + Multi-User (Node backend, SQLite file, auth,
-                per-user data) for the v1 milestone
-Blockers:       None — all Tier 3+ tiers complete, 266/266 e2e green.
+Next task:      Phase 4 PR2 — data-layer migration: REST endpoints for all entities,
+                src/lib/api.ts client, rewrite useTasks/useWallet to fetch, remove
+                in-browser PGlite, run e2e against both servers.
+Blockers:       None. PR1 scaffold landed; client still runs on PGlite until PR2.
                 Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
                 test-only `window as any` shims) remain across the codebase; not
                 introduced this session and do not affect typecheck or tests.
