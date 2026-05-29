@@ -175,12 +175,16 @@ export function Dashboard() {
   const upcomingBills = useMemo(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    return recurringTransactions.filter((r) => {
-      if (dismissedIds.has(r.id)) return false
-      const due = parseISO(r.nextDueDate)
-      const days = differenceInDays(due, today)
-      return days >= 0 && days <= 7
-    })
+    return recurringTransactions
+      .filter((r) => {
+        if (dismissedIds.has(r.id)) return false
+        const days = differenceInDays(parseISO(r.nextDueDate), today)
+        return days <= 7
+      })
+      .map((r) => ({
+        ...r,
+        daysUntilDue: differenceInDays(parseISO(r.nextDueDate), today),
+      }))
   }, [recurringTransactions, dismissedIds])
 
   const handleDismiss = (id: string) => {
@@ -291,10 +295,7 @@ export function Dashboard() {
           </div>
           <div className="flex flex-col gap-2">
             {upcomingBills.map((bill) => {
-              const today = new Date()
-              today.setHours(0, 0, 0, 0)
-              const due = parseISO(bill.nextDueDate)
-              const days = differenceInDays(due, today)
+              const days = bill.daysUntilDue
               return (
                 <div
                   key={bill.id}
@@ -304,7 +305,7 @@ export function Dashboard() {
                   <div>
                     <p className="text-sm font-medium text-gray-900">{bill.merchant || '(no merchant)'}</p>
                     <p className="text-xs text-amber-600">
-                      {days === 0 ? 'due soon' : `due in ${days} day${days !== 1 ? 's' : ''}`}
+                      {days < 0 ? `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}` : days === 0 ? 'due soon' : `due in ${days} day${days !== 1 ? 's' : ''}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

@@ -156,8 +156,8 @@ export function ReportsPage() {
                       <span className="font-medium text-gray-800">{t.merchant || '(no merchant)'}</span>
                       <span className="ml-2 text-xs text-gray-400">{t.date}</span>
                     </div>
-                    <span className={t.type === 'income' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
-                      {t.type === 'income' ? '+' : '-'}{formatMYR(t.amount)}
+                    <span className={t.type === 'income' ? 'text-green-600 font-medium' : t.type === 'transfer' ? 'text-gray-500 font-medium' : 'text-red-600 font-medium'}>
+                      {t.type === 'income' ? '+' : t.type === 'transfer' ? '↔' : '-'}{formatMYR(t.amount)}
                     </span>
                   </div>
                 ))}

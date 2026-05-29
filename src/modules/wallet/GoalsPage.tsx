@@ -38,10 +38,7 @@ export function GoalsPage() {
       const [accs] = await Promise.all([loadAccounts(), loadGoals()])
       if (accs.length === 0) return
       const entries = await Promise.all(
-        accs.map(async (a) => {
-          const bal = await getAccountBalance(a.id)
-          return [a.id, bal] as const
-        }),
+        accs.map(async (a) => [a.id, await getAccountBalance(a.id)] as const),
       )
       setBalances(new Map(entries))
     }
