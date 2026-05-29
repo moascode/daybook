@@ -10,7 +10,7 @@ interface AccountFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   account?: Account | null
-  onSubmit: (data: AccountFormData) => void
+  onSubmit: (data: AccountFormData) => void | Promise<void>
 }
 
 export interface AccountFormData {
@@ -71,7 +71,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
     }
   }, [open, account])
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     if (!form.name.trim()) {
@@ -79,7 +79,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
       return
     }
 
-    onSubmit({
+    await onSubmit({
       ...form,
       name: form.name.trim(),
       description: form.description.trim(),

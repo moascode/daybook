@@ -11,8 +11,14 @@ import {
   Check,
   CheckSquare,
   Target,
+  CalendarClock,
+  BookCopy,
 } from 'lucide-react'
+import { format, parseISO, isBefore, startOfDay } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { DatePicker } from '@/components/ui/DatePicker'
 import { BulletEditor } from './BulletEditor'
 import { BulletNote } from './BulletNote'
 import type { Task } from '@/types/tasks.types'
@@ -31,6 +37,8 @@ interface BulletNodeProps {
   onOutdent: (id: string) => void
   onDelete: (id: string) => void
   onZoomIn: (id: string) => void
+  onSetDueDate: (id: string, date: string | null) => void
+  onSaveAsTemplate: (task: Task) => void
   autoFocus?: boolean
 }
 
@@ -48,9 +56,22 @@ export function BulletNode({
   onOutdent,
   onDelete,
   onZoomIn,
+  onSetDueDate,
+  onSaveAsTemplate,
   autoFocus,
 }: BulletNodeProps) {
   const [showNote, setShowNote] = useState(task.note.length > 0)
+  const [showDueDateDialog, setShowDueDateDialog] = useState(false)
+  const [pendingDueDate, setPendingDueDate] = useState(task.dueDate ?? '')
+
+  const today = startOfDay(new Date())
+  const isOverdue =
+    !!task.dueDate && isBefore(startOfDay(parseISO(task.dueDate)), today)
+
+  const handleSaveDueDate = useCallback(() => {
+    onSetDueDate(task.id, pendingDueDate || null)
+    setShowDueDateDialog(false)
+  }, [task.id, pendingDueDate, onSetDueDate])
 
   const {
     attributes,
@@ -166,6 +187,24 @@ export function BulletNode({
           />
         </div>
 
+        {/* ── Due date badge ───────────────────────────────── */}
+        {task.dueDate && (
+          <div className="flex shrink-0 items-center self-center mr-1">
+            <span
+              data-testid={isOverdue ? 'overdue-indicator' : undefined}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                isOverdue
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-blue-50 text-blue-600',
+              )}
+            >
+              <CalendarClock className="h-2.5 w-2.5" />
+              {format(parseISO(task.dueDate), 'dd MMM yyyy')}
+            </span>
+          </div>
+        )}
+
         {/* ── Hover actions ────────────────────────────────── */}
         <div
           className={cn(
@@ -230,6 +269,25 @@ export function BulletNode({
                   {showNote ? 'Hide note' : 'Add note'}
                 </DropdownMenu.Item>
 
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={() => {
+                    setPendingDueDate(task.dueDate ?? '')
+                    setShowDueDateDialog(true)
+                  }}
+                >
+                  <CalendarClock className="h-3.5 w-3.5 text-gray-400" />
+                  Set due date
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  onSelect={() => onSaveAsTemplate(task)}
+                >
+                  <BookCopy className="h-3.5 w-3.5 text-gray-400" />
+                  Save as template
+                </DropdownMenu.Item>
+
                 <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />
 
                 <DropdownMenu.Item
@@ -254,6 +312,39 @@ export function BulletNode({
           onSave={handleSaveNote}
         />
       )}
+
+      {/* ── Due date dialog ─────────────────────────────────── */}
+      <Modal
+        open={showDueDateDialog}
+        onOpenChange={(open) => { if (!open) setShowDueDateDialog(false) }}
+        title="Set due date"
+        className="max-w-sm"
+      >
+        <div className="flex flex-col gap-4">
+          <DatePicker
+            label="Due date"
+            value={pendingDueDate}
+            onChange={(e) => setPendingDueDate(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            {pendingDueDate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setPendingDueDate(''); onSetDueDate(task.id, null); setShowDueDateDialog(false) }}
+              >
+                Clear
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => setShowDueDateDialog(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleSaveDueDate}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

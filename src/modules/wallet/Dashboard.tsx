@@ -2,8 +2,8 @@ import { useEffect, useState, useMemo } from 'react'
 import { useWallet } from '@/hooks/useWallet'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown } from 'lucide-react'
-import { format, parseISO, endOfWeek, eachWeekOfInterval } from 'date-fns'
+import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
+import { format, parseISO, endOfWeek, eachWeekOfInterval, differenceInDays } from 'date-fns'
 import {
   BarChart,
   Bar,
@@ -44,12 +44,28 @@ interface MerchantSpend {
   count: number
 }
 
+const DISMISSED_KEY = 'daybook:dismissed_reminders'
+
+function getDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY)
+    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveDismissed(ids: Set<string>) {
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(ids)))
+}
+
 export function Dashboard() {
-  const { loadTransactions, loadCategories, loadAccounts, accounts, categories } = useWallet()
+  const { loadTransactions, loadCategories, loadAccounts, loadRecurringTransactions, accounts, categories, recurringTransactions } = useWallet()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [dateRange, setDateRange] = useState<DateRange>('this-month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
 
   const { dateFrom, dateTo } = useMemo(() => {
     const now = new Date()
@@ -75,7 +91,8 @@ export function Dashboard() {
   useEffect(() => {
     loadAccounts()
     loadCategories()
-  }, [loadAccounts, loadCategories])
+    loadRecurringTransactions()
+  }, [loadAccounts, loadCategories, loadRecurringTransactions])
 
   useEffect(() => {
     if (!dateFrom || !dateTo) return
@@ -154,6 +171,28 @@ export function Dashboard() {
       }))
       .sort((a, b) => b.amount - a.amount)
   }, [transactions, accounts])
+
+  const upcomingBills = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return recurringTransactions
+      .filter((r) => {
+        if (dismissedIds.has(r.id)) return false
+        const days = differenceInDays(parseISO(r.nextDueDate), today)
+        return days <= 7
+      })
+      .map((r) => ({
+        ...r,
+        daysUntilDue: differenceInDays(parseISO(r.nextDueDate), today),
+      }))
+  }, [recurringTransactions, dismissedIds])
+
+  const handleDismiss = (id: string) => {
+    const next = new Set(dismissedIds)
+    next.add(id)
+    setDismissedIds(next)
+    saveDismissed(next)
+  }
 
   const topMerchants = useMemo((): MerchantSpend[] => {
     const map = new Map<string, { total: number; count: number }>()
@@ -246,6 +285,45 @@ export function Dashboard() {
           </p>
         </div>
       </div>
+
+      {/* Bill reminders */}
+      {upcomingBills.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Bell className="h-4 w-4 text-amber-600" />
+            <h3 className="text-sm font-semibold text-amber-800">Upcoming Bills</h3>
+          </div>
+          <div className="flex flex-col gap-2">
+            {upcomingBills.map((bill) => {
+              const days = bill.daysUntilDue
+              return (
+                <div
+                  key={bill.id}
+                  data-testid="bill-reminder"
+                  className="flex items-center justify-between rounded-lg bg-white border border-amber-100 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{bill.merchant || '(no merchant)'}</p>
+                    <p className="text-xs text-amber-600">
+                      {days < 0 ? `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}` : days === 0 ? 'due soon' : `due in ${days} day${days !== 1 ? 's' : ''}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-gray-700">{formatMYR(bill.amount)}</span>
+                    <button
+                      aria-label="Dismiss"
+                      onClick={() => handleDismiss(bill.id)}
+                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Cash flow chart */}
       {weeklyData.length > 0 && (

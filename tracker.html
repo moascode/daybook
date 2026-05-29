@@ -597,7 +597,7 @@ const MILESTONE_ALPHA = {
 const PHASES_1B = [
   {
     id: 'ph3b', num: '3+', name: 'Alpha UX Polish', type: 'dev',
-    desc: 'Iterative UX improvements post-Alpha, delivered in prioritised tiers. Tier 1 is shipped; Tier 2 and 3 are queued.',
+    desc: 'Iterative UX improvements post-Alpha, delivered in prioritised tiers. Tiers 1, 2, and 3 are all shipped and covered by the e2e suite.',
     sections: [
       {
         heading: 'Tier 1 — Core UX Gaps (Complete)',
@@ -612,7 +612,7 @@ const PHASES_1B = [
         ]
       },
       {
-        heading: 'Tier 2 — Next Priority',
+        heading: 'Tier 2 — Power Features (Complete)',
         tasks: [
           { id: 'pt2a', t: 'Tasks: drag-and-drop reorder — move tasks between positions and across indent levels (@dnd-kit already installed; test skipped pending implementation)', note: 'Unblock the 2 skipped DnD tests in e2e/01-tasks.spec.ts' },
           { id: 'pt2b', t: 'Tasks: due dates — optional date field per task with overdue visual indicator and sort-by-due option' },
@@ -623,7 +623,7 @@ const PHASES_1B = [
         ]
       },
       {
-        heading: 'Tier 3 — Further Polish',
+        heading: 'Tier 3 — Further Polish (Complete)',
         tasks: [
           { id: 'pt3a', t: 'Wallet: goals & savings tracker — set a target amount, link a dedicated account, track progress over time' },
           { id: 'pt3b', t: 'Wallet: bill reminders — flag upcoming recurring bills N days before they are due' },
@@ -806,6 +806,14 @@ const CONFIRMED_DONE_M3 = {
   pt1a: true, pt1b: true, pt1c: true, pt1d: true, pt1e: true, pt1f: true, pt1g: true,
 };
 
+// m4: Phase 3+ Tier 2 + Tier 3 shipped.
+// Tier 2 — due dates, budgets, recurring transactions, data export (e2e 12–15).
+// Tier 3 — goals, bill reminders, advanced reports, task templates, PWA, mobile-responsive (e2e 16–21).
+const CONFIRMED_DONE_M4 = {
+  pt2a: true, pt2b: true, pt2c: true, pt2d: true, pt2e: true, pt2f: true,
+  pt3a: true, pt3b: true, pt3c: true, pt3d: true, pt3e: true, pt3f: true, pt3g: true,
+};
+
 function loadState() {
   try {
     const raw = localStorage.getItem('daybook-tracker-v1');
@@ -821,6 +829,10 @@ function loadState() {
     if (!saved['_m3']) {
       // Phase 3+ Tier 1 complete — mark all Tier 1 UX tasks done
       current = { ...CONFIRMED_DONE_M3, ...current, _m3: true };
+    }
+    if (!saved['_m4']) {
+      // Phase 3+ Tier 2 + Tier 3 complete — mark all remaining UX tasks done
+      current = { ...CONFIRMED_DONE_M4, ...current, _m4: true };
     }
     if (current !== saved) localStorage.setItem('daybook-tracker-v1', JSON.stringify(current));
     return current;

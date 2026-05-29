@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { getDB } from '@/db'
 import { useWalletStore } from '@/stores/wallet.store'
 import { generateId, nowISO, todayISO } from '@/lib/utils'
-import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
+import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal } from '@/types/wallet.types'
 
 // ── DB row types (snake_case from PGlite) ───────────
 
@@ -88,6 +88,52 @@ function mapCategory(row: CategoryRow): Category {
   }
 }
 
+interface BudgetRow {
+  id: string
+  category_id: string
+  limit_amount: number
+  created_at: string
+  updated_at: string
+}
+
+interface RecurringRow {
+  id: string
+  account_id: string
+  amount: number
+  merchant: string
+  type: string
+  category_id: string | null
+  frequency: string
+  next_due_date: string
+  created_at: string
+  updated_at: string
+}
+
+function mapBudget(row: BudgetRow): Budget {
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    limitAmount: row.limit_amount,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function mapRecurring(row: RecurringRow): RecurringTransaction {
+  return {
+    id: row.id,
+    accountId: row.account_id,
+    amount: row.amount,
+    merchant: row.merchant ?? '',
+    type: row.type as TransactionType,
+    categoryId: row.category_id,
+    frequency: row.frequency as RecurrenceFrequency,
+    nextDueDate: row.next_due_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
 // ── Input types ─────────────────────────────────────
 
 interface AccountInput {
@@ -110,6 +156,47 @@ interface TransactionInput {
   categoryId?: string | null
   tag?: string
   importHash?: string
+}
+
+interface BudgetInput {
+  categoryId: string
+  limitAmount: number
+}
+
+interface RecurringInput {
+  accountId: string
+  amount: number
+  merchant?: string
+  type?: TransactionType
+  categoryId?: string | null
+  frequency: RecurrenceFrequency
+  nextDueDate: string
+}
+
+interface GoalInput {
+  name: string
+  targetAmount: number
+  accountId: string
+}
+
+interface GoalRow {
+  id: string
+  name: string
+  target_amount: number
+  account_id: string
+  created_at: string
+  updated_at: string
+}
+
+function mapGoal(row: GoalRow): Goal {
+  return {
+    id: row.id,
+    name: row.name,
+    targetAmount: row.target_amount,
+    accountId: row.account_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
 }
 
 interface TransactionFilters {
@@ -518,6 +605,206 @@ export function useWallet() {
     return imported
   }, [])
 
+  // ── Budget CRUD ─────────────────────────────────
+
+  const loadBudgets = useCallback(async () => {
+    const db = await getDB()
+    const result = await db.query<BudgetRow>('SELECT * FROM budgets ORDER BY created_at ASC')
+    const budgets = result.rows.map(mapBudget)
+    useWalletStore.getState().setBudgets(budgets)
+    return budgets
+  }, [])
+
+  const addBudget = useCallback(async (data: BudgetInput): Promise<Budget> => {
+    const db = await getDB()
+    const id = generateId()
+    const now = nowISO()
+    await db.query(
+      `INSERT INTO budgets (id, category_id, limit_amount, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $4)`,
+      [id, data.categoryId, data.limitAmount, now],
+    )
+    const budget: Budget = { id, categoryId: data.categoryId, limitAmount: data.limitAmount, createdAt: now, updatedAt: now }
+    useWalletStore.getState().addBudget(budget)
+    return budget
+  }, [])
+
+  const updateBudget = useCallback(async (id: string, data: Partial<BudgetInput>): Promise<void> => {
+    const db = await getDB()
+    const now = nowISO()
+    const fields: string[] = ['updated_at = $1']
+    const params: (string | number)[] = [now]
+    let idx = 2
+    if (data.limitAmount !== undefined) { fields.push(`limit_amount = $${idx}`); params.push(data.limitAmount); idx++ }
+    params.push(id)
+    await db.query(`UPDATE budgets SET ${fields.join(', ')} WHERE id = $${idx}`, params)
+    useWalletStore.getState().updateBudget(id, { ...(data.limitAmount !== undefined ? { limitAmount: data.limitAmount } : {}), updatedAt: now })
+  }, [])
+
+  const deleteBudget = useCallback(async (id: string): Promise<void> => {
+    const db = await getDB()
+    await db.query('DELETE FROM budgets WHERE id = $1', [id])
+    useWalletStore.getState().removeBudget(id)
+  }, [])
+
+  /** Returns spending per category for the given month (YYYY-MM), computed from in-memory transactions. */
+  const getMonthlySpending = useCallback((monthYear: string): Map<string, number> => {
+    const { transactions } = useWalletStore.getState()
+    const map = new Map<string, number>()
+    for (const t of transactions) {
+      if (t.type !== 'expense' || !t.categoryId) continue
+      if (!t.date.startsWith(monthYear)) continue
+      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount)
+    }
+    return map
+  }, [])
+
+  // ── Recurring CRUD ───────────────────────────────
+
+  const loadRecurringTransactions = useCallback(async () => {
+    const db = await getDB()
+    const result = await db.query<RecurringRow>(
+      'SELECT * FROM recurring_transactions ORDER BY next_due_date ASC',
+    )
+    const rts = result.rows.map(mapRecurring)
+    useWalletStore.getState().setRecurringTransactions(rts)
+    return rts
+  }, [])
+
+  const addRecurringTransaction = useCallback(async (data: RecurringInput): Promise<RecurringTransaction> => {
+    const db = await getDB()
+    const id = generateId()
+    const now = nowISO()
+    await db.query(
+      `INSERT INTO recurring_transactions
+       (id, account_id, amount, merchant, type, category_id, frequency, next_due_date, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+      [id, data.accountId, data.amount, data.merchant ?? '', data.type ?? 'expense', data.categoryId ?? null, data.frequency, data.nextDueDate, now],
+    )
+    const rt: RecurringTransaction = {
+      id, accountId: data.accountId, amount: data.amount, merchant: data.merchant ?? '',
+      type: data.type ?? 'expense', categoryId: data.categoryId ?? null,
+      frequency: data.frequency, nextDueDate: data.nextDueDate, createdAt: now, updatedAt: now,
+    }
+    useWalletStore.getState().addRecurringTransaction(rt)
+    return rt
+  }, [])
+
+  const updateRecurringTransaction = useCallback(async (id: string, data: Partial<RecurringInput>): Promise<void> => {
+    const db = await getDB()
+    const now = nowISO()
+    const fields: string[] = ['updated_at = $1']
+    const params: (string | number | null)[] = [now]
+    let idx = 2
+    if (data.amount !== undefined) { fields.push(`amount = $${idx}`); params.push(data.amount); idx++ }
+    if (data.merchant !== undefined) { fields.push(`merchant = $${idx}`); params.push(data.merchant); idx++ }
+    if (data.type !== undefined) { fields.push(`type = $${idx}`); params.push(data.type); idx++ }
+    if (data.categoryId !== undefined) { fields.push(`category_id = $${idx}`); params.push(data.categoryId ?? null); idx++ }
+    if (data.frequency !== undefined) { fields.push(`frequency = $${idx}`); params.push(data.frequency); idx++ }
+    if (data.nextDueDate !== undefined) { fields.push(`next_due_date = $${idx}`); params.push(data.nextDueDate); idx++ }
+    if (data.accountId !== undefined) { fields.push(`account_id = $${idx}`); params.push(data.accountId); idx++ }
+    params.push(id)
+    await db.query(`UPDATE recurring_transactions SET ${fields.join(', ')} WHERE id = $${idx}`, params)
+    const storeUpdate: Partial<RecurringTransaction> = { updatedAt: now }
+    if (data.amount !== undefined) storeUpdate.amount = data.amount
+    if (data.merchant !== undefined) storeUpdate.merchant = data.merchant
+    if (data.type !== undefined) storeUpdate.type = data.type
+    if (data.categoryId !== undefined) storeUpdate.categoryId = data.categoryId ?? null
+    if (data.frequency !== undefined) storeUpdate.frequency = data.frequency
+    if (data.nextDueDate !== undefined) storeUpdate.nextDueDate = data.nextDueDate
+    if (data.accountId !== undefined) storeUpdate.accountId = data.accountId
+    useWalletStore.getState().updateRecurringTransaction(id, storeUpdate)
+  }, [])
+
+  const deleteRecurringTransaction = useCallback(async (id: string): Promise<void> => {
+    const db = await getDB()
+    await db.query('DELETE FROM recurring_transactions WHERE id = $1', [id])
+    useWalletStore.getState().removeRecurringTransaction(id)
+  }, [])
+
+  // ── Goal CRUD ────────────────────────────────────
+
+  const loadGoals = useCallback(async () => {
+    const db = await getDB()
+    const result = await db.query<GoalRow>('SELECT * FROM goals ORDER BY created_at ASC')
+    const goals = result.rows.map(mapGoal)
+    useWalletStore.getState().setGoals(goals)
+    return goals
+  }, [])
+
+  const addGoal = useCallback(async (data: GoalInput): Promise<Goal> => {
+    const db = await getDB()
+    const id = generateId()
+    const now = nowISO()
+    await db.query(
+      `INSERT INTO goals (id, name, target_amount, account_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)`,
+      [id, data.name, data.targetAmount, data.accountId, now],
+    )
+    const goal: Goal = { id, name: data.name, targetAmount: data.targetAmount, accountId: data.accountId, createdAt: now, updatedAt: now }
+    useWalletStore.getState().addGoal(goal)
+    return goal
+  }, [])
+
+  const updateGoal = useCallback(async (id: string, data: Partial<GoalInput>): Promise<void> => {
+    const db = await getDB()
+    const now = nowISO()
+    const fields: string[] = ['updated_at = $1']
+    const params: (string | number)[] = [now]
+    let idx = 2
+    if (data.name !== undefined) { fields.push(`name = $${idx}`); params.push(data.name); idx++ }
+    if (data.targetAmount !== undefined) { fields.push(`target_amount = $${idx}`); params.push(data.targetAmount); idx++ }
+    if (data.accountId !== undefined) { fields.push(`account_id = $${idx}`); params.push(data.accountId); idx++ }
+    params.push(id)
+    await db.query(`UPDATE goals SET ${fields.join(', ')} WHERE id = $${idx}`, params)
+    const storeUpdate: Partial<Goal> = { updatedAt: now }
+    if (data.name !== undefined) storeUpdate.name = data.name
+    if (data.targetAmount !== undefined) storeUpdate.targetAmount = data.targetAmount
+    if (data.accountId !== undefined) storeUpdate.accountId = data.accountId
+    useWalletStore.getState().updateGoal(id, storeUpdate)
+  }, [])
+
+  const deleteGoal = useCallback(async (id: string): Promise<void> => {
+    const db = await getDB()
+    await db.query('DELETE FROM goals WHERE id = $1', [id])
+    useWalletStore.getState().removeGoal(id)
+  }, [])
+
+  // ── Export ───────────────────────────────────────
+
+  const exportTransactions = useCallback(async (format: 'csv' | 'json'): Promise<void> => {
+    const db = await getDB()
+
+    interface ExportRow {
+      date: string; merchant: string; description: string; amount: number
+      type: string; category_name: string | null; account_name: string; tag: string
+    }
+
+    const result = await db.query<ExportRow>(
+      `SELECT t.date, t.merchant, t.description, t.amount, t.type,
+              c.name as category_name, a.name as account_name, t.tag
+       FROM transactions t
+       LEFT JOIN categories c ON c.id = t.category_id
+       LEFT JOIN accounts a ON a.id = t.account_id
+       ORDER BY t.date DESC, t.created_at DESC`,
+    )
+
+    const filename = `daybook-transactions-${todayISO()}.${format}`
+
+    if (format === 'csv') {
+      const header = 'date,merchant,description,amount,type,category,account,tag'
+      const rows = result.rows.map((r) =>
+        [r.date, `"${(r.merchant ?? '').replace(/"/g, '""')}"`, `"${(r.description ?? '').replace(/"/g, '""')}"`,
+         r.amount, r.type, `"${(r.category_name ?? '').replace(/"/g, '""')}"`,
+         `"${(r.account_name ?? '').replace(/"/g, '""')}"`, `"${(r.tag ?? '').replace(/"/g, '""')}"`].join(','),
+      )
+      triggerDownload([header, ...rows].join('\n'), filename, 'text/csv')
+    } else {
+      const json = JSON.stringify(result.rows, null, 2)
+      triggerDownload(json, filename, 'application/json')
+    }
+  }, [])
+
   // ── Summary helpers ─────────────────────────────
 
   const getFilteredSummary = useCallback(() => {
@@ -543,6 +830,9 @@ export function useWallet() {
     accounts: store.accounts,
     transactions: store.transactions,
     categories: store.categories,
+    budgets: store.budgets,
+    recurringTransactions: store.recurringTransactions,
+    goals: store.goals,
     filters: store.filters,
     setFilters: store.setFilters,
 
@@ -550,6 +840,9 @@ export function useWallet() {
     loadAccounts,
     loadTransactions,
     loadCategories,
+    loadBudgets,
+    loadRecurringTransactions,
+    loadGoals,
 
     // Balance
     getAccountBalance,
@@ -567,9 +860,40 @@ export function useWallet() {
     // Batch
     importTransactions,
 
+    // Budget CRUD
+    addBudget,
+    updateBudget,
+    deleteBudget,
+    getMonthlySpending,
+
+    // Recurring CRUD
+    addRecurringTransaction,
+    updateRecurringTransaction,
+    deleteRecurringTransaction,
+
+    // Goal CRUD
+    addGoal,
+    updateGoal,
+    deleteGoal,
+
+    // Export
+    exportTransactions,
+
     // Summary
     getFilteredSummary,
   }
 }
 
-export type { AccountInput, TransactionInput, TransactionFilters }
+export type { AccountInput, TransactionInput, TransactionFilters, BudgetInput, RecurringInput }
+
+function triggerDownload(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}

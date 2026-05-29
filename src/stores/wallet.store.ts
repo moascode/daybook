@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Account, Transaction, Category } from '@/types/wallet.types'
+import type { Account, Transaction, Category, Budget, RecurringTransaction, Goal } from '@/types/wallet.types'
 
 interface WalletFilters {
   dateFrom: string
@@ -14,11 +14,17 @@ interface WalletState {
   accounts: Account[]
   transactions: Transaction[]
   categories: Category[]
+  budgets: Budget[]
+  recurringTransactions: RecurringTransaction[]
+  goals: Goal[]
   filters: WalletFilters
 
   setAccounts: (accounts: Account[]) => void
   setTransactions: (transactions: Transaction[]) => void
   setCategories: (categories: Category[]) => void
+  setBudgets: (budgets: Budget[]) => void
+  setRecurringTransactions: (rts: RecurringTransaction[]) => void
+  setGoals: (goals: Goal[]) => void
   setFilters: (filters: Partial<WalletFilters>) => void
   addAccount: (account: Account) => void
   updateAccount: (id: string, updates: Partial<Account>) => void
@@ -26,6 +32,15 @@ interface WalletState {
   addTransaction: (transaction: Transaction) => void
   updateTransaction: (id: string, updates: Partial<Transaction>) => void
   removeTransaction: (id: string) => void
+  addBudget: (budget: Budget) => void
+  updateBudget: (id: string, updates: Partial<Budget>) => void
+  removeBudget: (id: string) => void
+  addRecurringTransaction: (rt: RecurringTransaction) => void
+  updateRecurringTransaction: (id: string, updates: Partial<RecurringTransaction>) => void
+  removeRecurringTransaction: (id: string) => void
+  addGoal: (goal: Goal) => void
+  updateGoal: (id: string, updates: Partial<Goal>) => void
+  removeGoal: (id: string) => void
 }
 
 function getDefaultFilters(): WalletFilters {
@@ -49,11 +64,17 @@ export const useWalletStore = create<WalletState>((set) => ({
   accounts: [],
   transactions: [],
   categories: [],
+  budgets: [],
+  recurringTransactions: [],
+  goals: [],
   filters: getDefaultFilters(),
 
   setAccounts: (accounts) => set({ accounts }),
   setTransactions: (transactions) => set({ transactions }),
   setCategories: (categories) => set({ categories }),
+  setBudgets: (budgets) => set({ budgets }),
+  setRecurringTransactions: (rts) => set({ recurringTransactions: rts }),
+  setGoals: (goals) => set({ goals }),
   setFilters: (updates) =>
     set((s) => ({ filters: { ...s.filters, ...updates } })),
 
@@ -78,4 +99,35 @@ export const useWalletStore = create<WalletState>((set) => ({
     set((s) => ({
       transactions: s.transactions.filter((t) => t.id !== id),
     })),
+
+  addBudget: (budget) =>
+    set((s) => ({ budgets: [...s.budgets, budget] })),
+  updateBudget: (id, updates) =>
+    set((s) => ({
+      budgets: s.budgets.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+    })),
+  removeBudget: (id) =>
+    set((s) => ({ budgets: s.budgets.filter((b) => b.id !== id) })),
+
+  addRecurringTransaction: (rt) =>
+    set((s) => ({ recurringTransactions: [...s.recurringTransactions, rt] })),
+  updateRecurringTransaction: (id, updates) =>
+    set((s) => ({
+      recurringTransactions: s.recurringTransactions.map((r) =>
+        r.id === id ? { ...r, ...updates } : r,
+      ),
+    })),
+  removeRecurringTransaction: (id) =>
+    set((s) => ({
+      recurringTransactions: s.recurringTransactions.filter((r) => r.id !== id),
+    })),
+
+  addGoal: (goal) =>
+    set((s) => ({ goals: [...s.goals, goal] })),
+  updateGoal: (id, updates) =>
+    set((s) => ({
+      goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+    })),
+  removeGoal: (id) =>
+    set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
 }))

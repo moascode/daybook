@@ -700,22 +700,34 @@ chore: update CLAUDE.md with Phase 2 status
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  3+ — Alpha UX Polish
-Phase status:   Tier 1 complete and merged; Tier 2 and 3 queued
+Current phase:  3+ — Alpha UX Polish (Tier 3 complete)
+Phase status:   Tier 1 + Tier 2 + Tier 3 all complete; full e2e suite green
 Last session:   2026-05-28
-Last completed: - Phase 3+ Tier 1 UX improvements shipped (PR #1):
-                    • Task search bar (Ctrl+F, live filter, breadcrumb paths, click-to-navigate)
-                    • Task delete undo (5-sec toast, Undo button, restores full subtree)
-                    • Zoom persist (rootId saved to localStorage, restored on reload)
-                    • Net worth banner (total balance on Accounts page)
-                    • Settings page (/settings): API key, theme, currency; persists to DB
-                    • Toast system (useToastStore + ToastContainer)
-                - 5 new Playwright specs (e2e/07–11): full 171-test suite green
-                - Fixed WalletPage CRUD handlers (stale-closure race condition on tag filter)
-                - tracker.html updated: Phase 3+ added with Tier 1/2/3 sections
-Next task:      Phase 3+ Tier 2 — drag-and-drop reorder, due dates, budget tracking,
-                recurring transactions, data export  (OR skip to Phase 4 for multi-user)
-Blockers:       None — Tier 1 complete, e2e suite green, no known regressions
+Last completed: - Phase 3+ Tier 3 features shipped (un-skipped e2e 16–21):
+                    • Wallet goals (/wallet/goals): savings target linked to an account,
+                      progress bar vs live account balance, full CRUD
+                    • Bill reminders on Dashboard: recurring bills due within 7 days,
+                      "due soon"/days-left badge, dismissible (persists via localStorage)
+                    • Advanced reports (/wallet/reports): year-on-year comparison chart
+                      (recharts) + fully custom date-range transaction view
+                    • Task templates: "Save as template" in BulletNode menu, "Templates"
+                      browser dialog to apply/delete; persisted in task_templates table
+                    • PWA: public/manifest.json + public/sw.js, manifest/theme-color/
+                      apple meta tags in index.html, SW registration in main.tsx
+                    • Mobile-responsive layout: hamburger drawer Sidebar + mobile top bar
+                      in AppShell; no horizontal overflow at 390px
+                - Schema additions: `goals`, `task_templates`
+                - New components: GoalsPage, ReportsPage; Goals/Reports tabs in WalletTabNav
+                - useWallet goal CRUD + useTasks template CRUD; wallet.store goals state
+                - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
+                  helpers.waitForApp now checks <main> (aside is hidden on mobile)
+                - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
+Next task:      Phase 4 — Home Network + Multi-User (Node backend, SQLite file, auth,
+                per-user data) for the v1 milestone
+Blockers:       None — all Tier 3+ tiers complete, 266/266 e2e green.
+                Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
+                test-only `window as any` shims) remain across the codebase; not
+                introduced this session and do not affect typecheck or tests.
 ```
 
 ---

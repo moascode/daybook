@@ -4,10 +4,18 @@ import { useTasksStore } from '@/stores/tasks.store'
 import { BulletNode } from './BulletNode'
 import type { Task } from '@/types/tasks.types'
 
+function dueDateSorter(a: Task, b: Task): number {
+  if (!a.dueDate && !b.dueDate) return a.sortOrder - b.sortOrder
+  if (!a.dueDate) return 1
+  if (!b.dueDate) return -1
+  return a.dueDate.localeCompare(b.dueDate)
+}
+
 interface BulletTreeProps {
   parentId: string | null
   depth: number
   focusId: string | null
+  sortByDue?: boolean
   onUpdate: (id: string, content: string) => void
   onUpdateNote: (id: string, note: string) => void
   onToggleComplete: (id: string) => void
@@ -18,12 +26,15 @@ interface BulletTreeProps {
   onOutdent: (id: string) => void
   onDelete: (id: string) => void
   onZoomIn: (id: string) => void
+  onSetDueDate: (id: string, date: string | null) => void
+  onSaveAsTemplate: (task: Task) => void
 }
 
 export function BulletTree({
   parentId,
   depth,
   focusId,
+  sortByDue = false,
   onUpdate,
   onUpdateNote,
   onToggleComplete,
@@ -34,6 +45,8 @@ export function BulletTree({
   onOutdent,
   onDelete,
   onZoomIn,
+  onSetDueDate,
+  onSaveAsTemplate,
 }: BulletTreeProps) {
   const tasks = useTasksStore((s) => s.tasks)
   const hideCompleted = useTasksStore((s) => s.hideCompleted)
@@ -46,8 +59,10 @@ export function BulletTree({
           if (hideCompleted && t.isCompleted) return false
           return true
         })
-        .sort((a, b) => a.sortOrder - b.sortOrder),
-    [tasks, hideCompleted],
+        .sort((a, b) =>
+          sortByDue ? dueDateSorter(a, b) : a.sortOrder - b.sortOrder,
+        ),
+    [tasks, hideCompleted, sortByDue],
   )
 
   const checkHasChildren = useCallback(
@@ -93,6 +108,8 @@ export function BulletTree({
               onOutdent={onOutdent}
               onDelete={onDelete}
               onZoomIn={onZoomIn}
+              onSetDueDate={onSetDueDate}
+              onSaveAsTemplate={onSaveAsTemplate}
               autoFocus={focusId === task.id}
             />
 
@@ -101,6 +118,7 @@ export function BulletTree({
                 parentId={task.id}
                 depth={depth + 1}
                 focusId={focusId}
+                sortByDue={sortByDue}
                 onUpdate={onUpdate}
                 onUpdateNote={onUpdateNote}
                 onToggleComplete={onToggleComplete}
@@ -111,6 +129,8 @@ export function BulletTree({
                 onOutdent={onOutdent}
                 onDelete={onDelete}
                 onZoomIn={onZoomIn}
+                onSetDueDate={onSetDueDate}
+                onSaveAsTemplate={onSaveAsTemplate}
               />
             )}
           </div>

@@ -35,6 +35,38 @@ export interface Category {
   type: 'income' | 'expense' | 'both'
 }
 
+export interface Budget {
+  id: string
+  categoryId: string
+  limitAmount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type RecurrenceFrequency = 'weekly' | 'monthly'
+
+export interface RecurringTransaction {
+  id: string
+  accountId: string
+  amount: number
+  merchant: string
+  type: TransactionType
+  categoryId: string | null
+  frequency: RecurrenceFrequency
+  nextDueDate: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Goal {
+  id: string
+  name: string
+  targetAmount: number
+  accountId: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface DailyGroup {
   date: string
   transactions: Transaction[]

@@ -6,6 +6,7 @@ export interface Task {
   isCompleted: boolean
   isCollapsed: boolean
   sortOrder: number
+  dueDate: string | null
   createdAt: string
   updatedAt: string
   children?: Task[]

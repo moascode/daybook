@@ -11,9 +11,11 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
-import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare } from 'lucide-react'
+import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare, CalendarClock, BookCopy } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
+import { Input } from '@/components/ui/Input'
 import { useTasks } from '@/hooks/useTasks'
 import { useTasksStore } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
@@ -57,6 +59,13 @@ function highlight(text: string, query: string): React.ReactNode {
 
 // ── Component ─────────────────────────────────────
 
+interface TaskTemplate {
+  id: string
+  name: string
+  content: string
+  createdAt: string
+}
+
 export function TasksPage() {
   const {
     tasks,
@@ -73,6 +82,10 @@ export function TasksPage() {
     indentTask,
     outdentTask,
     getBreadcrumb,
+    loadTemplates,
+    saveTemplate,
+    deleteTemplate,
+    applyTemplate,
   } = useTasks()
 
   const { addToast, removeToast } = useToastStore()
@@ -80,6 +93,15 @@ export function TasksPage() {
   const [loaded, setLoaded] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [sortByDue, setSortByDue] = useState(false)
+
+  // Template state
+  const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
+  const [pendingTemplateName, setPendingTemplateName] = useState('')
+  const [templateTaskToSave, setTemplateTaskToSave] = useState<Task | null>(null)
+  const [templatesDialogOpen, setTemplatesDialogOpen] = useState(false)
+  const [templates, setTemplates] = useState<TaskTemplate[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
 
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -203,10 +225,51 @@ export function TasksPage() {
 
   const handleZoomIn = useCallback((id: string) => { setRootId(id) }, [setRootId])
 
+  const handleSetDueDate = useCallback(
+    (id: string, date: string | null) => updateTask(id, { dueDate: date }),
+    [updateTask],
+  )
+
   const handleAddRootTask = useCallback(async () => {
     const newTask = await addTask('', rootId)
     setFocusId(newTask.id)
   }, [addTask, rootId])
+
+  const handleSaveAsTemplate = useCallback((task: Task) => {
+    setTemplateTaskToSave(task)
+    setPendingTemplateName(task.content || '')
+    setSaveTemplateDialogOpen(true)
+  }, [])
+
+  const handleConfirmSaveTemplate = useCallback(async () => {
+    if (!pendingTemplateName.trim() || !templateTaskToSave) return
+    await saveTemplate(pendingTemplateName.trim(), templateTaskToSave.content)
+    setSaveTemplateDialogOpen(false)
+    setTemplateTaskToSave(null)
+    setPendingTemplateName('')
+    addToast({ message: 'Template saved', duration: 3000 })
+  }, [pendingTemplateName, templateTaskToSave, saveTemplate, addToast])
+
+  const handleOpenTemplates = useCallback(async () => {
+    const loaded = await loadTemplates()
+    setTemplates(loaded)
+    setSelectedTemplateId(null)
+    setTemplatesDialogOpen(true)
+  }, [loadTemplates])
+
+  const handleApplyTemplate = useCallback(async () => {
+    const tpl = templates.find((t) => t.id === selectedTemplateId)
+    if (!tpl) return
+    const newTask = await applyTemplate(tpl, rootId)
+    setFocusId(newTask.id)
+    setTemplatesDialogOpen(false)
+  }, [templates, selectedTemplateId, applyTemplate, rootId])
+
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    await deleteTemplate(id)
+    setTemplates((prev) => prev.filter((t) => t.id !== id))
+    if (selectedTemplateId === id) setSelectedTemplateId(null)
+  }, [deleteTemplate, selectedTemplateId])
 
   const handleToggleHideCompleted = useCallback(
     () => setHideCompleted(!hideCompleted),
@@ -346,12 +409,35 @@ export function TasksPage() {
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-1.5">
           <button
+            onClick={() => setSortByDue((v) => !v)}
+            title={sortByDue ? 'Revert to default order' : 'Sort by due date'}
+            className={cn(
+              'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+              sortByDue
+                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+            )}
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+            Sort by due date
+          </button>
+
+          <button
             onClick={handleToggleHideCompleted}
             title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
             className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
           >
             {hideCompleted ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
             {hideCompleted ? 'Show done' : 'Hide done'}
+          </button>
+
+          <button
+            onClick={handleOpenTemplates}
+            title="Apply a saved task template"
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+          >
+            <BookCopy className="h-3.5 w-3.5" />
+            Templates
           </button>
 
           <Button size="sm" onClick={handleAddRootTask}>
@@ -468,6 +554,7 @@ export function TasksPage() {
               parentId={rootId}
               depth={0}
               focusId={focusId}
+              sortByDue={sortByDue}
               onUpdate={handleUpdate}
               onUpdateNote={handleUpdateNote}
               onToggleComplete={handleToggleComplete}
@@ -478,10 +565,75 @@ export function TasksPage() {
               onOutdent={handleOutdent}
               onDelete={handleDelete}
               onZoomIn={handleZoomIn}
+              onSetDueDate={handleSetDueDate}
+              onSaveAsTemplate={handleSaveAsTemplate}
             />
           </DndContext>
         )
       )}
+      {/* Save as template dialog */}
+      <Modal
+        open={saveTemplateDialogOpen}
+        onOpenChange={(open) => { if (!open) { setSaveTemplateDialogOpen(false); setTemplateTaskToSave(null) } }}
+        title="Save as template"
+        className="max-w-sm"
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Template name"
+            placeholder="e.g. Weekly Review"
+            value={pendingTemplateName}
+            onChange={(e) => setPendingTemplateName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setSaveTemplateDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleConfirmSaveTemplate}>Save</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Templates browser dialog */}
+      <Modal
+        open={templatesDialogOpen}
+        onOpenChange={(open) => { if (!open) setTemplatesDialogOpen(false) }}
+        title="Templates"
+        className="max-w-sm"
+      >
+        <div className="flex flex-col gap-3">
+          {templates.length === 0 ? (
+            <p className="py-6 text-center text-sm text-gray-400">
+              No templates yet. Save your first template from the task menu.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1 max-h-64 overflow-y-auto">
+              {templates.map((tpl) => (
+                <div
+                  key={tpl.id}
+                  className={cn(
+                    'flex items-center justify-between rounded-lg px-3 py-2 cursor-pointer transition-colors',
+                    selectedTemplateId === tpl.id ? 'bg-brand-50 text-brand-700' : 'hover:bg-gray-50',
+                  )}
+                  onClick={() => setSelectedTemplateId(tpl.id)}
+                >
+                  <span className="text-sm font-medium truncate">{tpl.name}</span>
+                  <button
+                    className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id) }}
+                    aria-label={`Delete ${tpl.name}`}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" size="sm" onClick={() => setTemplatesDialogOpen(false)}>Cancel</Button>
+            <Button size="sm" disabled={!selectedTemplateId} onClick={handleApplyTemplate}>Apply</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
