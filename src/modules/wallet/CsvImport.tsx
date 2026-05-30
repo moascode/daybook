@@ -12,6 +12,13 @@ import type { TransactionInput } from '@/hooks/useWallet'
 
 type ImportStep = 'upload' | 'mapping' | 'review' | 'done'
 
+declare global {
+  interface Window {
+    /** DEV/E2E-only hook so Playwright can drive file selection on the hidden input. */
+    __testCsvFileSelect?: (file: File) => void
+  }
+}
+
 export function CsvImport() {
   const navigate = useNavigate()
   const { accounts, loadAccounts, loadCategories, categories, importTransactions, setFilters } = useWallet()
@@ -51,16 +58,16 @@ export function CsvImport() {
   // Expose file handler for E2E testing (Playwright can't reliably trigger React onChange on hidden file inputs)
   useEffect(() => {
     if (import.meta.env.DEV) {
-      (window as any).__testCsvFileSelect = (file: File) => handleFileSelect(file)
-      return () => { delete (window as any).__testCsvFileSelect }
+      window.__testCsvFileSelect = (file: File) => handleFileSelect(file)
+      return () => { delete window.__testCsvFileSelect }
     }
   }, [handleFileSelect])
 
-  useEffect(() => {
-    if (accounts.length > 0 && !selectedAccountId) {
-      setSelectedAccountId(accounts[0].id)
-    }
-  }, [accounts, selectedAccountId])
+  // Default to the first account once accounts load — converging conditional
+  // adjusted during render (no effect needed).
+  if (accounts.length > 0 && !selectedAccountId) {
+    setSelectedAccountId(accounts[0].id)
+  }
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {

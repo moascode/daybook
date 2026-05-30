@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Plus, Wallet, TrendingUp, TrendingDown, Download } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -26,7 +26,6 @@ export function WalletPage() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
-    getFilteredSummary,
     exportTransactions,
   } = useWallet()
 
@@ -34,9 +33,22 @@ export function WalletPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
-  const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, net: 0 })
+  // Keep the latest filters in a ref so the load-on-mutation handlers below can
+  // read them without depending on `filters` (which would recreate them).
   const filtersRef = useRef(filters)
-  filtersRef.current = filters
+  useEffect(() => { filtersRef.current = filters }, [filters])
+
+  // Income/expense/net for the currently loaded transactions — derived state,
+  // recomputed whenever the transaction list changes (transfers excluded).
+  const summary = useMemo(() => {
+    let totalIncome = 0
+    let totalExpense = 0
+    for (const t of transactions) {
+      if (t.type === 'income') totalIncome += t.amount
+      else if (t.type === 'expense') totalExpense += t.amount
+    }
+    return { totalIncome, totalExpense, net: totalIncome - totalExpense }
+  }, [transactions])
 
   useEffect(() => {
     const accountParam = searchParams.get('account')
@@ -49,12 +61,8 @@ export function WalletPage() {
   }, [loadAccounts, loadCategories])
 
   useEffect(() => {
-    loadTransactions(filters).then(() => setSummary(getFilteredSummary()))
-  }, [filters, loadTransactions, getFilteredSummary])
-
-  useEffect(() => {
-    setSummary(getFilteredSummary())
-  }, [transactions, getFilteredSummary])
+    loadTransactions(filters)
+  }, [filters, loadTransactions])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     await addTransaction(data)

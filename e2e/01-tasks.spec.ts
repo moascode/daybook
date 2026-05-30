@@ -138,7 +138,7 @@ test('complete also works via the options menu', async () => {
 test('indent task via Tab — makes it a child of the task above', async () => {
   const callBankNode = bulletNodeFor(page, 'Call the bank')
   const taskId = await callBankNode.getAttribute('data-task-id')
-  await page.evaluate(async (id) => (window as any).__testIndentTask(id), taskId)
+  await page.evaluate(async (id) => window.__testIndentTask(id), taskId)
   await page.waitForTimeout(600)
   // "Buy groceries" now has children → collapse chevron is active (not pointer-events-none)
   const groceriesNode = bulletNodeFor(page, 'Buy groceries')
@@ -162,7 +162,7 @@ test('expand parent reveals children again', async () => {
   const groceriesId = await groceriesNode.getAttribute('data-task-id')
   // Use test helper — clicking the Expand button triggers a PGlite write that can hang
   // after the indent test's DB operations.
-  await page.evaluate(async (id) => (window as any).__testToggleCollapse(id), groceriesId)
+  await page.evaluate(async (id) => window.__testToggleCollapse(id), groceriesId)
   await page.waitForTimeout(500)
   await expect(
     page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Call the bank' }),
@@ -215,7 +215,7 @@ test('navigate home after zoom test', async () => {
 test('outdent task via Shift+Tab — moves back to root', async () => {
   const callBankNode = bulletNodeFor(page, 'Call the bank')
   const taskId = await callBankNode.getAttribute('data-task-id')
-  await page.evaluate((id) => (window as any).__testOutdentTask(id), taskId)
+  await page.evaluate((id) => window.__testOutdentTask(id), taskId)
   await page.waitForTimeout(400)
   const groceriesNode = bulletNodeFor(page, 'Buy groceries')
   // Button is always in DOM; check CSS class for "no children" state instead of visibility
@@ -368,7 +368,6 @@ test('drag to reorder tasks within the same level', async () => {
   ).toBeVisible()
 
   const nodeA = bulletNodeFor(page, 'Drag target A')
-  const nodeB = bulletNodeFor(page, 'Drag target B')
 
   // Verify initial order: A appears before B
   const textsBefore = await page.getByRole('textbox', { name: 'Task content' }).allInnerTexts()
@@ -386,14 +385,14 @@ test('drag to reorder tasks within the same level', async () => {
   // pattern as indent/outdent/collapse — call updateTask programmatically to change sort
   // order and verify the DOM reflects the new order.
   // __testUpdateTask supports { sortOrder } (see useTasks.ts updateTask signature).
-  const tasks = await page.evaluate(() => (window as any).__testGetTasks())
+  const tasks = await page.evaluate(() => window.__testGetTasks())
   const taskA = tasks.find((t: { content: string }) => t.content === 'Drag target A')
   const taskB = tasks.find((t: { content: string }) => t.content === 'Drag target B')
 
   if (taskA && taskB) {
     await page.evaluate(
       ({ id, sortOrder }: { id: string; sortOrder: number }) =>
-        (window as any).__testUpdateTask(id, { sortOrder }),
+        window.__testUpdateTask(id, { sortOrder }),
       { id: taskA.id, sortOrder: taskB.sortOrder + 1.0 },
     )
     await page.waitForTimeout(400)

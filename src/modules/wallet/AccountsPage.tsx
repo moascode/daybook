@@ -20,9 +20,9 @@ export function AccountsPage() {
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
 
-  // Compute net worth whenever accounts list changes
+  // Compute net worth whenever accounts list changes. Promise.all([]) resolves
+  // to [] → reduces to 0, so the empty case needs no special handling.
   useEffect(() => {
-    if (accounts.length === 0) { setNetWorth(0); return }
     let cancelled = false
     Promise.all(accounts.map((a) => getAccountBalance(a.id))).then((balances) => {
       if (!cancelled) setNetWorth(balances.reduce((sum, b) => sum + b, 0))

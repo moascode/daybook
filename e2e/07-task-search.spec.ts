@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, openTaskMenu } from './helpers'
+import { newAppPage } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -150,7 +150,7 @@ test('search finds tasks nested under other tasks (cross-level)', async () => {
     has: page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Beta reminder note' }),
   })
   const betaId = await betaNode.getAttribute('data-task-id')
-  await page.evaluate(async (id) => (window as any).__testIndentTask(id), betaId)
+  await page.evaluate(async (id) => window.__testIndentTask(id), betaId)
   await page.waitForTimeout(500)
 
   // Now search from home level — should still find "Beta" even though it's nested
