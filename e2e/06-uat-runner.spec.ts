@@ -38,7 +38,6 @@ test('shows test suites in pending state before run', async () => {
 })
 
 test('summary shows the total test count before run', async () => {
-  const totalEl = page.locator('div').filter({ hasText: /^\d+$/ }).first()
   // At least 30 tests are defined in the UAT suite
   const totalText = await page.locator('p.text-xl.font-bold').first().textContent()
   expect(parseInt(totalText ?? '0')).toBeGreaterThanOrEqual(30)

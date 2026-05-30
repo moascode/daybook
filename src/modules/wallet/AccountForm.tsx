@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -63,13 +63,19 @@ function getInitialState(account?: Account | null): AccountFormData {
 export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFormProps) {
   const [form, setForm] = useState<AccountFormData>(getInitialState(account))
   const [error, setError] = useState('')
+  const [prevOpen, setPrevOpen] = useState(open)
+  const [prevAccount, setPrevAccount] = useState(account)
 
-  useEffect(() => {
+  // Reset the form to the (re)opened account's values — adjust state during
+  // render when open/account changes, rather than in an effect.
+  if (open !== prevOpen || account !== prevAccount) {
+    setPrevOpen(open)
+    setPrevAccount(account)
     if (open) {
       setForm(getInitialState(account))
       setError('')
     }
-  }, [open, account])
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

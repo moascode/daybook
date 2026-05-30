@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -65,13 +65,21 @@ export function TransactionForm({
     getInitialState(transaction, defaultAccountId)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [prevOpen, setPrevOpen] = useState(open)
+  const [prevTransaction, setPrevTransaction] = useState(transaction)
+  const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
 
-  useEffect(() => {
+  // Reset the form when the modal (re)opens or its inputs change — adjust state
+  // during render rather than in an effect.
+  if (open !== prevOpen || transaction !== prevTransaction || defaultAccountId !== prevDefaultAccountId) {
+    setPrevOpen(open)
+    setPrevTransaction(transaction)
+    setPrevDefaultAccountId(defaultAccountId)
     if (open) {
       setForm(getInitialState(transaction, defaultAccountId))
       setErrors({})
     }
-  }, [open, transaction, defaultAccountId])
+  }
 
   // Filter categories based on transaction type
   const filteredCategories = categories.filter((c) => {

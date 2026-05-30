@@ -72,9 +72,9 @@ export default function App() {
       root.classList.remove('dark')
     } else {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      mq.matches ? root.classList.add('dark') : root.classList.remove('dark')
+      root.classList.toggle('dark', mq.matches)
       const handler = (e: MediaQueryListEvent) => {
-        e.matches ? root.classList.add('dark') : root.classList.remove('dark')
+        root.classList.toggle('dark', e.matches)
       }
       mq.addEventListener('change', handler)
       return () => mq.removeEventListener('change', handler)

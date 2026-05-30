@@ -770,8 +770,30 @@ Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending revie
 Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
-Last session:   2026-05-29
-Last completed: - Phase 4 full adversarial review (4 agents) round 2 — fixes:
+Last session:   2026-05-30
+Last completed: - Release management + CI/CD (branch
+                  claude/release-management-cicd-dMkPq). See docs/ci-cd.md.
+                    • CI: .github/workflows/ci.yml — typecheck (client+server),
+                      lint, build, full Playwright e2e on every PR/push to main;
+                      uploads the HTML report; cancels superseded runs. Replaced
+                      the standalone playwright.yml (folded in).
+                    • Release: .github/workflows/release.yml — on a vX.Y.Z tag,
+                      builds + e2e-gates, packages a versioned artifact, and
+                      publishes a GitHub Release (tarball + .sha256, auto notes).
+                    • scripts/package-release.sh: assembles a self-contained
+                      artifact (built dist/ + server TS + manifests + infra tool +
+                      VERSION manifest); excludes server/data; emits sha256.
+                      Verified locally end-to-end (build → tar → checksum OK).
+                    • Deploy tool: new `deploy [tag]` + `rollback` commands in
+                      infra/daybook — pulls the release artifact from the GitHub
+                      API (anonymous; optional GITHUB_TOKEN), verifies checksum, backs up
+                      (.daybook/backups, keeps 5), swaps dist/+server/, npm ci
+                      (rebuilds native modules), restarts the launchd service.
+                      Refactored cmd_reload to share restart_service().
+                    • Docs: docs/ci-cd.md (CI, versioning, cutting a release,
+                      artifact layout, deploy/rollback, secrets, troubleshooting).
+                    • .gitignore: dist-release/. bash -n clean on both scripts.
+                - Phase 4 full adversarial review (4 agents) round 2 — fixes:
                     • CsvImport: wrap importTransactions in try/catch/finally +
                       error toast (was a stuck spinner + unhandled rejection on
                       atomic-import failure). api.ts: 401 on a non-/auth request
