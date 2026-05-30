@@ -786,7 +786,7 @@ Last completed: - Release management + CI/CD (branch
                       Verified locally end-to-end (build → tar → checksum OK).
                     • Deploy tool: new `deploy [tag]` + `rollback` commands in
                       infra/daybook — pulls the release artifact from the GitHub
-                      API (GITHUB_TOKEN, private repo), verifies checksum, backs up
+                      API (anonymous; optional GITHUB_TOKEN), verifies checksum, backs up
                       (.daybook/backups, keeps 5), swaps dist/+server/, npm ci
                       (rebuilds native modules), restarts the launchd service.
                       Refactored cmd_reload to share restart_service().

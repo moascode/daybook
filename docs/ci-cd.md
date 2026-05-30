@@ -124,16 +124,15 @@ Deployment pulls a prebuilt release artifact — no building on the Mac.
 
 ### One-time setup
 
-The repo is **private**, so downloading release assets needs a GitHub token.
-Create a fine-grained or classic token with read access to `moascode/daybook`
-(`contents: read`) and export it:
+The repo is **public**, so `deploy` downloads release assets anonymously — no
+setup required. A token is optional: it raises the GitHub API rate limit and
+becomes necessary only if the repo is ever made private. To use one, create a
+token with read access to `moascode/daybook` (`contents: read`) and export it
+(e.g. in `~/.zshrc`):
 
 ```bash
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx   # optional
 ```
-
-Put it in your shell profile (`~/.zshrc`) so it's always available, or prefix
-the deploy command with it.
 
 ### Deploy
 
@@ -197,7 +196,7 @@ There are two ways to update the Mac. **`deploy` is the recommended path.**
 
 | Name | Where | Purpose |
 |---|---|---|
-| `GITHUB_TOKEN` | Mac shell env | `deploy` downloads private release assets. CI provides its own automatically. |
+| `GITHUB_TOKEN` | Mac shell env | Optional for `deploy` (repo is public — anonymous works). Raises the API rate limit; required only if the repo goes private. CI provides its own automatically. |
 | `SESSION_SECRET` | launchd service env | Signs session cookies. `infra/daybook` generates and persists one in `.daybook/session-secret`; the service refuses to start in production without it. |
 | `DAYBOOK_REPO` | optional Mac env | Override the GitHub repo for `deploy` (default `moascode/daybook`). |
 
@@ -210,8 +209,8 @@ Runtime files (`.daybook/`, including backups, pidfile, log, session secret),
 
 | Symptom | Fix |
 |---|---|
-| `deploy`: "GITHUB_TOKEN not set" | Export a token with read access to the repo. |
-| `deploy`: "Release not found" | Check the tag exists and the token can read the repo. |
+| `deploy`: "Release not found" | Check the tag exists; if the repo is private, export a `GITHUB_TOKEN` with read access. |
+| `deploy`: hitting GitHub rate limits | Export a `GITHUB_TOKEN` to raise the anonymous API limit. |
 | `deploy`: "Checksum verification failed" | The download was corrupt/partial — re-run `deploy`. |
 | Native module errors after deploy | Ensure Xcode CLT is installed (`xcode-select --install`); re-run `deploy` (it runs `npm ci`). |
 | Service didn't restart | `infra/daybook status`; check `infra/daybook logs`. |

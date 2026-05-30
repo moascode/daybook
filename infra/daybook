@@ -30,8 +30,8 @@
 # Environment overrides (optional):
 #   PORT=3001          Port to serve on
 #   HOST=0.0.0.0       Interface to bind (0.0.0.0 = all; use 127.0.0.1 to keep it local)
-#   GITHUB_TOKEN=…     GitHub token for `deploy` (required — repo is private).
-#                      A token with `repo` (read) / `contents:read` scope works.
+#   GITHUB_TOKEN=…     Optional GitHub token for `deploy`. Not needed for a
+#                      public repo; raises the API rate limit / required if private.
 #   DAYBOOK_REPO=…     Override the GitHub repo (default: moascode/daybook)
 #
 set -euo pipefail
@@ -329,7 +329,10 @@ cmd_deploy() {
   require_node
   require_curl
   command -v npm >/dev/null 2>&1 || die "npm not found."
-  [ -n "$GITHUB_TOKEN" ] || die "GITHUB_TOKEN not set. Export a GitHub token with read access to $REPO."
+
+  # Public repo: a token is optional (anonymous downloads work). It only raises
+  # the GitHub API rate limit and is needed if the repo is ever made private.
+  [ -n "$GITHUB_TOKEN" ] || info "No GITHUB_TOKEN set — using anonymous GitHub access (fine for a public repo)."
 
   local tag="${1:-}"
   local tmp; tmp="$(mktemp -d)"
