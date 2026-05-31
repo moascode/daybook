@@ -25,6 +25,9 @@
 #   run                Run the server in the FOREGROUND (used by launchd; Ctrl-C to stop)
 #   install-service    Install a launchd service so it starts on boot + auto-restarts
 #   uninstall-service  Remove the launchd service
+#   setup-lan          Set up daybook.local (mDNS hostname + pf port 80→3001 redirect)
+#                      Requires sudo. Makes http://daybook.local work from any device.
+#   teardown-lan       Remove the daybook.local setup (undo setup-lan)
 #   help               Show this help
 #
 # Environment overrides (optional):
@@ -49,6 +52,12 @@ PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 # the service log lives in the standard, unprotected ~/Library/Logs.
 SERVICE_LOG="$HOME/Library/Logs/daybook.log"
 BACKUP_DIR="$RUN_DIR/backups"
+
+# LAN domain setup constants.
+PF_ANCHOR_FILE="/etc/pf.anchors/daybook"
+PF_DAEMON_PLIST="/Library/LaunchDaemons/com.daybook.pf.plist"
+PF_DAEMON_LABEL="com.daybook.pf"
+LAN_HOSTNAME="daybook"
 
 # GitHub release source for `deploy`.
 REPO="${DAYBOOK_REPO:-moascode/daybook}"
@@ -289,6 +298,117 @@ cmd_up() {
   cmd_start
 }
 
+# ── LAN domain setup (daybook.local → port 80 → 3001) ───────────────────────
+cmd_setup_lan() {
+  # Re-exec as root if needed — launchd daemon + pf rules require it.
+  if [ "$(id -u)" -ne 0 ]; then
+    info "LAN setup needs sudo for firewall rules and hostname change…"
+    exec sudo "$0" setup-lan
+  fi
+
+  local ip; ip="$(lan_ip)"
+
+  # 1. Set the Bonjour (mDNS) hostname so daybook.local resolves on the LAN.
+  local cur_host
+  cur_host="$(scutil --get LocalHostName 2>/dev/null || echo '')"
+  if [ "$cur_host" != "$LAN_HOSTNAME" ]; then
+    info "Setting Bonjour hostname: ${cur_host:-<unset>} → $LAN_HOSTNAME"
+    scutil --set LocalHostName "$LAN_HOSTNAME"
+    ok "Bonjour hostname set → ${LAN_HOSTNAME}.local"
+  else
+    ok "Bonjour hostname already: ${LAN_HOSTNAME}.local"
+  fi
+
+  # 2. Write pf anchor: redirect :80 → :3001 on all active interfaces.
+  info "Writing pf redirect rules → $PF_ANCHOR_FILE"
+  {
+    echo "rdr pass on lo0 proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+    # Cover the active Wi-Fi / Ethernet interface.
+    local iface
+    for iface in en0 en1; do
+      ipconfig getifaddr "$iface" >/dev/null 2>&1 && \
+        echo "rdr pass on $iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+    done
+    # Also cover whatever the default route uses (catches USB-C Ethernet etc.)
+    local def_iface
+    def_iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
+    if [ -n "$def_iface" ] && [ "$def_iface" != "en0" ] && [ "$def_iface" != "en1" ] && [ "$def_iface" != "lo0" ]; then
+      echo "rdr pass on $def_iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+    fi
+  } > "$PF_ANCHOR_FILE"
+
+  # 3. Patch /etc/pf.conf to reference our anchor (idempotent).
+  if ! grep -q 'rdr-anchor "daybook"' /etc/pf.conf 2>/dev/null; then
+    info "Patching /etc/pf.conf to include daybook anchor…"
+    printf '\n# daybook LAN redirect\nrdr-anchor "daybook"\nanchor "daybook"\n' >> /etc/pf.conf
+    ok "pf.conf updated."
+  fi
+
+  # 4. Enable pf and load our anchor into the running instance.
+  pfctl -ef /etc/pf.conf 2>/dev/null || true   # (re)load main ruleset + enable
+  pfctl -a daybook -f "$PF_ANCHOR_FILE" 2>/dev/null && \
+    ok "pf rules loaded (port 80 → $PORT)." || \
+    warn "pf anchor load returned non-zero — rules may still be active."
+
+  # 5. Install a root LaunchDaemon so the redirect survives reboots.
+  info "Installing LaunchDaemon → $PF_DAEMON_PLIST"
+  local script_abs; script_abs="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  cat > "$PF_DAEMON_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$PF_DAEMON_LABEL</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>/sbin/pfctl -ef /etc/pf.conf 2&gt;/dev/null; /sbin/pfctl -a daybook -f $PF_ANCHOR_FILE 2&gt;/dev/null; true</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StandardErrorPath</key><string>/var/log/daybook-pf.log</string>
+</dict>
+</plist>
+PLIST
+  launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
+  launchctl load  "$PF_DAEMON_PLIST"
+  ok "LaunchDaemon installed (rules persist on reboot)."
+
+  printf '\n%s\n' "${c_bold}┌─ daybook.local is ready ─────────────────────────────┐${c_reset}"
+  printf   '%s\n' "  On this Mac:    ${c_green}http://daybook.local${c_reset}"
+  printf   '%s\n' "  On iPhone/iPad: ${c_green}http://daybook.local${c_reset}  (Bonjour/mDNS)"
+  printf   '%s\n' "  Fallback IP:    http://$ip"
+  printf   '%s\n' "${c_bold}└──────────────────────────────────────────────────────┘${c_reset}"
+  printf '\n%s\n' "${c_dim}Android note: .local mDNS may be blocked — use the IP above or add a router DNS entry for 'daybook' → $ip${c_reset}"
+}
+
+cmd_teardown_lan() {
+  if [ "$(id -u)" -ne 0 ]; then
+    info "Teardown needs sudo…"
+    exec sudo "$0" teardown-lan
+  fi
+
+  if [ -f "$PF_DAEMON_PLIST" ]; then
+    launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
+    rm -f "$PF_DAEMON_PLIST"
+    ok "LaunchDaemon removed."
+  else
+    warn "No LaunchDaemon found at $PF_DAEMON_PLIST"
+  fi
+
+  pfctl -a daybook -F all 2>/dev/null || true
+  rm -f "$PF_ANCHOR_FILE"
+  ok "pf rules flushed."
+
+  if grep -q '# daybook LAN redirect' /etc/pf.conf 2>/dev/null; then
+    sed -i '' '/# daybook LAN redirect/,/anchor "daybook"/d' /etc/pf.conf
+    ok "pf.conf restored."
+  fi
+
+  warn "Bonjour hostname '${LAN_HOSTNAME}' left as-is."
+  warn "To restore original: sudo scutil --set LocalHostName <your-mac-name>"
+}
+
 # ── Release deployment (pull a built artifact from GitHub) ───────────────────
 require_curl() { command -v curl >/dev/null 2>&1 || die "curl not found."; }
 
@@ -524,7 +644,7 @@ cmd_uninstall_service() {
 }
 
 cmd_help() {
-  sed -n '3,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -545,6 +665,8 @@ case "${1:-help}" in
   run)               cmd_run ;;
   install-service)   cmd_install_service ;;
   uninstall-service) cmd_uninstall_service ;;
+  setup-lan)         cmd_setup_lan ;;
+  teardown-lan)      cmd_teardown_lan ;;
   help|-h|--help)    cmd_help ;;
   *)                 err "Unknown command: $1"; echo; cmd_help; exit 1 ;;
 esac
