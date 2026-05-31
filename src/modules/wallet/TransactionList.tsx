@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft, Pencil, Copy } from 'lucide-react'
+import { Trash2, ArrowRightLeft, Pencil, Scissors } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -182,8 +182,9 @@ function TransactionRow({
             size="sm"
             onClick={() => onSplit(transaction)}
             aria-label="Split transaction"
+            data-testid="split-transaction-btn"
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Scissors className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"

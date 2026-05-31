@@ -9,6 +9,8 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
+import { SplitTransactionModal } from '@/modules/wallet/SplitTransactionModal'
+import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
@@ -58,6 +60,7 @@ export function WalletPage() {
   const [searchParams] = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [splitOpen, setSplitOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
@@ -165,20 +168,6 @@ export function WalletPage() {
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
 
-  // Stable prefill object — only recreates when splitSource identity changes,
-  // not on every WalletPage re-render. Prevents mid-session form resets.
-  const splitPrefill = useMemo(() => splitSource ? {
-    accountId: splitSource.accountId,
-    destinationAccountId: splitSource.destinationAccountId,
-    date: splitSource.date,
-    merchant: splitSource.merchant,
-    description: splitSource.description,
-    amount: splitSource.amount,
-    type: splitSource.type,
-    categoryId: splitSource.categoryId,
-    tags: splitSource.tags,
-  } : undefined, [splitSource])
-
   function openEditForm(transaction: Transaction) {
     setSplitSource(null)
     setEditingTransaction(transaction)
@@ -192,10 +181,18 @@ export function WalletPage() {
   }
 
   function openSplitForm(transaction: Transaction) {
-    setEditingTransaction(null)
     setSplitSource(transaction)
-    setFormOpen(true)
+    setSplitOpen(true)
   }
+
+  const handleSplitConfirm = useCallback(async (parts: [TransactionFormData, TransactionFormData]) => {
+    if (!splitSource) return
+    await addTransaction(parts[0])
+    await addTransaction(parts[1])
+    await deleteTransaction(splitSource.id)
+    await loadTransactions(filtersRef.current)
+    await loadNetWorth()
+  }, [splitSource, addTransaction, deleteTransaction, loadTransactions, loadNetWorth])
 
   function toggleSelectMode() {
     setSelectMode((m) => !m)
@@ -219,9 +216,8 @@ export function WalletPage() {
     }
   }
 
-  const handleExport = useCallback(async (format: 'csv' | 'json') => {
-    await exportTransactions(format)
-    setExportOpen(false)
+  const handleExport = useCallback((format: 'csv' | 'json', ids: string[]) => {
+    exportTransactions(format, ids)
   }, [exportTransactions])
 
   const typeOptions = [
@@ -263,31 +259,10 @@ export function WalletPage() {
               Select
             </Button>
           )}
-          <div className="relative">
-            <Button variant="secondary" size="sm" onClick={() => setExportOpen((o) => !o)}>
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </Button>
-            {exportOpen && (
-              <div
-                data-testid="export-panel"
-                className="absolute right-0 top-full mt-1 z-10 w-44 rounded-xl border border-gray-200 bg-white shadow-lg p-2 flex flex-col gap-1"
-              >
-                <button
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={() => handleExport('csv')}
-                >
-                  Export CSV
-                </button>
-                <button
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  onClick={() => handleExport('json')}
-                >
-                  Export JSON
-                </button>
-              </div>
-            )}
-          </div>
+          <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </Button>
           {!selectMode && (
             <Button size="sm" onClick={openCreateForm}>
               <Plus className="h-3.5 w-3.5" />
@@ -367,6 +342,7 @@ export function WalletPage() {
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[12rem] max-w-xs">
             <TagInput
+              id="filter-tags"
               label="Tags"
               value={filters.tags}
               onChange={(tags) => setFilters({ tags })}
@@ -502,18 +478,35 @@ export function WalletPage() {
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open)
-          if (!open) {
-            setEditingTransaction(null)
-            setSplitSource(null)
-          }
+          if (!open) setEditingTransaction(null)
         }}
         transaction={editingTransaction}
-        prefill={splitPrefill}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}
         availableTags={tags}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
+      />
+
+      <SplitTransactionModal
+        open={splitOpen}
+        onOpenChange={(open) => {
+          setSplitOpen(open)
+          if (!open) setSplitSource(null)
+        }}
+        transaction={splitSource}
+        categories={categories}
+        availableTags={tags}
+        onConfirm={handleSplitConfirm}
+      />
+
+      <ExportModal
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        transactions={transactions}
+        accounts={accounts}
+        categories={categories}
+        onExport={handleExport}
       />
 
       <CategoryManager

@@ -12,7 +12,6 @@ interface TransactionFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   transaction?: Transaction | null
-  prefill?: Partial<TransactionFormData>
   accounts: Account[]
   categories: Category[]
   defaultAccountId?: string | null
@@ -42,21 +41,7 @@ function getInitialState(
   transaction?: Transaction | null,
   defaultAccountId?: string | null,
   accounts: Account[] = [],
-  prefill?: Partial<TransactionFormData>,
 ): TransactionFormData {
-  if (prefill) {
-    return {
-      accountId: prefill.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '',
-      destinationAccountId: prefill.destinationAccountId ?? null,
-      date: prefill.date ?? todayISO(),
-      merchant: prefill.merchant ?? '',
-      description: prefill.description ?? '',
-      amount: prefill.amount ?? 0,
-      type: prefill.type ?? 'expense',
-      categoryId: prefill.categoryId ?? null,
-      tags: prefill.tags ?? [],
-    }
-  }
   return {
     // Pre-select an account so the common single-account case needs no extra
     // click: the active account filter if set, otherwise the first account.
@@ -76,7 +61,6 @@ export function TransactionForm({
   open,
   onOpenChange,
   transaction,
-  prefill,
   accounts,
   categories,
   defaultAccountId,
@@ -84,28 +68,25 @@ export function TransactionForm({
   onSubmit,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
-    getInitialState(transaction, defaultAccountId, accounts, prefill)
+    getInitialState(transaction, defaultAccountId, accounts)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
-  const [prevPrefill, setPrevPrefill] = useState(prefill)
 
   // Reset the form when the modal (re)opens or its inputs change — adjust state
   // during render rather than in an effect.
   if (
     open !== prevOpen ||
     transaction !== prevTransaction ||
-    defaultAccountId !== prevDefaultAccountId ||
-    prefill !== prevPrefill
+    defaultAccountId !== prevDefaultAccountId
   ) {
     setPrevOpen(open)
     setPrevTransaction(transaction)
     setPrevDefaultAccountId(defaultAccountId)
-    setPrevPrefill(prefill)
     if (open) {
-      setForm(getInitialState(transaction, defaultAccountId, accounts, prefill))
+      setForm(getInitialState(transaction, defaultAccountId, accounts))
       setErrors({})
     }
   }
@@ -170,13 +151,12 @@ export function TransactionForm({
   }
 
   const isEdit = !!transaction
-  const isSplit = !!prefill && !isEdit
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? 'Edit Transaction' : isSplit ? 'Split Transaction' : 'New Transaction'}
+      title={isEdit ? 'Edit Transaction' : 'New Transaction'}
       className="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -307,7 +287,7 @@ export function TransactionForm({
             Cancel
           </Button>
           <Button type="submit">
-            {isEdit ? 'Save Changes' : isSplit ? 'Create Split' : 'Add Transaction'}
+            {isEdit ? 'Save Changes' : 'Add Transaction'}
           </Button>
         </div>
       </form>

@@ -276,6 +276,61 @@ test('clear tag filter restores all transactions', async () => {
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 
+test('tag filter works standalone without other filters (no category/account required)', async () => {
+  // Ensure no category or account filter is active
+  await page.getByLabel('Account').selectOption('')
+  await page.getByLabel('Category').selectOption('')
+  // Filter by coffee tag alone — should return only Kopitiam
+  const filterTagInput = page.locator('#filter-tags')
+  await filterTagInput.click()
+  await filterTagInput.fill('coffee')
+  await filterTagInput.press('ArrowDown')
+  await filterTagInput.press('Enter')
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
+  await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
+  await page.getByLabel('Remove coffee').click()
+})
+
+test('tag filter uses OR logic: selecting multiple tags shows transactions matching any', async () => {
+  // Add a second transaction with a different tag
+  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(page, {
+    type: 'Expense',
+    amount: '30',
+    account: 'Test Bank',
+    merchant: 'Bistro',
+    tags: ['food'],
+  })
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+
+  // Use #filter-tags id to locate the filter bar TagInput reliably
+  // (placeholder disappears after the first tag is selected)
+  const filterTagInput = page.locator('#filter-tags')
+
+  // Select 'coffee' tag
+  await filterTagInput.click()
+  await filterTagInput.fill('coffee')
+  await filterTagInput.press('ArrowDown')
+  await filterTagInput.press('Enter')
+  // Wait for transactions to reload after first tag filter
+  await page.waitForTimeout(500)
+  // Select 'food' tag (OR condition) — click again to re-open dropdown
+  await filterTagInput.click()
+  await filterTagInput.fill('food')
+  await filterTagInput.press('ArrowDown')
+  await filterTagInput.press('Enter')
+
+  // Both transactions should appear (OR logic)
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
+  await expect(transactionRowFor(page, 'Bistro')).toBeVisible()
+  // Transaction without either tag should not appear
+  await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
+
+  // Clear both tags
+  await page.getByLabel('Remove coffee').click()
+  await page.getByLabel('Remove food').click()
+})
+
 // ── Date grouping headers ────────────────────────────────────────────────
 
 test('transactions are grouped by date with day headers', async () => {
@@ -288,9 +343,9 @@ test('transactions are grouped by date with day headers', async () => {
 
 test('account balance updates to reflect transactions', async () => {
   await page.getByRole('link', { name: 'Accounts' }).click()
-  // Test Bank: income 5000 - transfer 500 - expense 12 = 4488
+  // Test Bank: income 5000 - transfer 500 - expense 12 (Kopitiam) - expense 30 (Bistro) = 4458
   const bankCard = accountCardFor(page, 'Test Bank')
-  await expect(bankCard.getByText(/RM\s4,488\.00/)).toBeVisible()
+  await expect(bankCard.getByText(/RM\s4,458\.00/)).toBeVisible()
   // Test Cash: received 500 from transfer
   const cashCard = accountCardFor(page, 'Test Cash')
   await expect(cashCard.getByText(/RM\s500\.00/)).toBeVisible()
@@ -370,4 +425,47 @@ test('Cancel exits select mode without deleting', async () => {
   await page.getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByTestId('select-mode-bar')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
+})
+
+// ── Split transaction ────────────────────────────────────────────────────
+
+test('hover on transaction row reveals the Split (scissors) button', async () => {
+  await transactionRowFor(page, 'Kopitiam').hover()
+  await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toBeVisible()
+})
+
+test('clicking Split opens the Split Transaction modal', async () => {
+  await transactionRowFor(page, 'Kopitiam').hover()
+  await transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn').click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
+})
+
+test('split modal shows two part inputs with amounts summing to original', async () => {
+  const dialog = page.getByRole('dialog')
+  // Default: each part is half of original (12 / 2 = 6)
+  await expect(dialog.locator('#split-amount-0')).toBeVisible()
+  await expect(dialog.locator('#split-amount-1')).toBeVisible()
+  // Total indicator shows a checkmark because the halves sum to the original
+  await expect(dialog.getByText('✓')).toBeVisible()
+})
+
+test('changing amount in part 0 auto-updates part 1 to keep total', async () => {
+  const dialog = page.getByRole('dialog')
+  const part0Amount = dialog.locator('#split-amount-0')
+  await part0Amount.fill('8')
+  await part0Amount.blur()
+  // Part 1 should now show 4 (12 - 8)
+  const part1Amount = dialog.locator('#split-amount-1')
+  await expect(part1Amount).toHaveValue('4')
+  // Checkmark shows totals match
+  await expect(dialog.getByText('✓')).toBeVisible()
+})
+
+test('confirming split creates two transactions and removes the original', async () => {
+  await page.getByTestId('confirm-split-btn').click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  // Original Kopitiam is replaced by two new Kopitiam rows
+  const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'Kopitiam' })
+  await expect(rows).toHaveCount(2)
 })
