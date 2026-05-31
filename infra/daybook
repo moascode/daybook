@@ -317,6 +317,13 @@ cmd_setup_lan() {
   [ -n "$node_bin" ] || die "node not found — install Node 20+ first."
   [ -f "$PROXY_SCRIPT" ] || die "Port-forward script not found: $PROXY_SCRIPT"
 
+  # Copy the proxy script to a system path — launchd root daemons cannot read
+  # files under ~/Documents (macOS TCC protection). /usr/local/lib is unprotected.
+  mkdir -p /usr/local/lib/daybook
+  cp "$PROXY_SCRIPT" /usr/local/lib/daybook/port-forward.js
+  chmod 644 /usr/local/lib/daybook/port-forward.js
+  local proxy_system_path="/usr/local/lib/daybook/port-forward.js"
+
   # 1. Set the Bonjour (mDNS) hostname so daybook.local resolves on the LAN.
   local cur_host
   cur_host="$(scutil --get LocalHostName 2>/dev/null || echo '')"
@@ -360,7 +367,7 @@ cmd_setup_lan() {
   <key>ProgramArguments</key>
   <array>
     <string>$node_bin</string>
-    <string>$PROXY_SCRIPT</string>
+    <string>$proxy_system_path</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>
@@ -417,6 +424,7 @@ cmd_teardown_lan() {
   else
     warn "No proxy daemon found at $PROXY_DAEMON_PLIST"
   fi
+  rm -rf /usr/local/lib/daybook
 
   # Also clean up any legacy pf-based setup from old installs.
   if [ -f "$PF_DAEMON_PLIST" ]; then
