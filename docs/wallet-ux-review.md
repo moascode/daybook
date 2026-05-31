@@ -4,6 +4,12 @@
 > Architecture/Navigation, UX/Usability, Feature-completeness/Redundancy, and
 > Visual/Interaction Design. This document is the consolidated brainstorm and a
 > prioritized action list. No code was changed to produce it.
+>
+> **Status:** the core of this review (Phases A–D + opening balance) plus a second
+> review round's correctness fixes have since shipped on branch
+> `claude/wallet-design-ux-review-cTMY1` / PR #6. Remaining open items (UX wins,
+> tech debt, and sign-off features) are tracked in
+> [`wallet-backlog.md`](./wallet-backlog.md).
 
 ## TL;DR — where all four reviewers converged
 
