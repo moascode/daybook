@@ -23,6 +23,20 @@ import { BulletTree } from './BulletTree'
 import { cn } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
 
+declare global {
+  interface Window {
+    // DEV/E2E-only hooks so Playwright can drive task operations directly.
+    __testIndentTask?: (id: string) => void
+    __testOutdentTask?: (id: string) => void
+    __testGetTasks?: () => Task[]
+    __testToggleCollapse?: (id: string) => void
+    __testUpdateTask?: (
+      id: string,
+      updates: Partial<Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>>,
+    ) => void
+  }
+}
+
 // ── Search helpers ──────────────────────────────────
 
 function getTaskPath(task: Task, allTasks: Task[]): string {
@@ -284,17 +298,17 @@ export function TasksPage() {
   // Expose task operations for E2E testing
   useEffect(() => {
     if (import.meta.env.DEV) {
-      (window as any).__testIndentTask = (id: string) => indentTask(id)
-      ;(window as any).__testOutdentTask = (id: string) => outdentTask(id)
-      ;(window as any).__testGetTasks = () => useTasksStore.getState().tasks
-      ;(window as any).__testToggleCollapse = (id: string) => handleToggleCollapse(id)
-      ;(window as any).__testUpdateTask = (id: string, updates: any) => updateTask(id, updates)
+      window.__testIndentTask = (id: string) => indentTask(id)
+      window.__testOutdentTask = (id: string) => outdentTask(id)
+      window.__testGetTasks = () => useTasksStore.getState().tasks
+      window.__testToggleCollapse = (id: string) => handleToggleCollapse(id)
+      window.__testUpdateTask = (id, updates) => updateTask(id, updates)
       return () => {
-        delete (window as any).__testIndentTask
-        delete (window as any).__testOutdentTask
-        delete (window as any).__testGetTasks
-        delete (window as any).__testToggleCollapse
-        delete (window as any).__testUpdateTask
+        delete window.__testIndentTask
+        delete window.__testOutdentTask
+        delete window.__testGetTasks
+        delete window.__testToggleCollapse
+        delete window.__testUpdateTask
       }
     }
   }, [indentTask, outdentTask, handleToggleCollapse, updateTask])

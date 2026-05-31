@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { Textarea } from '@/components/ui/Textarea'
 import { cn } from '@/lib/utils'
 
@@ -11,10 +11,14 @@ interface BulletNoteProps {
 
 export function BulletNote({ taskId, note, depth, onSave }: BulletNoteProps) {
   const [value, setValue] = useState(note)
+  const [prevNote, setPrevNote] = useState(note)
 
-  useEffect(() => {
+  // Sync the editor when the note changes upstream (React-endorsed pattern:
+  // adjust state during render rather than in an effect).
+  if (note !== prevNote) {
+    setPrevNote(note)
     setValue(note)
-  }, [note])
+  }
 
   const handleBlur = useCallback(() => {
     if (value !== note) {

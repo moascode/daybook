@@ -16,7 +16,10 @@
 #   reload             Rebuild, then restart whichever instance is running (launchd or manual)
 #   status             Show whether it's running and the URL to use on your phone
 #   logs [-f]          Show the server log (-f to follow)
-#   update             git pull origin main → setup → build → restart
+#   deploy [tag]       Download a release artifact from GitHub, install it, restart
+#                      (default: latest release; release-based deploy — no local build)
+#   rollback           Restore the previous release (the last deploy's backup)
+#   update             git pull origin main → setup → build → restart (source-based)
 #   up                 setup → build → start  (first-run, do-everything)
 #   url                Print the LAN URL to open on your phone
 #   run                Run the server in the FOREGROUND (used by launchd; Ctrl-C to stop)
@@ -27,6 +30,9 @@
 # Environment overrides (optional):
 #   PORT=3001          Port to serve on
 #   HOST=0.0.0.0       Interface to bind (0.0.0.0 = all; use 127.0.0.1 to keep it local)
+#   GITHUB_TOKEN=…     Optional GitHub token for `deploy`. Not needed for a
+#                      public repo; raises the API rate limit / required if private.
+#   DAYBOOK_REPO=…     Override the GitHub repo (default: moascode/daybook)
 #
 set -euo pipefail
 
@@ -42,6 +48,11 @@ PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
 # launchd cannot write into TCC-protected dirs (~/Documents, ~/Desktop, …), so
 # the service log lives in the standard, unprotected ~/Library/Logs.
 SERVICE_LOG="$HOME/Library/Logs/daybook.log"
+BACKUP_DIR="$RUN_DIR/backups"
+
+# GitHub release source for `deploy`.
+REPO="${DAYBOOK_REPO:-moascode/daybook}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 
 PORT="${PORT:-3001}"
 HOST="${HOST:-0.0.0.0}"
@@ -200,8 +211,9 @@ cmd_restart() { cmd_stop; cmd_start; }
 # When launchd owns the process, `restart` (which only tracks the manual
 # pidfile) would start a second instance and collide on the port — so detect
 # the launchd service and kickstart it instead.
-cmd_reload() {
-  cmd_build
+# Restart whichever instance is actually serving (launchd service or a manual
+# background start), without rebuilding. Shared by `reload` and `deploy`.
+restart_service() {
   if [ -f "$PLIST_PATH" ]; then
     info "Restarting launchd service ($PLIST_LABEL)…"
     if launchd_loaded; then
@@ -210,7 +222,7 @@ cmd_reload() {
       launchctl load "$PLIST_PATH"
     fi
     sleep 1.5
-    ok "Reloaded (launchd-managed)."
+    ok "Restarted (launchd-managed)."
     cmd_url
   elif is_running; then
     cmd_restart
@@ -218,6 +230,11 @@ cmd_reload() {
     warn "No running server and no launchd service — starting a background instance."
     cmd_start
   fi
+}
+
+cmd_reload() {
+  cmd_build
+  restart_service
 }
 
 cmd_status() {
@@ -270,6 +287,169 @@ cmd_up() {
   cmd_setup
   cmd_build
   cmd_start
+}
+
+# ── Release deployment (pull a built artifact from GitHub) ───────────────────
+require_curl() { command -v curl >/dev/null 2>&1 || die "curl not found."; }
+
+# Call the GitHub REST API. $1 = path (e.g. /releases/latest). Echoes JSON.
+gh_api() {
+  local path="$1"
+  local url="https://api.github.com/repos/$REPO$path"
+  local -a auth=()
+  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    ${auth[@]+"${auth[@]}"} "$url"
+}
+
+# Pull one field out of a release JSON blob using node (always present here).
+# $1 = release JSON file, $2 = a small node expression over `r` (the parsed obj).
+release_field() {
+  node -e '
+    const fs = require("fs");
+    const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const out = (function(){ return eval(process.argv[2]); })();
+    process.stdout.write(out == null ? "" : String(out));
+  ' "$1" "$2"
+}
+
+# Download a release asset by id to a path. Assets need the octet-stream Accept
+# header (and auth on a private repo) to return bytes rather than JSON.
+download_asset() {
+  local asset_id="$1" dest="$2"
+  local url="https://api.github.com/repos/$REPO/releases/assets/$asset_id"
+  local -a auth=()
+  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl -fsSL -H "Accept: application/octet-stream" ${auth[@]+"${auth[@]}"} "$url" -o "$dest"
+}
+
+cmd_deploy() {
+  require_node
+  require_curl
+  command -v npm >/dev/null 2>&1 || die "npm not found."
+
+  # Public repo: a token is optional (anonymous downloads work). It only raises
+  # the GitHub API rate limit and is needed if the repo is ever made private.
+  [ -n "$GITHUB_TOKEN" ] || info "No GITHUB_TOKEN set — using anonymous GitHub access (fine for a public repo)."
+
+  local tag="${1:-}"
+  local tmp; tmp="$(mktemp -d)"
+  # EXIT (not RETURN) so the temp dir is cleaned up on the die/exit paths too;
+  # cmd_deploy is a terminal command, so the script exits right after it returns.
+  trap 'rm -rf "$tmp"' EXIT
+
+  # Resolve the release (explicit tag or latest).
+  if [ -n "$tag" ]; then
+    info "Fetching release $tag from $REPO…"
+    gh_api "/releases/tags/$tag" > "$tmp/release.json" 2>/dev/null \
+      || die "Release '$tag' not found on $REPO (or token lacks access)."
+  else
+    info "Fetching latest release from $REPO…"
+    gh_api "/releases/latest" > "$tmp/release.json" 2>/dev/null \
+      || die "No releases found on $REPO (or token lacks access)."
+  fi
+
+  local rel_tag; rel_tag="$(release_field "$tmp/release.json" 'r.tag_name')"
+  [ -n "$rel_tag" ] || die "Could not read the release tag from GitHub."
+  info "Release: $rel_tag"
+
+  # Find the tarball + checksum asset ids by name suffix.
+  local tarball_id tarball_name sha_id
+  tarball_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).id')"
+  tarball_name="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).name')"
+  sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
+  [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
+
+  info "Downloading $tarball_name…"
+  download_asset "$tarball_id" "$tmp/$tarball_name"
+
+  # Verify the checksum when the release ships one.
+  if [ -n "$sha_id" ]; then
+    download_asset "$sha_id" "$tmp/$tarball_name.sha256"
+    info "Verifying checksum…"
+    ( cd "$tmp"
+      if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 -c "$tarball_name.sha256" >/dev/null
+      else
+        sha256sum -c "$tarball_name.sha256" >/dev/null
+      fi
+    ) || die "Checksum verification failed — refusing to deploy a corrupt artifact."
+    ok "Checksum verified."
+  else
+    warn "No checksum asset on the release; skipping verification."
+  fi
+
+  # Unpack into a clean staging dir first so a bad archive can't half-overwrite
+  # the live install.
+  mkdir -p "$tmp/unpack"
+  tar -xzf "$tmp/$tarball_name" -C "$tmp/unpack"
+  [ -f "$tmp/unpack/dist/index.html" ] || die "Artifact is missing dist/ — aborting."
+  [ -f "$tmp/unpack/server/index.ts" ] || die "Artifact is missing server/ — aborting."
+
+  # Back up the current install (dist + server + manifests) for `rollback`.
+  local stamp backup
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  backup="$BACKUP_DIR/$stamp"
+  mkdir -p "$backup"
+  info "Backing up current release → ${backup/#$HOME/\~}"
+  # Fail loudly if a backup copy errors — better to abort now than to do the
+  # destructive swap below with an incomplete backup that rollback can't use.
+  for item in dist server package.json package-lock.json VERSION; do
+    if [ -e "$ROOT_DIR/$item" ]; then
+      cp -R "$ROOT_DIR/$item" "$backup/" || die "Backup of '$item' failed — aborting before installing."
+    fi
+  done
+  # Keep only the 5 most recent backups.
+  ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true
+
+  # Swap in the new release. Replace dist/ and server/ wholesale so removed
+  # files don't linger; overlay the manifests, infra tool, and VERSION.
+  info "Installing $rel_tag…"
+  rm -rf "$ROOT_DIR/dist" "$ROOT_DIR/server"
+  cp -R "$tmp/unpack/dist"   "$ROOT_DIR/dist"
+  cp -R "$tmp/unpack/server" "$ROOT_DIR/server"
+  for f in package.json package-lock.json tsconfig.json tsconfig.node.json VERSION; do
+    [ -f "$tmp/unpack/$f" ] && cp "$tmp/unpack/$f" "$ROOT_DIR/$f"
+  done
+  # Update the control tool via rename, not in-place cp. This very script is
+  # executing right now; `cp` rewrites the same inode and bash, which reads the
+  # script by byte offset, would run corrupted bytes for the rest of the deploy.
+  # `mv` swaps in a new inode — the live process keeps reading the old one, and
+  # the new tool takes effect on the next invocation.
+  if [ -f "$tmp/unpack/infra/daybook" ]; then
+    cp "$tmp/unpack/infra/daybook" "$ROOT_DIR/infra/daybook.new"
+    chmod +x "$ROOT_DIR/infra/daybook.new"
+    mv -f "$ROOT_DIR/infra/daybook.new" "$ROOT_DIR/infra/daybook"
+  fi
+
+  # Install runtime deps (rebuilds native modules: better-sqlite3, bcrypt).
+  info "Installing dependencies for the new release…"
+  npm ci
+
+  restart_service
+  ok "Deployed $rel_tag."
+}
+
+cmd_rollback() {
+  require_node
+  local backup
+  backup="$(ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | head -n 1 || true)"
+  [ -n "$backup" ] || die "No backup found to roll back to (deploy at least once first)."
+  backup="${backup%/}"
+  warn "Rolling back to ${backup/#$HOME/\~}"
+
+  [ -d "$backup/dist" ]   && { rm -rf "$ROOT_DIR/dist";   cp -R "$backup/dist"   "$ROOT_DIR/dist"; }
+  [ -d "$backup/server" ] && { rm -rf "$ROOT_DIR/server"; cp -R "$backup/server" "$ROOT_DIR/server"; }
+  for f in package.json package-lock.json VERSION; do
+    [ -f "$backup/$f" ] && cp "$backup/$f" "$ROOT_DIR/$f"
+  done
+
+  info "Reinstalling dependencies for the restored release…"
+  npm ci
+  restart_service
+  ok "Rolled back."
 }
 
 # ── launchd service (boot persistence + auto-restart) ────────────────────────
@@ -344,7 +524,7 @@ cmd_uninstall_service() {
 }
 
 cmd_help() {
-  sed -n '3,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,36p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
@@ -357,6 +537,8 @@ case "${1:-help}" in
   reload)            cmd_reload ;;
   status)            cmd_status ;;
   logs)              shift; cmd_logs "${1:-}" ;;
+  deploy)            shift; cmd_deploy "${1:-}" ;;
+  rollback)          cmd_rollback ;;
   update)            cmd_update ;;
   up)                cmd_up ;;
   url)               cmd_url ;;

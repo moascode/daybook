@@ -134,7 +134,7 @@ test('undo restores parent and all children', async () => {
     has: page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Child task' }),
   })
   const childId = await childNode.getAttribute('data-task-id')
-  await page.evaluate(async (id) => (window as any).__testIndentTask(id), childId)
+  await page.evaluate(async (id) => window.__testIndentTask(id), childId)
   await page.waitForTimeout(500)
 
   // Delete "Parent task" — this cascades to "Child task"

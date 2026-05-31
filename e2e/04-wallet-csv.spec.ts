@@ -48,7 +48,7 @@ test('upload CSV file via file input', async () => {
   const csvContent = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
   await page.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
-    await (window as any).__testCsvFileSelect(file)
+    await window.__testCsvFileSelect(file)
   }, csvContent)
   await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
 })
@@ -149,10 +149,10 @@ test('imported transactions have correct dates', async () => {
 })
 
 test('imported transactions have correct amounts', async () => {
-  await expect(page.getByText(/RM[\s ]50\.00/).first()).toBeVisible()
-  await expect(page.getByText(/RM[\s ]200\.00/).first()).toBeVisible()
-  await expect(page.getByText(/RM[\s ]100\.00/).first()).toBeVisible()
-  await expect(page.getByText(/RM[\s ]30\.00/).first()).toBeVisible()
+  await expect(page.getByText(/RM\s50\.00/).first()).toBeVisible()
+  await expect(page.getByText(/RM\s200\.00/).first()).toBeVisible()
+  await expect(page.getByText(/RM\s100\.00/).first()).toBeVisible()
+  await expect(page.getByText(/RM\s30\.00/).first()).toBeVisible()
 })
 
 // ── Duplicate detection ──────────────────────────────────────────────────
@@ -162,7 +162,7 @@ test('importing the same CSV a second time detects all 4 as duplicates', async (
   const csvContent2 = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
   await page.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
-    await (window as any).__testCsvFileSelect(file)
+    await window.__testCsvFileSelect(file)
   }, csvContent2)
   await expect(page.getByText('Map Columns')).toBeVisible()
   await page.getByRole('button', { name: /Review Rows/ }).click()
