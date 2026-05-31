@@ -65,7 +65,13 @@ test('log out returns to the sign-in screen, and the same credentials log back i
 test('session survives a page reload (cookie keeps you logged in)', async ({ browser }) => {
   const page = await newAppPage(browser, '/tasks')
   // Create a marker so we can confirm the SAME user/session resolves after reload.
+  const countBefore = await page.getByRole('textbox', { name: 'Task content' }).count()
   await page.getByRole('button', { name: 'New task' }).first().click()
+  // Wait for the new empty editor to appear and be focused before typing —
+  // creation is async (POST → store → focus), so typing immediately can race
+  // the editor mounting. (Same pattern as 01-tasks.)
+  await expect(page.getByRole('textbox', { name: 'Task content' })).toHaveCount(countBefore + 1)
+  await expect(page.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
   await page.keyboard.type('Persisted task')
   await page.getByRole('textbox', { name: 'Task content' }).last().blur()
   await expect(bulletNodeFor(page, 'Persisted task')).toBeVisible()
