@@ -34,6 +34,7 @@
 9. **Keep `.env.local` out of git.** It is in `.gitignore`. Never log or expose API keys.
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
 11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npx playwright test` to confirm no regressions. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
+12. **Branch before you touch anything.** Never commit directly to `main`. Every task — no matter how small — starts with `git checkout -b <branch>`. When done, open a PR. See Section 11 for naming and PR conventions.
 
 ---
 
@@ -756,25 +757,70 @@ async function addTask(content: string) {
 
 ## 11. Git Conventions
 
-### Branch strategy (simple — solo developer)
-- `main` — always working, always deployable
-- `feature/phase-1-scaffold` — current work
-- Merge to main when phase is complete and tested
+### The non-negotiable rule
+**Never commit directly to `main`.** Every task starts on a branch and ends with a PR.
+This applies to everything — a one-line fix, a doc update, a new feature.
 
-### Commit format
+### Workflow for every task
+
+```
+1. BRANCH   git checkout -b <type>/<short-description>
+2. BUILD    make changes, commit incrementally
+3. VERIFY   run tsc + affected e2e tests (Haiku agent — see §17)
+4. PR       gh pr create … (see template below)
+5. MERGE    owner reviews + merges; delete branch
+```
+
+### Branch naming
+```
+feat/wallet-quick-filters        ← new feature
+fix/csv-header-toggle-reparse    ← bug fix
+chore/update-claude-md           ← docs / config / tooling
+refactor/transaction-list-props  ← no behaviour change
+test/add-csv-e2e-coverage        ← tests only
+```
+
+### Commit format (Conventional Commits)
 ```
 feat(tasks): add bullet collapse toggle
 fix(wallet): correct balance calculation for transfers
 chore: update CLAUDE.md with Phase 2 status
+test(csv): add header-toggle and no-account e2e tests
+```
+- Subject ≤ 50 chars, imperative mood
+- Body only when the *why* isn't obvious from the subject
+- Always include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+
+### PR template (use `gh pr create`)
+```
+gh pr create \
+  --title "<type>(<scope>): short description" \
+  --body "$(cat <<'EOF'
+## What
+- Bullet summary of changes
+
+## Why
+One sentence on the motivation.
+
+## Test plan
+- [ ] tsc clean
+- [ ] Affected e2e specs pass
+- [ ] Manual smoke (if UI change)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
 ```
 
 ### What to commit
 - ✅ All source files
 - ✅ `.env.example`
 - ✅ `CLAUDE.md`
+- ✅ `.agents/skills/` (skill files)
 - ❌ `.env.local` (gitignored)
 - ❌ `node_modules/`
 - ❌ `.DS_Store`
+- ❌ `server/data/*.db` (gitignored)
 
 ---
 
@@ -1140,20 +1186,23 @@ The goal: use the cheapest model capable of the task. Haiku for mechanical work,
 | Security / adversarial review | **sonnet** | Agent, high effort |
 | Final verification after any delivery | **haiku** | Agent (always) |
 
-### Mandatory three-phase workflow for every feature
+### Mandatory four-phase workflow for every task
 
 ```
+BRANCH → Haiku agent  — git checkout -b <type>/<desc>  ← NEVER skip, even for tiny fixes
 PLAN   → Sonnet (main thread) — read files, design solution, identify all changes needed
 BUILD  → Sonnet (main thread) — implement; spawn Haiku agents for mechanical sub-tasks
-VERIFY → Haiku agent — tsc + affected e2e spec; report pass/fail; loop back to BUILD if failures
+VERIFY → Haiku agent  — tsc + affected e2e spec; report pass/fail; loop back to BUILD if failures
+PR     → Haiku agent  — gh pr create; return PR URL   ← work is not done until PR exists
 ```
 
 ### Hard rules
 
-1. **Never run tests inline** — always `Agent({ model: "haiku", ... })`.
-2. **Never do git inline** — always `Agent({ model: "haiku", ... })`.
-3. **Every session must end with a Haiku verification agent** before reporting work done.
-4. **Haiku prompts must be tight** — exact commands + exact file paths. Haiku doesn't explore.
-5. **Independent verifications run in parallel** — spawn typecheck + e2e in one message.
+1. **Never work on main** — always branch first.
+2. **Never run tests inline** — always `Agent({ model: "haiku", ... })`.
+3. **Never do git inline** — always `Agent({ model: "haiku", ... })`.
+4. **Every session must end with a Haiku verification agent + PR** before reporting work done.
+5. **Haiku prompts must be tight** — exact commands + exact file paths. Haiku doesn't explore.
+6. **Independent verifications run in parallel** — spawn typecheck + e2e in one message.
 
 See `.agents/skills/smart-delegate/SKILL.md` for full routing table, cost intuition, and spawn templates.

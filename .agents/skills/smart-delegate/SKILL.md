@@ -39,11 +39,16 @@ consult this table first.
 
 ---
 
-## The three-phase workflow
+## The four-phase workflow
 
-Every feature or fix follows this structure:
+Every feature or fix follows this structure — no exceptions:
 
 ```
+Phase 0 — BRANCH  (haiku agent)
+  git checkout -b <type>/<short-description>
+  Never start work on main. Never skip this step.
+  Branch naming: feat/ fix/ chore/ refactor/ test/
+
 Phase 1 — PLAN  (sonnet, main thread, high effort)
   Understand the task. Read relevant files. Design the solution.
   Output: precise implementation plan with file paths + line numbers.
@@ -51,7 +56,7 @@ Phase 1 — PLAN  (sonnet, main thread, high effort)
 Phase 2 — BUILD  (sonnet, main thread, medium effort)
   Execute the plan. Write the code. One concern per step.
   Spawn haiku agents for any sub-task that is purely mechanical
-  (running existing code, reading known paths, git ops).
+  (running existing code, reading known paths, git ops, commits).
 
 Phase 3 — VERIFY  (haiku agent)
   Spawn a haiku Agent to:
@@ -59,6 +64,10 @@ Phase 3 — VERIFY  (haiku agent)
     2. Run e2e tests for affected spec files
     3. Report: pass count, fail count, any new failures vs baseline
   If haiku reports new failures → re-enter Phase 2 (sonnet) to fix.
+
+Phase 4 — PR  (haiku agent)
+  gh pr create with title + body (What / Why / Test plan).
+  Return the PR URL. Work is not done until a PR exists.
 ```
 
 ---
@@ -116,6 +125,30 @@ Agent({
 })
 ```
 
+### Haiku — create branch
+```
+Agent({
+  description: "Create feature branch",
+  model: "haiku",
+  prompt: "Run: git checkout -b <type>/<short-description>
+  Confirm the new branch name.",
+})
+```
+
+### Haiku — open PR
+```
+Agent({
+  description: "Open pull request",
+  model: "haiku",
+  prompt: "Run gh pr create with title '<type>(<scope>): description' and a body covering:
+  ## What (bullet list of changes)
+  ## Why (one sentence)
+  ## Test plan (tsc clean, e2e pass, manual smoke if UI)
+  Footer: 🤖 Generated with Claude Code
+  Report the PR URL.",
+})
+```
+
 ---
 
 ## Cost intuition
@@ -124,6 +157,7 @@ Agent({
 |--------|--------------|-------------|
 | Run test suite + parse output | ~2k tokens | ~300 tokens |
 | Git status + commit | ~800 tokens | ~150 tokens |
+| Create branch + open PR | ~1k tokens | ~200 tokens |
 | Final verification (build + tests) | ~3k tokens | ~500 tokens |
 | **Typical session savings** | baseline | **~40-70% fewer tokens** |
 
@@ -134,9 +168,11 @@ the returned text is short — a long haiku response still costs main-context bu
 
 ## Rules
 
-1. **Never run tests in the main thread** — always spawn haiku.
-2. **Never do git in the main thread** — always spawn haiku (unless there's a merge conflict that needs reasoning).
-3. **Always end a feature session with a haiku verification agent** before reporting done.
-4. **Sonnet for anything that requires judgment** — ambiguous bugs, architecture choices, code that interacts across many files.
-5. **Prompt haiku agents tightly** — give exact commands, exact file paths. Haiku doesn't explore well on open-ended prompts.
-6. **Parallel haiku** — independent verifications (typecheck + tests) can be spawned in the same message.
+1. **Never start work on main** — always create a branch first (haiku agent).
+2. **Work is not done until a PR exists** — open one with haiku before reporting done.
+3. **Never run tests in the main thread** — always spawn haiku.
+4. **Never do git in the main thread** — always spawn haiku (unless merge conflict needs reasoning).
+5. **Always end a feature with a haiku verification agent** before the PR.
+6. **Sonnet for anything requiring judgment** — ambiguous bugs, architecture, cross-file changes.
+7. **Prompt haiku agents tightly** — exact commands + exact file paths. Haiku doesn't explore.
+8. **Parallel haiku** — independent checks (typecheck + tests) spawn in the same message.
