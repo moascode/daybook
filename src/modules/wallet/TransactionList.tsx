@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft, Pencil } from 'lucide-react'
+import { Trash2, ArrowRightLeft, Pencil, Copy } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +13,7 @@ interface TransactionListProps {
   categories: Category[]
   onEdit: (transaction: Transaction) => void
   onDelete: (id: string) => void
+  onSplit: (transaction: Transaction) => void
   selectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
@@ -52,6 +53,7 @@ function TransactionRow({
   accounts,
   categories,
   onEdit,
+  onSplit,
   onRequestDelete,
   selectMode,
   isSelected,
@@ -61,6 +63,7 @@ function TransactionRow({
   accounts: Account[]
   categories: Category[]
   onEdit: (t: Transaction) => void
+  onSplit: (t: Transaction) => void
   onRequestDelete: (t: Transaction) => void
   selectMode?: boolean
   isSelected?: boolean
@@ -155,11 +158,11 @@ function TransactionRow({
           {transaction.description && transaction.merchant && (
             <span className="truncate">- {transaction.description}</span>
           )}
-          {transaction.tag && (
-            <Badge variant="default" className="text-[10px]">
-              {transaction.tag}
+          {transaction.tags.map((tag) => (
+            <Badge key={tag} variant="default" className="text-[10px]">
+              {tag}
             </Badge>
-          )}
+          ))}
         </div>
       </div>
 
@@ -174,6 +177,14 @@ function TransactionRow({
           className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
           onClick={(e) => e.stopPropagation()}
         >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onSplit(transaction)}
+            aria-label="Split transaction"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -202,6 +213,7 @@ export function TransactionList({
   categories,
   onEdit,
   onDelete,
+  onSplit,
   selectMode,
   selectedIds,
   onToggleSelect,
@@ -257,6 +269,7 @@ export function TransactionList({
                   accounts={accounts}
                   categories={categories}
                   onEdit={onEdit}
+                  onSplit={onSplit}
                   onRequestDelete={setDeleteTarget}
                   selectMode={selectMode}
                   isSelected={selectedIds?.has(t.id)}

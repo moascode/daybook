@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
-import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { TagInput } from '@/components/ui/TagInput'
 import { cn, todayISO } from '@/lib/utils'
 import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
 
@@ -11,9 +12,11 @@ interface TransactionFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   transaction?: Transaction | null
+  prefill?: Partial<TransactionFormData>
   accounts: Account[]
   categories: Category[]
   defaultAccountId?: string | null
+  availableTags?: string[]
   onSubmit: (data: TransactionFormData) => void | Promise<void>
 }
 
@@ -26,7 +29,7 @@ export interface TransactionFormData {
   amount: number
   type: TransactionType
   categoryId: string | null
-  tag: string
+  tags: string[]
 }
 
 const TYPE_OPTIONS: { value: TransactionType; label: string; color: string }[] = [
@@ -38,8 +41,22 @@ const TYPE_OPTIONS: { value: TransactionType; label: string; color: string }[] =
 function getInitialState(
   transaction?: Transaction | null,
   defaultAccountId?: string | null,
-  accounts: Account[] = []
+  accounts: Account[] = [],
+  prefill?: Partial<TransactionFormData>,
 ): TransactionFormData {
+  if (prefill) {
+    return {
+      accountId: prefill.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '',
+      destinationAccountId: prefill.destinationAccountId ?? null,
+      date: prefill.date ?? todayISO(),
+      merchant: prefill.merchant ?? '',
+      description: prefill.description ?? '',
+      amount: prefill.amount ?? 0,
+      type: prefill.type ?? 'expense',
+      categoryId: prefill.categoryId ?? null,
+      tags: prefill.tags ?? [],
+    }
+  }
   return {
     // Pre-select an account so the common single-account case needs no extra
     // click: the active account filter if set, otherwise the first account.
@@ -51,7 +68,7 @@ function getInitialState(
     amount: transaction?.amount ?? 0,
     type: transaction?.type ?? 'expense',
     categoryId: transaction?.categoryId ?? null,
-    tag: transaction?.tag ?? '',
+    tags: transaction?.tags ?? [],
   }
 }
 
@@ -59,27 +76,36 @@ export function TransactionForm({
   open,
   onOpenChange,
   transaction,
+  prefill,
   accounts,
   categories,
   defaultAccountId,
+  availableTags,
   onSubmit,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
-    getInitialState(transaction, defaultAccountId, accounts)
+    getInitialState(transaction, defaultAccountId, accounts, prefill)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
+  const [prevPrefill, setPrevPrefill] = useState(prefill)
 
   // Reset the form when the modal (re)opens or its inputs change — adjust state
   // during render rather than in an effect.
-  if (open !== prevOpen || transaction !== prevTransaction || defaultAccountId !== prevDefaultAccountId) {
+  if (
+    open !== prevOpen ||
+    transaction !== prevTransaction ||
+    defaultAccountId !== prevDefaultAccountId ||
+    prefill !== prevPrefill
+  ) {
     setPrevOpen(open)
     setPrevTransaction(transaction)
     setPrevDefaultAccountId(defaultAccountId)
+    setPrevPrefill(prefill)
     if (open) {
-      setForm(getInitialState(transaction, defaultAccountId, accounts))
+      setForm(getInitialState(transaction, defaultAccountId, accounts, prefill))
       setErrors({})
     }
   }
@@ -135,7 +161,6 @@ export function TransactionForm({
       ...form,
       merchant: form.merchant.trim(),
       description: form.description.trim(),
-      tag: form.tag.trim(),
       categoryId: form.type === 'transfer' ? null : (form.categoryId || null),
       destinationAccountId: form.type === 'transfer' ? form.destinationAccountId : null,
     }
@@ -145,12 +170,13 @@ export function TransactionForm({
   }
 
   const isEdit = !!transaction
+  const isSplit = !!prefill && !isEdit
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={isEdit ? 'Edit Transaction' : 'New Transaction'}
+      title={isEdit ? 'Edit Transaction' : isSplit ? 'Split Transaction' : 'New Transaction'}
       className="max-w-md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -258,13 +284,18 @@ export function TransactionForm({
           />
         )}
 
-        {/* Tag */}
-        <Input
-          label="Tag"
-          placeholder="Optional tag"
-          value={form.tag}
-          onChange={(e) => setForm((f) => ({ ...f, tag: e.target.value }))}
-        />
+        {/* Tags */}
+        {form.type !== 'transfer' && (
+          <TagInput
+            id="tags"
+            label="Tags"
+            value={form.tags}
+            onChange={(tags) => setForm((f) => ({ ...f, tags }))}
+            suggestions={availableTags}
+            allowCreate
+            placeholder="Add tags..."
+          />
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">
@@ -276,7 +307,7 @@ export function TransactionForm({
             Cancel
           </Button>
           <Button type="submit">
-            {isEdit ? 'Save Changes' : 'Add Transaction'}
+            {isEdit ? 'Save Changes' : isSplit ? 'Create Split' : 'Add Transaction'}
           </Button>
         </div>
       </form>

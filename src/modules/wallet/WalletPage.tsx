@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2 } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { Input } from '@/components/ui/Input'
+import { TagInput } from '@/components/ui/TagInput'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
+import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { cn, formatMYR } from '@/lib/utils'
@@ -36,16 +37,21 @@ export function WalletPage() {
     accounts,
     transactions,
     categories,
+    tags,
     filters,
     setFilters,
     loadAccounts,
     loadCategories,
+    loadTags,
     loadTransactions,
     addTransaction,
     updateTransaction,
     deleteTransaction,
     exportTransactions,
     getAccountBalance,
+    addCategory,
+    deleteCategory,
+    getCategoryUsage,
   } = useWallet()
 
   const dataVersion = useWalletStore((s) => s.dataVersion)
@@ -54,6 +60,12 @@ export function WalletPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+
+  // Split transaction state
+  const [splitSource, setSplitSource] = useState<Transaction | null>(null)
+
+  // Category manager state
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false)
@@ -95,7 +107,8 @@ export function WalletPage() {
   useEffect(() => {
     loadAccounts()
     loadCategories()
-  }, [loadAccounts, loadCategories])
+    loadTags()
+  }, [loadAccounts, loadCategories, loadTags])
 
   useEffect(() => {
     loadTransactions(filters)
@@ -123,7 +136,8 @@ export function WalletPage() {
     await addTransaction(data)
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-  }, [addTransaction, loadTransactions, loadNetWorth])
+    await loadTags()
+  }, [addTransaction, loadTransactions, loadNetWorth, loadTags])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
     if (!editingTransaction) return
@@ -131,7 +145,8 @@ export function WalletPage() {
     setEditingTransaction(null)
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth])
+    await loadTags()
+  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth, loadTags])
 
   const handleDeleteTransaction = useCallback(async (id: string) => {
     await deleteTransaction(id)
@@ -150,13 +165,35 @@ export function WalletPage() {
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
 
+  // Stable prefill object — only recreates when splitSource identity changes,
+  // not on every WalletPage re-render. Prevents mid-session form resets.
+  const splitPrefill = useMemo(() => splitSource ? {
+    accountId: splitSource.accountId,
+    destinationAccountId: splitSource.destinationAccountId,
+    date: splitSource.date,
+    merchant: splitSource.merchant,
+    description: splitSource.description,
+    amount: splitSource.amount,
+    type: splitSource.type,
+    categoryId: splitSource.categoryId,
+    tags: splitSource.tags,
+  } : undefined, [splitSource])
+
   function openEditForm(transaction: Transaction) {
+    setSplitSource(null)
     setEditingTransaction(transaction)
     setFormOpen(true)
   }
 
   function openCreateForm() {
+    setSplitSource(null)
     setEditingTransaction(null)
+    setFormOpen(true)
+  }
+
+  function openSplitForm(transaction: Transaction) {
+    setEditingTransaction(null)
+    setSplitSource(transaction)
     setFormOpen(true)
   }
 
@@ -307,20 +344,35 @@ export function WalletPage() {
             value={filters.accountId ?? ''}
             onChange={(e) => setFilters({ accountId: e.target.value || null })}
           />
-          <Select
-            label="Category"
-            options={categoryOptions}
-            value={filters.categoryId ?? ''}
-            onChange={(e) => setFilters({ categoryId: e.target.value || null })}
-          />
+          <div className="flex items-end gap-1">
+            <div className="flex-1">
+              <Select
+                label="Category"
+                options={categoryOptions}
+                value={filters.categoryId ?? ''}
+                onChange={(e) => setFilters({ categoryId: e.target.value || null })}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setCategoryManagerOpen(true)}
+              className="mb-[1px] flex-shrink-0 rounded-lg border border-gray-300 p-2 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Manage categories"
+              title="Manage categories"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[12rem] max-w-xs">
-            <Input
-              label="Tag"
-              placeholder="Filter by tag..."
-              value={filters.tag}
-              onChange={(e) => setFilters({ tag: e.target.value })}
+            <TagInput
+              label="Tags"
+              value={filters.tags}
+              onChange={(tags) => setFilters({ tags })}
+              suggestions={tags}
+              allowCreate={false}
+              placeholder="Filter by tags..."
             />
           </div>
           {/* Quick date filter buttons */}
@@ -438,6 +490,7 @@ export function WalletPage() {
             categories={categories}
             onEdit={openEditForm}
             onDelete={handleDeleteTransaction}
+            onSplit={openSplitForm}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -447,12 +500,29 @@ export function WalletPage() {
 
       <TransactionForm
         open={formOpen}
-        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingTransaction(null) }}
+        onOpenChange={(open) => {
+          setFormOpen(open)
+          if (!open) {
+            setEditingTransaction(null)
+            setSplitSource(null)
+          }
+        }}
         transaction={editingTransaction}
+        prefill={splitPrefill}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}
+        availableTags={tags}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
+      />
+
+      <CategoryManager
+        open={categoryManagerOpen}
+        onOpenChange={setCategoryManagerOpen}
+        categories={categories}
+        onAdd={async (data) => { await addCategory(data) }}
+        onDelete={async (id) => { await deleteCategory(id) }}
+        onGetUsage={getCategoryUsage}
       />
 
       {/* Bulk delete confirmation */}

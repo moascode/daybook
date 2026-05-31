@@ -4,6 +4,16 @@ import { useWalletStore } from '@/stores/wallet.store'
 import { todayISO } from '@/lib/utils'
 import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal } from '@/types/wallet.types'
 
+function parseTags(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return [raw]
+  }
+}
+
 // ── DB row types (snake_case from PGlite) ───────────
 
 interface AccountRow {
@@ -69,7 +79,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     amount: row.amount,
     type: row.type as TransactionType,
     categoryId: row.category_id,
-    tag: row.tag ?? '',
+    tags: parseTags(row.tag),
     importHash: row.import_hash ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -153,8 +163,15 @@ interface TransactionInput {
   amount: number
   type: TransactionType
   categoryId?: string | null
-  tag?: string
+  tags?: string[]
   importHash?: string
+}
+
+export interface CategoryInput {
+  name: string
+  type: 'income' | 'expense' | 'both'
+  color?: string
+  icon?: string
 }
 
 interface BudgetInput {
@@ -204,7 +221,7 @@ interface TransactionFilters {
   type?: 'all' | TransactionType
   categoryId?: string | null
   accountId?: string | null
-  tag?: string
+  tags?: string[]
 }
 
 // ── Hook ────────────────────────────────────────────
@@ -228,6 +245,36 @@ export function useWallet() {
     return categories
   }, [])
 
+  const loadTags = useCallback(async (): Promise<string[]> => {
+    const tags = await api.get<string[]>('/tags')
+    useWalletStore.getState().setTags(tags)
+    return tags
+  }, [])
+
+  // ── Category CRUD ────────────────────────────────
+
+  const addCategory = useCallback(async (data: CategoryInput): Promise<Category> => {
+    const row = await api.post<CategoryRow>('/categories', data)
+    const category = mapCategory(row)
+    useWalletStore.getState().setCategories([...useWalletStore.getState().categories, category])
+    return category
+  }, [])
+
+  const deleteCategory = useCallback(async (id: string): Promise<void> => {
+    await api.delete(`/categories/${id}`)
+    const s = useWalletStore.getState()
+    s.setCategories(s.categories.filter((c) => c.id !== id))
+    // ON DELETE SET NULL on transactions.category_id — mirror in store
+    s.setTransactions(s.transactions.map((t) => t.categoryId === id ? { ...t, categoryId: null } : t))
+    // ON DELETE CASCADE on budgets.category_id — remove from store
+    s.setBudgets(s.budgets.filter((b) => b.categoryId !== id))
+  }, [])
+
+  const getCategoryUsage = useCallback(async (id: string): Promise<number> => {
+    const { count } = await api.get<{ count: number }>(`/categories/${id}/usage`)
+    return count
+  }, [])
+
   const loadTransactions = useCallback(async (filters?: TransactionFilters) => {
     const qs = new URLSearchParams()
     if (filters?.dateFrom) qs.set('dateFrom', filters.dateFrom)
@@ -235,7 +282,9 @@ export function useWallet() {
     if (filters?.type && filters.type !== 'all') qs.set('type', filters.type)
     if (filters?.categoryId) qs.set('categoryId', filters.categoryId)
     if (filters?.accountId) qs.set('accountId', filters.accountId)
-    if (filters?.tag) qs.set('tag', filters.tag)
+    if (filters?.tags?.length) {
+      for (const t of filters.tags) qs.append('tags', t)
+    }
 
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)
@@ -277,6 +326,7 @@ export function useWallet() {
     const row = await api.post<TransactionRow>('/transactions', {
       ...data,
       date: data.date ?? todayISO(),
+      tag: JSON.stringify(data.tags ?? []),
     })
     const transaction = mapTransaction(row)
     useWalletStore.getState().addTransaction(transaction)
@@ -284,7 +334,12 @@ export function useWallet() {
   }, [])
 
   const updateTransaction = useCallback(async (id: string, data: Partial<TransactionInput>): Promise<void> => {
-    const row = await api.patch<TransactionRow>(`/transactions/${id}`, data)
+    const payload: Record<string, unknown> = { ...data }
+    if ('tags' in data) {
+      payload.tag = JSON.stringify(data.tags ?? [])
+      delete payload.tags
+    }
+    const row = await api.patch<TransactionRow>(`/transactions/${id}`, payload)
     useWalletStore.getState().updateTransaction(id, mapTransaction(row))
   }, [])
 
@@ -300,7 +355,11 @@ export function useWallet() {
   ): Promise<number> => {
     if (transactions.length === 0) return 0
 
-    const payload = transactions.map((data) => ({ ...data, date: data.date ?? todayISO() }))
+    const payload = transactions.map((data) => ({
+      ...data,
+      date: data.date ?? todayISO(),
+      tag: JSON.stringify(data.tags ?? []),
+    }))
     const rows = await api.post<TransactionRow[]>('/transactions/import', payload)
 
     for (const row of rows) {
@@ -429,7 +488,7 @@ export function useWallet() {
       const csvRows = rows.map((r) =>
         [r.date, `"${(r.merchant ?? '').replace(/"/g, '""')}"`, `"${(r.description ?? '').replace(/"/g, '""')}"`,
          r.amount, r.type, `"${(r.category_name ?? '').replace(/"/g, '""')}"`,
-         `"${(r.account_name ?? '').replace(/"/g, '""')}"`, `"${(r.tag ?? '').replace(/"/g, '""')}"`].join(','),
+         `"${(r.account_name ?? '').replace(/"/g, '""')}"`, `"${parseTags(r.tag).join(', ').replace(/"/g, '""')}"`].join(','),
       )
       triggerDownload([header, ...csvRows].join('\n'), filename, 'text/csv')
     } else {
@@ -466,6 +525,7 @@ export function useWallet() {
     budgets: store.budgets,
     recurringTransactions: store.recurringTransactions,
     goals: store.goals,
+    tags: store.tags,
     filters: store.filters,
     setFilters: store.setFilters,
 
@@ -473,6 +533,7 @@ export function useWallet() {
     loadAccounts,
     loadTransactions,
     loadCategories,
+    loadTags,
     loadBudgets,
     loadRecurringTransactions,
     loadGoals,
@@ -510,6 +571,11 @@ export function useWallet() {
     addGoal,
     updateGoal,
     deleteGoal,
+
+    // Category CRUD
+    addCategory,
+    deleteCategory,
+    getCategoryUsage,
 
     // Export
     exportTransactions,

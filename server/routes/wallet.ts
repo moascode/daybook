@@ -81,12 +81,67 @@ walletRouter.get('/accounts/:id/balance', (req, res) => {
   res.json({ balance: opening + income - expense - transferOut + transferIn })
 })
 
-// ── Categories (read-only; seeded per user on signup) ─
+// ── Categories ────────────────────────────────────────
 
 walletRouter.get('/categories', (req, res) => {
   res.json(
     getDb().prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY type ASC, name ASC').all(req.session.userId!),
   )
+})
+
+walletRouter.post('/categories', (req, res) => {
+  const b = req.body ?? {}
+  if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
+    return res.status(400).json({ error: 'name is required' })
+  }
+  const validTypes = new Set(['income', 'expense', 'both'])
+  if (!validTypes.has(b.type)) {
+    return res.status(400).json({ error: 'type must be income, expense, or both' })
+  }
+  const row = getDb()
+    .prepare(
+      `INSERT INTO categories (id, user_id, name, icon, color, type)
+       VALUES (lower(hex(randomblob(16))), @userId, @name, @icon, @color, @type)
+       RETURNING *`,
+    )
+    .get({
+      userId: req.session.userId!,
+      name: b.name.trim(),
+      icon: b.icon ?? 'tag',
+      color: b.color ?? '#378ADD',
+      type: b.type,
+    })
+  res.status(201).json(row)
+})
+
+walletRouter.get('/categories/:id/usage', (req, res) => {
+  const count = (getDb()
+    .prepare('SELECT COUNT(*) as cnt FROM transactions WHERE category_id = ? AND user_id = ?')
+    .get(req.params.id, req.session.userId!) as { cnt: number }).cnt
+  res.json({ count })
+})
+
+walletRouter.delete('/categories/:id', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const cat = db.prepare('SELECT id FROM categories WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!cat) return res.status(404).json({ error: 'category not found' })
+  db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(req.params.id, userId)
+  res.status(204).end()
+})
+
+// ── Tags ──────────────────────────────────────────────
+
+walletRouter.get('/tags', (req, res) => {
+  const rows = getDb()
+    .prepare(
+      `SELECT DISTINCT je.value AS tag
+       FROM transactions t, json_each(t.tag) je
+       WHERE t.user_id = ? AND json_valid(t.tag) AND json_type(t.tag) = 'array' AND t.tag != '[]'
+       ORDER BY je.value`,
+    )
+    .all(req.session.userId!) as { tag: string }[]
+  res.json(rows.map((r) => r.tag))
 })
 
 // ── Transactions ─────────────────────────────────────
@@ -123,7 +178,7 @@ function insertTransaction(b: Record<string, unknown>, userId: string) {
       amount: normalizeBind(b.amount),
       type: b.type,
       categoryId: b.categoryId ?? null,
-      tag: b.tag ?? '',
+      tag: Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
       importHash: b.importHash ?? '',
     })
 }
@@ -141,7 +196,13 @@ walletRouter.get('/transactions', (req, res) => {
     conditions.push('(account_id = @accountId OR destination_account_id = @accountId)')
     params.accountId = q.accountId
   }
-  if (str(q.tag)) { conditions.push('tag LIKE @tag'); params.tag = `%${q.tag}%` }
+  const rawTags = q.tags
+    ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
+    : []
+  for (let i = 0; i < rawTags.length; i++) {
+    conditions.push(`EXISTS (SELECT 1 FROM json_each(transactions.tag) WHERE value = @tag${i})`)
+    params[`tag${i}`] = rawTags[i]
+  }
 
   const rows = getDb()
     .prepare(`SELECT * FROM transactions WHERE ${conditions.join(' AND ')} ORDER BY date DESC, created_at DESC`)

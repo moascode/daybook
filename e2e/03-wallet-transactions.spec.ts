@@ -78,7 +78,7 @@ test('add an expense transaction', async () => {
     account: 'Test Bank',
     merchant: 'Starbucks',
     category: 'Food & Drink',
-    tag: 'coffee',
+    tags: ['coffee'],
   })
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Starbucks')).toBeVisible()
@@ -256,17 +256,22 @@ test('filter by tag: "coffee" shows tagged transaction', async () => {
     amount: '12',
     account: 'Test Bank',
     merchant: 'Kopitiam',
-    tag: 'coffee',
+    tags: ['coffee'],
   })
   // Wait for dialog to fully close before touching the filter bar
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  await page.getByLabel('Tag').fill('coffee')
+  // TagInput filter bar: type to filter suggestions, arrow-down to highlight, Enter to select
+  const tagFilterInput = page.getByPlaceholder('Filter by tags...')
+  await tagFilterInput.click()
+  await tagFilterInput.fill('coffee')
+  await tagFilterInput.press('ArrowDown')
+  await tagFilterInput.press('Enter')
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
 })
 
 test('clear tag filter restores all transactions', async () => {
-  await page.getByLabel('Tag').fill('')
+  await page.getByLabel('Remove coffee').click()
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
