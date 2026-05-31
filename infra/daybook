@@ -25,7 +25,7 @@
 #   run                Run the server in the FOREGROUND (used by launchd; Ctrl-C to stop)
 #   install-service    Install a launchd service so it starts on boot + auto-restarts
 #   uninstall-service  Remove the launchd service
-#   setup-lan          Set up daybook.local (mDNS hostname + pf port 80→3001 redirect)
+#   setup-lan          Set up daybook.local (mDNS hostname + Node port-80 proxy)
 #                      Requires sudo. Makes http://daybook.local work from any device.
 #   teardown-lan       Remove the daybook.local setup (undo setup-lan)
 #   help               Show this help
@@ -54,6 +54,11 @@ SERVICE_LOG="$HOME/Library/Logs/daybook.log"
 BACKUP_DIR="$RUN_DIR/backups"
 
 # LAN domain setup constants.
+# Node TCP proxy (current implementation — no pf/kernel dependencies).
+PROXY_DAEMON_PLIST="/Library/LaunchDaemons/com.daybook.proxy.plist"
+PROXY_DAEMON_LABEL="com.daybook.proxy"
+PROXY_SCRIPT="$SCRIPT_DIR/port-forward.js"
+# Legacy pf constants — kept only for cleanup of old installs.
 PF_ANCHOR_FILE="/etc/pf.anchors/daybook"
 PF_DAEMON_PLIST="/Library/LaunchDaemons/com.daybook.pf.plist"
 PF_DAEMON_LABEL="com.daybook.pf"
@@ -300,13 +305,17 @@ cmd_up() {
 
 # ── LAN domain setup (daybook.local → port 80 → 3001) ───────────────────────
 cmd_setup_lan() {
-  # Re-exec as root if needed — launchd daemon + pf rules require it.
+  # Re-exec as root — binding port 80 and installing a system LaunchDaemon
+  # both require root.
   if [ "$(id -u)" -ne 0 ]; then
-    info "LAN setup needs sudo for firewall rules and hostname change…"
+    info "LAN setup needs sudo to bind port 80 and install the LaunchDaemon…"
     exec sudo "$0" setup-lan
   fi
 
   local ip; ip="$(lan_ip)"
+  local node_bin; node_bin="$(command -v node 2>/dev/null || true)"
+  [ -n "$node_bin" ] || die "node not found — install Node 20+ first."
+  [ -f "$PROXY_SCRIPT" ] || die "Port-forward script not found: $PROXY_SCRIPT"
 
   # 1. Set the Bonjour (mDNS) hostname so daybook.local resolves on the LAN.
   local cur_host
@@ -319,90 +328,76 @@ cmd_setup_lan() {
     ok "Bonjour hostname already: ${LAN_HOSTNAME}.local"
   fi
 
-  # 2. Write a standalone pf rules file (not just anchor rules — this is loaded
-  #    directly as the entire pf ruleset, bypassing pf.conf entirely).
-  #    rdr pass rules must come before filter rules (translation → filtering order).
-  info "Writing pf rules → $PF_ANCHOR_FILE"
-  {
-    # macOS pf uses pre-4.7 OpenBSD syntax: bare `rdr` for translation rules.
-    # Translation rules must come before filter rules (`pass all`).
-    # Check both `pfctl -s nat` (rdr rules) and `pfctl -sr` (filter rules).
-    echo "rdr on lo0 proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
-    # Cover the active Wi-Fi / Ethernet interface.
-    local iface
-    for iface in en0 en1; do
-      ipconfig getifaddr "$iface" >/dev/null 2>&1 && \
-        echo "rdr on $iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
-    done
-    # Also cover whatever the default route uses (catches USB-C Ethernet etc.)
-    local def_iface
-    def_iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
-    if [ -n "$def_iface" ] && [ "$def_iface" != "en0" ] && [ "$def_iface" != "en1" ] && [ "$def_iface" != "lo0" ]; then
-      echo "rdr on $def_iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
-    fi
-    # Pass all other traffic — must come after translation rules.
-    echo "pass all"
-  } > "$PF_ANCHOR_FILE"
-
-  # 3. Restore pf.conf to the macOS default (remove any daybook entries we may
-  #    have previously appended — we no longer use the anchor approach).
+  # 2. Clean up any legacy pf-based setup from old installs.
+  if [ -f "$PF_DAEMON_PLIST" ]; then
+    info "Removing legacy pf LaunchDaemon…"
+    launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || \
+      launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
+    rm -f "$PF_DAEMON_PLIST"
+    ok "Legacy pf daemon removed."
+  fi
+  if [ -f "$PF_ANCHOR_FILE" ]; then
+    rm -f "$PF_ANCHOR_FILE"
+  fi
+  # Remove any daybook lines from pf.conf left by old setups.
   if grep -q 'daybook' /etc/pf.conf 2>/dev/null; then
-    info "Removing stale daybook entries from /etc/pf.conf…"
-    sed -i.bak '/# daybook LAN redirect/,/anchor "daybook"/d' /etc/pf.conf
+    info "Cleaning stale daybook entries from /etc/pf.conf…"
+    sed -i '' '/rdr-anchor "daybook"/d; /anchor "daybook"/d; /load anchor "daybook"/d' /etc/pf.conf
     ok "pf.conf cleaned."
   fi
 
-  # 4. Enable IP forwarding — required for pf to redirect packets arriving on
-  #    a physical interface to localhost. Persist in /etc/sysctl.conf.
-  sysctl -w net.inet.ip.forwarding=1 >/dev/null
-  if ! grep -q 'net.inet.ip.forwarding=1' /etc/sysctl.conf 2>/dev/null; then
-    printf '\nnet.inet.ip.forwarding=1\n' >> /etc/sysctl.conf
-  fi
-  ok "IP forwarding enabled."
-
-  # 5. Load our standalone rules file directly and enable pf.
-  #    We bypass pf.conf entirely — no anchor point needed.
-  pfctl -ef "$PF_ANCHOR_FILE" && \
-    ok "pf rules loaded (port 80 → $PORT)." || \
-    warn "pfctl returned non-zero — check: sudo pfctl -sr"
-
-  # 5. Install a root LaunchDaemon so the redirect survives reboots.
-  info "Installing LaunchDaemon → $PF_DAEMON_PLIST"
-  cat > "$PF_DAEMON_PLIST" <<PLIST
+  # 3. Install a Node.js TCP proxy as a root LaunchDaemon.
+  #    The proxy listens on 0.0.0.0:80 and forwards every connection to
+  #    127.0.0.1:PORT. This is far simpler than pf and works reliably on macOS
+  #    because Node handles the userspace routing (no kernel forwarding quirks).
+  info "Installing port-80 proxy LaunchDaemon → $PROXY_DAEMON_PLIST"
+  cat > "$PROXY_DAEMON_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>$PF_DAEMON_LABEL</string>
+  <key>Label</key><string>$PROXY_DAEMON_LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>-c</string>
-    <string>/sbin/sysctl -w net.inet.ip.forwarding=1; /sbin/pfctl -ef $PF_ANCHOR_FILE</string>
+    <string>$node_bin</string>
+    <string>$PROXY_SCRIPT</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT_IN</key>  <string>80</string>
+    <key>PORT_OUT</key> <string>$PORT</string>
+  </dict>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/var/log/daybook-pf.log</string>
-  <key>StandardErrorPath</key><string>/var/log/daybook-pf.log</string>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/var/log/daybook-proxy.log</string>
+  <key>StandardErrorPath</key><string>/var/log/daybook-proxy.log</string>
 </dict>
 </plist>
 PLIST
-  # Bootstrap into the system domain (correct API for root LaunchDaemons on
-  # macOS 10.11+). Fall back to the legacy `load` on older macOS only.
-  launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || true
-  if launchctl bootstrap system "$PF_DAEMON_PLIST"; then
-    ok "LaunchDaemon installed (rules persist on reboot)."
+
+  # Boot/reload the daemon in the system domain.
+  launchctl bootout system "$PROXY_DAEMON_PLIST" 2>/dev/null || true
+  if launchctl bootstrap system "$PROXY_DAEMON_PLIST"; then
+    ok "LaunchDaemon installed (port 80 proxy starts on reboot)."
   else
-    # `bootstrap` is unavailable on very old macOS — try legacy `load`.
-    # If this also fails, surface the error rather than printing false success.
-    launchctl load "$PF_DAEMON_PLIST" \
-      || die "Failed to load LaunchDaemon — check plist at $PF_DAEMON_PLIST"
-    ok "LaunchDaemon installed via legacy load (rules persist on reboot)."
+    launchctl load "$PROXY_DAEMON_PLIST" \
+      || die "Failed to load LaunchDaemon — check plist at $PROXY_DAEMON_PLIST"
+    ok "LaunchDaemon installed via legacy load."
+  fi
+
+  # Give the proxy a moment to bind, then do a quick sanity check.
+  sleep 1
+  if lsof -i TCP:80 -sTCP:LISTEN 2>/dev/null | grep -q node; then
+    ok "Port 80 proxy is listening."
+  else
+    warn "Port 80 proxy may not have started yet — check: sudo lsof -i TCP:80"
+    warn "Proxy log: /var/log/daybook-proxy.log"
   fi
 
   printf '\n%s\n' "${c_bold}┌─ daybook.local is ready ─────────────────────────────┐${c_reset}"
   printf   '%s\n' "  On this Mac:    ${c_green}http://daybook.local${c_reset}"
   printf   '%s\n' "  On iPhone/iPad: ${c_green}http://daybook.local${c_reset}  (Bonjour/mDNS)"
-  printf   '%s\n' "  Fallback IP:    http://$ip"
+  printf   '%s\n' "  Fallback IP:    ${c_green}http://$ip${c_reset}"
   printf   '%s\n' "${c_bold}└──────────────────────────────────────────────────────┘${c_reset}"
   printf '\n%s\n' "${c_dim}Android note: .local mDNS may be blocked — use the IP above or add a router DNS entry for 'daybook' → $ip${c_reset}"
 }
@@ -413,24 +408,26 @@ cmd_teardown_lan() {
     exec sudo "$0" teardown-lan
   fi
 
+  # Remove the Node proxy daemon.
+  if [ -f "$PROXY_DAEMON_PLIST" ]; then
+    launchctl bootout system "$PROXY_DAEMON_PLIST" 2>/dev/null || \
+      launchctl unload "$PROXY_DAEMON_PLIST" 2>/dev/null || true
+    rm -f "$PROXY_DAEMON_PLIST"
+    ok "Proxy LaunchDaemon removed."
+  else
+    warn "No proxy daemon found at $PROXY_DAEMON_PLIST"
+  fi
+
+  # Also clean up any legacy pf-based setup from old installs.
   if [ -f "$PF_DAEMON_PLIST" ]; then
     launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || \
       launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
     rm -f "$PF_DAEMON_PLIST"
-    ok "LaunchDaemon removed."
-  else
-    warn "No LaunchDaemon found at $PF_DAEMON_PLIST"
+    ok "Legacy pf daemon removed."
   fi
-
-  # Disable pf (decrements the enable reference count; other components
-  # that called pfctl -E will re-enable it as needed).
-  pfctl -d 2>/dev/null || true
   rm -f "$PF_ANCHOR_FILE"
-  ok "pf rules removed."
-
-  # Clean up any stale daybook entries left in pf.conf from old installs.
-  if grep -q '# daybook LAN redirect' /etc/pf.conf 2>/dev/null; then
-    sed -i '' '/# daybook LAN redirect/,/anchor "daybook"/d' /etc/pf.conf
+  if grep -q 'daybook' /etc/pf.conf 2>/dev/null; then
+    sed -i '' '/rdr-anchor "daybook"/d; /anchor "daybook"/d; /load anchor "daybook"/d' /etc/pf.conf
     ok "pf.conf cleaned."
   fi
 
