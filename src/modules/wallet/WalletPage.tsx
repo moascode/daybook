@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Input } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
@@ -13,6 +14,22 @@ import { useWalletStore } from '@/stores/wallet.store'
 import { cn, formatMYR } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
+
+function getMonthRange(monthOffset: number) {
+  const now = new Date()
+  // Use local year/month arithmetic — never toISOString() which converts to UTC
+  // and shifts the date by up to a day in non-UTC timezones.
+  const year = now.getFullYear()
+  const month = now.getMonth() + monthOffset        // JS handles underflow (month < 0)
+  const d = new Date(year, month, 1)                // normalises month overflow/underflow
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const lastDay = new Date(y, d.getMonth() + 1, 0).getDate()
+  return {
+    dateFrom: `${y}-${m}-01`,
+    dateTo: `${y}-${m}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
 
 export function WalletPage() {
   const {
@@ -37,10 +54,26 @@ export function WalletPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
+  // Also track previous filters to detect changes and clear the selection.
   const filtersRef = useRef(filters)
-  useEffect(() => { filtersRef.current = filters }, [filters])
+  const prevFiltersRef = useRef(filters)
+
+  useEffect(() => {
+    // Detect filter changes and clear selection if in select mode
+    if (selectMode && JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
+      setSelectedIds(new Set())
+    }
+    filtersRef.current = filters
+    prevFiltersRef.current = filters
+  }, [filters, selectMode])
 
   // Income/expense/net for the currently loaded transactions — derived state,
   // recomputed whenever the transaction list changes (transfers excluded).
@@ -74,7 +107,6 @@ export function WalletPage() {
   // filters, so this is keyed on `accounts` (and dataVersion) — NOT on the
   // filtered transaction list. Mutations refresh it explicitly below.
   const loadNetWorth = useCallback(async () => {
-    // Promise.all([]) resolves to [] → reduce to 0, so the empty case is handled.
     const balances = await Promise.all(accounts.map((a) => getAccountBalance(a.id)))
     setNetWorth(balances.reduce((sum, b) => sum + b, 0))
   }, [accounts, getAccountBalance])
@@ -107,6 +139,17 @@ export function WalletPage() {
     await loadNetWorth()
   }, [deleteTransaction, loadTransactions, loadNetWorth])
 
+  const handleBulkDelete = useCallback(async () => {
+    for (const id of Array.from(selectedIds)) {
+      await deleteTransaction(id)
+    }
+    setSelectedIds(new Set())
+    setSelectMode(false)
+    setBulkDeleteOpen(false)
+    await loadTransactions(filtersRef.current)
+    await loadNetWorth()
+  }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
+
   function openEditForm(transaction: Transaction) {
     setEditingTransaction(transaction)
     setFormOpen(true)
@@ -115,6 +158,28 @@ export function WalletPage() {
   function openCreateForm() {
     setEditingTransaction(null)
     setFormOpen(true)
+  }
+
+  function toggleSelectMode() {
+    setSelectMode((m) => !m)
+    setSelectedIds(new Set())
+  }
+
+  function handleToggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function handleSelectAll() {
+    if (selectedIds.size === transactions.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(transactions.map((t) => t.id)))
+    }
   }
 
   const handleExport = useCallback(async (format: 'csv' | 'json') => {
@@ -139,6 +204,8 @@ export function WalletPage() {
     ...categories.map((c) => ({ value: c.id, label: c.name })),
   ]
 
+  const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Page sub-header */}
@@ -148,6 +215,17 @@ export function WalletPage() {
           <p className="text-xs text-gray-500 mt-0.5">Track income, expenses, and transfers</p>
         </div>
         <div className="flex items-center gap-2">
+          {accounts.length > 0 && !selectMode && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={toggleSelectMode}
+              aria-label="Select transactions"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              Select
+            </Button>
+          )}
           <div className="relative">
             <Button variant="secondary" size="sm" onClick={() => setExportOpen((o) => !o)}>
               <Download className="h-3.5 w-3.5" />
@@ -173,15 +251,16 @@ export function WalletPage() {
               </div>
             )}
           </div>
-          <Button size="sm" onClick={openCreateForm}>
-            <Plus className="h-3.5 w-3.5" />
-            Add Transaction
-          </Button>
+          {!selectMode && (
+            <Button size="sm" onClick={openCreateForm}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Transaction
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Total balance hero — the landing screen should answer "where's my
-          money" first. Only shown once the user has at least one account. */}
+      {/* Total balance hero */}
       {accounts.length > 0 && (
         <div className="mb-4 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
           <div>
@@ -235,13 +314,39 @@ export function WalletPage() {
             onChange={(e) => setFilters({ categoryId: e.target.value || null })}
           />
         </div>
-        <div className="mt-3 max-w-xs">
-          <Input
-            label="Tag"
-            placeholder="Filter by tag..."
-            value={filters.tag}
-            onChange={(e) => setFilters({ tag: e.target.value })}
-          />
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[12rem] max-w-xs">
+            <Input
+              label="Tag"
+              placeholder="Filter by tag..."
+              value={filters.tag}
+              onChange={(e) => setFilters({ tag: e.target.value })}
+            />
+          </div>
+          {/* Quick date filter buttons */}
+          <div className="flex items-center gap-1.5 pb-0.5">
+            <button
+              onClick={() => setFilters(getMonthRange(0))}
+              data-testid="filter-this-month"
+              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setFilters(getMonthRange(-1))}
+              data-testid="filter-last-month"
+              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              Last Month
+            </button>
+            <button
+              onClick={() => setFilters({ dateFrom: '', dateTo: '' })}
+              data-testid="filter-clear-dates"
+              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-400 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+            >
+              All Time
+            </button>
+          </div>
         </div>
       </div>
 
@@ -272,6 +377,43 @@ export function WalletPage() {
       </>
       )}
 
+      {/* Multi-select action bar */}
+      {selectMode && (
+        <div
+          data-testid="select-mode-bar"
+          className="mb-4 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5"
+        >
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={handleSelectAll}
+            className="h-4 w-4 rounded border-gray-300 text-brand-600 cursor-pointer"
+            aria-label="Select all transactions"
+          />
+          <span className="text-sm text-gray-600">
+            {selectedIds.size > 0
+              ? `${selectedIds.size} selected`
+              : 'Select transactions'}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setBulkDeleteOpen(true)}
+                data-testid="bulk-delete-btn"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete {selectedIds.size}
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Transaction list */}
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
         {transactions.length === 0 && accounts.length === 0 ? (
@@ -296,6 +438,9 @@ export function WalletPage() {
             categories={categories}
             onEdit={openEditForm}
             onDelete={handleDeleteTransaction}
+            selectMode={selectMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
           />
         )}
       </div>
@@ -309,6 +454,23 @@ export function WalletPage() {
         defaultAccountId={filters.accountId}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
       />
+
+      {/* Bulk delete confirmation */}
+      <Modal
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => { if (!open) setBulkDeleteOpen(false) }}
+        title="Delete Transactions"
+        description={`Delete ${selectedIds.size} selected transaction${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
+      >
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={() => setBulkDeleteOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleBulkDelete} data-testid="confirm-bulk-delete">
+            Delete {selectedIds.size}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

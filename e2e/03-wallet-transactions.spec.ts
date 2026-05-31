@@ -290,3 +290,79 @@ test('account balance updates to reflect transactions', async () => {
   const cashCard = accountCardFor(page, 'Test Cash')
   await expect(cashCard.getByText(/RM\s500\.00/)).toBeVisible()
 })
+
+// ── Quick date filters ───────────────────────────────────────────────────
+
+test('quick filter "This Month" sets date range to current month', async () => {
+  await page.getByRole('link', { name: 'Transactions' }).click()
+  await page.getByTestId('filter-this-month').click()
+
+  const now = new Date()
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+  await expect(page.getByLabel('From')).toHaveValue(firstDay)
+  await expect(page.getByLabel('To')).toHaveValue(lastDay)
+})
+
+test('quick filter "Last Month" sets date range to previous month', async () => {
+  await page.getByTestId('filter-last-month').click()
+
+  const now = new Date()
+  const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10)
+  const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10)
+  await expect(page.getByLabel('From')).toHaveValue(firstDay)
+  await expect(page.getByLabel('To')).toHaveValue(lastDay)
+})
+
+test('quick filter "All Time" clears date range', async () => {
+  // Date filters are currently set from last test; clear them
+  await page.getByTestId('filter-clear-dates').click()
+  await expect(page.getByLabel('From')).toHaveValue('')
+  await expect(page.getByLabel('To')).toHaveValue('')
+})
+
+// ── Multi-select delete ──────────────────────────────────────────────────
+
+test('Select button enters select mode and shows action bar', async () => {
+  await page.getByRole('button', { name: 'Select' }).click()
+  await expect(page.getByTestId('select-mode-bar')).toBeVisible()
+  await expect(page.getByText('Select transactions')).toBeVisible()
+})
+
+test('clicking a transaction row in select mode checks the checkbox', async () => {
+  // Click a transaction row — should select it, not open edit form
+  await transactionRowFor(page, 'Acme Corp').click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.getByText('1 selected')).toBeVisible()
+})
+
+test('selecting another row updates the count', async () => {
+  await transactionRowFor(page, 'ATM Withdrawal').click()
+  await expect(page.getByText('2 selected')).toBeVisible()
+})
+
+test('Delete button in action bar opens confirmation modal', async () => {
+  await page.getByTestId('bulk-delete-btn').click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByText(/Delete 2 selected/)).toBeVisible()
+})
+
+test('confirming bulk delete removes the selected transactions', async () => {
+  await page.getByTestId('confirm-bulk-delete').click()
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.getByTestId('select-mode-bar')).not.toBeVisible()
+  await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
+  await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
+  // Kopitiam expense added in the tag filter tests should still be here
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
+})
+
+test('Cancel exits select mode without deleting', async () => {
+  await page.getByRole('button', { name: 'Select' }).click()
+  await expect(page.getByTestId('select-mode-bar')).toBeVisible()
+  await transactionRowFor(page, 'Kopitiam').click()
+  await expect(page.getByText('1 selected')).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expect(page.getByTestId('select-mode-bar')).not.toBeVisible()
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
+})

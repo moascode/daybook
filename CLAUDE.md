@@ -34,6 +34,7 @@
 9. **Keep `.env.local` out of git.** It is in `.gitignore`. Never log or expose API keys.
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
 11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npx playwright test` to confirm no regressions. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
+12. **Branch before you touch anything.** Never commit directly to `main`. Every task — no matter how small — starts with `git checkout -b <branch>`. When done, open a PR. See Section 11 for naming and PR conventions.
 
 ---
 
@@ -756,25 +757,70 @@ async function addTask(content: string) {
 
 ## 11. Git Conventions
 
-### Branch strategy (simple — solo developer)
-- `main` — always working, always deployable
-- `feature/phase-1-scaffold` — current work
-- Merge to main when phase is complete and tested
+### The non-negotiable rule
+**Never commit directly to `main`.** Every task starts on a branch and ends with a PR.
+This applies to everything — a one-line fix, a doc update, a new feature.
 
-### Commit format
+### Workflow for every task
+
+```
+1. BRANCH   git checkout -b <type>/<short-description>
+2. BUILD    make changes, commit incrementally
+3. VERIFY   run tsc + affected e2e tests (Haiku agent — see §17)
+4. PR       gh pr create … (see template below)
+5. MERGE    owner reviews + merges; delete branch
+```
+
+### Branch naming
+```
+feat/wallet-quick-filters        ← new feature
+fix/csv-header-toggle-reparse    ← bug fix
+chore/update-claude-md           ← docs / config / tooling
+refactor/transaction-list-props  ← no behaviour change
+test/add-csv-e2e-coverage        ← tests only
+```
+
+### Commit format (Conventional Commits)
 ```
 feat(tasks): add bullet collapse toggle
 fix(wallet): correct balance calculation for transfers
 chore: update CLAUDE.md with Phase 2 status
+test(csv): add header-toggle and no-account e2e tests
+```
+- Subject ≤ 50 chars, imperative mood
+- Body only when the *why* isn't obvious from the subject
+- Always include `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+
+### PR template (use `gh pr create`)
+```
+gh pr create \
+  --title "<type>(<scope>): short description" \
+  --body "$(cat <<'EOF'
+## What
+- Bullet summary of changes
+
+## Why
+One sentence on the motivation.
+
+## Test plan
+- [ ] tsc clean
+- [ ] Affected e2e specs pass
+- [ ] Manual smoke (if UI change)
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)"
 ```
 
 ### What to commit
 - ✅ All source files
 - ✅ `.env.example`
 - ✅ `CLAUDE.md`
+- ✅ `.agents/skills/` (skill files)
 - ❌ `.env.local` (gitignored)
 - ❌ `node_modules/`
 - ❌ `.DS_Store`
+- ❌ `server/data/*.db` (gitignored)
 
 ---
 
@@ -810,7 +856,25 @@ Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending revie
 Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
-Last session:   2026-05-31
+Last session:   2026-06-01
+Last completed: - Transaction UX improvements + CSV import hardening:
+                    • Quick date filters (This Month / Last Month / All Time) as
+                      pill buttons in the filter bar — sets dateFrom/dateTo.
+                    • Multi-select delete: "Select" button enters select mode,
+                      checkboxes on each row, select-all toggle, bulk delete
+                      with confirmation modal. Cancel exits without deleting.
+                    • CSV import: "First row is a header" toggle (default ON) —
+                      when OFF, first row is treated as data and included in
+                      import; row count updates live on toggle.
+                    • CSV import: no-account guard — if user has no accounts,
+                      upload step shows a warning and "Create an Account" link
+                      instead of the dropzone.
+                    • New e2e: +13 tests (03-wallet-transactions, 04-wallet-csv);
+                      65 pass, 0 new failures. Pre-existing flaky failures in
+                      01/02/05/07 unrelated to this work.
+                    • smart-delegate skill: model routing guide (Haiku for tests/
+                      git/verification, Sonnet for planning/dev). Symlinked into
+                      .claude/skills/. Section 17 added to CLAUDE.md.
 Last completed: - Release management + CI/CD (branch
                   claude/release-management-cicd-dMkPq). See docs/ci-cd.md.
                     • CI: .github/workflows/ci.yml — typecheck (client+server),
@@ -1096,3 +1160,49 @@ npx playwright test e2e/01-tasks # Single file
 npx playwright test --headed     # Watch mode (headed)
 npx playwright show-report       # View last HTML report
 ```
+
+---
+
+## 17. Model Routing for Claude Code Operations
+
+**These rules apply every session. Consult them before every Agent spawn and before every inline action.**
+
+The goal: use the cheapest model capable of the task. Haiku for mechanical work, Sonnet for judgment work.
+
+### Routing quick-reference
+
+| Task | Model | Location |
+|------|-------|----------|
+| Run tests / parse failures | **haiku** | Agent |
+| TypeScript typecheck (`tsc --noEmit`) | **haiku** | Agent |
+| Build check (`npm run build`) | **haiku** | Agent |
+| Git: status, diff, log, add, commit, push | **haiku** | Agent |
+| Read a known file / grep a known symbol | — | Inline Bash/Read |
+| Explore unknown code region | **haiku** | Agent (Explore) |
+| Small ≤2-file bug fix, cause already clear | — | Inline Edit |
+| New feature, 3–6 files | **sonnet** | Main thread, medium effort |
+| Architecture / planning pass | **sonnet** | Main thread, high effort |
+| Cross-cutting refactor, 6+ files | **sonnet** | Agent |
+| Security / adversarial review | **sonnet** | Agent, high effort |
+| Final verification after any delivery | **haiku** | Agent (always) |
+
+### Mandatory four-phase workflow for every task
+
+```
+BRANCH → Haiku agent  — git checkout -b <type>/<desc>  ← NEVER skip, even for tiny fixes
+PLAN   → Sonnet (main thread) — read files, design solution, identify all changes needed
+BUILD  → Sonnet (main thread) — implement; spawn Haiku agents for mechanical sub-tasks
+VERIFY → Haiku agent  — tsc + affected e2e spec; report pass/fail; loop back to BUILD if failures
+PR     → Haiku agent  — gh pr create; return PR URL   ← work is not done until PR exists
+```
+
+### Hard rules
+
+1. **Never work on main** — always branch first.
+2. **Never run tests inline** — always `Agent({ model: "haiku", ... })`.
+3. **Never do git inline** — always `Agent({ model: "haiku", ... })`.
+4. **Every session must end with a Haiku verification agent + PR** before reporting work done.
+5. **Haiku prompts must be tight** — exact commands + exact file paths. Haiku doesn't explore.
+6. **Independent verifications run in parallel** — spawn typecheck + e2e in one message.
+
+See `.agents/skills/smart-delegate/SKILL.md` for full routing table, cost intuition, and spawn templates.

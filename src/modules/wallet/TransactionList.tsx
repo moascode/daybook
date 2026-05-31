@@ -13,6 +13,9 @@ interface TransactionListProps {
   categories: Category[]
   onEdit: (transaction: Transaction) => void
   onDelete: (id: string) => void
+  selectMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
 function groupByDay(transactions: Transaction[]): DailyGroup[] {
@@ -50,12 +53,18 @@ function TransactionRow({
   categories,
   onEdit,
   onRequestDelete,
+  selectMode,
+  isSelected,
+  onToggleSelect,
 }: {
   transaction: Transaction
   accounts: Account[]
   categories: Category[]
   onEdit: (t: Transaction) => void
   onRequestDelete: (t: Transaction) => void
+  selectMode?: boolean
+  isSelected?: boolean
+  onToggleSelect?: (id: string) => void
 }) {
   const account = accounts.find((a) => a.id === transaction.accountId)
   const destAccount = transaction.destinationAccountId
@@ -75,31 +84,53 @@ function TransactionRow({
   const amountPrefix =
     transaction.type === 'income' ? '+' : transaction.type === 'expense' ? '-' : ''
 
+  function handleRowClick() {
+    if (selectMode) {
+      onToggleSelect?.(transaction.id)
+    } else {
+      onEdit(transaction)
+    }
+  }
+
   return (
     <div
       data-testid="transaction-row"
-      className="group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-gray-50 cursor-pointer"
-      onClick={() => onEdit(transaction)}
+      className={cn(
+        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors cursor-pointer',
+        selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
+      )}
+      onClick={handleRowClick}
     >
-      {/* Type indicator */}
-      <div
-        className={cn(
-          'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold',
-          transaction.type === 'income'
-            ? 'bg-green-50 text-green-600'
-            : transaction.type === 'expense'
-              ? 'bg-red-50 text-red-600'
-              : 'bg-blue-50 text-blue-600'
-        )}
-      >
-        {transaction.type === 'transfer' ? (
-          <ArrowRightLeft className="h-3.5 w-3.5" />
-        ) : transaction.type === 'income' ? (
-          '+'
-        ) : (
-          '-'
-        )}
-      </div>
+      {/* Checkbox (select mode) or type indicator */}
+      {selectMode ? (
+        <input
+          type="checkbox"
+          checked={isSelected ?? false}
+          onChange={() => onToggleSelect?.(transaction.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-brand-600 cursor-pointer"
+          aria-label="Select transaction"
+        />
+      ) : (
+        <div
+          className={cn(
+            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold',
+            transaction.type === 'income'
+              ? 'bg-green-50 text-green-600'
+              : transaction.type === 'expense'
+                ? 'bg-red-50 text-red-600'
+                : 'bg-blue-50 text-blue-600'
+          )}
+        >
+          {transaction.type === 'transfer' ? (
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+          ) : transaction.type === 'income' ? (
+            '+'
+          ) : (
+            '-'
+          )}
+        </div>
+      )}
 
       {/* Details */}
       <div className="min-w-0 flex-1">
@@ -137,29 +168,30 @@ function TransactionRow({
         {amountPrefix}{formatMYR(transaction.amount)}
       </span>
 
-      {/* Row actions — always present (also reachable on touch), emphasised on
-          hover. Clicking the row still opens edit; these make it discoverable. */}
-      <div
-        className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onEdit(transaction)}
-          aria-label="Edit transaction"
+      {/* Row actions — hidden in select mode */}
+      {!selectMode && (
+        <div
+          className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
+          onClick={(e) => e.stopPropagation()}
         >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onRequestDelete(transaction)}
-          aria-label="Delete transaction"
-        >
-          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-        </Button>
-      </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onEdit(transaction)}
+            aria-label="Edit transaction"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRequestDelete(transaction)}
+            aria-label="Delete transaction"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -170,6 +202,9 @@ export function TransactionList({
   categories,
   onEdit,
   onDelete,
+  selectMode,
+  selectedIds,
+  onToggleSelect,
 }: TransactionListProps) {
   const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
@@ -223,6 +258,9 @@ export function TransactionList({
                   categories={categories}
                   onEdit={onEdit}
                   onRequestDelete={setDeleteTarget}
+                  selectMode={selectMode}
+                  isSelected={selectedIds?.has(t.id)}
+                  onToggleSelect={onToggleSelect}
                 />
               ))}
             </div>
