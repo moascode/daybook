@@ -57,6 +57,7 @@ export function SplitTransactionModal({
     ]
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // Reset when transaction changes
@@ -115,6 +116,7 @@ export function SplitTransactionModal({
     if (Object.keys(errs).length > 0) return
 
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const make = (p: SplitPart): TransactionFormData => ({
         accountId: transaction.accountId,
@@ -129,6 +131,8 @@ export function SplitTransactionModal({
       })
       await onConfirm([make(parts[0]), make(parts[1])])
       onOpenChange(false)
+    } catch {
+      setSubmitError('Split failed. Any partially created transactions have been rolled back.')
     } finally {
       setSubmitting(false)
     }
@@ -163,6 +167,9 @@ export function SplitTransactionModal({
 
         {errors.total && (
           <p className="text-sm text-red-600">{errors.total}</p>
+        )}
+        {submitError && (
+          <p className="text-sm text-red-600">{submitError}</p>
         )}
 
         {/* Side-by-side split parts */}

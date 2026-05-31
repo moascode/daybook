@@ -475,11 +475,13 @@ export function useWallet() {
 
   /**
    * Export a specific set of transactions (by ID) as CSV or JSON.
-   * Uses already-loaded store data — no extra server call needed.
+   * Reads from the store so it always operates on the currently filtered view.
    */
   const exportTransactions = useCallback((format: 'csv' | 'json', ids: string[]): void => {
     const { transactions, accounts, categories } = useWalletStore.getState()
     const idSet = new Set(ids)
+    // Only export IDs that exist in the current filtered view (prevents stale IDs from
+    // exporting rows the user can no longer see).
     const toExport = transactions.filter((t) => idSet.has(t.id))
 
     const filename = `daybook-transactions-${todayISO()}.${format}`

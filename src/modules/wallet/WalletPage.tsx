@@ -187,11 +187,23 @@ export function WalletPage() {
 
   const handleSplitConfirm = useCallback(async (parts: [TransactionFormData, TransactionFormData]) => {
     if (!splitSource) return
-    await addTransaction(parts[0])
-    await addTransaction(parts[1])
-    await deleteTransaction(splitSource.id)
-    await loadTransactions(filtersRef.current)
-    await loadNetWorth()
+    const created: string[] = []
+    try {
+      const t1 = await addTransaction(parts[0])
+      created.push(t1.id)
+      const t2 = await addTransaction(parts[1])
+      created.push(t2.id)
+      await deleteTransaction(splitSource.id)
+    } catch (err) {
+      // Roll back any successfully created parts so we don't leave orphans.
+      for (const id of created) {
+        await deleteTransaction(id).catch(() => {})
+      }
+      throw err
+    } finally {
+      await loadTransactions(filtersRef.current)
+      await loadNetWorth()
+    }
   }, [splitSource, addTransaction, deleteTransaction, loadTransactions, loadNetWorth])
 
   function toggleSelectMode() {
