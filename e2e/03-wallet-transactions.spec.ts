@@ -33,7 +33,7 @@ test.afterAll(async () => {
 test('navigate to Transactions tab', async () => {
   await page.getByRole('link', { name: 'Transactions' }).click()
   await expect(page).toHaveURL(/\/wallet$/)
-  await expect(page.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
   // Clear the default current-month date filters so transactions with past dates are visible
   await page.getByLabel('From').fill('')
   await page.getByLabel('To').fill('')

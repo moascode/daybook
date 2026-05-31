@@ -1,18 +1,84 @@
-import { NavLink } from 'react-router-dom'
-import { CheckSquare, Wallet, Settings, FlaskConical, X } from 'lucide-react'
+import { useState } from 'react'
+import { NavLink, useLocation } from 'react-router-dom'
+import {
+  CheckSquare,
+  Wallet,
+  Settings,
+  FlaskConical,
+  X,
+  ChevronDown,
+  List,
+  CreditCard,
+  BarChart3,
+  PieChart,
+  RefreshCw,
+  Target,
+  BarChart2,
+  Upload,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-const mainNavItems = [
-  { to: '/tasks', label: 'Tasks', icon: CheckSquare, end: true },
-  { to: '/wallet', label: 'Wallet', icon: Wallet, end: false },
-]
+/**
+ * Wallet sub-navigation, grouped by how often each destination is used.
+ * Rendered as an expandable section under the "Wallet" top-level item so the
+ * eight wallet pages live in a vertical left panel instead of a squeezed
+ * horizontal tab strip.
+ */
+const walletGroups = [
+  {
+    label: 'Daily',
+    items: [
+      { to: '/wallet', label: 'Transactions', icon: List, end: true },
+      { to: '/wallet/dashboard', label: 'Dashboard', icon: BarChart3, end: false },
+      { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false },
+    ],
+  },
+  {
+    label: 'Planning',
+    items: [
+      { to: '/wallet/budgets', label: 'Budgets', icon: PieChart, end: false },
+      { to: '/wallet/goals', label: 'Goals', icon: Target, end: false },
+      { to: '/wallet/recurring', label: 'Recurring', icon: RefreshCw, end: false },
+    ],
+  },
+  {
+    label: 'Analyse',
+    items: [{ to: '/wallet/reports', label: 'Reports', icon: BarChart2, end: false }],
+  },
+  {
+    label: 'Data',
+    items: [{ to: '/wallet/import', label: 'Import CSV', icon: Upload, end: false }],
+  },
+] as const
 
 interface SidebarProps {
   open?: boolean
   onClose?: () => void
 }
 
+const topLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+    isActive
+      ? 'bg-brand-50 text-brand-700'
+      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+  )
+
+const subLinkClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'flex items-center gap-2.5 rounded-lg py-1.5 pl-9 pr-3 text-[13px] font-medium transition-colors',
+    isActive
+      ? 'bg-brand-50 text-brand-700'
+      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+  )
+
 export function Sidebar({ open = true, onClose }: SidebarProps) {
+  const location = useLocation()
+  const isWalletRoute = location.pathname.startsWith('/wallet')
+  // null = follow the route (auto-expand on /wallet/*); true/false = manual override.
+  const [walletOverride, setWalletOverride] = useState<boolean | null>(null)
+  const walletExpanded = walletOverride ?? isWalletRoute
+
   const navContent = (
     <>
       {/* Logo */}
@@ -38,42 +104,73 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       </div>
 
       {/* Main navigation */}
-      <nav className="flex-1 space-y-0.5 px-3 pt-2">
-        {mainNavItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            onClick={onClose}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-              )
-            }
-          >
-            <item.icon className="h-4 w-4 flex-shrink-0" />
-            {item.label}
-          </NavLink>
-        ))}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
+        <NavLink to="/tasks" end onClick={onClose} className={topLinkClass}>
+          <CheckSquare className="h-4 w-4 flex-shrink-0" />
+          Tasks
+        </NavLink>
+
+        {/* Wallet — expandable section */}
+        <div>
+          <div className="flex items-center">
+            <NavLink
+              to="/wallet"
+              end={false}
+              onClick={() => {
+                setWalletOverride(true)
+                onClose?.()
+              }}
+              className={({ isActive }) =>
+                cn(topLinkClass({ isActive }), 'flex-1')
+              }
+            >
+              <Wallet className="h-4 w-4 flex-shrink-0" />
+              Wallet
+            </NavLink>
+            <button
+              type="button"
+              onClick={() => setWalletOverride(!walletExpanded)}
+              aria-label={walletExpanded ? 'Collapse Wallet' : 'Expand Wallet'}
+              aria-expanded={walletExpanded}
+              className="ml-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            >
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 transition-transform',
+                  walletExpanded ? '' : '-rotate-90',
+                )}
+              />
+            </button>
+          </div>
+
+          {walletExpanded && (
+            <div className="mt-0.5 space-y-2 pb-1">
+              {walletGroups.map((group) => (
+                <div key={group.label} className="space-y-0.5">
+                  <p className="px-3 pb-0.5 pl-9 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    {group.label}
+                  </p>
+                  {group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      onClick={onClose}
+                      className={subLinkClass}
+                    >
+                      <item.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Dev-only UAT link */}
         {import.meta.env.DEV && (
-          <NavLink
-            to="/uat"
-            end
-            onClick={onClose}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-              )
-            }
-          >
+          <NavLink to="/uat" end onClick={onClose} className={topLinkClass}>
             <FlaskConical className="h-4 w-4 flex-shrink-0" />
             UAT Tests
           </NavLink>
@@ -82,19 +179,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
 
       {/* Bottom: Settings */}
       <div className="border-t border-gray-200 px-3 py-3">
-        <NavLink
-          to="/settings"
-          end
-          onClick={onClose}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-brand-50 text-brand-700'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
-            )
-          }
-        >
+        <NavLink to="/settings" end onClick={onClose} className={topLinkClass}>
           <Settings className="h-4 w-4 flex-shrink-0" />
           Settings
         </NavLink>

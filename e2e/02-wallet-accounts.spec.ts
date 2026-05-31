@@ -153,7 +153,7 @@ test('confirm delete removes the account', async () => {
 test('sidebar Wallet link navigates to /wallet (transactions)', async () => {
   await page.getByRole('link', { name: 'Wallet' }).click()
   await expect(page).toHaveURL(/\/wallet$/)
-  await expect(page.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
 })
 
 test('Accounts tab from transaction page takes you back to accounts', async () => {

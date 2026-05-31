@@ -32,7 +32,7 @@ test('wallet navigation contains a "Recurring" link', async () => {
 test('navigating to /wallet/recurring shows the Recurring page', async () => {
   await page.goto('/wallet/recurring')
   await expect(page).toHaveURL(/\/wallet\/recurring$/)
-  await expect(page.getByRole('heading', { name: /Recurring/i })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: /Recurring/i })).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────

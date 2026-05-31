@@ -2,10 +2,14 @@ import { useLocation } from 'react-router-dom'
 
 const routeTitles: Record<string, string> = {
   '/tasks':             'Tasks',
-  '/wallet':            'Wallet',
-  '/wallet/accounts':   'Wallet',
-  '/wallet/dashboard':  'Wallet',
-  '/wallet/import':     'Wallet',
+  '/wallet':            'Transactions',
+  '/wallet/accounts':   'Accounts',
+  '/wallet/dashboard':  'Dashboard',
+  '/wallet/budgets':    'Budgets',
+  '/wallet/recurring':  'Recurring',
+  '/wallet/goals':      'Goals',
+  '/wallet/reports':    'Reports',
+  '/wallet/import':     'Import CSV',
   '/settings':          'Settings',
   '/uat':               'UAT Tests',
 }
