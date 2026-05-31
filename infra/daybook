@@ -317,11 +317,11 @@ cmd_deploy() {
 
   local tag="$arg"
   if [ -n "$tag" ]; then
-    info "Fetching release $tag from $REPO…"
+    info "Fetching release $tag from ${REPO}…"
     gh_api "/releases/tags/$tag" > "$tmp/release.json" 2>/dev/null \
       || die "Release '$tag' not found on $REPO."
   else
-    info "Fetching latest release from $REPO…"
+    info "Fetching latest release from ${REPO}…"
     gh_api "/releases/latest" > "$tmp/release.json" 2>/dev/null \
       || die "No releases found on $REPO."
   fi
@@ -346,7 +346,7 @@ cmd_deploy() {
     sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
     [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
 
-    info "Downloading $tarball_name…"
+    info "Downloading ${tarball_name}…"
     download_asset "$tarball_id" "$tmp/$tarball_name"
 
     if [ -n "$sha_id" ]; then
@@ -376,7 +376,7 @@ cmd_deploy() {
     chmod +x "$release_dir/infra/daybook" 2>/dev/null || true
 
     # Install runtime deps inside the release dir (compiles native modules).
-    info "Installing dependencies for $rel_tag…"
+    info "Installing dependencies for ${rel_tag}…"
     ( cd "$release_dir" && npm ci )
     ok "Release $rel_tag staged at ${release_dir/#$HOME/\~}"
   fi
@@ -387,9 +387,11 @@ cmd_deploy() {
   # Flip the symlink atomically.
   # Use a temp name + mv so the switch is an atomic rename (no window where
   # current points nowhere).
-  ln -sfn "$release_dir" "$CURRENT_LINK.next"
-  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
-  ok "current → $rel_tag"
+  tmp_link="$(mktemp -u "${CURRENT_LINK}.XXXX")"
+
+  ln -s "$release_dir" "$tmp_link" || exit 1
+  ln -sfn "$release_dir" "$CURRENT_LINK" || exit 1
+  rm -f "$tmp_link"
 
   restart_service
   ok "Deployed $rel_tag."
