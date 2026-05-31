@@ -98,7 +98,8 @@ export async function fillTransactionForm(
     merchant?: string
     date?: string
     category?: string
-    tag?: string
+    /** Tags to add — each is typed into the TagInput and confirmed with Enter */
+    tags?: string[]
   },
 ) {
   const dialog = page.getByRole('dialog')
@@ -115,7 +116,13 @@ export async function fillTransactionForm(
   if (fields.toAccount) await dialog.locator('#to-account').selectOption(fields.toAccount)
   if (fields.merchant) await dialog.getByLabel('Merchant').fill(fields.merchant)
   if (fields.category) await dialog.locator('#category').selectOption(fields.category)
-  if (fields.tag) await dialog.locator('#tag').fill(fields.tag)
-  await dialog.getByRole('button', { name: /Add Transaction|Save Changes/ }).click()
+  if (fields.tags) {
+    const tagInput = dialog.locator('#tags')
+    for (const tag of fields.tags) {
+      await tagInput.fill(tag)
+      await tagInput.press('Enter')
+    }
+  }
+  await dialog.getByRole('button', { name: /Add Transaction|Save Changes|Create Split/ }).click()
   await expect(dialog).toBeHidden()
 }
