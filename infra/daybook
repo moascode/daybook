@@ -351,7 +351,15 @@ cmd_setup_lan() {
     ok "pf.conf cleaned."
   fi
 
-  # 4. Load our standalone rules file directly and enable pf.
+  # 4. Enable IP forwarding — required for pf to redirect packets arriving on
+  #    a physical interface to localhost. Persist in /etc/sysctl.conf.
+  sysctl -w net.inet.ip.forwarding=1 >/dev/null
+  if ! grep -q 'net.inet.ip.forwarding=1' /etc/sysctl.conf 2>/dev/null; then
+    printf '\nnet.inet.ip.forwarding=1\n' >> /etc/sysctl.conf
+  fi
+  ok "IP forwarding enabled."
+
+  # 5. Load our standalone rules file directly and enable pf.
   #    We bypass pf.conf entirely — no anchor point needed.
   pfctl -ef "$PF_ANCHOR_FILE" && \
     ok "pf rules loaded (port 80 → $PORT)." || \
@@ -367,9 +375,9 @@ cmd_setup_lan() {
   <key>Label</key><string>$PF_DAEMON_LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/sbin/pfctl</string>
-    <string>-ef</string>
-    <string>$PF_ANCHOR_FILE</string>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>/sbin/sysctl -w net.inet.ip.forwarding=1; /sbin/pfctl -ef $PF_ANCHOR_FILE</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>/var/log/daybook-pf.log</string>
