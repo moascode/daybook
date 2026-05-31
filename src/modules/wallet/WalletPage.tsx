@@ -62,14 +62,17 @@ export function WalletPage() {
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
+  // Also track previous filters to detect changes and clear the selection.
   const filtersRef = useRef(filters)
-  useEffect(() => { filtersRef.current = filters }, [filters])
+  const prevFiltersRef = useRef(filters)
 
-  // When filters change while select mode is active, the displayed transaction
-  // list changes — any previously selected IDs may no longer be visible and
-  // would be silently bulk-deleted. Clear the selection to prevent this.
   useEffect(() => {
-    if (selectMode) setSelectedIds(new Set())
+    // Detect filter changes and clear selection if in select mode
+    if (selectMode && JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
+      setSelectedIds(new Set())
+    }
+    filtersRef.current = filters
+    prevFiltersRef.current = filters
   }, [filters, selectMode])
 
   // Income/expense/net for the currently loaded transactions — derived state,
