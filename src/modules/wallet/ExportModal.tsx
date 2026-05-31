@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Download } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -24,13 +24,18 @@ export function ExportModal({
   onExport,
 }: ExportModalProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [prevOpen, setPrevOpen] = useState(open)
+  const [prevTransactions, setPrevTransactions] = useState(transactions)
 
-  // Select all by default when modal opens or transactions change
-  useEffect(() => {
+  // Reset selection when the modal opens or the transaction list changes — adjust
+  // state during render to avoid setState-in-effect (react-hooks/set-state-in-effect).
+  if (open !== prevOpen || transactions !== prevTransactions) {
+    setPrevOpen(open)
+    setPrevTransactions(transactions)
     if (open) {
       setSelectedIds(new Set(transactions.map((t) => t.id)))
     }
-  }, [open, transactions])
+  }
 
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
