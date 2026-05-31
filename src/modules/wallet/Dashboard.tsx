@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
 import { format, parseISO, endOfWeek, eachWeekOfInterval, differenceInDays } from 'date-fns'
 import {
@@ -214,6 +215,11 @@ export function Dashboard() {
           icon={<LayoutDashboard className="h-12 w-12" />}
           title="No data yet"
           description="Add accounts and transactions to see your financial dashboard."
+          action={
+            <Link to="/wallet/accounts">
+              <Button size="sm">Go to Accounts</Button>
+            </Link>
+          }
         />
       ) : (
 

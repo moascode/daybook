@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft } from 'lucide-react'
+import { Trash2, ArrowRightLeft, Pencil } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -137,11 +137,20 @@ function TransactionRow({
         {amountPrefix}{formatMYR(transaction.amount)}
       </span>
 
-      {/* Delete button — visible on hover */}
+      {/* Row actions — always present (also reachable on touch), emphasised on
+          hover. Clicking the row still opens edit; these make it discoverable. */}
       <div
-        className="flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+        className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
         onClick={(e) => e.stopPropagation()}
       >
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(transaction)}
+          aria-label="Edit transaction"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
         <Button
           variant="ghost"
           size="sm"
