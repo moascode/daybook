@@ -14,6 +14,7 @@ interface AccountRow {
   type: string
   color: string
   icon: string
+  opening_balance: number
   created_at: string
 }
 
@@ -52,6 +53,7 @@ function mapAccount(row: AccountRow): Account {
     type: row.type as Account['type'],
     color: row.color,
     icon: row.icon,
+    openingBalance: row.opening_balance ?? 0,
     createdAt: row.created_at,
   }
 }
@@ -139,6 +141,7 @@ interface AccountInput {
   type?: Account['type']
   color?: string
   icon?: string
+  openingBalance?: number
 }
 
 interface TransactionInput {
@@ -371,6 +374,18 @@ export function useWallet() {
     useWalletStore.getState().removeRecurringTransaction(id)
   }, [])
 
+  // Post all rules due on/before today (catch-up). Returns the number posted.
+  const processRecurringTransactions = useCallback(async (): Promise<number> => {
+    const { posted } = await api.post<{ posted: number }>('/recurring-transactions/process')
+    return posted
+  }, [])
+
+  // Post a single rule immediately and advance its schedule one period.
+  const postRecurringNow = useCallback(async (id: string): Promise<void> => {
+    const row = await api.post<RecurringRow>(`/recurring-transactions/${id}/post`)
+    useWalletStore.getState().updateRecurringTransaction(id, mapRecurring(row))
+  }, [])
+
   // ── Goal CRUD ────────────────────────────────────
 
   const loadGoals = useCallback(async () => {
@@ -488,6 +503,8 @@ export function useWallet() {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
+    processRecurringTransactions,
+    postRecurringNow,
 
     // Goal CRUD
     addGoal,

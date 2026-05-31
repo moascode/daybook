@@ -47,11 +47,12 @@ test('open "New Account" modal via Add Account button', async () => {
   await expect(page.getByRole('heading', { name: 'New Account' })).toBeVisible()
 })
 
-test('modal has Account Name, Type, Currency, Icon, Color fields', async () => {
+test('modal has Account Name, Type, Icon, Color fields', async () => {
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByLabel('Account Name')).toBeVisible()
   await expect(dialog.getByLabel('Type')).toBeVisible()
-  await expect(dialog.getByLabel('Currency')).toBeVisible()
+  // Currency selector was removed — the app is single-currency (MYR).
+  await expect(dialog.getByLabel('Currency')).toHaveCount(0)
   await expect(dialog.getByLabel('Icon')).toBeVisible()
 })
 
@@ -62,7 +63,7 @@ test('cannot submit without account name — shows validation error', async () =
 })
 
 test('create first account: Maybank Savings (Bank, MYR)', async () => {
-  await fillAccountForm(page, { name: 'Maybank Savings', type: 'bank', currency: 'MYR' })
+  await fillAccountForm(page, { name: 'Maybank Savings', type: 'bank' })
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(accountCardFor(page, 'Maybank Savings')).toBeVisible()
 })
@@ -93,7 +94,6 @@ test('open Edit Account modal via pencil icon', async () => {
 test('edit modal is pre-filled with existing values', async () => {
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByLabel('Account Name')).toHaveValue('Maybank Savings')
-  await expect(dialog.getByLabel('Currency')).toHaveValue('MYR')
 })
 
 test('update account name and save', async () => {
@@ -153,7 +153,7 @@ test('confirm delete removes the account', async () => {
 test('sidebar Wallet link navigates to /wallet (transactions)', async () => {
   await page.getByRole('link', { name: 'Wallet' }).click()
   await expect(page).toHaveURL(/\/wallet$/)
-  await expect(page.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
 })
 
 test('Accounts tab from transaction page takes you back to accounts', async () => {

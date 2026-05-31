@@ -18,7 +18,11 @@ interface WalletState {
   recurringTransactions: RecurringTransaction[]
   goals: Goal[]
   filters: WalletFilters
+  // Bumped to signal that server-side data changed out-of-band (e.g. recurring
+  // rules auto-posted on boot) so mounted pages re-fetch.
+  dataVersion: number
 
+  invalidate: () => void
   setAccounts: (accounts: Account[]) => void
   setTransactions: (transactions: Transaction[]) => void
   setCategories: (categories: Category[]) => void
@@ -68,7 +72,9 @@ export const useWalletStore = create<WalletState>((set) => ({
   recurringTransactions: [],
   goals: [],
   filters: getDefaultFilters(),
+  dataVersion: 0,
 
+  invalidate: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),
   setAccounts: (accounts) => set({ accounts }),
   setTransactions: (transactions) => set({ transactions }),
   setCategories: (categories) => set({ categories }),

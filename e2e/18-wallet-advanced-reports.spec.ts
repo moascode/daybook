@@ -55,7 +55,7 @@ test('wallet navigation or dashboard has a "Reports" link/button', async () => {
 test('navigating to /wallet/reports shows the Reports page', async () => {
   await page.goto('/wallet/reports')
   await expect(page).toHaveURL(/\/wallet\/reports$/)
-  await expect(page.getByRole('heading', { name: /Reports/i })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: /Reports/i })).toBeVisible()
 })
 
 // ── Year-on-year comparison ────────────────────────────────────────────

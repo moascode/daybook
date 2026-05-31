@@ -16,6 +16,7 @@ const ACCOUNT_COLS: Record<string, string> = {
   type: 'type',
   color: 'color',
   icon: 'icon',
+  openingBalance: 'opening_balance',
 }
 
 walletRouter.get('/accounts', (req, res) => {
@@ -28,8 +29,8 @@ walletRouter.post('/accounts', (req, res) => {
   const b = req.body ?? {}
   const row = getDb()
     .prepare(
-      `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, created_at)
-       VALUES (lower(hex(randomblob(16))), @userId, @name, @description, @currency, @type, @color, @icon, datetime('now'))
+      `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, opening_balance, created_at)
+       VALUES (lower(hex(randomblob(16))), @userId, @name, @description, @currency, @type, @color, @icon, @openingBalance, datetime('now'))
        RETURNING *`,
     )
     .get({
@@ -40,6 +41,7 @@ walletRouter.post('/accounts', (req, res) => {
       type: b.type ?? 'cash',
       color: b.color ?? '#1D9E75',
       icon: b.icon ?? 'wallet',
+      openingBalance: normalizeBind(b.openingBalance ?? 0),
     })
   res.status(201).json(row)
 })
@@ -58,11 +60,16 @@ walletRouter.delete('/accounts/:id', (req, res) => {
   res.status(204).end()
 })
 
-// Balance = income − expense − transfers out + transfers in.
+// Balance = opening balance + income − expense − transfers out + transfers in.
 walletRouter.get('/accounts/:id/balance', (req, res) => {
   const db = getDb()
   const id = req.params.id
   const userId = req.session.userId!
+  const acct = db
+    .prepare('SELECT opening_balance FROM accounts WHERE id = @id AND user_id = @userId')
+    .get({ id, userId }) as { opening_balance: number } | undefined
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  const opening = acct.opening_balance ?? 0
   const total = (clause: string) =>
     (db
       .prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE user_id = @userId AND ${clause}`)
@@ -71,7 +78,7 @@ walletRouter.get('/accounts/:id/balance', (req, res) => {
   const expense = total(`account_id = @id AND type = 'expense'`)
   const transferOut = total(`account_id = @id AND type = 'transfer'`)
   const transferIn = total(`destination_account_id = @id AND type = 'transfer'`)
-  res.json({ balance: income - expense - transferOut + transferIn })
+  res.json({ balance: opening + income - expense - transferOut + transferIn })
 })
 
 // ── Categories (read-only; seeded per user on signup) ─
@@ -273,10 +280,22 @@ walletRouter.get('/recurring-transactions', (req, res) => {
   )
 })
 
+// Recurring rules only post income or expense (never transfers — a transfer
+// needs a destination account these rules don't carry) and repeat monthly or
+// weekly. Guard both so a malformed rule can't post corrupt transactions.
+const RECURRING_TYPES = new Set(['income', 'expense'])
+const RECURRING_FREQS = new Set(['monthly', 'weekly'])
+
 walletRouter.post('/recurring-transactions', (req, res) => {
   const b = req.body ?? {}
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['categories', b.categoryId]])) {
     return res.status(400).json({ error: 'invalid account or category reference' })
+  }
+  if (b.type != null && !RECURRING_TYPES.has(b.type)) {
+    return res.status(400).json({ error: 'recurring type must be income or expense' })
+  }
+  if (!RECURRING_FREQS.has(b.frequency)) {
+    return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
   }
   const row = getDb()
     .prepare(
@@ -299,8 +318,129 @@ walletRouter.post('/recurring-transactions', (req, res) => {
   res.status(201).json(row)
 })
 
+// Advance an ISO date (YYYY-MM-DD) by one recurrence period. Monthly clamps to
+// the last valid day of the target month (e.g. 31 Jan → 28/29 Feb).
+function advanceDate(dateStr: string, frequency: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (frequency === 'weekly') {
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() + 7)
+    return dt.toISOString().slice(0, 10)
+  }
+  let ny = y
+  let nm = m + 1
+  if (nm > 12) { nm = 1; ny += 1 }
+  const lastDay = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  const nd = Math.min(d, lastDay)
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+}
+
+// Local calendar date (YYYY-MM-DD), matching the client's todayISO() — NOT UTC.
+// On a home-network server the local timezone is the user's, so recurring posts
+// are dated the user's "today", consistent with manually entered transactions.
+function todayStr(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+interface RecurringRecord {
+  id: string
+  account_id: string
+  amount: number
+  merchant: string
+  type: string
+  category_id: string | null
+  frequency: string
+  next_due_date: string
+}
+
+// Process every rule that is due on/before today, posting a real transaction for
+// each missed occurrence (catch-up) and advancing next_due_date past today.
+// Returns how many transactions were posted.
+walletRouter.post('/recurring-transactions/process', (req, res) => {
+  const userId = req.session.userId!
+  const db = getDb()
+  const today = todayStr()
+  const due = db
+    .prepare('SELECT * FROM recurring_transactions WHERE user_id = ? AND next_due_date <= ?')
+    .all(userId, today) as RecurringRecord[]
+
+  let posted = 0
+  const run = db.transaction(() => {
+    for (const rule of due) {
+      let next = rule.next_due_date
+      let guard = 0
+      while (next <= today && guard < 120) {
+        insertTransaction(
+          {
+            accountId: rule.account_id,
+            date: next,
+            merchant: rule.merchant,
+            description: '',
+            amount: rule.amount,
+            type: rule.type,
+            categoryId: rule.category_id,
+          },
+          userId,
+        )
+        next = advanceDate(next, rule.frequency)
+        posted++
+        guard++
+      }
+      db.prepare(
+        `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+         WHERE id = ? AND user_id = ?`,
+      ).run(next, rule.id, userId)
+    }
+  })
+  run()
+  res.json({ posted })
+})
+
+// Post a single rule immediately (dated today) and push its schedule forward one
+// period. Used by the "Post now" action.
+walletRouter.post('/recurring-transactions/:id/post', (req, res) => {
+  const userId = req.session.userId!
+  const db = getDb()
+  const rule = db
+    .prepare('SELECT * FROM recurring_transactions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as RecurringRecord | undefined
+  if (!rule) return res.status(404).json({ error: 'recurring transaction not found' })
+
+  const today = todayStr()
+  insertTransaction(
+    {
+      accountId: rule.account_id,
+      date: today,
+      merchant: rule.merchant,
+      description: '',
+      amount: rule.amount,
+      type: rule.type,
+      categoryId: rule.category_id,
+    },
+    userId,
+  )
+  // Only advance the schedule when the rule was actually due. Posting an early,
+  // ad-hoc occurrence must not consume (skip) the upcoming scheduled one.
+  const next =
+    rule.next_due_date <= today ? advanceDate(rule.next_due_date, rule.frequency) : rule.next_due_date
+  const row = db
+    .prepare(
+      `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+       WHERE id = ? AND user_id = ? RETURNING *`,
+    )
+    .get(next, rule.id, userId)
+  res.json(row)
+})
+
 walletRouter.patch('/recurring-transactions/:id', (req, res) => {
   const b = req.body ?? {}
+  if ('type' in b && !RECURRING_TYPES.has(b.type)) {
+    return res.status(400).json({ error: 'recurring type must be income or expense' })
+  }
+  if ('frequency' in b && !RECURRING_FREQS.has(b.frequency)) {
+    return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
+  }
   const refs: Array<[string, unknown]> = []
   if ('accountId' in b) refs.push(['accounts', b.accountId])
   if ('categoryId' in b) refs.push(['categories', b.categoryId])

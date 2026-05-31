@@ -37,10 +37,13 @@ const TYPE_OPTIONS: { value: TransactionType; label: string; color: string }[] =
 
 function getInitialState(
   transaction?: Transaction | null,
-  defaultAccountId?: string | null
+  defaultAccountId?: string | null,
+  accounts: Account[] = []
 ): TransactionFormData {
   return {
-    accountId: transaction?.accountId ?? defaultAccountId ?? '',
+    // Pre-select an account so the common single-account case needs no extra
+    // click: the active account filter if set, otherwise the first account.
+    accountId: transaction?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '',
     destinationAccountId: transaction?.destinationAccountId ?? null,
     date: transaction?.date ?? todayISO(),
     merchant: transaction?.merchant ?? '',
@@ -62,7 +65,7 @@ export function TransactionForm({
   onSubmit,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
-    getInitialState(transaction, defaultAccountId)
+    getInitialState(transaction, defaultAccountId, accounts)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [prevOpen, setPrevOpen] = useState(open)
@@ -76,7 +79,7 @@ export function TransactionForm({
     setPrevTransaction(transaction)
     setPrevDefaultAccountId(defaultAccountId)
     if (open) {
-      setForm(getInitialState(transaction, defaultAccountId))
+      setForm(getInitialState(transaction, defaultAccountId, accounts))
       setErrors({})
     }
   }

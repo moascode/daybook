@@ -1,7 +1,10 @@
 import { useEffect, useState, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
+import { useWalletStore } from '@/stores/wallet.store'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
 import { format, parseISO, endOfWeek, eachWeekOfInterval, differenceInDays } from 'date-fns'
 import {
@@ -19,7 +22,7 @@ import {
 } from 'recharts'
 import type { Transaction } from '@/types/wallet.types'
 
-type DateRange = 'this-month' | 'last-month' | 'custom'
+type DateRange = 'this-month' | 'last-month'
 
 interface WeeklyData {
   week: string
@@ -63,20 +66,11 @@ export function Dashboard() {
   const { loadTransactions, loadCategories, loadAccounts, loadRecurringTransactions, accounts, categories, recurringTransactions } = useWallet()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [dateRange, setDateRange] = useState<DateRange>('this-month')
-  const [customFrom, setCustomFrom] = useState('')
-  const [customTo, setCustomTo] = useState('')
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
+  const dataVersion = useWalletStore((s) => s.dataVersion)
 
   const { dateFrom, dateTo } = useMemo(() => {
     const now = new Date()
-    if (dateRange === 'this-month') {
-      const first = new Date(now.getFullYear(), now.getMonth(), 1)
-      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      return {
-        dateFrom: format(first, 'yyyy-MM-dd'),
-        dateTo: format(last, 'yyyy-MM-dd'),
-      }
-    }
     if (dateRange === 'last-month') {
       const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const last = new Date(now.getFullYear(), now.getMonth(), 0)
@@ -85,19 +79,25 @@ export function Dashboard() {
         dateTo: format(last, 'yyyy-MM-dd'),
       }
     }
-    return { dateFrom: customFrom, dateTo: customTo }
-  }, [dateRange, customFrom, customTo])
+    // this-month
+    const first = new Date(now.getFullYear(), now.getMonth(), 1)
+    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    return {
+      dateFrom: format(first, 'yyyy-MM-dd'),
+      dateTo: format(last, 'yyyy-MM-dd'),
+    }
+  }, [dateRange])
 
   useEffect(() => {
     loadAccounts()
     loadCategories()
     loadRecurringTransactions()
-  }, [loadAccounts, loadCategories, loadRecurringTransactions])
+  }, [loadAccounts, loadCategories, loadRecurringTransactions, dataVersion])
 
   useEffect(() => {
     if (!dateFrom || !dateTo) return
     loadTransactions({ dateFrom, dateTo }).then(setTransactions)
-  }, [dateFrom, dateTo, loadTransactions])
+  }, [dateFrom, dateTo, loadTransactions, dataVersion])
 
   const summary = useMemo(() => {
     let income = 0
@@ -217,14 +217,21 @@ export function Dashboard() {
           icon={<LayoutDashboard className="h-12 w-12" />}
           title="No data yet"
           description="Add accounts and transactions to see your financial dashboard."
+          action={
+            <Link to="/wallet/accounts">
+              <Button size="sm">Go to Accounts</Button>
+            </Link>
+          }
         />
       ) : (
 
       <div className="space-y-6">
-      {/* Date range selector */}
-      <div className="flex items-center gap-3">
+      {/* Date range selector — the dashboard is an at-a-glance current-period
+          view. Custom ranges and historical comparison live on the Reports
+          page (linked below) so the two pages don't duplicate each other. */}
+      <div className="flex items-center justify-between gap-3">
         <div className="flex rounded-lg border border-gray-200 bg-white">
-          {(['this-month', 'last-month', 'custom'] as const).map((range) => (
+          {(['this-month', 'last-month'] as const).map((range) => (
             <button
               key={range}
               onClick={() => setDateRange(range)}
@@ -234,29 +241,16 @@ export function Dashboard() {
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
             >
-              {range === 'this-month' ? 'This Month' : range === 'last-month' ? 'Last Month' : 'Custom'}
+              {range === 'this-month' ? 'This Month' : 'Last Month'}
             </button>
           ))}
         </div>
-        {dateRange === 'custom' && (
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              aria-label="From"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-            />
-            <span className="text-gray-400">to</span>
-            <input
-              type="date"
-              aria-label="To"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-        )}
+        <Link
+          to="/wallet/reports"
+          className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
+        >
+          Custom range &amp; history →
+        </Link>
       </div>
 
       {/* Summary cards */}

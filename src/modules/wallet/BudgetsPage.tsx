@@ -202,13 +202,9 @@ export function BudgetsPage() {
             value={form.limitAmount}
             onChange={(e) => setForm((f) => ({ ...f, limitAmount: e.target.value }))}
           />
-          <Select
-            label="Period"
-            id="period"
-            options={[{ value: 'monthly', label: 'Monthly' }]}
-            value="monthly"
-            onChange={() => {}}
-          />
+          <p className="-mt-1 text-xs text-gray-500">
+            Budgets reset <span className="font-medium text-gray-700">monthly</span>.
+          </p>
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>
               Cancel

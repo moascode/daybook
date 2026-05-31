@@ -33,7 +33,7 @@ test.afterAll(async () => {
 test('navigate to Transactions tab', async () => {
   await page.getByRole('link', { name: 'Transactions' }).click()
   await expect(page).toHaveURL(/\/wallet$/)
-  await expect(page.getByRole('heading', { name: 'Transactions' })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
   // Clear the default current-month date filters so transactions with past dates are visible
   await page.getByLabel('From').fill('')
   await page.getByLabel('To').fill('')
@@ -58,11 +58,14 @@ test('form defaults to Expense type', async () => {
   await expect(dialog.getByRole('button', { name: 'Expense' })).toHaveClass(/text-red-600/)
 })
 
-test('form requires account and amount > 0', async () => {
+test('account is pre-selected and amount must be > 0', async () => {
   const dialog = page.getByRole('dialog')
+  // The account now defaults to the first account, so it is never empty when
+  // accounts exist — only the amount needs validating.
+  await expect(dialog.locator('#account')).not.toHaveValue('')
   await dialog.getByRole('button', { name: /Add Transaction/ }).click()
-  await expect(dialog.getByText(/Select an account/)).toBeVisible()
   await expect(dialog.getByText(/Amount must be greater than 0/)).toBeVisible()
+  await expect(dialog.getByText(/Select an account/)).toHaveCount(0)
 })
 
 test('add an expense transaction', async () => {
@@ -117,7 +120,8 @@ test('summary row shows correct income, expense and net', async () => {
   // Income = 5000, Expense = 125.50, Net = 4874.50
   await expect(page.getByText('RM 5,000.00').first()).toBeVisible()
   await expect(page.getByText('RM 125.50').first()).toBeVisible()
-  await expect(page.getByText('RM 4,874.50')).toBeVisible()
+  // Net summary; the total-balance banner can show the same figure, so .first().
+  await expect(page.getByText('RM 4,874.50').first()).toBeVisible()
 })
 
 // ── Add transfer ────────────────────────────────────────────────────────
@@ -179,7 +183,7 @@ test('update merchant and amount, save', async () => {
 test('updated amount is reflected in the summary', async () => {
   // Expense is now 98.00, net = 5000 - 98 = 4902
   await expect(page.getByText('RM 98.00').first()).toBeVisible()
-  await expect(page.getByText('RM 4,902.00')).toBeVisible()
+  await expect(page.getByText('RM 4,902.00').first()).toBeVisible()
 })
 
 // ── Delete transaction ──────────────────────────────────────────────────
