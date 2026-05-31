@@ -370,9 +370,18 @@ cmd_setup_lan() {
 </dict>
 </plist>
 PLIST
-  launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
-  launchctl load  "$PF_DAEMON_PLIST"
-  ok "LaunchDaemon installed (rules persist on reboot)."
+  # Bootstrap into the system domain (correct API for root LaunchDaemons on
+  # macOS 10.11+). Fall back to the legacy `load` on older macOS only.
+  launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || true
+  if launchctl bootstrap system "$PF_DAEMON_PLIST"; then
+    ok "LaunchDaemon installed (rules persist on reboot)."
+  else
+    # `bootstrap` is unavailable on very old macOS — try legacy `load`.
+    # If this also fails, surface the error rather than printing false success.
+    launchctl load "$PF_DAEMON_PLIST" \
+      || die "Failed to load LaunchDaemon — check plist at $PF_DAEMON_PLIST"
+    ok "LaunchDaemon installed via legacy load (rules persist on reboot)."
+  fi
 
   printf '\n%s\n' "${c_bold}┌─ daybook.local is ready ─────────────────────────────┐${c_reset}"
   printf   '%s\n' "  On this Mac:    ${c_green}http://daybook.local${c_reset}"
@@ -389,7 +398,8 @@ cmd_teardown_lan() {
   fi
 
   if [ -f "$PF_DAEMON_PLIST" ]; then
-    launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
+    launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || \
+      launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
     rm -f "$PF_DAEMON_PLIST"
     ok "LaunchDaemon removed."
   else
@@ -455,10 +465,11 @@ cmd_deploy() {
   [ -n "$GITHUB_TOKEN" ] || info "No GITHUB_TOKEN set — using anonymous GitHub access (fine for a public repo)."
 
   local tag="${1:-}"
-  local tmp; tmp="$(mktemp -d)"
-  # EXIT (not RETURN) so the temp dir is cleaned up on the die/exit paths too;
-  # cmd_deploy is a terminal command, so the script exits right after it returns.
-  trap 'rm -rf "$tmp"' EXIT
+  # Use a script-level (non-local) variable so the EXIT trap can reference it
+  # after cmd_deploy returns — local variables go out of scope before the trap fires.
+  _deploy_tmp="$(mktemp -d)"
+  trap 'rm -rf "${_deploy_tmp:-}"' EXIT
+  local tmp="$_deploy_tmp"
 
   # Resolve the release (explicit tag or latest).
   if [ -n "$tag" ]; then
