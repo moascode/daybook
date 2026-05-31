@@ -175,3 +175,47 @@ test('importing the same CSV a second time detects all 4 as duplicates', async (
 test('Import button is disabled when all rows are duplicates', async () => {
   await expect(page.getByRole('button', { name: /Import 0 Transactions/ })).toBeDisabled()
 })
+
+// ── First-row-is-header toggle ───────────────────────────────────────────
+
+test('header toggle is checked by default in the mapping step', async () => {
+  // Re-upload the CSV to get back to mapping step
+  const csvContent = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
+  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await page.evaluate(async (content) => {
+    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
+    await window.__testCsvFileSelect(file)
+  }, csvContent)
+  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByLabel('First row is a header (column names)')).toBeChecked()
+})
+
+test('unchecking header toggle increases row count (first row treated as data)', async () => {
+  // With header: the CSV has 4 data rows (header row is excluded from count).
+  // Without header: first row becomes data too, so count becomes 5.
+  await expect(page.getByText('4 rows')).toBeVisible()
+  await page.getByLabel('First row is a header (column names)').uncheck()
+  // Wait for the async re-parse to complete and the count to update
+  await expect(page.getByText('5 rows')).toBeVisible({ timeout: 5000 })
+})
+
+test('re-checking header toggle restores original row count', async () => {
+  await page.getByLabel('First row is a header (column names)').check()
+  await expect(page.getByText('4 rows')).toBeVisible()
+})
+
+// ── No-account guard ────────────────────────────────────────────────────
+
+test('CSV import shows no-account warning when user has no accounts', async ({ browser }) => {
+  // A freshly signed-up user has no accounts — navigate directly to import
+  const noAccountPage = await newAppPage(browser, '/wallet/import')
+
+  await expect(noAccountPage.getByTestId('csv-no-account-warning')).toBeVisible()
+  await expect(noAccountPage.getByText('No accounts yet')).toBeVisible()
+  await expect(noAccountPage.getByRole('link', { name: 'Create an Account' })).toBeVisible()
+
+  // Drop zone should not be visible when no accounts exist
+  await expect(noAccountPage.getByText('Drop a CSV file here')).not.toBeVisible()
+
+  await noAccountPage.context().close()
+})

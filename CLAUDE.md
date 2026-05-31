@@ -810,7 +810,25 @@ Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending revie
 Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
-Last session:   2026-05-31
+Last session:   2026-06-01
+Last completed: - Transaction UX improvements + CSV import hardening:
+                    • Quick date filters (This Month / Last Month / All Time) as
+                      pill buttons in the filter bar — sets dateFrom/dateTo.
+                    • Multi-select delete: "Select" button enters select mode,
+                      checkboxes on each row, select-all toggle, bulk delete
+                      with confirmation modal. Cancel exits without deleting.
+                    • CSV import: "First row is a header" toggle (default ON) —
+                      when OFF, first row is treated as data and included in
+                      import; row count updates live on toggle.
+                    • CSV import: no-account guard — if user has no accounts,
+                      upload step shows a warning and "Create an Account" link
+                      instead of the dropzone.
+                    • New e2e: +13 tests (03-wallet-transactions, 04-wallet-csv);
+                      65 pass, 0 new failures. Pre-existing flaky failures in
+                      01/02/05/07 unrelated to this work.
+                    • smart-delegate skill: model routing guide (Haiku for tests/
+                      git/verification, Sonnet for planning/dev). Symlinked into
+                      .claude/skills/. Section 17 added to CLAUDE.md.
 Last completed: - Release management + CI/CD (branch
                   claude/release-management-cicd-dMkPq). See docs/ci-cd.md.
                     • CI: .github/workflows/ci.yml — typecheck (client+server),
@@ -1096,3 +1114,46 @@ npx playwright test e2e/01-tasks # Single file
 npx playwright test --headed     # Watch mode (headed)
 npx playwright show-report       # View last HTML report
 ```
+
+---
+
+## 17. Model Routing for Claude Code Operations
+
+**These rules apply every session. Consult them before every Agent spawn and before every inline action.**
+
+The goal: use the cheapest model capable of the task. Haiku for mechanical work, Sonnet for judgment work.
+
+### Routing quick-reference
+
+| Task | Model | Location |
+|------|-------|----------|
+| Run tests / parse failures | **haiku** | Agent |
+| TypeScript typecheck (`tsc --noEmit`) | **haiku** | Agent |
+| Build check (`npm run build`) | **haiku** | Agent |
+| Git: status, diff, log, add, commit, push | **haiku** | Agent |
+| Read a known file / grep a known symbol | — | Inline Bash/Read |
+| Explore unknown code region | **haiku** | Agent (Explore) |
+| Small ≤2-file bug fix, cause already clear | — | Inline Edit |
+| New feature, 3–6 files | **sonnet** | Main thread, medium effort |
+| Architecture / planning pass | **sonnet** | Main thread, high effort |
+| Cross-cutting refactor, 6+ files | **sonnet** | Agent |
+| Security / adversarial review | **sonnet** | Agent, high effort |
+| Final verification after any delivery | **haiku** | Agent (always) |
+
+### Mandatory three-phase workflow for every feature
+
+```
+PLAN   → Sonnet (main thread) — read files, design solution, identify all changes needed
+BUILD  → Sonnet (main thread) — implement; spawn Haiku agents for mechanical sub-tasks
+VERIFY → Haiku agent — tsc + affected e2e spec; report pass/fail; loop back to BUILD if failures
+```
+
+### Hard rules
+
+1. **Never run tests inline** — always `Agent({ model: "haiku", ... })`.
+2. **Never do git inline** — always `Agent({ model: "haiku", ... })`.
+3. **Every session must end with a Haiku verification agent** before reporting work done.
+4. **Haiku prompts must be tight** — exact commands + exact file paths. Haiku doesn't explore.
+5. **Independent verifications run in parallel** — spawn typecheck + e2e in one message.
+
+See `.agents/skills/smart-delegate/SKILL.md` for full routing table, cost intuition, and spawn templates.

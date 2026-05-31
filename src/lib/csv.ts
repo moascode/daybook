@@ -38,30 +38,41 @@ const DESCRIPTION_KEYWORDS = ['description', 'memo', 'note', 'remarks', 'remark'
 
 // ── Parse CSV file ──────────────────────────────────
 
-export function parseCSV(file: File): Promise<ParsedCSVResult> {
+export function parseCSV(file: File, headerRow = true): Promise<ParsedCSVResult> {
   return new Promise((resolve) => {
-    Papa.parse<Record<string, string>>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header: string) => header.trim(),
-      complete: (results) => {
-        const errors = results.errors.map(
-          (e) => `Row ${e.row ?? '?'}: ${e.message}`
-        )
-        resolve({
-          headers: results.meta.fields ?? [],
-          rows: results.data,
-          errors,
-        })
-      },
-      error: (error: Error) => {
-        resolve({
-          headers: [],
-          rows: [],
-          errors: [error.message],
-        })
-      },
-    })
+    if (headerRow) {
+      Papa.parse<Record<string, string>>(file, {
+        header: true,
+        skipEmptyLines: true,
+        transformHeader: (header: string) => header.trim(),
+        complete: (results) => {
+          const errors = results.errors.map((e) => `Row ${e.row ?? '?'}: ${e.message}`)
+          resolve({ headers: results.meta.fields ?? [], rows: results.data, errors })
+        },
+        error: (error: Error) => resolve({ headers: [], rows: [], errors: [error.message] }),
+      })
+    } else {
+      // No header row — treat every row as data and auto-generate column names.
+      Papa.parse<string[]>(file, {
+        header: false,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const errors = results.errors.map((e) => `Row ${e.row ?? '?'}: ${e.message}`)
+          const allRows = results.data as string[][]
+          if (allRows.length === 0) {
+            resolve({ headers: [], rows: [], errors })
+            return
+          }
+          const maxCols = Math.max(...allRows.map((r) => r.length))
+          const headers = Array.from({ length: maxCols }, (_, i) => `Column ${i + 1}`)
+          const rows = allRows.map((row) =>
+            Object.fromEntries(headers.map((h, i) => [h, (row[i] ?? '').trim()]))
+          )
+          resolve({ headers, rows, errors })
+        },
+        error: (error: Error) => resolve({ headers: [], rows: [], errors: [error.message] }),
+      })
+    }
   })
 }
 
