@@ -20,6 +20,7 @@ export interface AccountFormData {
   currency: string
   color: string
   icon: string
+  openingBalance: number
 }
 
 const ACCOUNT_TYPES = [
@@ -57,6 +58,7 @@ function getInitialState(account?: Account | null): AccountFormData {
     currency: account?.currency ?? 'MYR',
     color: account?.color ?? '#1D9E75',
     icon: account?.icon ?? 'wallet',
+    openingBalance: account?.openingBalance ?? 0,
   }
 }
 
@@ -134,6 +136,23 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
             maxLength={3}
           />
+        </div>
+
+        <div>
+          <Input
+            label="Opening Balance"
+            id="opening-balance"
+            type="number"
+            step="0.01"
+            placeholder="0.00"
+            value={form.openingBalance || ''}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))
+            }
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            The account&apos;s current balance, before recording any transactions.
+          </p>
         </div>
 
         <Select

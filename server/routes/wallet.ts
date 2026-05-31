@@ -16,6 +16,7 @@ const ACCOUNT_COLS: Record<string, string> = {
   type: 'type',
   color: 'color',
   icon: 'icon',
+  openingBalance: 'opening_balance',
 }
 
 walletRouter.get('/accounts', (req, res) => {
@@ -28,8 +29,8 @@ walletRouter.post('/accounts', (req, res) => {
   const b = req.body ?? {}
   const row = getDb()
     .prepare(
-      `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, created_at)
-       VALUES (lower(hex(randomblob(16))), @userId, @name, @description, @currency, @type, @color, @icon, datetime('now'))
+      `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, opening_balance, created_at)
+       VALUES (lower(hex(randomblob(16))), @userId, @name, @description, @currency, @type, @color, @icon, @openingBalance, datetime('now'))
        RETURNING *`,
     )
     .get({
@@ -40,6 +41,7 @@ walletRouter.post('/accounts', (req, res) => {
       type: b.type ?? 'cash',
       color: b.color ?? '#1D9E75',
       icon: b.icon ?? 'wallet',
+      openingBalance: normalizeBind(b.openingBalance ?? 0),
     })
   res.status(201).json(row)
 })
@@ -58,11 +60,16 @@ walletRouter.delete('/accounts/:id', (req, res) => {
   res.status(204).end()
 })
 
-// Balance = income − expense − transfers out + transfers in.
+// Balance = opening balance + income − expense − transfers out + transfers in.
 walletRouter.get('/accounts/:id/balance', (req, res) => {
   const db = getDb()
   const id = req.params.id
   const userId = req.session.userId!
+  const acct = db
+    .prepare('SELECT opening_balance FROM accounts WHERE id = @id AND user_id = @userId')
+    .get({ id, userId }) as { opening_balance: number } | undefined
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  const opening = acct.opening_balance ?? 0
   const total = (clause: string) =>
     (db
       .prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE user_id = @userId AND ${clause}`)
@@ -71,7 +78,7 @@ walletRouter.get('/accounts/:id/balance', (req, res) => {
   const expense = total(`account_id = @id AND type = 'expense'`)
   const transferOut = total(`account_id = @id AND type = 'transfer'`)
   const transferIn = total(`destination_account_id = @id AND type = 'transfer'`)
-  res.json({ balance: income - expense - transferOut + transferIn })
+  res.json({ balance: opening + income - expense - transferOut + transferIn })
 })
 
 // ── Categories (read-only; seeded per user on signup) ─

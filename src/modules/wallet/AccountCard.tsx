@@ -55,7 +55,8 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
       if (!cancelled) setBalance(bal)
     })
     return () => { cancelled = true }
-  }, [account.id, getAccountBalance])
+    // openingBalance is part of the balance, so refetch when an edit changes it.
+  }, [account.id, account.openingBalance, getAccountBalance])
 
   const IconComponent = ICON_MAP[account.icon] ?? Wallet
 

@@ -6,6 +6,7 @@ export interface Account {
   type: 'cash' | 'card' | 'e-wallet' | 'bank' | 'investment' | 'other'
   color: string
   icon: string
+  openingBalance: number
   createdAt: string
 }
 

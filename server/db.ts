@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   type        TEXT NOT NULL DEFAULT 'cash',
   color       TEXT DEFAULT '#1D9E75',
   icon        TEXT DEFAULT 'wallet',
+  opening_balance REAL NOT NULL DEFAULT 0,
   created_at  TEXT DEFAULT (datetime('now'))
 );
 
@@ -145,7 +146,7 @@ const DATA_TABLES = [
 
 // Bump when the data-table DDL above changes (pre-v1: triggers a drop+recreate
 // of the data tables on next boot). Auth tables (users/sessions) are unaffected.
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 

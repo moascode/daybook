@@ -14,6 +14,7 @@ interface AccountRow {
   type: string
   color: string
   icon: string
+  opening_balance: number
   created_at: string
 }
 
@@ -52,6 +53,7 @@ function mapAccount(row: AccountRow): Account {
     type: row.type as Account['type'],
     color: row.color,
     icon: row.icon,
+    openingBalance: row.opening_balance ?? 0,
     createdAt: row.created_at,
   }
 }
@@ -139,6 +141,7 @@ interface AccountInput {
   type?: Account['type']
   color?: string
   icon?: string
+  openingBalance?: number
 }
 
 interface TransactionInput {
