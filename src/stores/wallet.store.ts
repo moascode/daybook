@@ -7,7 +7,7 @@ interface WalletFilters {
   type: 'all' | 'income' | 'expense' | 'transfer'
   categoryId: string | null
   accountId: string | null
-  tag: string
+  tags: string[]
 }
 
 interface WalletState {
@@ -17,6 +17,7 @@ interface WalletState {
   budgets: Budget[]
   recurringTransactions: RecurringTransaction[]
   goals: Goal[]
+  tags: string[]
   filters: WalletFilters
   // Bumped to signal that server-side data changed out-of-band (e.g. recurring
   // rules auto-posted on boot) so mounted pages re-fetch.
@@ -26,6 +27,7 @@ interface WalletState {
   setAccounts: (accounts: Account[]) => void
   setTransactions: (transactions: Transaction[]) => void
   setCategories: (categories: Category[]) => void
+  setTags: (tags: string[]) => void
   setBudgets: (budgets: Budget[]) => void
   setRecurringTransactions: (rts: RecurringTransaction[]) => void
   setGoals: (goals: Goal[]) => void
@@ -60,7 +62,7 @@ function getDefaultFilters(): WalletFilters {
     type: 'all',
     categoryId: null,
     accountId: null,
-    tag: '',
+    tags: [],
   }
 }
 
@@ -71,6 +73,7 @@ export const useWalletStore = create<WalletState>((set) => ({
   budgets: [],
   recurringTransactions: [],
   goals: [],
+  tags: [],
   filters: getDefaultFilters(),
   dataVersion: 0,
 
@@ -78,6 +81,7 @@ export const useWalletStore = create<WalletState>((set) => ({
   setAccounts: (accounts) => set({ accounts }),
   setTransactions: (transactions) => set({ transactions }),
   setCategories: (categories) => set({ categories }),
+  setTags: (tags) => set({ tags }),
   setBudgets: (budgets) => set({ budgets }),
   setRecurringTransactions: (rts) => set({ recurringTransactions: rts }),
   setGoals: (goals) => set({ goals }),

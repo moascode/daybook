@@ -22,7 +22,7 @@ export interface Transaction {
   amount: number
   type: TransactionType
   categoryId: string | null
-  tag: string
+  tags: string[]
   importHash: string
   createdAt: string
   updatedAt: string

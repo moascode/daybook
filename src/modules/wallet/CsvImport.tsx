@@ -125,7 +125,7 @@ export function CsvImport() {
       amount: r.amount,
       type: r.type,
       categoryId: r.categoryId,
-      tag: '',
+      tags: [],
       importHash: r.importHash,
     }))
 
