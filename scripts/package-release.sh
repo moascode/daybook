@@ -61,19 +61,20 @@ fi
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
 
-# Built frontend + server source + the control/deploy tool + dependency lock.
+# Built frontend + server source (incl. migrations) + control tool + manifests.
 cp -R "$ROOT_DIR/dist"            "$STAGE_DIR/dist"
 cp -R "$ROOT_DIR/server"          "$STAGE_DIR/server"
 mkdir -p "$STAGE_DIR/infra" "$STAGE_DIR/scripts"
-cp    "$ROOT_DIR/infra/daybook"   "$STAGE_DIR/infra/daybook"
-cp    "$SCRIPT_DIR/package-release.sh" "$STAGE_DIR/scripts/package-release.sh"
-cp    "$ROOT_DIR/package.json"    "$STAGE_DIR/package.json"
-cp    "$ROOT_DIR/package-lock.json" "$STAGE_DIR/package-lock.json"
-cp    "$ROOT_DIR/tsconfig.json"   "$STAGE_DIR/tsconfig.json"
-cp    "$ROOT_DIR/tsconfig.node.json" "$STAGE_DIR/tsconfig.node.json"
+cp    "$ROOT_DIR/infra/daybook"         "$STAGE_DIR/infra/daybook"
+cp    "$ROOT_DIR/infra/port-forward.js" "$STAGE_DIR/infra/port-forward.js"
+cp    "$SCRIPT_DIR/package-release.sh"  "$STAGE_DIR/scripts/package-release.sh"
+cp    "$ROOT_DIR/package.json"          "$STAGE_DIR/package.json"
+cp    "$ROOT_DIR/package-lock.json"     "$STAGE_DIR/package-lock.json"
+cp    "$ROOT_DIR/tsconfig.json"         "$STAGE_DIR/tsconfig.json"
+cp    "$ROOT_DIR/tsconfig.node.json"    "$STAGE_DIR/tsconfig.node.json"
 [ -f "$ROOT_DIR/.env.example" ] && cp "$ROOT_DIR/.env.example" "$STAGE_DIR/.env.example"
 
-# Never ship local databases, runtime files, or build inputs the target rebuilds.
+# Never ship local databases or runtime state — those live in DAYBOOK_HOME/shared/.
 rm -rf "$STAGE_DIR/server/data"
 
 # A manifest so the deployed machine (and humans) can see exactly what's running.

@@ -240,11 +240,14 @@ daybook/
 ```
 server/
 ├── index.ts                         ← Express app + session middleware + createApp() + listen
-├── db.ts                            ← better-sqlite3 instance + schema (users, sessions, data)
+├── db.ts                            ← DB singleton + file-based migration runner
 ├── seed.ts                          ← seedUserDefaults(): per-user categories + settings
 ├── lib.ts                           ← updateRow() (user-scoped) + bind coercion
 ├── session-store.ts                 ← SQLite-backed express-session Store
 ├── tsconfig.json                    ← Server typecheck config (run via tsx)
+├── migrations/                      ← SQL migration files, applied in lexicographic order
+│   └── 0001_initial.sql             ← Baseline schema (all tables for v1)
+│   (add 0002_….sql for future changes — never edit shipped files)
 ├── routes/
 │   ├── health.ts                    ← GET /api/health (public)
 │   ├── auth.ts                      ← /api/auth/signup|login|logout|me + requireAuth (public)
@@ -253,7 +256,7 @@ server/
 │   │                                   /budgets, /recurring-transactions, /goals (auth)
 │   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
 │   └── test.ts                      ← POST /api/test/reset (only when DAYBOOK_TEST=1)
-└── data/                            ← SQLite DB file (gitignored — never commit)
+└── data/                            ← e2e test DB only (gitignored); prod DB is in DAYBOOK_HOME
 ```
 > The browser reaches the server through Vite's `/api` dev proxy → `localhost:3001`.
 > The client talks to it via `src/lib/api.ts` (credentials:'include' for the
@@ -263,12 +266,45 @@ server/
 > the app behind `src/components/auth/AuthPage.tsx`.
 > Scripts: `npm run server` (watch), `npm run dev:all` (server + Vite),
 > `npm run typecheck:server`.
+>
+> **DB location in production:** `DAYBOOK_HOME/shared/data/daybook.db` (set via
+> `DAYBOOK_HOME` env var). Dev fallback: `server/data/daybook.db`. e2e tests:
+> `DAYBOOK_DB_PATH=server/data/e2e.db`.
+
+### Production deployment layout (`~/daybook/` by default)
+```
+~/daybook/                           ← DAYBOOK_HOME (set DAYBOOK_HOME env var to override)
+├── releases/
+│   ├── v1.3.0/                      ← immutable extracted artifact (dist/ + server/ + infra/)
+│   └── v1.2.0/                      ← previous release kept for instant rollback
+├── current -> releases/v1.3.0/      ← symlink; the service always runs from here
+├── shared/
+│   ├── data/
+│   │   └── daybook.db               ← THE database — survives every deploy
+│   └── session-secret               ← persistent session signing key
+├── backups/
+│   └── pre-deploy-1.3.0-20260601/
+│       └── daybook.db               ← timestamped snapshot before each deploy
+└── logs/
+    └── server.log
+```
+> First-time setup: `infra/daybook install` (creates dirs, deploys latest, installs launchd).
+> Deploy new release: `infra/daybook deploy [tag]` — downloads artifact, snaps DB, flips symlink.
+> Rollback: `infra/daybook rollback` — re-points symlink to previous release (instant, no download).
+> Manual DB snapshot: `infra/daybook backup`.
+> The dev repo and DAYBOOK_HOME are completely separate — never deploy by copying the repo.
 
 ---
 
 ## 6. Database Schema (Source of Truth)
 
 **NEVER modify this schema without explicit user instruction.**
+
+> **Schema changes post-v1:** Add a new numbered file `server/migrations/NNNN_description.sql`
+> with only `ALTER TABLE … ADD COLUMN` or `CREATE TABLE IF NOT EXISTS` statements.
+> Never edit a migration file that has already shipped. Never drop a table or column.
+> The migration runner in `server/db.ts` applies pending files automatically on first boot.
+> The `schema_migrations` table records which files have run.
 
 ```sql
 -- ─────────────────────────────────────────
@@ -774,7 +810,7 @@ Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending revie
 Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
                 per-user) all done on branch. v1 milestone reached.
                 See docs/phase-4-plan.md.
-Last session:   2026-05-30
+Last session:   2026-05-31
 Last completed: - Release management + CI/CD (branch
                   claude/release-management-cicd-dMkPq). See docs/ci-cd.md.
                     • CI: .github/workflows/ci.yml — typecheck (client+server),
@@ -917,16 +953,38 @@ Last completed: - Release management + CI/CD (branch
                 - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
                   helpers.waitForApp now checks <main> (aside is hidden on mobile)
                 - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
+Last completed  - Stable deployment architecture (2026-05-31):
+(continued):        • infra/daybook fully rewritten: Capistrano-style releases at
+                      DAYBOOK_HOME (default ~/daybook). Deploy downloads artifact
+                      from GitHub, installs under releases/vX.Y.Z/, flips current
+                      symlink atomically, backs up DB, restarts service.
+                    • Rollback is instant symlink flip to previous release — no
+                      re-download. DB is never auto-rolled back (keeps user data).
+                    • `infra/daybook install` — one command first-time setup:
+                      creates DAYBOOK_HOME structure, deploys latest, installs
+                      launchd service.
+                    • `infra/daybook backup` — manual DB snapshot to backups/.
+                    • server/db.ts: replaced monolithic schema + drop+recreate
+                      guard with a file-based migration runner. Reads
+                      server/migrations/*.sql in lexicographic order, applies
+                      pending ones inside a transaction, records each in
+                      schema_migrations. Safe for post-v1 real data.
+                    • server/migrations/0001_initial.sql — baseline v1 schema.
+                      Future schema changes: add 0002_*.sql etc. (additive only).
+                    • DB path: DAYBOOK_HOME env var → shared/data/daybook.db.
+                      Dev fallback: server/data/daybook.db. e2e: DAYBOOK_DB_PATH.
+                    • scripts/package-release.sh: now includes infra/port-forward.js
+                      and server/migrations/ in the artifact.
+                    • Verified: typecheck:server green, client build green.
 Next task:      Phase 5 — AI Features (v2): Claude integration, NL task/transaction
                 entry, daily briefing, financial insights. Route the Anthropic key
                 through the backend (no key in the browser bundle). See §9.3.
-Blockers:       None. v1 (home-network multi-user) is feature-complete on the
-                branch: Node + SQLite backend, session-cookie auth, per-user data.
-                Reminder: a SESSION_SECRET env var should be set in any real
-                (non-dev) deployment; defaults to a dev secret otherwise.
+Blockers:       None. Deployment is now stable: versioned releases, DB safe from
+                deploys, file-based migrations for future schema changes.
+                Reminder: SESSION_SECRET is read from DAYBOOK_HOME/shared/session-secret
+                (generated on first install); no manual env var needed in production.
                 Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
-                test-only `window as any` shims) remain across the codebase; not
-                introduced this session and do not affect typecheck or tests.
+                test-only `window as any` shims) remain; not introduced this session.
 ```
 
 ---

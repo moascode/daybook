@@ -1,6 +1,6 @@
 import express from 'express'
 import session from 'express-session'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getDb } from './db.ts'
@@ -74,7 +74,18 @@ export function createApp(): express.Express {
 }
 
 // Start the server only when run directly (not when imported by tests).
-const isMain = process.argv[1] === new URL(import.meta.url).pathname
+// Use realpathSync on both sides so symlinks (e.g. ~/daybook/current →
+// releases/vX.Y.Z/) don't cause a false mismatch.
+const isMain = (() => {
+  try {
+    return (
+      realpathSync(process.argv[1]) ===
+      realpathSync(fileURLToPath(import.meta.url))
+    )
+  } catch {
+    return false
+  }
+})()
 if (isMain) {
   getDb() // initialise schema before accepting requests
   const app = createApp()

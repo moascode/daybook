@@ -1,80 +1,97 @@
 #!/usr/bin/env bash
 #
-# daybook — infrastructure control tool for serving Daybook on your local network.
+# daybook — Daybook production control tool.
 #
-# One Node process serves both the built frontend and the /api backend on a
-# single port (default 3001), bound to all interfaces so any device on your
-# WiFi (e.g. your phone) can reach it.
+# Manages the deployed app at DAYBOOK_HOME (default: ~/daybook).
+# The dev repo and the deployed app are completely separate:
+#   dev repo  → where you code and run `npm run dev:all`
+#   DAYBOOK_HOME → where releases are installed and the service runs
+#
+# Directory layout at DAYBOOK_HOME:
+#   releases/vX.Y.Z/   immutable, extracted release artifacts
+#   current            symlink → releases/vX.Y.Z/ (active release)
+#   shared/data/       daybook.db — persists across every deploy
+#   shared/            session-secret — persists across every deploy
+#   backups/           timestamped DB snapshots (kept 5)
+#   logs/              server.log
 #
 # Usage:  infra/daybook <command>
 #
-#   setup              Install dependencies (incl. native modules) + sanity checks
-#   build              Build the frontend into dist/
-#   start              Start the server in the background (writes pidfile + log)
-#   stop               Stop the background server
-#   restart            Stop then start
-#   reload             Rebuild, then restart whichever instance is running (launchd or manual)
-#   status             Show whether it's running and the URL to use on your phone
-#   logs [-f]          Show the server log (-f to follow)
-#   deploy [tag]       Download a release artifact from GitHub, install it, restart
-#                      (default: latest release; release-based deploy — no local build)
-#   rollback           Restore the previous release (the last deploy's backup)
-#   update             git pull origin main → setup → build → restart (source-based)
-#   up                 setup → build → start  (first-run, do-everything)
-#   url                Print the LAN URL to open on your phone
-#   run                Run the server in the FOREGROUND (used by launchd; Ctrl-C to stop)
-#   install-service    Install a launchd service so it starts on boot + auto-restarts
-#   uninstall-service  Remove the launchd service
-#   setup-lan          Set up daybook.local (mDNS hostname + Node port-80 proxy)
-#                      Requires sudo. Makes http://daybook.local work from any device.
-#   teardown-lan       Remove the daybook.local setup (undo setup-lan)
-#   help               Show this help
+#   install [path]     First-time setup: create DAYBOOK_HOME structure,
+#                      deploy (latest GitHub release or local .tar.gz path),
+#                      install the launchd service.
+#   deploy [tag|path]  Download a release from GitHub (default: latest tag),
+#                      OR install a local artifact if a .tar.gz path is given.
+#                      Backs up DB, flips current symlink, restarts.
+#   rollback           Flip current symlink back to the previous release
+#                      and restart. DB is kept as-is (not rolled back).
+#   backup             Take a manual DB snapshot → DAYBOOK_HOME/backups/
+#   status             Show running state, current version, LAN URL.
+#   logs [-f]          Tail the server log.
+#   restart            Restart the service (launchd or manual).
+#   stop               Stop the service.
+#   start              Start the service (manual background mode).
+#   install-service    Install a launchd service (start on boot, auto-restart).
+#   uninstall-service  Remove the launchd service.
+#   setup-lan          Set up daybook.local (mDNS + port-80 proxy). Needs sudo.
+#   teardown-lan       Undo setup-lan.
+#   url                Print the LAN URL.
+#   help               Show this help.
 #
 # Environment overrides (optional):
+#   DAYBOOK_HOME=…     Install root (default: ~/daybook)
 #   PORT=3001          Port to serve on
-#   HOST=0.0.0.0       Interface to bind (0.0.0.0 = all; use 127.0.0.1 to keep it local)
-#   GITHUB_TOKEN=…     Optional GitHub token for `deploy`. Not needed for a
-#                      public repo; raises the API rate limit / required if private.
+#   HOST=0.0.0.0       Interface to bind
+#   GITHUB_TOKEN=…     Optional GitHub token for deploy (raises rate limit)
 #   DAYBOOK_REPO=…     Override the GitHub repo (default: moascode/daybook)
 #
 set -euo pipefail
 
-# ── Paths ──────────────────────────────────────────────────────────────────
+# ── Paths ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-RUN_DIR="$ROOT_DIR/.daybook"
+# DEV_ROOT is where this script lives (the dev repo). Used only for setup-lan
+# (needs port-forward.js) and as fallback when running from the dev repo.
+DEV_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+DAYBOOK_HOME="${DAYBOOK_HOME:-$HOME/daybook}"
+RELEASES_DIR="$DAYBOOK_HOME/releases"
+CURRENT_LINK="$DAYBOOK_HOME/current"
+SHARED_DIR="$DAYBOOK_HOME/shared"
+DB_FILE="$SHARED_DIR/data/daybook.db"
+SECRET_FILE="$SHARED_DIR/session-secret"
+BACKUP_DIR="$DAYBOOK_HOME/backups"
+LOG_FILE="$DAYBOOK_HOME/logs/server.log"
+
+# Runtime files (pid) still go in DAYBOOK_HOME directly.
+RUN_DIR="$DAYBOOK_HOME"
 PID_FILE="$RUN_DIR/server.pid"
-LOG_FILE="$RUN_DIR/server.log"
-SECRET_FILE="$RUN_DIR/session-secret"
+
 PLIST_LABEL="com.daybook.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_LABEL.plist"
-# launchd cannot write into TCC-protected dirs (~/Documents, ~/Desktop, …), so
-# the service log lives in the standard, unprotected ~/Library/Logs.
 SERVICE_LOG="$HOME/Library/Logs/daybook.log"
-BACKUP_DIR="$RUN_DIR/backups"
 
-# LAN domain setup constants.
-# Node TCP proxy (current implementation — no pf/kernel dependencies).
 PROXY_DAEMON_PLIST="/Library/LaunchDaemons/com.daybook.proxy.plist"
 PROXY_DAEMON_LABEL="com.daybook.proxy"
-PROXY_SCRIPT="$SCRIPT_DIR/port-forward.js"
-# Legacy pf constants — kept only for cleanup of old installs.
+# port-forward.js ships with each release but may also be in the dev repo.
+PROXY_SCRIPT_RELEASE="$CURRENT_LINK/infra/port-forward.js"
+PROXY_SCRIPT_DEV="$SCRIPT_DIR/port-forward.js"
 PF_ANCHOR_FILE="/etc/pf.anchors/daybook"
 PF_DAEMON_PLIST="/Library/LaunchDaemons/com.daybook.pf.plist"
 PF_DAEMON_LABEL="com.daybook.pf"
 LAN_HOSTNAME="daybook"
 
-# GitHub release source for `deploy`.
 REPO="${DAYBOOK_REPO:-moascode/daybook}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 
 PORT="${PORT:-3001}"
 HOST="${HOST:-0.0.0.0}"
 
-cd "$ROOT_DIR"
+# Keep this many versioned release dirs (excluding current).
+MAX_RELEASES=3
 
 # ── Pretty output ────────────────────────────────────────────────────────────
-c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_green=$'\033[32m'; c_yellow=$'\033[33m'; c_red=$'\033[31m'; c_dim=$'\033[2m'
+c_reset=$'\033[0m'; c_bold=$'\033[1m'; c_green=$'\033[32m'
+c_yellow=$'\033[33m'; c_red=$'\033[31m'; c_dim=$'\033[2m'
 info()  { printf '%s\n' "${c_dim}›${c_reset} $*"; }
 ok()    { printf '%s\n' "${c_green}✓${c_reset} $*"; }
 warn()  { printf '%s\n' "${c_yellow}!${c_reset} $*"; }
@@ -82,15 +99,24 @@ err()   { printf '%s\n' "${c_red}✗${c_reset} $*" >&2; }
 die()   { err "$*"; exit 1; }
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
-ensure_run_dir() { mkdir -p "$RUN_DIR"; }
+require_node() {
+  command -v node >/dev/null 2>&1 || die "Node.js not found. Install Node 20+."
+  local major; major="$(node -p 'process.versions.node.split(".")[0]')"
+  [ "$major" -ge 20 ] || die "Node 20+ required; found $(node -v)."
+}
 
-# Detect the Mac's LAN IP (active interface), best-effort.
+require_curl() { command -v curl >/dev/null 2>&1 || die "curl not found."; }
+
+require_home() {
+  [ -d "$DAYBOOK_HOME" ] || die "DAYBOOK_HOME ($DAYBOOK_HOME) does not exist. Run: infra/daybook install"
+  [ -L "$CURRENT_LINK" ] || die "No current release found. Run: infra/daybook deploy"
+}
+
 lan_ip() {
   local ip
   ip="$(ipconfig getifaddr en0 2>/dev/null || true)"
   [ -z "$ip" ] && ip="$(ipconfig getifaddr en1 2>/dev/null || true)"
   if [ -z "$ip" ]; then
-    # Fall back to whatever route the default gateway uses.
     local iface
     iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
     [ -n "$iface" ] && ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
@@ -98,14 +124,28 @@ lan_ip() {
   printf '%s' "${ip:-127.0.0.1}"
 }
 
-# A persistent random secret for signing session cookies (generated once).
+current_version() {
+  if [ -f "$CURRENT_LINK/VERSION" ]; then
+    grep '^version=' "$CURRENT_LINK/VERSION" | cut -d= -f2
+  else
+    echo "(unknown)"
+  fi
+}
+
 ensure_secret() {
-  ensure_run_dir
+  # Guarantees the secret file exists. Prints nothing to stdout.
+  mkdir -p "$SHARED_DIR"
   if [ ! -s "$SECRET_FILE" ]; then
-    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 48 > "$SECRET_FILE"
+    node -e "process.stdout.write(require('crypto').randomBytes(48).toString('hex').slice(0,48))" \
+      > "$SECRET_FILE"
     chmod 600 "$SECRET_FILE"
     info "Generated session secret → ${SECRET_FILE/#$HOME/\~}"
   fi
+}
+
+read_secret() {
+  # Echoes the secret value so callers can capture it: secret="$(read_secret)"
+  ensure_secret
   cat "$SECRET_FILE"
 }
 
@@ -120,113 +160,303 @@ is_running() { server_pid >/dev/null 2>&1; }
 
 launchd_loaded() { launchctl list 2>/dev/null | grep -q "$PLIST_LABEL"; }
 
-require_node() {
-  command -v node >/dev/null 2>&1 || die "Node.js not found. Install Node 20+ (https://nodejs.org)."
-  local major; major="$(node -p 'process.versions.node.split(".")[0]')"
-  [ "$major" -ge 20 ] || die "Node 20+ required; found $(node -v)."
-}
-
-# ── Commands ───────────────────────────────────────────────────────────────
-cmd_setup() {
-  require_node
-  command -v npm >/dev/null 2>&1 || die "npm not found."
-  # Native modules (better-sqlite3, bcrypt) compile from source on install.
-  if ! xcode-select -p >/dev/null 2>&1; then
-    warn "Xcode Command Line Tools not detected — native modules may fail to build."
-    warn "Install with: xcode-select --install"
-  fi
-  info "Installing dependencies (this compiles native modules; first run is slow)…"
-  if [ -f package-lock.json ]; then
-    npm ci
-  else
-    npm install
-  fi
-  ok "Dependencies installed."
-}
-
-cmd_build() {
-  require_node
-  info "Building frontend → dist/ …"
-  npm run build
-  [ -f "$ROOT_DIR/dist/index.html" ] || die "Build finished but dist/index.html is missing."
-  ok "Frontend built."
-}
-
-# Compose the env + command used to launch the server (shared by start/run).
 server_env() {
-  local secret; secret="$(ensure_secret)"
+  local secret; secret="$(read_secret)"
   SERVER_ENV=(
     "NODE_ENV=production"
     "PORT=$PORT"
     "HOST=$HOST"
     "SESSION_SECRET=$secret"
+    "DAYBOOK_HOME=$DAYBOOK_HOME"
   )
 }
 
-cmd_run() {
-  # Foreground. Used by launchd and for manual debugging.
-  require_node
-  [ -f "$ROOT_DIR/dist/index.html" ] || die "No build found. Run: infra/daybook build"
-  server_env
-  info "Starting Daybook in foreground on $HOST:$PORT (Ctrl-C to stop)…"
-  exec env "${SERVER_ENV[@]}" ./node_modules/.bin/tsx server/index.ts
+# Prune old release dirs, keeping MAX_RELEASES most recent (plus current).
+prune_releases() {
+  local current_real
+  current_real="$(readlink "$CURRENT_LINK" 2>/dev/null || true)"
+  # List release dirs by modification time (newest first), skip the active one.
+  local dirs; dirs="$(ls -1dt "$RELEASES_DIR"/*/ 2>/dev/null | grep -v "^${current_real%/}/$" || true)"
+  local count=0
+  while IFS= read -r dir; do
+    [ -z "$dir" ] && continue
+    count=$((count + 1))
+    if [ "$count" -gt "$MAX_RELEASES" ]; then
+      info "Pruning old release: ${dir/#$HOME/\~}"
+      rm -rf "$dir"
+    fi
+  done <<< "$dirs"
 }
 
-cmd_start() {
+# ── Commands ─────────────────────────────────────────────────────────────────
+
+cmd_install() {
   require_node
-  if is_running; then
-    warn "Already running (pid $(server_pid))."
-    cmd_url
-    return 0
-  fi
-  [ -f "$ROOT_DIR/dist/index.html" ] || die "No build found. Run: infra/daybook build  (or: infra/daybook up)"
-  ensure_run_dir
-  server_env
-  info "Starting Daybook on $HOST:$PORT …"
-  # Detach so it keeps running after the terminal closes.
-  nohup env "${SERVER_ENV[@]}" ./node_modules/.bin/tsx server/index.ts >>"$LOG_FILE" 2>&1 &
-  echo $! > "$PID_FILE"
-  sleep 1.5
-  if is_running; then
-    ok "Started (pid $(cat "$PID_FILE")). Logs: ${LOG_FILE/#$HOME/\~}"
-    cmd_url
+  printf '%s\n' "${c_bold}Installing Daybook to ${DAYBOOK_HOME/#$HOME/\~}…${c_reset}"
+
+  mkdir -p \
+    "$RELEASES_DIR" \
+    "$SHARED_DIR/data" \
+    "$BACKUP_DIR" \
+    "$DAYBOOK_HOME/logs"
+
+  ensure_secret
+
+  # Accept an optional local artifact path; fall back to GitHub latest.
+  local artifact="${1:-}"
+  if [ -n "$artifact" ]; then
+    info "Deploying from local artifact: $artifact"
+    cmd_deploy "$artifact"
   else
-    err "Server failed to start. Last log lines:"
-    tail -n 20 "$LOG_FILE" 2>/dev/null || true
-    rm -f "$PID_FILE"
-    exit 1
+    require_curl
+    info "Deploying latest release from GitHub…"
+    cmd_deploy
   fi
+
+  info "Installing launchd service…"
+  cmd_install_service
+
+  printf '\n%s\n' "${c_bold}${c_green}Daybook installed successfully.${c_reset}"
+  printf '%s\n' "  Home:    ${DAYBOOK_HOME/#$HOME/\~}"
+  printf '%s\n' "  DB:      ${DB_FILE/#$HOME/\~}"
+  printf '%s\n' "  Backups: ${BACKUP_DIR/#$HOME/\~}"
+  cmd_url
 }
 
-cmd_stop() {
-  if ! is_running; then
-    warn "Not running."
-    rm -f "$PID_FILE"
+# ── GitHub release helpers ───────────────────────────────────────────────────
+gh_api() {
+  local path="$1"
+  local url="https://api.github.com/repos/$REPO$path"
+  local -a auth=()
+  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    ${auth[@]+"${auth[@]}"} "$url"
+}
+
+release_field() {
+  node -e '
+    const fs = require("fs");
+    const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    const out = (function(){ return eval(process.argv[2]); })();
+    process.stdout.write(out == null ? "" : String(out));
+  ' "$1" "$2"
+}
+
+download_asset() {
+  local asset_id="$1" dest="$2"
+  local url="https://api.github.com/repos/$REPO/releases/assets/$asset_id"
+  local -a auth=()
+  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+  curl -fsSL -H "Accept: application/octet-stream" ${auth[@]+"${auth[@]}"} "$url" -o "$dest"
+}
+
+# ── Deploy ───────────────────────────────────────────────────────────────────
+# Usage:
+#   cmd_deploy                  → download latest release from GitHub
+#   cmd_deploy v1.2.0           → download specific tag from GitHub
+#   cmd_deploy /path/to.tar.gz  → install a local artifact (local build)
+cmd_deploy() {
+  require_node
+  command -v npm >/dev/null 2>&1 || die "npm not found."
+
+  # Ensure DAYBOOK_HOME structure exists (install may not have run yet).
+  mkdir -p "$RELEASES_DIR" "$SHARED_DIR/data" "$BACKUP_DIR" "$DAYBOOK_HOME/logs"
+  ensure_secret
+
+  local arg="${1:-}"
+  _deploy_tmp="$(mktemp -d)"
+  trap 'rm -rf "${_deploy_tmp:-}"' EXIT
+  local tmp="$_deploy_tmp"
+
+  # ── Branch: local tarball ─────────────────────────────────────────────────
+  # If the argument looks like a file path (starts with / or ./ or the file
+  # exists), skip GitHub entirely and install from the local file.
+  if [ -n "$arg" ] && [ -f "$arg" ]; then
+    local tarball; tarball="$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")"
+    info "Installing from local artifact: ${tarball/#$HOME/\~}"
+
+    mkdir -p "$tmp/unpack"
+    tar -xzf "$tarball" -C "$tmp/unpack"
+    [ -f "$tmp/unpack/dist/index.html" ] || die "Artifact missing dist/ — aborting."
+    [ -f "$tmp/unpack/server/index.ts" ]  || die "Artifact missing server/ — aborting."
+
+    # Read the version from the bundled VERSION file.
+    local rel_tag version
+    version="$(grep '^version=' "$tmp/unpack/VERSION" 2>/dev/null | cut -d= -f2 || echo 'local')"
+    rel_tag="v${version}"
+    local release_dir="$RELEASES_DIR/$rel_tag"
+    info "Version: $rel_tag"
+
+    if [ -d "$release_dir" ]; then
+      warn "Release $rel_tag already present — overwriting with fresh local build."
+      rm -rf "$release_dir"
+    fi
+    mkdir -p "$release_dir"
+    cp -R "$tmp/unpack/." "$release_dir/"
+    chmod +x "$release_dir/infra/daybook" 2>/dev/null || true
+
+    info "Installing dependencies for $rel_tag…"
+    ( cd "$release_dir" && npm ci )
+    ok "Release $rel_tag staged at ${release_dir/#$HOME/\~}"
+
+    cmd_backup_internal "pre-deploy-$version"
+    ln -sfn "$release_dir" "$CURRENT_LINK.next"
+    mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+    ok "current → $rel_tag"
+    restart_service
+    ok "Deployed $rel_tag (local build)."
+    prune_releases
     return 0
   fi
-  local pid; pid="$(server_pid)"
-  info "Stopping (pid $pid)…"
-  kill "$pid" 2>/dev/null || true
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    is_running || break
-    sleep 0.5
-  done
-  if is_running; then
-    warn "Did not exit gracefully; forcing."
-    kill -9 "$pid" 2>/dev/null || true
+
+  # ── Branch: GitHub release ────────────────────────────────────────────────
+  require_curl
+  [ -n "$GITHUB_TOKEN" ] || info "No GITHUB_TOKEN — using anonymous GitHub access."
+
+  local tag="$arg"
+  if [ -n "$tag" ]; then
+    info "Fetching release $tag from $REPO…"
+    gh_api "/releases/tags/$tag" > "$tmp/release.json" 2>/dev/null \
+      || die "Release '$tag' not found on $REPO."
+  else
+    info "Fetching latest release from $REPO…"
+    gh_api "/releases/latest" > "$tmp/release.json" 2>/dev/null \
+      || die "No releases found on $REPO."
   fi
-  rm -f "$PID_FILE"
-  ok "Stopped."
+
+  local rel_tag; rel_tag="$(release_field "$tmp/release.json" 'r.tag_name')"
+  [ -n "$rel_tag" ] || die "Could not read release tag from GitHub."
+  local version="${rel_tag#v}"
+  local release_dir="$RELEASES_DIR/$rel_tag"
+
+  if [ -d "$release_dir" ]; then
+    warn "Release $rel_tag already installed at ${release_dir/#$HOME/\~}."
+    if [ "$(readlink "$CURRENT_LINK" 2>/dev/null || true)" = "$release_dir" ]; then
+      warn "Already running $rel_tag — nothing to do."
+      return 0
+    fi
+    info "Re-activating existing $rel_tag release…"
+  else
+    # Download + verify artifact.
+    local tarball_id tarball_name sha_id
+    tarball_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).id')"
+    tarball_name="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).name')"
+    sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
+    [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
+
+    info "Downloading $tarball_name…"
+    download_asset "$tarball_id" "$tmp/$tarball_name"
+
+    if [ -n "$sha_id" ]; then
+      download_asset "$sha_id" "$tmp/$tarball_name.sha256"
+      info "Verifying checksum…"
+      ( cd "$tmp"
+        if command -v shasum >/dev/null 2>&1; then
+          shasum -a 256 -c "$tarball_name.sha256" >/dev/null
+        else
+          sha256sum -c "$tarball_name.sha256" >/dev/null
+        fi
+      ) || die "Checksum failed — refusing to deploy a corrupt artifact."
+      ok "Checksum verified."
+    else
+      warn "No checksum asset — skipping verification."
+    fi
+
+    # Unpack into a staging dir so a bad archive can't corrupt the install.
+    mkdir -p "$tmp/unpack"
+    tar -xzf "$tmp/$tarball_name" -C "$tmp/unpack"
+    [ -f "$tmp/unpack/dist/index.html" ]  || die "Artifact missing dist/ — aborting."
+    [ -f "$tmp/unpack/server/index.ts" ]  || die "Artifact missing server/ — aborting."
+
+    # Move into versioned release dir.
+    mkdir -p "$release_dir"
+    cp -R "$tmp/unpack/." "$release_dir/"
+    chmod +x "$release_dir/infra/daybook" 2>/dev/null || true
+
+    # Install runtime deps inside the release dir (compiles native modules).
+    info "Installing dependencies for $rel_tag…"
+    ( cd "$release_dir" && npm ci )
+    ok "Release $rel_tag staged at ${release_dir/#$HOME/\~}"
+  fi
+
+  # Back up the live DB before touching anything.
+  cmd_backup_internal "pre-deploy-$version"
+
+  # Flip the symlink atomically.
+  # Use a temp name + mv so the switch is an atomic rename (no window where
+  # current points nowhere).
+  ln -sfn "$release_dir" "$CURRENT_LINK.next"
+  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+  ok "current → $rel_tag"
+
+  restart_service
+  ok "Deployed $rel_tag."
+
+  prune_releases
 }
 
-cmd_restart() { cmd_stop; cmd_start; }
+# ── Rollback ─────────────────────────────────────────────────────────────────
+cmd_rollback() {
+  require_home
+  require_node
 
-# Rebuild the frontend, then restart whichever instance is actually serving.
-# When launchd owns the process, `restart` (which only tracks the manual
-# pidfile) would start a second instance and collide on the port — so detect
-# the launchd service and kickstart it instead.
-# Restart whichever instance is actually serving (launchd service or a manual
-# background start), without rebuilding. Shared by `reload` and `deploy`.
+  # Find the release dirs in order; skip the currently active one.
+  local current_real; current_real="$(readlink "$CURRENT_LINK")"
+  local prev=""
+  while IFS= read -r dir; do
+    dir="${dir%/}"
+    [ "$dir" = "$current_real" ] && continue
+    prev="$dir"
+    break
+  done < <(ls -1dt "$RELEASES_DIR"/*/ 2>/dev/null || true)
+
+  [ -n "$prev" ] || die "No previous release to roll back to. Deploy at least two releases first."
+
+  local prev_version
+  prev_version="$(grep '^version=' "$prev/VERSION" 2>/dev/null | cut -d= -f2 || basename "$prev")"
+  warn "Rolling back code: $(current_version) → $prev_version"
+  warn "Database is NOT rolled back — user data entered after the deploy is kept."
+
+  ln -sfn "$prev" "$CURRENT_LINK.next"
+  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+  ok "current → $prev_version"
+
+  restart_service
+  ok "Rolled back to $prev_version."
+
+  if ls "$BACKUP_DIR"/pre-deploy-* >/dev/null 2>&1; then
+    local snap; snap="$(ls -1dt "$BACKUP_DIR"/pre-deploy-* | head -n1)"
+    info "DB snapshot from before last deploy: ${snap/#$HOME/\~}/daybook.db"
+    info "To restore it (loses data added since deploy): cp \"$snap/daybook.db\" \"$DB_FILE\""
+  fi
+}
+
+# ── Backup ───────────────────────────────────────────────────────────────────
+cmd_backup_internal() {
+  local label="${1:-manual}"
+  [ -f "$DB_FILE" ] || return 0
+  mkdir -p "$BACKUP_DIR"
+  local stamp; stamp="$(date +%Y%m%d-%H%M%S)"
+  local dest="$BACKUP_DIR/${label}-${stamp}"
+  mkdir -p "$dest"
+  cp "$DB_FILE" "$dest/daybook.db"
+  ok "DB snapshot → ${dest/#$HOME/\~}/daybook.db"
+  # Prune: keep 5 most recent backups total.
+  ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true
+}
+
+cmd_backup() {
+  require_home
+  if [ ! -f "$DB_FILE" ]; then
+    warn "No database found at ${DB_FILE/#$HOME/\~} — nothing to back up."
+    return 0
+  fi
+  cmd_backup_internal "manual"
+}
+
+# ── Service control ───────────────────────────────────────────────────────────
 restart_service() {
   if [ -f "$PLIST_PATH" ]; then
     info "Restarting launchd service ($PLIST_LABEL)…"
@@ -236,30 +466,113 @@ restart_service() {
       launchctl load "$PLIST_PATH"
     fi
     sleep 1.5
-    ok "Restarted (launchd-managed)."
+    ok "Service restarted."
     cmd_url
   elif is_running; then
-    cmd_restart
+    cmd_stop
+    cmd_start
   else
     warn "No running server and no launchd service — starting a background instance."
     cmd_start
   fi
 }
 
-cmd_reload() {
-  cmd_build
-  restart_service
+cmd_run() {
+  require_home
+  require_node
+  server_env
+  info "Starting Daybook in foreground on $HOST:$PORT (Ctrl-C to stop)…"
+  exec env "${SERVER_ENV[@]}" \
+    "$CURRENT_LINK/node_modules/.bin/tsx" \
+    "$CURRENT_LINK/server/index.ts"
 }
 
-cmd_status() {
+cmd_start() {
+  require_home
+  require_node
   if is_running; then
-    ok "Running (pid $(server_pid))."
+    warn "Already running (pid $(server_pid))."
+    cmd_url; return 0
+  fi
+  mkdir -p "$DAYBOOK_HOME/logs"
+  server_env
+  info "Starting Daybook on $HOST:$PORT…"
+  nohup env "${SERVER_ENV[@]}" \
+    "$CURRENT_LINK/node_modules/.bin/tsx" \
+    "$CURRENT_LINK/server/index.ts" \
+    >> "$LOG_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+  sleep 1.5
+  if is_running; then
+    ok "Started (pid $(cat "$PID_FILE")). Logs: ${LOG_FILE/#$HOME/\~}"
     cmd_url
+  else
+    err "Server failed to start. Last log lines:"
+    tail -n 20 "$LOG_FILE" 2>/dev/null || true
+    rm -f "$PID_FILE"; exit 1
+  fi
+}
+
+cmd_stop() {
+  if ! is_running; then
+    warn "Not running."; rm -f "$PID_FILE"; return 0
+  fi
+  local pid; pid="$(server_pid)"
+  info "Stopping (pid $pid)…"
+  kill "$pid" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    is_running || break; sleep 0.5
+  done
+  if is_running; then
+    warn "Did not exit gracefully; forcing."
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PID_FILE"; ok "Stopped."
+}
+
+cmd_restart() { cmd_stop; cmd_start; }
+
+cmd_status() {
+  if [ -d "$DAYBOOK_HOME" ]; then
+    info "Home:    ${DAYBOOK_HOME/#$HOME/\~}"
+    info "Version: $(current_version)"
+    info "DB:      ${DB_FILE/#$HOME/\~} $([ -f "$DB_FILE" ] && echo "(exists)" || echo "(not created yet)")"
+  else
+    warn "DAYBOOK_HOME (${DAYBOOK_HOME/#$HOME/\~}) does not exist. Run: infra/daybook install"
+    return 0
+  fi
+  # Determine running state: check pidfile (manual start) or query the port
+  # (launchd-managed processes don't write a pidfile).
+  local launchd_pid=""
+  if [ -f "$PLIST_PATH" ]; then
+    launchd_pid="$(launchctl list "$PLIST_LABEL" 2>/dev/null | awk '/"PID"/{gsub(/[^0-9]/,"",$NF); print $NF}')"
+  fi
+
+  if is_running; then
+    ok "Running (pid $(server_pid), manual)."
+    cmd_url
+  elif [ -n "$launchd_pid" ]; then
+    ok "Running (pid $launchd_pid, launchd-managed)."
+    info "launchd service: $PLIST_LABEL"
+    cmd_url
+  elif [ -f "$PLIST_PATH" ]; then
+    warn "launchd service installed but not running (check: infra/daybook logs)."
   else
     warn "Not running."
   fi
-  if [ -f "$PLIST_PATH" ]; then
-    info "launchd service installed (starts on boot): $PLIST_LABEL"
+  # Show available releases.
+  if [ -d "$RELEASES_DIR" ]; then
+    local current_real; current_real="$(readlink "$CURRENT_LINK" 2>/dev/null || true)"
+    info "Releases:"
+    ls -1dt "$RELEASES_DIR"/*/ 2>/dev/null | while IFS= read -r dir; do
+      dir="${dir%/}"
+      local ver; ver="$(grep '^version=' "$dir/VERSION" 2>/dev/null | cut -d= -f2 || basename "$dir")"
+      if [ "$dir" = "$current_real" ]; then
+        printf '    %s  %s← current%s\n' "$ver" "$c_green" "$c_reset"
+      else
+        printf '    %s\n' "$ver"
+      fi
+    done
   fi
 }
 
@@ -270,43 +583,82 @@ cmd_url() {
 }
 
 cmd_logs() {
-  # The launchd service and the manual (nohup) start write to different files.
   local target="$LOG_FILE"
   [ -f "$PLIST_PATH" ] && target="$SERVICE_LOG"
-  mkdir -p "$(dirname "$target")"
-  touch "$target"
+  mkdir -p "$(dirname "$target")"; touch "$target"
   info "Tailing ${target/#$HOME/\~}"
-  if [ "${1:-}" = "-f" ]; then
-    tail -f "$target"
-  else
-    tail -n 100 "$target"
+  if [ "${1:-}" = "-f" ]; then tail -f "$target"
+  else tail -n 100 "$target"
   fi
 }
 
-cmd_update() {
-  info "Pulling latest from origin/main…"
-  git fetch origin main
-  git merge --ff-only origin/main || die "Cannot fast-forward (local changes/divergence). Resolve manually, then retry."
-  cmd_setup
-  cmd_build
-  if is_running || [ -f "$PLIST_PATH" ]; then
-    cmd_restart
-  else
-    info "Not currently running; start with: infra/daybook start"
+# ── launchd service ───────────────────────────────────────────────────────────
+cmd_install_service() {
+  require_home
+  require_node
+  local secret tsx_bin node_bin
+  secret="$(ensure_secret)"
+  tsx_bin="$CURRENT_LINK/node_modules/.bin/tsx"
+  [ -x "$tsx_bin" ] || die "tsx not found at $tsx_bin — run: infra/daybook deploy"
+  node_bin="$(command -v node)"
+  [ -x "$node_bin" ] || die "node not found on PATH."
+
+  if is_running; then
+    info "Stopping manual instance; launchd will manage it from now on."
+    cmd_stop
   fi
-  ok "Updated."
+
+  mkdir -p "$HOME/Library/LaunchAgents" "$(dirname "$SERVICE_LOG")"
+  info "Writing launchd plist → ${PLIST_PATH/#$HOME/\~}"
+  cat > "$PLIST_PATH" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>          <string>$PLIST_LABEL</string>
+  <key>WorkingDirectory</key><string>$DAYBOOK_HOME</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$node_bin</string>
+    <string>$tsx_bin</string>
+    <string>$CURRENT_LINK/server/index.ts</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>      <string>production</string>
+    <key>PORT</key>          <string>$PORT</string>
+    <key>HOST</key>          <string>$HOST</string>
+    <key>SESSION_SECRET</key><string>$secret</string>
+    <key>DAYBOOK_HOME</key>  <string>$DAYBOOK_HOME</string>
+    <key>PATH</key>          <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>RunAtLoad</key>       <true/>
+  <key>KeepAlive</key>       <true/>
+  <key>StandardOutPath</key> <string>$SERVICE_LOG</string>
+  <key>StandardErrorPath</key><string>$SERVICE_LOG</string>
+</dict>
+</plist>
+PLIST
+
+  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launchctl load "$PLIST_PATH"
+  sleep 1.5
+  ok "Service installed and started. Starts on boot."
+  cmd_url
 }
 
-cmd_up() {
-  cmd_setup
-  cmd_build
-  cmd_start
+cmd_uninstall_service() {
+  if [ -f "$PLIST_PATH" ]; then
+    launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    rm -f "$PLIST_PATH"
+    ok "Service removed."
+  else
+    warn "No launchd service installed."
+  fi
 }
 
-# ── LAN domain setup (daybook.local → port 80 → 3001) ───────────────────────
+# ── LAN domain setup ─────────────────────────────────────────────────────────
 cmd_setup_lan() {
-  # Re-exec as root — binding port 80 and installing a system LaunchDaemon
-  # both require root.
   if [ "$(id -u)" -ne 0 ]; then
     info "LAN setup needs sudo to bind port 80 and install the LaunchDaemon…"
     exec sudo "$0" setup-lan
@@ -315,18 +667,19 @@ cmd_setup_lan() {
   local ip; ip="$(lan_ip)"
   local node_bin; node_bin="$(command -v node 2>/dev/null || true)"
   [ -n "$node_bin" ] || die "node not found — install Node 20+ first."
-  [ -f "$PROXY_SCRIPT" ] || die "Port-forward script not found: $PROXY_SCRIPT"
 
-  # Copy the proxy script to a system path — launchd root daemons cannot read
-  # files under ~/Documents (macOS TCC protection). /usr/local/lib is unprotected.
+  # Prefer the release copy; fall back to dev repo copy.
+  local proxy_src=""
+  [ -f "$PROXY_SCRIPT_RELEASE" ] && proxy_src="$PROXY_SCRIPT_RELEASE"
+  [ -z "$proxy_src" ] && [ -f "$PROXY_SCRIPT_DEV" ] && proxy_src="$PROXY_SCRIPT_DEV"
+  [ -n "$proxy_src" ] || die "port-forward.js not found. Deploy a release first or run from the dev repo."
+
   mkdir -p /usr/local/lib/daybook
-  cp "$PROXY_SCRIPT" /usr/local/lib/daybook/port-forward.js
+  cp "$proxy_src" /usr/local/lib/daybook/port-forward.js
   chmod 644 /usr/local/lib/daybook/port-forward.js
   local proxy_system_path="/usr/local/lib/daybook/port-forward.js"
 
-  # 1. Set the Bonjour (mDNS) hostname so daybook.local resolves on the LAN.
-  local cur_host
-  cur_host="$(scutil --get LocalHostName 2>/dev/null || echo '')"
+  local cur_host; cur_host="$(scutil --get LocalHostName 2>/dev/null || echo '')"
   if [ "$cur_host" != "$LAN_HOSTNAME" ]; then
     info "Setting Bonjour hostname: ${cur_host:-<unset>} → $LAN_HOSTNAME"
     scutil --set LocalHostName "$LAN_HOSTNAME"
@@ -335,28 +688,19 @@ cmd_setup_lan() {
     ok "Bonjour hostname already: ${LAN_HOSTNAME}.local"
   fi
 
-  # 2. Clean up any legacy pf-based setup from old installs.
+  # Clean up any legacy pf-based setup.
   if [ -f "$PF_DAEMON_PLIST" ]; then
-    info "Removing legacy pf LaunchDaemon…"
     launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || \
       launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
     rm -f "$PF_DAEMON_PLIST"
     ok "Legacy pf daemon removed."
   fi
-  if [ -f "$PF_ANCHOR_FILE" ]; then
-    rm -f "$PF_ANCHOR_FILE"
-  fi
-  # Remove any daybook lines from pf.conf left by old setups.
+  rm -f "$PF_ANCHOR_FILE"
   if grep -q 'daybook' /etc/pf.conf 2>/dev/null; then
-    info "Cleaning stale daybook entries from /etc/pf.conf…"
     sed -i '' '/rdr-anchor "daybook"/d; /anchor "daybook"/d; /load anchor "daybook"/d' /etc/pf.conf
     ok "pf.conf cleaned."
   fi
 
-  # 3. Install a Node.js TCP proxy as a root LaunchDaemon.
-  #    The proxy listens on 0.0.0.0:80 and forwards every connection to
-  #    127.0.0.1:PORT. This is far simpler than pf and works reliably on macOS
-  #    because Node handles the userspace routing (no kernel forwarding quirks).
   info "Installing port-80 proxy LaunchDaemon → $PROXY_DAEMON_PLIST"
   cat > "$PROXY_DAEMON_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -382,31 +726,27 @@ cmd_setup_lan() {
 </plist>
 PLIST
 
-  # Boot/reload the daemon in the system domain.
   launchctl bootout system "$PROXY_DAEMON_PLIST" 2>/dev/null || true
   if launchctl bootstrap system "$PROXY_DAEMON_PLIST"; then
-    ok "LaunchDaemon installed (port 80 proxy starts on reboot)."
+    ok "LaunchDaemon installed."
   else
     launchctl load "$PROXY_DAEMON_PLIST" \
-      || die "Failed to load LaunchDaemon — check plist at $PROXY_DAEMON_PLIST"
+      || die "Failed to load LaunchDaemon."
     ok "LaunchDaemon installed via legacy load."
   fi
 
-  # Give the proxy a moment to bind, then do a quick sanity check.
   sleep 1
   if lsof -i TCP:80 -sTCP:LISTEN 2>/dev/null | grep -q node; then
     ok "Port 80 proxy is listening."
   else
-    warn "Port 80 proxy may not have started yet — check: sudo lsof -i TCP:80"
-    warn "Proxy log: /var/log/daybook-proxy.log"
+    warn "Port 80 proxy may not have started — check: sudo lsof -i TCP:80"
   fi
 
-  printf '\n%s\n' "${c_bold}┌─ daybook.local is ready ─────────────────────────────┐${c_reset}"
+  printf '\n%s\n' "${c_bold}┌─ daybook.local is ready ──────────────────────────────┐${c_reset}"
   printf   '%s\n' "  On this Mac:    ${c_green}http://daybook.local${c_reset}"
   printf   '%s\n' "  On iPhone/iPad: ${c_green}http://daybook.local${c_reset}  (Bonjour/mDNS)"
   printf   '%s\n' "  Fallback IP:    ${c_green}http://$ip${c_reset}"
-  printf   '%s\n' "${c_bold}└──────────────────────────────────────────────────────┘${c_reset}"
-  printf '\n%s\n' "${c_dim}Android note: .local mDNS may be blocked — use the IP above or add a router DNS entry for 'daybook' → $ip${c_reset}"
+  printf   '%s\n' "${c_bold}└───────────────────────────────────────────────────────┘${c_reset}"
 }
 
 cmd_teardown_lan() {
@@ -414,294 +754,50 @@ cmd_teardown_lan() {
     info "Teardown needs sudo…"
     exec sudo "$0" teardown-lan
   fi
-
-  # Remove the Node proxy daemon.
   if [ -f "$PROXY_DAEMON_PLIST" ]; then
     launchctl bootout system "$PROXY_DAEMON_PLIST" 2>/dev/null || \
       launchctl unload "$PROXY_DAEMON_PLIST" 2>/dev/null || true
     rm -f "$PROXY_DAEMON_PLIST"
     ok "Proxy LaunchDaemon removed."
   else
-    warn "No proxy daemon found at $PROXY_DAEMON_PLIST"
+    warn "No proxy daemon found."
   fi
   rm -rf /usr/local/lib/daybook
-
-  # Also clean up any legacy pf-based setup from old installs.
   if [ -f "$PF_DAEMON_PLIST" ]; then
     launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || \
       launchctl unload "$PF_DAEMON_PLIST" 2>/dev/null || true
-    rm -f "$PF_DAEMON_PLIST"
-    ok "Legacy pf daemon removed."
+    rm -f "$PF_DAEMON_PLIST"; ok "Legacy pf daemon removed."
   fi
   rm -f "$PF_ANCHOR_FILE"
   if grep -q 'daybook' /etc/pf.conf 2>/dev/null; then
     sed -i '' '/rdr-anchor "daybook"/d; /anchor "daybook"/d; /load anchor "daybook"/d' /etc/pf.conf
     ok "pf.conf cleaned."
   fi
-
-  warn "Bonjour hostname '${LAN_HOSTNAME}' left as-is."
-  warn "To restore original: sudo scutil --set LocalHostName <your-mac-name>"
-}
-
-# ── Release deployment (pull a built artifact from GitHub) ───────────────────
-require_curl() { command -v curl >/dev/null 2>&1 || die "curl not found."; }
-
-# Call the GitHub REST API. $1 = path (e.g. /releases/latest). Echoes JSON.
-gh_api() {
-  local path="$1"
-  local url="https://api.github.com/repos/$REPO$path"
-  local -a auth=()
-  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    ${auth[@]+"${auth[@]}"} "$url"
-}
-
-# Pull one field out of a release JSON blob using node (always present here).
-# $1 = release JSON file, $2 = a small node expression over `r` (the parsed obj).
-release_field() {
-  node -e '
-    const fs = require("fs");
-    const r = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const out = (function(){ return eval(process.argv[2]); })();
-    process.stdout.write(out == null ? "" : String(out));
-  ' "$1" "$2"
-}
-
-# Download a release asset by id to a path. Assets need the octet-stream Accept
-# header (and auth on a private repo) to return bytes rather than JSON.
-download_asset() {
-  local asset_id="$1" dest="$2"
-  local url="https://api.github.com/repos/$REPO/releases/assets/$asset_id"
-  local -a auth=()
-  [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl -fsSL -H "Accept: application/octet-stream" ${auth[@]+"${auth[@]}"} "$url" -o "$dest"
-}
-
-cmd_deploy() {
-  require_node
-  require_curl
-  command -v npm >/dev/null 2>&1 || die "npm not found."
-
-  # Public repo: a token is optional (anonymous downloads work). It only raises
-  # the GitHub API rate limit and is needed if the repo is ever made private.
-  [ -n "$GITHUB_TOKEN" ] || info "No GITHUB_TOKEN set — using anonymous GitHub access (fine for a public repo)."
-
-  local tag="${1:-}"
-  # Use a script-level (non-local) variable so the EXIT trap can reference it
-  # after cmd_deploy returns — local variables go out of scope before the trap fires.
-  _deploy_tmp="$(mktemp -d)"
-  trap 'rm -rf "${_deploy_tmp:-}"' EXIT
-  local tmp="$_deploy_tmp"
-
-  # Resolve the release (explicit tag or latest).
-  if [ -n "$tag" ]; then
-    info "Fetching release $tag from $REPO…"
-    gh_api "/releases/tags/$tag" > "$tmp/release.json" 2>/dev/null \
-      || die "Release '$tag' not found on $REPO (or token lacks access)."
-  else
-    info "Fetching latest release from $REPO…"
-    gh_api "/releases/latest" > "$tmp/release.json" 2>/dev/null \
-      || die "No releases found on $REPO (or token lacks access)."
-  fi
-
-  local rel_tag; rel_tag="$(release_field "$tmp/release.json" 'r.tag_name')"
-  [ -n "$rel_tag" ] || die "Could not read the release tag from GitHub."
-  info "Release: $rel_tag"
-
-  # Find the tarball + checksum asset ids by name suffix.
-  local tarball_id tarball_name sha_id
-  tarball_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).id')"
-  tarball_name="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).name')"
-  sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
-  [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
-
-  info "Downloading $tarball_name…"
-  download_asset "$tarball_id" "$tmp/$tarball_name"
-
-  # Verify the checksum when the release ships one.
-  if [ -n "$sha_id" ]; then
-    download_asset "$sha_id" "$tmp/$tarball_name.sha256"
-    info "Verifying checksum…"
-    ( cd "$tmp"
-      if command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 -c "$tarball_name.sha256" >/dev/null
-      else
-        sha256sum -c "$tarball_name.sha256" >/dev/null
-      fi
-    ) || die "Checksum verification failed — refusing to deploy a corrupt artifact."
-    ok "Checksum verified."
-  else
-    warn "No checksum asset on the release; skipping verification."
-  fi
-
-  # Unpack into a clean staging dir first so a bad archive can't half-overwrite
-  # the live install.
-  mkdir -p "$tmp/unpack"
-  tar -xzf "$tmp/$tarball_name" -C "$tmp/unpack"
-  [ -f "$tmp/unpack/dist/index.html" ] || die "Artifact is missing dist/ — aborting."
-  [ -f "$tmp/unpack/server/index.ts" ] || die "Artifact is missing server/ — aborting."
-
-  # Back up the current install (dist + server + manifests) for `rollback`.
-  local stamp backup
-  stamp="$(date +%Y%m%d-%H%M%S)"
-  backup="$BACKUP_DIR/$stamp"
-  mkdir -p "$backup"
-  info "Backing up current release → ${backup/#$HOME/\~}"
-  # Fail loudly if a backup copy errors — better to abort now than to do the
-  # destructive swap below with an incomplete backup that rollback can't use.
-  for item in dist server package.json package-lock.json VERSION; do
-    if [ -e "$ROOT_DIR/$item" ]; then
-      cp -R "$ROOT_DIR/$item" "$backup/" || die "Backup of '$item' failed — aborting before installing."
-    fi
-  done
-  # Keep only the 5 most recent backups.
-  ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true
-
-  # Swap in the new release. Replace dist/ and server/ wholesale so removed
-  # files don't linger; overlay the manifests, infra tool, and VERSION.
-  info "Installing $rel_tag…"
-  rm -rf "$ROOT_DIR/dist" "$ROOT_DIR/server"
-  cp -R "$tmp/unpack/dist"   "$ROOT_DIR/dist"
-  cp -R "$tmp/unpack/server" "$ROOT_DIR/server"
-  for f in package.json package-lock.json tsconfig.json tsconfig.node.json VERSION; do
-    [ -f "$tmp/unpack/$f" ] && cp "$tmp/unpack/$f" "$ROOT_DIR/$f"
-  done
-  # Update the control tool via rename, not in-place cp. This very script is
-  # executing right now; `cp` rewrites the same inode and bash, which reads the
-  # script by byte offset, would run corrupted bytes for the rest of the deploy.
-  # `mv` swaps in a new inode — the live process keeps reading the old one, and
-  # the new tool takes effect on the next invocation.
-  if [ -f "$tmp/unpack/infra/daybook" ]; then
-    cp "$tmp/unpack/infra/daybook" "$ROOT_DIR/infra/daybook.new"
-    chmod +x "$ROOT_DIR/infra/daybook.new"
-    mv -f "$ROOT_DIR/infra/daybook.new" "$ROOT_DIR/infra/daybook"
-  fi
-
-  # Install runtime deps (rebuilds native modules: better-sqlite3, bcrypt).
-  info "Installing dependencies for the new release…"
-  npm ci
-
-  restart_service
-  ok "Deployed $rel_tag."
-}
-
-cmd_rollback() {
-  require_node
-  local backup
-  backup="$(ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | head -n 1 || true)"
-  [ -n "$backup" ] || die "No backup found to roll back to (deploy at least once first)."
-  backup="${backup%/}"
-  warn "Rolling back to ${backup/#$HOME/\~}"
-
-  [ -d "$backup/dist" ]   && { rm -rf "$ROOT_DIR/dist";   cp -R "$backup/dist"   "$ROOT_DIR/dist"; }
-  [ -d "$backup/server" ] && { rm -rf "$ROOT_DIR/server"; cp -R "$backup/server" "$ROOT_DIR/server"; }
-  for f in package.json package-lock.json VERSION; do
-    [ -f "$backup/$f" ] && cp "$backup/$f" "$ROOT_DIR/$f"
-  done
-
-  info "Reinstalling dependencies for the restored release…"
-  npm ci
-  restart_service
-  ok "Rolled back."
-}
-
-# ── launchd service (boot persistence + auto-restart) ────────────────────────
-cmd_install_service() {
-  require_node
-  [ -f "$ROOT_DIR/dist/index.html" ] || die "Build first: infra/daybook build  (or: infra/daybook up)"
-  local secret tsx_bin node_bin
-  secret="$(ensure_secret)"
-  tsx_bin="$ROOT_DIR/node_modules/.bin/tsx"
-  [ -x "$tsx_bin" ] || die "tsx not found at $tsx_bin — run: infra/daybook setup"
-  # Use the absolute node binary directly. launchd execs the tsx shim's
-  # "#!/usr/bin/env node" shebang in a context where it can't resolve node
-  # (exit 78); passing the shim as an argument to an absolute node avoids that.
-  node_bin="$(command -v node)"
-  [ -x "$node_bin" ] || die "node not found on PATH — cannot build the service."
-
-  # If a backgrounded instance is running, stop it; launchd will own it now.
-  if is_running; then
-    info "Stopping the manually-started instance; launchd will manage it from now on."
-    cmd_stop
-  fi
-
-  mkdir -p "$HOME/Library/LaunchAgents" "$(dirname "$SERVICE_LOG")"
-  ensure_run_dir
-  info "Writing launchd plist → ${PLIST_PATH/#$HOME/\~}"
-  info "Service log → ${SERVICE_LOG/#$HOME/\~}"
-  cat > "$PLIST_PATH" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>          <string>$PLIST_LABEL</string>
-  <key>WorkingDirectory</key><string>$ROOT_DIR</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$node_bin</string>
-    <string>$tsx_bin</string>
-    <string>server/index.ts</string>
-  </array>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>NODE_ENV</key>      <string>production</string>
-    <key>PORT</key>          <string>$PORT</string>
-    <key>HOST</key>          <string>$HOST</string>
-    <key>SESSION_SECRET</key><string>$secret</string>
-    <key>PATH</key>          <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
-  </dict>
-  <key>RunAtLoad</key>       <true/>
-  <key>KeepAlive</key>       <true/>
-  <key>StandardOutPath</key> <string>$SERVICE_LOG</string>
-  <key>StandardErrorPath</key><string>$SERVICE_LOG</string>
-</dict>
-</plist>
-PLIST
-
-  # Reload cleanly if it was already loaded.
-  launchctl unload "$PLIST_PATH" 2>/dev/null || true
-  launchctl load "$PLIST_PATH"
-  sleep 1.5
-  ok "Service installed and started. It will now launch on boot and restart if it crashes."
-  cmd_url
-}
-
-cmd_uninstall_service() {
-  if [ -f "$PLIST_PATH" ]; then
-    launchctl unload "$PLIST_PATH" 2>/dev/null || true
-    rm -f "$PLIST_PATH"
-    ok "Service removed. (The app is no longer set to start on boot.)"
-  else
-    warn "No launchd service installed."
-  fi
+  warn "Bonjour hostname '$LAN_HOSTNAME' left as-is."
+  warn "To restore: sudo scutil --set LocalHostName <your-mac-name>"
 }
 
 cmd_help() {
-  sed -n '3,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 case "${1:-help}" in
-  setup)             cmd_setup ;;
-  build)             cmd_build ;;
-  start)             cmd_start ;;
-  stop)              cmd_stop ;;
-  restart)           cmd_restart ;;
-  reload)            cmd_reload ;;
-  status)            cmd_status ;;
-  logs)              shift; cmd_logs "${1:-}" ;;
+  install)           shift; cmd_install "${1:-}" ;;
   deploy)            shift; cmd_deploy "${1:-}" ;;
   rollback)          cmd_rollback ;;
-  update)            cmd_update ;;
-  up)                cmd_up ;;
-  url)               cmd_url ;;
+  backup)            cmd_backup ;;
+  status)            cmd_status ;;
+  logs)              shift; cmd_logs "${1:-}" ;;
+  restart)           restart_service ;;
+  stop)              cmd_stop ;;
+  start)             cmd_start ;;
   run)               cmd_run ;;
   install-service)   cmd_install_service ;;
   uninstall-service) cmd_uninstall_service ;;
   setup-lan)         cmd_setup_lan ;;
   teardown-lan)      cmd_teardown_lan ;;
+  url)               cmd_url ;;
   help|-h|--help)    cmd_help ;;
   *)                 err "Unknown command: $1"; echo; cmd_help; exit 1 ;;
 esac
