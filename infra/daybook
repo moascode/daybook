@@ -301,7 +301,7 @@ gh_api() {
   curl -fsSL \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
-    "${auth[@]}" "$url"
+    ${auth[@]+"${auth[@]}"} "$url"
 }
 
 # Pull one field out of a release JSON blob using node (always present here).
@@ -322,7 +322,7 @@ download_asset() {
   local url="https://api.github.com/repos/$REPO/releases/assets/$asset_id"
   local -a auth=()
   [ -n "$GITHUB_TOKEN" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
-  curl -fsSL -H "Accept: application/octet-stream" "${auth[@]}" "$url" -o "$dest"
+  curl -fsSL -H "Accept: application/octet-stream" ${auth[@]+"${auth[@]}"} "$url" -o "$dest"
 }
 
 cmd_deploy() {
@@ -336,7 +336,9 @@ cmd_deploy() {
 
   local tag="${1:-}"
   local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
+  # EXIT (not RETURN) so the temp dir is cleaned up on the die/exit paths too;
+  # cmd_deploy is a terminal command, so the script exits right after it returns.
+  trap 'rm -rf "$tmp"' EXIT
 
   # Resolve the release (explicit tag or latest).
   if [ -n "$tag" ]; then
@@ -355,9 +357,9 @@ cmd_deploy() {
 
   # Find the tarball + checksum asset ids by name suffix.
   local tarball_id tarball_name sha_id
-  tarball_id="$(release_field "$tmp/release.json" '(r.assets.find(a=>a.name.endsWith(".tar.gz"))||{}).id')"
-  tarball_name="$(release_field "$tmp/release.json" '(r.assets.find(a=>a.name.endsWith(".tar.gz"))||{}).name')"
-  sha_id="$(release_field "$tmp/release.json" '(r.assets.find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
+  tarball_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).id')"
+  tarball_name="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz")&&!a.name.endsWith(".sha256"))||{}).name')"
+  sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
   [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
 
   info "Downloading $tarball_name…"
@@ -392,8 +394,12 @@ cmd_deploy() {
   backup="$BACKUP_DIR/$stamp"
   mkdir -p "$backup"
   info "Backing up current release → ${backup/#$HOME/\~}"
+  # Fail loudly if a backup copy errors — better to abort now than to do the
+  # destructive swap below with an incomplete backup that rollback can't use.
   for item in dist server package.json package-lock.json VERSION; do
-    [ -e "$ROOT_DIR/$item" ] && cp -R "$ROOT_DIR/$item" "$backup/" 2>/dev/null || true
+    if [ -e "$ROOT_DIR/$item" ]; then
+      cp -R "$ROOT_DIR/$item" "$backup/" || die "Backup of '$item' failed — aborting before installing."
+    fi
   done
   # Keep only the 5 most recent backups.
   ls -1dt "$BACKUP_DIR"/*/ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true
@@ -407,7 +413,16 @@ cmd_deploy() {
   for f in package.json package-lock.json tsconfig.json tsconfig.node.json VERSION; do
     [ -f "$tmp/unpack/$f" ] && cp "$tmp/unpack/$f" "$ROOT_DIR/$f"
   done
-  [ -f "$tmp/unpack/infra/daybook" ] && cp "$tmp/unpack/infra/daybook" "$ROOT_DIR/infra/daybook" && chmod +x "$ROOT_DIR/infra/daybook"
+  # Update the control tool via rename, not in-place cp. This very script is
+  # executing right now; `cp` rewrites the same inode and bash, which reads the
+  # script by byte offset, would run corrupted bytes for the rest of the deploy.
+  # `mv` swaps in a new inode — the live process keeps reading the old one, and
+  # the new tool takes effect on the next invocation.
+  if [ -f "$tmp/unpack/infra/daybook" ]; then
+    cp "$tmp/unpack/infra/daybook" "$ROOT_DIR/infra/daybook.new"
+    chmod +x "$ROOT_DIR/infra/daybook.new"
+    mv -f "$ROOT_DIR/infra/daybook.new" "$ROOT_DIR/infra/daybook"
+  fi
 
   # Install runtime deps (rebuilds native modules: better-sqlite3, bcrypt).
   info "Installing dependencies for the new release…"
