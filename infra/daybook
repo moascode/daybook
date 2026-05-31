@@ -371,12 +371,15 @@ cmd_setup_lan() {
 </plist>
 PLIST
   # Bootstrap into the system domain (correct API for root LaunchDaemons on
-  # macOS 10.11+). Fall back to the legacy `load` on older systems.
+  # macOS 10.11+). Fall back to the legacy `load` on older macOS only.
   launchctl bootout system "$PF_DAEMON_PLIST" 2>/dev/null || true
-  if launchctl bootstrap system "$PF_DAEMON_PLIST" 2>/dev/null; then
+  if launchctl bootstrap system "$PF_DAEMON_PLIST"; then
     ok "LaunchDaemon installed (rules persist on reboot)."
   else
-    launchctl load "$PF_DAEMON_PLIST" 2>/dev/null || true
+    # `bootstrap` is unavailable on very old macOS — try legacy `load`.
+    # If this also fails, surface the error rather than printing false success.
+    launchctl load "$PF_DAEMON_PLIST" \
+      || die "Failed to load LaunchDaemon — check plist at $PF_DAEMON_PLIST"
     ok "LaunchDaemon installed via legacy load (rules persist on reboot)."
   fi
 
