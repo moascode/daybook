@@ -17,13 +17,17 @@ import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
 function getMonthRange(monthOffset: number) {
   const now = new Date()
+  // Use local year/month arithmetic — never toISOString() which converts to UTC
+  // and shifts the date by up to a day in non-UTC timezones.
   const year = now.getFullYear()
-  const month = now.getMonth() + monthOffset
-  const first = new Date(year, month, 1)
-  const last = new Date(year, month + 1, 0)
+  const month = now.getMonth() + monthOffset        // JS handles underflow (month < 0)
+  const d = new Date(year, month, 1)                // normalises month overflow/underflow
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const lastDay = new Date(y, d.getMonth() + 1, 0).getDate()
   return {
-    dateFrom: first.toISOString().slice(0, 10),
-    dateTo: last.toISOString().slice(0, 10),
+    dateFrom: `${y}-${m}-01`,
+    dateTo: `${y}-${m}-${String(lastDay).padStart(2, '0')}`,
   }
 }
 
@@ -60,6 +64,13 @@ export function WalletPage() {
   // read them without depending on `filters` (which would recreate them).
   const filtersRef = useRef(filters)
   useEffect(() => { filtersRef.current = filters }, [filters])
+
+  // When filters change while select mode is active, the displayed transaction
+  // list changes — any previously selected IDs may no longer be visible and
+  // would be silently bulk-deleted. Clear the selection to prevent this.
+  useEffect(() => {
+    if (selectMode) setSelectedIds(new Set())
+  }, [filters, selectMode])
 
   // Income/expense/net for the currently loaded transactions — derived state,
   // recomputed whenever the transaction list changes (transfers excluded).
