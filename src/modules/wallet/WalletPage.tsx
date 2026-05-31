@@ -165,6 +165,20 @@ export function WalletPage() {
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
 
+  // Stable prefill object — only recreates when splitSource identity changes,
+  // not on every WalletPage re-render. Prevents mid-session form resets.
+  const splitPrefill = useMemo(() => splitSource ? {
+    accountId: splitSource.accountId,
+    destinationAccountId: splitSource.destinationAccountId,
+    date: splitSource.date,
+    merchant: splitSource.merchant,
+    description: splitSource.description,
+    amount: splitSource.amount,
+    type: splitSource.type,
+    categoryId: splitSource.categoryId,
+    tags: splitSource.tags,
+  } : undefined, [splitSource])
+
   function openEditForm(transaction: Transaction) {
     setSplitSource(null)
     setEditingTransaction(transaction)
@@ -494,17 +508,7 @@ export function WalletPage() {
           }
         }}
         transaction={editingTransaction}
-        prefill={splitSource ? {
-          accountId: splitSource.accountId,
-          destinationAccountId: splitSource.destinationAccountId,
-          date: splitSource.date,
-          merchant: splitSource.merchant,
-          description: splitSource.description,
-          amount: splitSource.amount,
-          type: splitSource.type,
-          categoryId: splitSource.categoryId,
-          tags: splitSource.tags,
-        } : undefined}
+        prefill={splitPrefill}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}

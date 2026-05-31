@@ -287,6 +287,7 @@ export function TransactionForm({
         {/* Tags */}
         {form.type !== 'transfer' && (
           <TagInput
+            id="tags"
             label="Tags"
             value={form.tags}
             onChange={(tags) => setForm((f) => ({ ...f, tags }))}

@@ -137,7 +137,7 @@ walletRouter.get('/tags', (req, res) => {
     .prepare(
       `SELECT DISTINCT je.value AS tag
        FROM transactions t, json_each(t.tag) je
-       WHERE t.user_id = ? AND json_valid(t.tag) AND t.tag != '' AND t.tag != '[]'
+       WHERE t.user_id = ? AND json_valid(t.tag) AND json_type(t.tag) = 'array' AND t.tag != '[]'
        ORDER BY je.value`,
     )
     .all(req.session.userId!) as { tag: string }[]
@@ -178,7 +178,7 @@ function insertTransaction(b: Record<string, unknown>, userId: string) {
       amount: normalizeBind(b.amount),
       type: b.type,
       categoryId: b.categoryId ?? null,
-      tag: b.tag ?? '',
+      tag: Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
       importHash: b.importHash ?? '',
     })
 }

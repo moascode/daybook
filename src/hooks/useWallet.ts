@@ -8,7 +8,7 @@ function parseTags(raw: string | null | undefined): string[] {
   if (!raw) return []
   try {
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : [raw]
+    return Array.isArray(parsed) ? parsed : []
   } catch {
     return [raw]
   }
@@ -262,14 +262,12 @@ export function useWallet() {
 
   const deleteCategory = useCallback(async (id: string): Promise<void> => {
     await api.delete(`/categories/${id}`)
-    useWalletStore.getState().setCategories(
-      useWalletStore.getState().categories.filter((c) => c.id !== id),
-    )
-    useWalletStore.getState().setTransactions(
-      useWalletStore.getState().transactions.map((t) =>
-        t.categoryId === id ? { ...t, categoryId: null } : t,
-      ),
-    )
+    const s = useWalletStore.getState()
+    s.setCategories(s.categories.filter((c) => c.id !== id))
+    // ON DELETE SET NULL on transactions.category_id — mirror in store
+    s.setTransactions(s.transactions.map((t) => t.categoryId === id ? { ...t, categoryId: null } : t))
+    // ON DELETE CASCADE on budgets.category_id — remove from store
+    s.setBudgets(s.budgets.filter((b) => b.categoryId !== id))
   }, [])
 
   const getCategoryUsage = useCallback(async (id: string): Promise<number> => {
