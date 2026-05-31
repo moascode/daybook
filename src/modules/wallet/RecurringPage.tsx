@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
+import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
 import { formatMYR } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
@@ -40,10 +41,12 @@ export function RecurringPage() {
     postRecurringNow,
   } = useWallet()
   const { addToast } = useToastStore()
+  const invalidate = useWalletStore((s) => s.invalidate)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<RecurringTransaction | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [postingId, setPostingId] = useState<string | null>(null)
   const [form, setForm] = useState<RecurringFormData>({
     accountId: '',
     amount: '',
@@ -125,12 +128,20 @@ export function RecurringPage() {
   }, [form, editingRule, addRecurringTransaction, updateRecurringTransaction])
 
   const handlePostNow = useCallback(async (rule: RecurringTransaction) => {
-    await postRecurringNow(rule.id)
-    addToast({
-      message: `Posted ${formatMYR(rule.amount)}${rule.merchant ? ` to ${rule.merchant}` : ''}`,
-      duration: 3500,
-    })
-  }, [postRecurringNow, addToast])
+    setPostingId(rule.id)
+    try {
+      await postRecurringNow(rule.id)
+      const account = accounts.find((a) => a.id === rule.accountId)
+      addToast({
+        message: `Posted ${formatMYR(rule.amount)}${rule.merchant ? ` · ${rule.merchant}` : ''}${account ? ` → ${account.name}` : ''}`,
+        duration: 3500,
+      })
+      // A transaction was created — refresh balances/lists on other pages.
+      invalidate()
+    } finally {
+      setPostingId(null)
+    }
+  }, [postRecurringNow, addToast, accounts, invalidate])
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteRecurringTransaction(id)
@@ -202,10 +213,11 @@ export function RecurringPage() {
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
                       <button
-                        className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
                         onClick={() => handlePostNow(rule)}
+                        disabled={postingId === rule.id}
                       >
-                        Post now
+                        {postingId === rule.id ? 'Posting…' : 'Post now'}
                       </button>
                       <button
                         className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"

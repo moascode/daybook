@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { useWallet } from '@/hooks/useWallet'
+import { useWalletStore } from '@/stores/wallet.store'
 import { cn, formatMYR } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
@@ -30,6 +31,7 @@ export function WalletPage() {
     getAccountBalance,
   } = useWallet()
 
+  const dataVersion = useWalletStore((s) => s.dataVersion)
   const [searchParams] = useSearchParams()
   const [formOpen, setFormOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -64,36 +66,46 @@ export function WalletPage() {
 
   useEffect(() => {
     loadTransactions(filters)
-  }, [filters, loadTransactions])
+    // dataVersion: re-fetch when data changed out-of-band (e.g. recurring
+    // rules auto-posted on boot).
+  }, [filters, loadTransactions, dataVersion])
 
-  // Total balance across all accounts — recomputed when accounts or the
-  // transaction set change (a new transaction moves a balance).
+  // Total balance across all accounts. Balances are independent of the active
+  // filters, so this is keyed on `accounts` (and dataVersion) — NOT on the
+  // filtered transaction list. Mutations refresh it explicitly below.
+  const loadNetWorth = useCallback(async () => {
+    // Promise.all([]) resolves to [] → reduce to 0, so the empty case is handled.
+    const balances = await Promise.all(accounts.map((a) => getAccountBalance(a.id)))
+    setNetWorth(balances.reduce((sum, b) => sum + b, 0))
+  }, [accounts, getAccountBalance])
+
   useEffect(() => {
     let cancelled = false
-    // Promise.all([]) resolves to [] → reduce to 0, so the empty case is handled
-    // without a synchronous setState (the banner is gated on accounts anyway).
     Promise.all(accounts.map((a) => getAccountBalance(a.id))).then((balances) => {
       if (!cancelled) setNetWorth(balances.reduce((sum, b) => sum + b, 0))
     })
     return () => { cancelled = true }
-  }, [accounts, transactions, getAccountBalance])
+  }, [accounts, getAccountBalance, dataVersion])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     await addTransaction(data)
     await loadTransactions(filtersRef.current)
-  }, [addTransaction, loadTransactions])
+    await loadNetWorth()
+  }, [addTransaction, loadTransactions, loadNetWorth])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
     if (!editingTransaction) return
     await updateTransaction(editingTransaction.id, data)
     setEditingTransaction(null)
     await loadTransactions(filtersRef.current)
-  }, [editingTransaction, updateTransaction, loadTransactions])
+    await loadNetWorth()
+  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth])
 
   const handleDeleteTransaction = useCallback(async (id: string) => {
     await deleteTransaction(id)
     await loadTransactions(filtersRef.current)
-  }, [deleteTransaction, loadTransactions])
+    await loadNetWorth()
+  }, [deleteTransaction, loadTransactions, loadNetWorth])
 
   function openEditForm(transaction: Transaction) {
     setEditingTransaction(transaction)

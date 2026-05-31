@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
+import { useWalletStore } from '@/stores/wallet.store'
 import { formatMYR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
@@ -66,6 +67,7 @@ export function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [dateRange, setDateRange] = useState<DateRange>('this-month')
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
+  const dataVersion = useWalletStore((s) => s.dataVersion)
 
   const { dateFrom, dateTo } = useMemo(() => {
     const now = new Date()
@@ -90,12 +92,12 @@ export function Dashboard() {
     loadAccounts()
     loadCategories()
     loadRecurringTransactions()
-  }, [loadAccounts, loadCategories, loadRecurringTransactions])
+  }, [loadAccounts, loadCategories, loadRecurringTransactions, dataVersion])
 
   useEffect(() => {
     if (!dateFrom || !dateTo) return
     loadTransactions({ dateFrom, dateTo }).then(setTransactions)
-  }, [dateFrom, dateTo, loadTransactions])
+  }, [dateFrom, dateTo, loadTransactions, dataVersion])
 
   const summary = useMemo(() => {
     let income = 0

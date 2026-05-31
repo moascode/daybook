@@ -122,21 +122,15 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
           rows={2}
         />
 
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="Type"
-            options={ACCOUNT_TYPES}
-            value={form.type}
-            onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Account['type'] }))}
-          />
-
-          <Input
-            label="Currency"
-            value={form.currency}
-            onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
-            maxLength={3}
-          />
-        </div>
+        <Select
+          label="Type"
+          options={ACCOUNT_TYPES}
+          value={form.type}
+          onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as Account['type'] }))}
+        />
+        {/* Currency is fixed to the app currency (MYR) — single-currency app, so
+            net worth and balances stay meaningful. The value still flows through
+            form state for the API. */}
 
         <div>
           <Input

@@ -55,4 +55,19 @@ test.describe('wallet left-panel navigation', () => {
     await page.getByRole('button', { name: 'Expand Wallet' }).click()
     await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
   })
+
+  test('leaving /wallet clears a manual collapse so returning auto-expands', async ({
+    browser,
+  }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Collapse Wallet' }).click()
+    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeHidden()
+
+    // Navigate away and back via the URL (not the Wallet link, which force-expands).
+    await page.goto('/tasks')
+    await page.goto('/wallet/dashboard')
+    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+  })
 })

@@ -300,6 +300,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   -- type values: 'cash' | 'card' | 'e-wallet' | 'bank' | 'investment' | 'other'
   color       TEXT DEFAULT '#1D9E75',
   icon        TEXT DEFAULT 'wallet',
+  opening_balance REAL NOT NULL DEFAULT 0,
+  -- starting balance before any transactions; included in the computed balance.
+  -- Added post-v1 (server SCHEMA_VERSION 2). The app is single-currency (MYR):
+  -- the per-account currency selector was removed; `currency` stays 'MYR'.
   created_at  TEXT DEFAULT (datetime('now'))
 );
 

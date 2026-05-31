@@ -78,15 +78,11 @@ export function transactionRowFor(page: Page, merchant: string) {
 /** Fill the AccountForm modal and submit it */
 export async function fillAccountForm(
   page: Page,
-  fields: { name: string; type?: string; currency?: string },
+  fields: { name: string; type?: string },
 ) {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Account Name').fill(fields.name)
   if (fields.type) await dialog.getByLabel('Type').selectOption(fields.type)
-  if (fields.currency) {
-    await dialog.getByLabel('Currency').fill('')
-    await dialog.getByLabel('Currency').fill(fields.currency)
-  }
   await dialog.getByRole('button', { name: /Create Account|Save Changes/ }).click()
   await expect(dialog).toBeHidden()
 }

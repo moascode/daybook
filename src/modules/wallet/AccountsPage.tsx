@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
 import { useWallet } from '@/hooks/useWallet'
+import { useWalletStore } from '@/stores/wallet.store'
 import { formatMYR } from '@/lib/utils'
 import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
@@ -17,8 +18,9 @@ export function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
   const [netWorth, setNetWorth] = useState<number | null>(null)
+  const dataVersion = useWalletStore((s) => s.dataVersion)
 
-  useEffect(() => { loadAccounts() }, [loadAccounts])
+  useEffect(() => { loadAccounts() }, [loadAccounts, dataVersion])
 
   // Compute net worth whenever accounts list changes. Promise.all([]) resolves
   // to [] → reduces to 0, so the empty case needs no special handling.

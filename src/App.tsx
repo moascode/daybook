@@ -3,6 +3,8 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './router'
 import { api, ApiError, setUnauthorizedHandler } from '@/lib/api'
 import { useAppStore, type AuthUser } from '@/stores/app.store'
+import { useWalletStore } from '@/stores/wallet.store'
+import { useToastStore } from '@/stores/toast.store'
 import { AuthPage } from '@/components/auth/AuthPage'
 
 export default function App() {
@@ -56,10 +58,23 @@ export default function App() {
         }
         setDbReady(true)
         // Post any recurring rules that have come due since the last visit.
-        // Fire-and-forget: a failure here must never block the app.
-        api.post('/recurring-transactions/process').catch((err: unknown) => {
-          console.error('Failed to process recurring transactions:', err)
-        })
+        // Fire-and-forget: a failure here must never block the app. When it
+        // posts anything, tell the user and invalidate wallet data so any
+        // mounted page re-fetches the new transactions/balances.
+        api
+          .post<{ posted: number }>('/recurring-transactions/process')
+          .then(({ posted }) => {
+            if (posted > 0) {
+              useWalletStore.getState().invalidate()
+              useToastStore.getState().addToast({
+                message: `Posted ${posted} due recurring transaction${posted === 1 ? '' : 's'}`,
+                duration: 5000,
+              })
+            }
+          })
+          .catch((err: unknown) => {
+            console.error('Failed to process recurring transactions:', err)
+          })
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'

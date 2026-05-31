@@ -77,6 +77,13 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
   const isWalletRoute = location.pathname.startsWith('/wallet')
   // null = follow the route (auto-expand on /wallet/*); true/false = manual override.
   const [walletOverride, setWalletOverride] = useState<boolean | null>(null)
+  // Clear a manual override once the user leaves /wallet so a later visit
+  // auto-expands again, rather than staying stuck collapsed/expanded forever.
+  const [prevIsWalletRoute, setPrevIsWalletRoute] = useState(isWalletRoute)
+  if (isWalletRoute !== prevIsWalletRoute) {
+    setPrevIsWalletRoute(isWalletRoute)
+    if (!isWalletRoute) setWalletOverride(null)
+  }
   const walletExpanded = walletOverride ?? isWalletRoute
 
   const navContent = (

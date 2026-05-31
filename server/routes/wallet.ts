@@ -280,10 +280,22 @@ walletRouter.get('/recurring-transactions', (req, res) => {
   )
 })
 
+// Recurring rules only post income or expense (never transfers — a transfer
+// needs a destination account these rules don't carry) and repeat monthly or
+// weekly. Guard both so a malformed rule can't post corrupt transactions.
+const RECURRING_TYPES = new Set(['income', 'expense'])
+const RECURRING_FREQS = new Set(['monthly', 'weekly'])
+
 walletRouter.post('/recurring-transactions', (req, res) => {
   const b = req.body ?? {}
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['categories', b.categoryId]])) {
     return res.status(400).json({ error: 'invalid account or category reference' })
+  }
+  if (b.type != null && !RECURRING_TYPES.has(b.type)) {
+    return res.status(400).json({ error: 'recurring type must be income or expense' })
+  }
+  if (!RECURRING_FREQS.has(b.frequency)) {
+    return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
   }
   const row = getDb()
     .prepare(
@@ -323,8 +335,12 @@ function advanceDate(dateStr: string, frequency: string): string {
   return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
 }
 
+// Local calendar date (YYYY-MM-DD), matching the client's todayISO() — NOT UTC.
+// On a home-network server the local timezone is the user's, so recurring posts
+// are dated the user's "today", consistent with manually entered transactions.
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10)
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 interface RecurringRecord {
@@ -391,10 +407,11 @@ walletRouter.post('/recurring-transactions/:id/post', (req, res) => {
     .get(req.params.id, userId) as RecurringRecord | undefined
   if (!rule) return res.status(404).json({ error: 'recurring transaction not found' })
 
+  const today = todayStr()
   insertTransaction(
     {
       accountId: rule.account_id,
-      date: todayStr(),
+      date: today,
       merchant: rule.merchant,
       description: '',
       amount: rule.amount,
@@ -403,7 +420,10 @@ walletRouter.post('/recurring-transactions/:id/post', (req, res) => {
     },
     userId,
   )
-  const next = advanceDate(rule.next_due_date, rule.frequency)
+  // Only advance the schedule when the rule was actually due. Posting an early,
+  // ad-hoc occurrence must not consume (skip) the upcoming scheduled one.
+  const next =
+    rule.next_due_date <= today ? advanceDate(rule.next_due_date, rule.frequency) : rule.next_due_date
   const row = db
     .prepare(
       `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
@@ -415,6 +435,12 @@ walletRouter.post('/recurring-transactions/:id/post', (req, res) => {
 
 walletRouter.patch('/recurring-transactions/:id', (req, res) => {
   const b = req.body ?? {}
+  if ('type' in b && !RECURRING_TYPES.has(b.type)) {
+    return res.status(400).json({ error: 'recurring type must be income or expense' })
+  }
+  if ('frequency' in b && !RECURRING_FREQS.has(b.frequency)) {
+    return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
+  }
   const refs: Array<[string, unknown]> = []
   if ('accountId' in b) refs.push(['accounts', b.accountId])
   if ('categoryId' in b) refs.push(['categories', b.categoryId])
