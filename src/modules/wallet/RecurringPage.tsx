@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -7,14 +7,21 @@ import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
+import { useToastStore } from '@/stores/toast.store'
 import { formatMYR } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import type { RecurringTransaction, RecurrenceFrequency } from '@/types/wallet.types'
+import type {
+  RecurringTransaction,
+  RecurrenceFrequency,
+  TransactionType,
+} from '@/types/wallet.types'
 
 interface RecurringFormData {
   accountId: string
   amount: string
   merchant: string
+  type: TransactionType
+  categoryId: string
   frequency: RecurrenceFrequency
   nextDueDate: string
 }
@@ -23,12 +30,16 @@ export function RecurringPage() {
   const {
     recurringTransactions,
     accounts,
+    categories,
     loadRecurringTransactions,
     loadAccounts,
+    loadCategories,
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
+    postRecurringNow,
   } = useWallet()
+  const { addToast } = useToastStore()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<RecurringTransaction | null>(null)
@@ -37,6 +48,8 @@ export function RecurringPage() {
     accountId: '',
     amount: '',
     merchant: '',
+    type: 'expense',
+    categoryId: '',
     frequency: 'monthly',
     nextDueDate: '',
   })
@@ -44,11 +57,29 @@ export function RecurringPage() {
   useEffect(() => {
     loadRecurringTransactions()
     loadAccounts()
-  }, [loadRecurringTransactions, loadAccounts])
+    loadCategories()
+  }, [loadRecurringTransactions, loadAccounts, loadCategories])
+
+  // Categories valid for the rule's direction (income/expense + 'both').
+  const categoryOptions = useMemo(
+    () =>
+      categories
+        .filter((c) => c.type === form.type || c.type === 'both')
+        .map((c) => ({ value: c.id, label: c.name })),
+    [categories, form.type],
+  )
 
   const openCreate = useCallback(() => {
     setEditingRule(null)
-    setForm({ accountId: '', amount: '', merchant: '', frequency: 'monthly', nextDueDate: '' })
+    setForm({
+      accountId: '',
+      amount: '',
+      merchant: '',
+      type: 'expense',
+      categoryId: '',
+      frequency: 'monthly',
+      nextDueDate: '',
+    })
     setFormOpen(true)
   }, [])
 
@@ -58,6 +89,8 @@ export function RecurringPage() {
       accountId: rule.accountId,
       amount: String(rule.amount),
       merchant: rule.merchant,
+      type: rule.type === 'income' ? 'income' : 'expense',
+      categoryId: rule.categoryId ?? '',
       frequency: rule.frequency,
       nextDueDate: rule.nextDueDate,
     })
@@ -67,10 +100,13 @@ export function RecurringPage() {
   const handleSubmit = useCallback(async () => {
     const amount = parseFloat(form.amount)
     if (!form.accountId || isNaN(amount) || amount <= 0 || !form.nextDueDate) return
+    const categoryId = form.categoryId || null
     if (editingRule) {
       await updateRecurringTransaction(editingRule.id, {
         amount,
         merchant: form.merchant,
+        type: form.type,
+        categoryId,
         frequency: form.frequency,
         nextDueDate: form.nextDueDate,
       })
@@ -79,12 +115,22 @@ export function RecurringPage() {
         accountId: form.accountId,
         amount,
         merchant: form.merchant,
+        type: form.type,
+        categoryId,
         frequency: form.frequency,
         nextDueDate: form.nextDueDate,
       })
     }
     setFormOpen(false)
   }, [form, editingRule, addRecurringTransaction, updateRecurringTransaction])
+
+  const handlePostNow = useCallback(async (rule: RecurringTransaction) => {
+    await postRecurringNow(rule.id)
+    addToast({
+      message: `Posted ${formatMYR(rule.amount)}${rule.merchant ? ` to ${rule.merchant}` : ''}`,
+      duration: 3500,
+    })
+  }, [postRecurringNow, addToast])
 
   const handleDelete = useCallback(async (id: string) => {
     await deleteRecurringTransaction(id)
@@ -97,7 +143,9 @@ export function RecurringPage() {
       <div className="mb-5 flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Recurring</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Scheduled repeating transactions</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Repeating bills &amp; income — posted automatically when due
+          </p>
         </div>
         <Button size="sm" onClick={openCreate}>
           <Plus className="h-3.5 w-3.5" />
@@ -110,7 +158,7 @@ export function RecurringPage() {
         <EmptyState
           icon={<RefreshCw className="h-10 w-10" />}
           title="No scheduled rules yet"
-          description="No recurring transactions. Set up repeating rules for regular bills, subscriptions, or income."
+          description="No recurring transactions. Set up repeating rules for regular bills, subscriptions, or income — they post automatically on their due date."
         />
       ) : (
         <div className="flex flex-col gap-3">
@@ -118,6 +166,7 @@ export function RecurringPage() {
             const account = accounts.find((a) => a.id === rule.accountId)
             const freqLabel = rule.frequency === 'monthly' ? 'Monthly' : 'Weekly'
             const dueDateDisplay = format(parseISO(rule.nextDueDate), 'dd MMM yyyy')
+            const isIncome = rule.type === 'income'
 
             return (
               <div
@@ -141,8 +190,23 @@ export function RecurringPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-gray-900">{formatMYR(rule.amount)}</span>
+                    <span
+                      className={
+                        isIncome
+                          ? 'text-sm font-semibold text-green-700'
+                          : 'text-sm font-semibold text-gray-900'
+                      }
+                    >
+                      {isIncome ? '+' : '−'}
+                      {formatMYR(rule.amount)}
+                    </span>
                     <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                        onClick={() => handlePostNow(rule)}
+                      >
+                        Post now
+                      </button>
                       <button
                         className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
                         onClick={() => openEdit(rule)}
@@ -171,6 +235,18 @@ export function RecurringPage() {
         title={editingRule ? 'Edit Recurring Rule' : 'New Recurring Rule'}
       >
         <div className="flex flex-col gap-4">
+          <Select
+            label="Type"
+            id="type"
+            options={[
+              { value: 'expense', label: 'Expense' },
+              { value: 'income', label: 'Income' },
+            ]}
+            value={form.type}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, type: e.target.value as TransactionType, categoryId: '' }))
+            }
+          />
           <Input
             label="Amount"
             id="amount"
@@ -196,6 +272,13 @@ export function RecurringPage() {
             placeholder="e.g. Netflix"
             value={form.merchant}
             onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
+          />
+          <Select
+            label="Category"
+            id="category"
+            options={[{ value: '', label: 'No category' }, ...categoryOptions]}
+            value={form.categoryId}
+            onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
           />
           <Select
             label="Frequency"

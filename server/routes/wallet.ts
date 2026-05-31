@@ -299,6 +299,113 @@ walletRouter.post('/recurring-transactions', (req, res) => {
   res.status(201).json(row)
 })
 
+// Advance an ISO date (YYYY-MM-DD) by one recurrence period. Monthly clamps to
+// the last valid day of the target month (e.g. 31 Jan → 28/29 Feb).
+function advanceDate(dateStr: string, frequency: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (frequency === 'weekly') {
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() + 7)
+    return dt.toISOString().slice(0, 10)
+  }
+  let ny = y
+  let nm = m + 1
+  if (nm > 12) { nm = 1; ny += 1 }
+  const lastDay = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  const nd = Math.min(d, lastDay)
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+}
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+interface RecurringRecord {
+  id: string
+  account_id: string
+  amount: number
+  merchant: string
+  type: string
+  category_id: string | null
+  frequency: string
+  next_due_date: string
+}
+
+// Process every rule that is due on/before today, posting a real transaction for
+// each missed occurrence (catch-up) and advancing next_due_date past today.
+// Returns how many transactions were posted.
+walletRouter.post('/recurring-transactions/process', (req, res) => {
+  const userId = req.session.userId!
+  const db = getDb()
+  const today = todayStr()
+  const due = db
+    .prepare('SELECT * FROM recurring_transactions WHERE user_id = ? AND next_due_date <= ?')
+    .all(userId, today) as RecurringRecord[]
+
+  let posted = 0
+  const run = db.transaction(() => {
+    for (const rule of due) {
+      let next = rule.next_due_date
+      let guard = 0
+      while (next <= today && guard < 120) {
+        insertTransaction(
+          {
+            accountId: rule.account_id,
+            date: next,
+            merchant: rule.merchant,
+            description: '',
+            amount: rule.amount,
+            type: rule.type,
+            categoryId: rule.category_id,
+          },
+          userId,
+        )
+        next = advanceDate(next, rule.frequency)
+        posted++
+        guard++
+      }
+      db.prepare(
+        `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+         WHERE id = ? AND user_id = ?`,
+      ).run(next, rule.id, userId)
+    }
+  })
+  run()
+  res.json({ posted })
+})
+
+// Post a single rule immediately (dated today) and push its schedule forward one
+// period. Used by the "Post now" action.
+walletRouter.post('/recurring-transactions/:id/post', (req, res) => {
+  const userId = req.session.userId!
+  const db = getDb()
+  const rule = db
+    .prepare('SELECT * FROM recurring_transactions WHERE id = ? AND user_id = ?')
+    .get(req.params.id, userId) as RecurringRecord | undefined
+  if (!rule) return res.status(404).json({ error: 'recurring transaction not found' })
+
+  insertTransaction(
+    {
+      accountId: rule.account_id,
+      date: todayStr(),
+      merchant: rule.merchant,
+      description: '',
+      amount: rule.amount,
+      type: rule.type,
+      categoryId: rule.category_id,
+    },
+    userId,
+  )
+  const next = advanceDate(rule.next_due_date, rule.frequency)
+  const row = db
+    .prepare(
+      `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+       WHERE id = ? AND user_id = ? RETURNING *`,
+    )
+    .get(next, rule.id, userId)
+  res.json(row)
+})
+
 walletRouter.patch('/recurring-transactions/:id', (req, res) => {
   const b = req.body ?? {}
   const refs: Array<[string, unknown]> = []

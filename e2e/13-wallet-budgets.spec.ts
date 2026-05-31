@@ -48,11 +48,13 @@ test('"Add Budget" button opens the budget form dialog', async () => {
   await expect(page.getByRole('dialog')).toBeVisible()
 })
 
-test('budget form has Category, Amount/Limit, and Period fields', async () => {
+test('budget form has Category and Amount/Limit fields and notes the monthly period', async () => {
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByLabel(/Category/i)).toBeVisible()
   await expect(dialog.getByLabel(/Amount|Limit/i)).toBeVisible()
-  await expect(dialog.getByLabel(/Period|Month/i)).toBeVisible()
+  // Budgets are monthly-only; the form states this rather than offering a
+  // fake period selector with a single option.
+  await expect(dialog.getByText(/reset.*monthly/i)).toBeVisible()
 })
 
 test('save a budget: Food & Drink at MYR 500/month', async () => {

@@ -55,6 +55,11 @@ export default function App() {
           setTheme(saved)
         }
         setDbReady(true)
+        // Post any recurring rules that have come due since the last visit.
+        // Fire-and-forget: a failure here must never block the app.
+        api.post('/recurring-transactions/process').catch((err: unknown) => {
+          console.error('Failed to process recurring transactions:', err)
+        })
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'
