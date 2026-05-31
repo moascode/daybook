@@ -324,20 +324,22 @@ cmd_setup_lan() {
   #    rdr pass rules must come before filter rules (translation → filtering order).
   info "Writing pf rules → $PF_ANCHOR_FILE"
   {
-    echo "rdr pass on lo0 proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+    # Use modern pf `rdr-to` syntax (old `rdr pass` is silently dropped on
+    # macOS 10.15+). `pass in quick` with `rdr-to` is the supported form.
+    echo "pass in quick on lo0 proto tcp to port 80 rdr-to 127.0.0.1 port $PORT"
     # Cover the active Wi-Fi / Ethernet interface.
     local iface
     for iface in en0 en1; do
       ipconfig getifaddr "$iface" >/dev/null 2>&1 && \
-        echo "rdr pass on $iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+        echo "pass in quick on $iface proto tcp to port 80 rdr-to 127.0.0.1 port $PORT"
     done
     # Also cover whatever the default route uses (catches USB-C Ethernet etc.)
     local def_iface
     def_iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
     if [ -n "$def_iface" ] && [ "$def_iface" != "en0" ] && [ "$def_iface" != "en1" ] && [ "$def_iface" != "lo0" ]; then
-      echo "rdr pass on $def_iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
+      echo "pass in quick on $def_iface proto tcp to port 80 rdr-to 127.0.0.1 port $PORT"
     fi
-    # Pass all other traffic — must come after translation rules.
+    # Pass all other traffic — must come after rdr-to rules.
     echo "pass all"
   } > "$PF_ANCHOR_FILE"
 
