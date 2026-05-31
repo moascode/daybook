@@ -109,15 +109,13 @@ test('switch back to This Month shows data again', async () => {
   await expect(page.getByText(/6,500|6500/)).toBeVisible()
 })
 
-test('custom date range selector: set a specific range', async () => {
-  await page.getByRole('button', { name: 'Custom' }).click()
-  const thisYear = new Date().getFullYear()
-  const thisMonth = String(new Date().getMonth() + 1).padStart(2, '0')
-  await page.getByLabel('From').fill(`${thisYear}-${thisMonth}-01`)
-  await page.getByLabel('To').fill(`${thisYear}-${thisMonth}-05`)
-  // Should show partial data (only Jan 1–5 transactions: Salary Corp, Grab Food, Petronas)
-  // Income 6000 + 0, expense 80 + 150
-  await expect(page.getByText(/6,000|6000/)).toBeVisible()
+test('dashboard links to Reports for custom ranges (no inline custom picker)', async () => {
+  // Custom/historical analysis lives on the Reports page now — the dashboard
+  // stays an at-a-glance current-period view.
+  await expect(page.getByRole('button', { name: 'Custom' })).toHaveCount(0)
+  await expect(
+    page.getByRole('link', { name: /Custom range.*history/i }),
+  ).toBeVisible()
 })
 
 // ── Spending by account chart ───────────────────────────────────────────
