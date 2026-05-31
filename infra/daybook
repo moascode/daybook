@@ -319,8 +319,10 @@ cmd_setup_lan() {
     ok "Bonjour hostname already: ${LAN_HOSTNAME}.local"
   fi
 
-  # 2. Write pf anchor: redirect :80 → :3001 on all active interfaces.
-  info "Writing pf redirect rules → $PF_ANCHOR_FILE"
+  # 2. Write a standalone pf rules file (not just anchor rules — this is loaded
+  #    directly as the entire pf ruleset, bypassing pf.conf entirely).
+  #    rdr pass rules must come before filter rules (translation → filtering order).
+  info "Writing pf rules → $PF_ANCHOR_FILE"
   {
     echo "rdr pass on lo0 proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
     # Cover the active Wi-Fi / Ethernet interface.
@@ -335,24 +337,26 @@ cmd_setup_lan() {
     if [ -n "$def_iface" ] && [ "$def_iface" != "en0" ] && [ "$def_iface" != "en1" ] && [ "$def_iface" != "lo0" ]; then
       echo "rdr pass on $def_iface proto tcp from any to any port 80 -> 127.0.0.1 port $PORT"
     fi
+    # Pass all other traffic — must come after translation rules.
+    echo "pass all"
   } > "$PF_ANCHOR_FILE"
 
-  # 3. Patch /etc/pf.conf to reference our anchor (idempotent).
-  if ! grep -q 'rdr-anchor "daybook"' /etc/pf.conf 2>/dev/null; then
-    info "Patching /etc/pf.conf to include daybook anchor…"
-    printf '\n# daybook LAN redirect\nrdr-anchor "daybook"\nanchor "daybook"\n' >> /etc/pf.conf
-    ok "pf.conf updated."
+  # 3. Restore pf.conf to the macOS default (remove any daybook entries we may
+  #    have previously appended — we no longer use the anchor approach).
+  if grep -q 'daybook' /etc/pf.conf 2>/dev/null; then
+    info "Removing stale daybook entries from /etc/pf.conf…"
+    sed -i.bak '/# daybook LAN redirect/,/anchor "daybook"/d' /etc/pf.conf
+    ok "pf.conf cleaned."
   fi
 
-  # 4. Enable pf and load our anchor into the running instance.
-  pfctl -ef /etc/pf.conf 2>/dev/null || true   # (re)load main ruleset + enable
-  pfctl -a daybook -f "$PF_ANCHOR_FILE" 2>/dev/null && \
+  # 4. Load our standalone rules file directly and enable pf.
+  #    We bypass pf.conf entirely — no anchor point needed.
+  pfctl -ef "$PF_ANCHOR_FILE" && \
     ok "pf rules loaded (port 80 → $PORT)." || \
-    warn "pf anchor load returned non-zero — rules may still be active."
+    warn "pfctl returned non-zero — check: sudo pfctl -sr"
 
   # 5. Install a root LaunchDaemon so the redirect survives reboots.
   info "Installing LaunchDaemon → $PF_DAEMON_PLIST"
-  local script_abs; script_abs="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
   cat > "$PF_DAEMON_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -361,11 +365,12 @@ cmd_setup_lan() {
   <key>Label</key><string>$PF_DAEMON_LABEL</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/bin/bash</string>
-    <string>-c</string>
-    <string>/sbin/pfctl -ef /etc/pf.conf 2&gt;/dev/null; /sbin/pfctl -a daybook -f $PF_ANCHOR_FILE 2&gt;/dev/null; true</string>
+    <string>/sbin/pfctl</string>
+    <string>-ef</string>
+    <string>$PF_ANCHOR_FILE</string>
   </array>
   <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/var/log/daybook-pf.log</string>
   <key>StandardErrorPath</key><string>/var/log/daybook-pf.log</string>
 </dict>
 </plist>
@@ -406,13 +411,16 @@ cmd_teardown_lan() {
     warn "No LaunchDaemon found at $PF_DAEMON_PLIST"
   fi
 
-  pfctl -a daybook -F all 2>/dev/null || true
+  # Disable pf (decrements the enable reference count; other components
+  # that called pfctl -E will re-enable it as needed).
+  pfctl -d 2>/dev/null || true
   rm -f "$PF_ANCHOR_FILE"
-  ok "pf rules flushed."
+  ok "pf rules removed."
 
+  # Clean up any stale daybook entries left in pf.conf from old installs.
   if grep -q '# daybook LAN redirect' /etc/pf.conf 2>/dev/null; then
     sed -i '' '/# daybook LAN redirect/,/anchor "daybook"/d' /etc/pf.conf
-    ok "pf.conf restored."
+    ok "pf.conf cleaned."
   fi
 
   warn "Bonjour hostname '${LAN_HOSTNAME}' left as-is."
