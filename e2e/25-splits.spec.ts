@@ -110,14 +110,20 @@ test.describe('25 — Transaction splits', () => {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json()
+    // Use today's date so the transaction appears in the default date filter
+    const today = new Date().toISOString().slice(0, 10)
     await alicePage.request.post('http://localhost:5173/api/transactions', {
-      data: { accountId: acct.id, date: '2026-01-01', merchant: 'Lunch', amount: 50, type: 'expense', tag: '[]' },
+      data: { accountId: acct.id, date: today, merchant: 'Lunch', amount: 50, type: 'expense', tag: '[]' },
     })
 
     // Alice opens wallet and opens split dialog
     await alicePage.goto('/wallet')
-    await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
-    await alicePage.getByTestId('split-transaction-btn').first().click()
+    // Wait for accounts to load (filter bar appears)
+    await expect(alicePage.getByText('Total Balance')).toBeVisible({ timeout: 10_000 })
+    // Wait for the transaction to appear in the list
+    await expect(alicePage.getByText('Lunch')).toBeVisible({ timeout: 10_000 })
+    // Click the split button on the Lunch transaction row using the test ID
+    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Lunch' }).getByRole('button', { name: 'Split transaction' }).click()
 
     // Wait for dialog; Bob should be listed as an available member
     await expect(alicePage.getByRole('dialog')).toBeVisible({ timeout: 5000 })
