@@ -530,112 +530,27 @@ test('clicking Split opens the Split Transaction modal', async () => {
   await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
 })
 
-test('split modal shows two part inputs with amounts summing to original', async () => {
+test('split modal shows the transaction being split and a group-members prompt', async () => {
   const dialog = page.getByRole('dialog')
-  // Default: each part is half of original (12 / 2 = 6)
-  await expect(dialog.locator('#split-amount-0')).toBeVisible()
-  await expect(dialog.locator('#split-amount-1')).toBeVisible()
-  // Total indicator shows a checkmark because the halves sum to the original
-  await expect(dialog.getByText('✓')).toBeVisible()
+  // Transaction details are shown at the top
+  await expect(dialog.getByText('Kopitiam')).toBeVisible()
+  // Without any household group, a prompt to add members is shown
+  await expect(dialog.getByText('No group members yet')).toBeVisible()
+  // Save Split button is disabled when there are no members to split with
+  await expect(dialog.getByRole('button', { name: 'Save Split' })).toBeDisabled()
 })
 
-test('changing amount in part 0 auto-updates part 1 to keep total', async () => {
+test('split modal mode selector shows equal and custom options', async () => {
   const dialog = page.getByRole('dialog')
-  const part0Amount = dialog.locator('#split-amount-0')
-  await part0Amount.fill('8')
-  await part0Amount.blur()
-  // Part 1 should now show 4 (12 - 8)
-  const part1Amount = dialog.locator('#split-amount-1')
-  await expect(part1Amount).toHaveValue('4')
-  // Checkmark shows totals match
-  await expect(dialog.getByText('✓')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Split equally' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Custom amounts' })).toBeVisible()
 })
 
-test('confirming split creates two transactions and removes the original', async () => {
-  await page.getByTestId('confirm-split-btn').click()
+test('cancelling split modal closes it without creating new transactions', async () => {
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  // Original Kopitiam is replaced by two new Kopitiam rows
-  const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'Kopitiam' })
-  await expect(rows).toHaveCount(2)
+  // Original Kopitiam row is still present and unchanged
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 
-// ── Split transaction — decimal and edge-case tests ───────────────────────
-
-test('split: decimal input (e.g. 7.50) is preserved without snapping', async () => {
-  // Create a fresh $15 transaction to split with decimal amounts
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
-  await fillTransactionForm(page, { merchant: 'SplitDecimalTest', amount: '15', type: 'Expense' })
-
-  await transactionRowFor(page, 'SplitDecimalTest').hover()
-  await transactionRowFor(page, 'SplitDecimalTest').getByTestId('split-transaction-btn').click()
-
-  const dialog = page.getByRole('dialog')
-
-  // Default 50/50: 7.5 + 7.5 = 15
-  await expect(dialog.locator('#split-amount-0')).toHaveValue('7.5')
-  await expect(dialog.locator('#split-amount-1')).toHaveValue('7.5')
-  await expect(dialog.getByText('✓')).toBeVisible()
-
-  // Type a decimal amount — "9.99" must NOT snap back mid-entry
-  await dialog.locator('#split-amount-0').fill('9.99')
-  await expect(dialog.locator('#split-amount-0')).toHaveValue('9.99')
-  // Part 1 auto-adjusts: 15 - 9.99 = 5.01
-  await expect(dialog.locator('#split-amount-1')).toHaveValue('5.01')
-  await expect(dialog.getByText('✓')).toBeVisible()
-
-  // Confirm → two new transactions, original gone
-  await dialog.getByTestId('confirm-split-btn').click()
-  await expect(dialog).not.toBeVisible()
-  const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'SplitDecimalTest' })
-  await expect(rows).toHaveCount(2)
-})
-
-test('split: confirm button is disabled when part amounts exceed total', async () => {
-  // Create a $20 transaction
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
-  await fillTransactionForm(page, { merchant: 'SplitLimitTest', amount: '20', type: 'Expense' })
-
-  await transactionRowFor(page, 'SplitLimitTest').hover()
-  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
-
-  const dialog = page.getByRole('dialog')
-
-  // Type an amount larger than the total — part 1 clamps to 0, sum ≠ 20
-  await dialog.locator('#split-amount-0').fill('25')
-  // Part 1 becomes 0 (cannot go negative)
-  await expect(dialog.locator('#split-amount-1')).toHaveValue('0')
-  // Running total shows mismatch
-  await expect(dialog.getByText('✓')).not.toBeVisible()
-  // Confirm button is disabled
-  await expect(dialog.getByTestId('confirm-split-btn')).toBeDisabled()
-
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialog).not.toBeVisible()
-})
-
-test('split: cancelling and reopening the modal resets amounts to 50/50', async () => {
-  // Reuse SplitLimitTest ($20 still exists, untouched from the cancelled split)
-  await transactionRowFor(page, 'SplitLimitTest').hover()
-  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
-
-  const dialog = page.getByRole('dialog')
-  // Default 50/50: 10 + 10 = 20
-  await expect(dialog.locator('#split-amount-0')).toHaveValue('10')
-
-  // Change part 0 to 15
-  await dialog.locator('#split-amount-0').fill('15')
-  await expect(dialog.locator('#split-amount-1')).toHaveValue('5')
-
-  // Cancel without confirming
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
-  await expect(dialog).not.toBeVisible()
-
-  // Reopen — should reset back to 10 + 10, not show the abandoned 15 + 5
-  await transactionRowFor(page, 'SplitLimitTest').hover()
-  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
-  await expect(dialog.locator('#split-amount-0')).toHaveValue('10')
-  await expect(dialog.locator('#split-amount-1')).toHaveValue('10')
-  await expect(dialog.getByText('✓')).toBeVisible()
-
-  await dialog.getByRole('button', { name: 'Cancel' }).click()
-})
+// Split transaction — household sharing is tested in 25-splits.spec.ts

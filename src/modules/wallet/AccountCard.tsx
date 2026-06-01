@@ -11,6 +11,7 @@ import {
   Coins,
   Pencil,
   Trash2,
+  Share2,
 } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
@@ -22,6 +23,8 @@ interface AccountCardProps {
   account: Account
   onEdit: (account: Account) => void
   onDelete: (account: Account) => void
+  onShare?: (account: Account) => void
+  sharesCount?: number
 }
 
 const ACCOUNT_TYPE_LABELS: Record<Account['type'], string> = {
@@ -44,7 +47,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?:
   coins: Coins,
 }
 
-export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
+export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }: AccountCardProps) {
   const navigate = useNavigate()
   const { getAccountBalance } = useWallet()
   const [balance, setBalance] = useState<number | null>(null)
@@ -94,11 +97,23 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">{account.name}</h3>
-              <div className="mt-0.5 flex items-center gap-2">
+              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                 <Badge color={account.color}>
                   {ACCOUNT_TYPE_LABELS[account.type]}
                 </Badge>
                 <span className="text-xs text-gray-400">{account.currency}</span>
+                {account.isShared && account.sharedByUsername && (
+                  <span className="flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                    <Share2 className="h-2.5 w-2.5" />
+                    {account.sharedByUsername}
+                  </span>
+                )}
+                {!account.isShared && sharesCount !== undefined && sharesCount > 0 && (
+                  <span className="flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                    <Share2 className="h-2.5 w-2.5" />
+                    Shared with {sharesCount}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -108,6 +123,18 @@ export function AccountCard({ account, onEdit, onDelete }: AccountCardProps) {
             className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* U-2: share button — only shown for own (non-shared-in) accounts */}
+            {!account.isShared && onShare && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onShare(account)}
+                aria-label="Manage sharing"
+                title="Manage sharing"
+              >
+                <Share2 className="h-3.5 w-3.5 text-purple-500" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Share2, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
+import { api } from '@/lib/api'
 import type { Account } from '@/types/wallet.types'
+import type { AccountShare, Group } from '@/types/household.types'
 
 interface AccountFormProps {
   open: boolean
@@ -67,6 +70,19 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
   const [error, setError] = useState('')
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevAccount, setPrevAccount] = useState(account)
+  const [shares, setShares] = useState<AccountShare[]>([])
+  const [groups, setGroups] = useState<Group[]>([])
+  const [shareGroupId, setShareGroupId] = useState('')
+  const [shareCanWrite, setShareCanWrite] = useState(false)
+  const [sharingLoading, setSharingLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !account) return
+    Promise.all([
+      api.get<AccountShare[]>(`/accounts/${account.id}/shares`),
+      api.get<Group[]>('/groups'),
+    ]).then(([s, g]) => { setShares(s); setGroups(g) }).catch(() => {})
+  }, [open, account])
 
   // Reset the form to the (re)opened account's values — adjust state during
   // render when open/account changes, rather than in an effect.
@@ -176,6 +192,93 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             ))}
           </div>
         </div>
+
+        {/* Sharing section — only when editing an account you own */}
+        {isEdit && !account?.isShared && groups.length > 0 && (
+          <div className="border-t border-gray-100 pt-4">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+              <Share2 className="h-4 w-4" />
+              Sharing
+            </p>
+            {shares.length > 0 && (
+              <ul className="mb-3 space-y-1.5">
+                {shares.map((s) => (
+                  <li key={s.groupId} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                    <div>
+                      <span className="font-medium">{s.groupName}</span>
+                      <span className="ml-2 text-gray-500 text-xs">{s.canWrite ? 'can add/edit' : 'read-only'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-brand-600 hover:underline"
+                        onClick={async () => {
+                          await api.patch(`/accounts/${account!.id}/shares/${s.groupId}`, { canWrite: !s.canWrite })
+                          const updated = await api.get<AccountShare[]>(`/accounts/${account!.id}/shares`)
+                          setShares(updated)
+                        }}
+                      >
+                        {s.canWrite ? 'Make read-only' : 'Allow editing'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await api.delete(`/accounts/${account!.id}/shares/${s.groupId}`)
+                          setShares((prev) => prev.filter((x) => x.groupId !== s.groupId))
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-red-400 hover:text-red-600" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Share with group</label>
+                <select
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  value={shareGroupId}
+                  onChange={(e) => setShareGroupId(e.target.value)}
+                >
+                  <option value="">— select group —</option>
+                  {groups.filter((g) => !shares.some((s) => s.groupId === g.id)).map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+              <label className="flex items-center gap-1 text-xs text-gray-600 pb-2">
+                <input
+                  type="checkbox"
+                  checked={shareCanWrite}
+                  onChange={(e) => setShareCanWrite(e.target.checked)}
+                  className="rounded"
+                />
+                Write
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!shareGroupId || sharingLoading}
+                onClick={async () => {
+                  if (!shareGroupId || !account) return
+                  setSharingLoading(true)
+                  try {
+                    await api.post(`/accounts/${account.id}/shares`, { groupId: shareGroupId, canWrite: shareCanWrite })
+                    const updated = await api.get<AccountShare[]>(`/accounts/${account.id}/shares`)
+                    setShares(updated)
+                    setShareGroupId('')
+                  } finally {
+                    setSharingLoading(false)
+                  }
+                }}
+              >
+                Share
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-2">
           <Button

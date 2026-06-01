@@ -104,6 +104,7 @@ export function AccountsPage() {
               account={account}
               onEdit={openEditForm}
               onDelete={setDeleteTarget}
+              onShare={openEditForm}
             />
           ))}
         </div>

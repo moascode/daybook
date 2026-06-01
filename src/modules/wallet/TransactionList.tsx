@@ -76,6 +76,7 @@ function TransactionRow({
   const category = transaction.categoryId
     ? categories.find((c) => c.id === transaction.categoryId)
     : null
+  const isOnSharedAccount = account?.isShared
 
   const amountColor =
     transaction.type === 'income'
@@ -149,6 +150,11 @@ function TransactionRow({
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
           {account && <span>{account.name}</span>}
+          {isOnSharedAccount && account?.sharedByUsername && (
+            <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
+              {account.sharedByUsername}
+            </span>
+          )}
           {destAccount && (
             <>
               <ArrowRightLeft className="h-3 w-3" />
@@ -177,15 +183,19 @@ function TransactionRow({
           className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
           onClick={(e) => e.stopPropagation()}
         >
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onSplit(transaction)}
-            aria-label="Split transaction"
-            data-testid="split-transaction-btn"
-          >
-            <Scissors className="h-3.5 w-3.5" />
-          </Button>
+          {/* U-6: hide split button on transfer transactions */}
+          {transaction.type !== 'transfer' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onSplit(transaction)}
+              aria-label="Split transaction"
+              title="Split between household members"
+              data-testid="split-transaction-btn"
+            >
+              <Scissors className="h-3.5 w-3.5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"

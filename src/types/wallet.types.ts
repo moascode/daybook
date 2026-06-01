@@ -8,6 +8,11 @@ export interface Account {
   icon: string
   openingBalance: number
   createdAt: string
+  // Sharing — populated when the account is shared-in from another user
+  isShared?: boolean
+  sharedByUserId?: string | null
+  sharedByUsername?: string | null
+  canWrite?: number  // 0 | 1; only on shared-in accounts
 }
 
 export type TransactionType = 'income' | 'expense' | 'transfer'

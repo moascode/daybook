@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getDb } from '../db.ts'
 import { updateRow, normalizeBind, ownsAllRefs } from '../lib.ts'
+import { visibleAccountIds, canWriteAccount, isGroupMember, coGroupUserIds } from '../lib/sharing.ts'
 
 export const walletRouter: Router = Router()
 
@@ -20,9 +21,31 @@ const ACCOUNT_COLS: Record<string, string> = {
 }
 
 walletRouter.get('/accounts', (req, res) => {
-  res.json(
-    getDb().prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY created_at ASC').all(req.session.userId!),
-  )
+  const db = getDb()
+  const userId = req.session.userId!
+
+  // Own accounts
+  const own = db
+    .prepare('SELECT *, 0 AS is_shared, NULL AS shared_by_user_id, NULL AS shared_by_username FROM accounts WHERE user_id = ? ORDER BY created_at ASC')
+    .all(userId) as Record<string, unknown>[]
+
+  // Shared-in accounts (visible via a group the user belongs to)
+  const shared = db
+    .prepare(
+      `SELECT a.*, 1 AS is_shared, a.user_id AS shared_by_user_id, u.username AS shared_by_username,
+              MAX(acs.can_write) AS can_write
+       FROM account_shares acs
+       JOIN groups g ON g.id = acs.group_id
+       JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ?
+       JOIN accounts a ON a.id = acs.account_id
+       JOIN users u ON u.id = a.user_id
+       WHERE a.user_id != ?
+       GROUP BY a.id
+       ORDER BY a.created_at ASC`,
+    )
+    .all(userId, userId) as Record<string, unknown>[]
+
+  res.json([...own, ...shared])
 })
 
 walletRouter.post('/accounts', (req, res) => {
@@ -65,20 +88,85 @@ walletRouter.get('/accounts/:id/balance', (req, res) => {
   const db = getDb()
   const id = req.params.id
   const userId = req.session.userId!
-  const acct = db
-    .prepare('SELECT opening_balance FROM accounts WHERE id = @id AND user_id = @userId')
-    .get({ id, userId }) as { opening_balance: number } | undefined
+  // Allow both own accounts and shared-in accounts
+  const visible = visibleAccountIds(db, userId)
+  const acct = visible.includes(id)
+    ? db.prepare('SELECT opening_balance FROM accounts WHERE id = ?').get(id) as { opening_balance: number } | undefined
+    : undefined
   if (!acct) return res.status(404).json({ error: 'account not found' })
   const opening = acct.opening_balance ?? 0
   const total = (clause: string) =>
     (db
-      .prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE user_id = @userId AND ${clause}`)
-      .get({ id, userId }) as { total: number }).total ?? 0
+      .prepare(`SELECT COALESCE(SUM(amount),0) AS total FROM transactions WHERE ${clause}`)
+      .get({ id }) as { total: number }).total ?? 0
   const income = total(`account_id = @id AND type = 'income'`)
   const expense = total(`account_id = @id AND type = 'expense'`)
   const transferOut = total(`account_id = @id AND type = 'transfer'`)
   const transferIn = total(`destination_account_id = @id AND type = 'transfer'`)
   res.json({ balance: opening + income - expense - transferOut + transferIn })
+})
+
+// ── Account shares ────────────────────────────────────
+
+walletRouter.get('/accounts/:id/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  const rows = db
+    .prepare(
+      `SELECT acs.account_id, acs.group_id, acs.can_write, acs.shared_at, g.name AS group_name
+       FROM account_shares acs
+       JOIN groups g ON g.id = acs.group_id
+       WHERE acs.account_id = ?`,
+    )
+    .all(req.params.id)
+  res.json(rows)
+})
+
+walletRouter.post('/accounts/:id/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  const { groupId, canWrite } = req.body ?? {}
+  if (!groupId) return res.status(400).json({ error: 'groupId is required' })
+  const group = db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId)
+  if (!group) return res.status(403).json({ error: 'you must be a member of the group' })
+  const row = db
+    .prepare(
+      `INSERT OR REPLACE INTO account_shares (account_id, group_id, can_write, shared_at)
+       VALUES (?, ?, ?, datetime('now'))
+       RETURNING *`,
+    )
+    .get(req.params.id, groupId, canWrite ? 1 : 0)
+  res.status(201).json(row)
+})
+
+walletRouter.patch('/accounts/:id/shares/:groupId', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  const { canWrite } = req.body ?? {}
+  const row = db
+    .prepare('UPDATE account_shares SET can_write = ? WHERE account_id = ? AND group_id = ? RETURNING *')
+    .get(canWrite ? 1 : 0, req.params.id, req.params.groupId)
+  if (!row) return res.status(404).json({ error: 'share not found' })
+  res.json(row)
+})
+
+walletRouter.delete('/accounts/:id/shares/:groupId', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!acct) return res.status(404).json({ error: 'account not found' })
+  // C-10: Verify caller is a member of the group being unshared from
+  if (!isGroupMember(db, userId, req.params.groupId)) {
+    return res.status(403).json({ error: 'you are not a member of this group' })
+  }
+  db.prepare('DELETE FROM account_shares WHERE account_id = ? AND group_id = ?').run(req.params.id, req.params.groupId)
+  res.status(204).end()
 })
 
 // ── Categories ────────────────────────────────────────
@@ -185,8 +273,35 @@ function insertTransaction(b: Record<string, unknown>, userId: string) {
 
 walletRouter.get('/transactions', (req, res) => {
   const q = req.query
-  const conditions: string[] = ['user_id = @userId']
-  const params: Record<string, unknown> = { userId: req.session.userId! }
+  const userId = req.session.userId!
+  const db = getDb()
+
+  // view: 'mine' | 'shared-with-me' | 'all' (default 'all')
+  const view = str(q.view) ?? 'all'
+  const params: Record<string, unknown> = { userId }
+  const conditions: string[] = []
+
+  if (view === 'mine') {
+    // Own transactions only (whether split or not)
+    conditions.push('user_id = @userId')
+  } else if (view === 'shared-with-me') {
+    // Transactions created by others where I have a share line
+    conditions.push(
+      `user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id = @userId)`
+    )
+  } else {
+    // All visible: own transactions + transactions on shared accounts
+    const visible = visibleAccountIds(db, userId)
+    if (visible.length === 0) {
+      conditions.push('user_id = @userId')
+    } else {
+      const placeholders = visible.map((_, i) => `@aid${i}`).join(', ')
+      visible.forEach((id, i) => { params[`aid${i}`] = id })
+      conditions.push(
+        `(user_id = @userId OR account_id IN (${placeholders}) OR destination_account_id IN (${placeholders}))`
+      )
+    }
+  }
 
   if (str(q.dateFrom)) { conditions.push('date >= @dateFrom'); params.dateFrom = q.dateFrom }
   if (str(q.dateTo)) { conditions.push('date <= @dateTo'); params.dateTo = q.dateTo }
@@ -209,8 +324,9 @@ walletRouter.get('/transactions', (req, res) => {
     for (let i = 0; i < rawTags.length; i++) params[`tag${i}`] = rawTags[i]
   }
 
-  const rows = getDb()
-    .prepare(`SELECT * FROM transactions WHERE ${conditions.join(' AND ')} ORDER BY date DESC, created_at DESC`)
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+  const rows = db
+    .prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC`)
     .all(params)
   res.json(rows)
 })
@@ -303,28 +419,181 @@ walletRouter.post('/transactions/import', (req, res) => {
 
 walletRouter.post('/transactions', (req, res) => {
   const b = req.body ?? {}
-  if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['accounts', b.destinationAccountId], ['categories', b.categoryId]])) {
-    return res.status(400).json({ error: 'invalid account or category reference' })
+  const db = getDb()
+  const userId = req.session.userId!
+
+  // Allow writing to shared accounts with can_write permission
+  const accountId = String(b.accountId ?? '')
+  if (accountId && !canWriteAccount(db, userId, accountId)) {
+    return res.status(403).json({ error: 'no write permission on this account' })
   }
-  res.status(201).json(insertTransaction(b, req.session.userId!))
+  if (!ownsAllRefs(db, userId, [['categories', b.categoryId]])) {
+    return res.status(400).json({ error: 'invalid category reference' })
+  }
+  // For transfers, destination account must be visible
+  if (b.destinationAccountId) {
+    const visible = visibleAccountIds(db, userId)
+    if (!visible.includes(String(b.destinationAccountId))) {
+      return res.status(400).json({ error: 'invalid destination account reference' })
+    }
+  }
+
+  // When posting to a shared account, the transaction user_id is the caller
+  res.status(201).json(insertTransaction(b, userId))
 })
 
 walletRouter.patch('/transactions/:id', (req, res) => {
   const b = req.body ?? {}
+  const db = getDb()
+  const userId = req.session.userId!
+
+  // Caller must own the transaction or have write permission on its account
+  const existing = db
+    .prepare('SELECT user_id, account_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as { user_id: string; account_id: string } | undefined
+  if (!existing) return res.status(404).json({ error: 'transaction not found' })
+
+  const canEdit = existing.user_id === userId || canWriteAccount(db, userId, existing.account_id)
+  if (!canEdit) return res.status(403).json({ error: 'no permission to edit this transaction' })
+
+  // Scope updateRow by original owner's user_id
   const refs: Array<[string, unknown]> = []
-  if ('accountId' in b) refs.push(['accounts', b.accountId])
-  if ('destinationAccountId' in b) refs.push(['accounts', b.destinationAccountId])
   if ('categoryId' in b) refs.push(['categories', b.categoryId])
-  if (!ownsAllRefs(getDb(), req.session.userId!, refs)) {
-    return res.status(400).json({ error: 'invalid account or category reference' })
+  if (!ownsAllRefs(db, userId, refs)) {
+    return res.status(400).json({ error: 'invalid category reference' })
   }
-  const row = updateRow(getDb(), 'transactions', req.params.id, req.session.userId!, TRANSACTION_COLS, b)
+
+  // If amount changed and splits exist, auto-rescale
+  if ('amount' in b && b.amount !== undefined) {
+    const oldTxn = db
+      .prepare('SELECT amount FROM transactions WHERE id = ?')
+      .get(req.params.id) as { amount: number } | undefined
+    if (oldTxn && oldTxn.amount !== b.amount) {
+      const shareRows = db
+        .prepare('SELECT id, share_amount FROM transaction_shares WHERE transaction_id = ? ORDER BY created_at ASC')
+        .all(req.params.id) as { id: string; share_amount: number }[]
+      if (shareRows.length > 0) {
+        const newAmount = Number(b.amount)
+        let allocated = 0
+        const updShare = db.prepare('UPDATE transaction_shares SET share_amount = ? WHERE id = ?')
+        for (let i = 0; i < shareRows.length; i++) {
+          const row = shareRows[i]
+          if (i === shareRows.length - 1) {
+            // Last share absorbs rounding remainder
+            updShare.run(Math.round((newAmount - allocated) * 100) / 100, row.id)
+          } else {
+            const scaled = Math.round((row.share_amount / oldTxn.amount) * newAmount * 100) / 100
+            updShare.run(scaled, row.id)
+            allocated += scaled
+          }
+        }
+      }
+    }
+  }
+
+  const row = updateRow(db, 'transactions', req.params.id, existing.user_id, TRANSACTION_COLS, b)
   if (!row) return res.status(404).json({ error: 'transaction not found' })
   res.json(row)
 })
 
 walletRouter.delete('/transactions/:id', (req, res) => {
-  getDb().prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(req.params.id, req.session.userId!)
+  const db = getDb()
+  const userId = req.session.userId!
+  const existing = db
+    .prepare('SELECT user_id, account_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as { user_id: string; account_id: string } | undefined
+  if (!existing) return res.status(204).end()
+  const canDel = existing.user_id === userId || canWriteAccount(db, userId, existing.account_id)
+  if (!canDel) return res.status(403).json({ error: 'no permission to delete this transaction' })
+  db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id)
+  res.status(204).end()
+})
+
+// ── Transaction shares (splits) ───────────────────────
+
+walletRouter.get('/transactions/:id/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  // Caller must be the owner or have a share line
+  const txn = db
+    .prepare('SELECT user_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as { user_id: string } | undefined
+  if (!txn) return res.status(404).json({ error: 'transaction not found' })
+  const hasShare = db.prepare('SELECT 1 FROM transaction_shares WHERE transaction_id = ? AND user_id = ?').get(req.params.id, userId)
+  if (txn.user_id !== userId && !hasShare) {
+    return res.status(403).json({ error: 'not authorised to view shares for this transaction' })
+  }
+  const rows = db
+    .prepare(
+      `SELECT ts.id, ts.transaction_id, ts.user_id, ts.share_amount, ts.note, ts.settled_at, ts.created_at, u.username
+       FROM transaction_shares ts
+       JOIN users u ON u.id = ts.user_id
+       WHERE ts.transaction_id = ?
+       ORDER BY ts.share_amount DESC`,
+    )
+    .all(req.params.id)
+  res.json(rows)
+})
+
+walletRouter.post('/transactions/:id/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const txn = db
+    .prepare('SELECT user_id, amount, account_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as { user_id: string; amount: number; account_id: string } | undefined
+  if (!txn) return res.status(404).json({ error: 'transaction not found' })
+  if (txn.user_id !== userId && !canWriteAccount(db, userId, txn.account_id)) {
+    return res.status(403).json({ error: 'only the transaction owner can set splits' })
+  }
+
+  const shares: Array<{ userId: string; shareAmount: number; note?: string }> = Array.isArray(req.body?.shares)
+    ? req.body.shares
+    : []
+  if (shares.length === 0) return res.status(400).json({ error: 'shares array is required' })
+
+  // Validate each share amount is a positive finite number
+  for (const s of shares) {
+    const amt = Number(s.shareAmount)
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'each share amount must be a positive number' })
+    }
+  }
+
+  // Validate sum
+  const sum = shares.reduce((acc, s) => acc + Number(s.shareAmount), 0)
+  if (Math.abs(sum - txn.amount) > 0.015) {
+    return res.status(400).json({ error: `share amounts must sum to the transaction amount (${txn.amount}); got ${sum}` })
+  }
+
+  // S-3: All share userId values must be co-group members with the transaction owner
+  const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
+  for (const s of shares) {
+    if (!allowedIds.has(String(s.userId))) {
+      return res.status(400).json({ error: `user ${s.userId} is not a group co-member with this transaction's owner` })
+    }
+  }
+
+  // Atomically replace all share rows
+  const result = db.transaction(() => {
+    db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
+    const insert = db.prepare(
+      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
+       RETURNING *`,
+    )
+    return shares.map((s) => insert.get(req.params.id, s.userId, s.shareAmount, s.note ?? ''))
+  })()
+
+  res.status(201).json(result)
+})
+
+walletRouter.delete('/transactions/:id/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const txn = db.prepare('SELECT user_id FROM transactions WHERE id = ?').get(req.params.id) as { user_id: string } | undefined
+  if (!txn) return res.status(404).json({ error: 'transaction not found' })
+  if (txn.user_id !== userId) return res.status(403).json({ error: 'only the transaction owner can remove splits' })
+  db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
   res.status(204).end()
 })
 
