@@ -42,13 +42,30 @@ groupsRouter.post('/groups', (req, res) => {
   res.status(201).json({ ...group, role: 'owner' })
 })
 
+// GET /api/groups/members — all unique co-members across all the caller's groups (for SplitDialog)
+groupsRouter.get('/groups/members', (req, res) => {
+  const userId = req.session.userId!
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT u.id AS user_id, u.username, gm.role, gm.joined_at
+       FROM group_members gm
+       JOIN users u ON u.id = gm.user_id
+       WHERE gm.group_id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+         AND gm.user_id != ?
+       ORDER BY u.username ASC`
+    )
+    .all(userId, userId)
+  res.json(rows)
+})
+
 groupsRouter.get('/groups/:id', (req, res) => {
   const userId = req.session.userId!
   const db = getDb()
   if (!isGroupMember(db, userId, req.params.id)) {
     return res.status(404).json({ error: 'group not found' })
   }
-  const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(req.params.id)
+  const group = db.prepare('SELECT id, name, created_by, created_at FROM groups WHERE id = ?').get(req.params.id)
   const members = db
     .prepare(
       `SELECT gm.user_id, gm.role, gm.joined_at, u.username
@@ -87,6 +104,18 @@ groupsRouter.delete('/groups/:id', (req, res) => {
     .get(req.params.id)
   if (shares) {
     return res.status(409).json({ error: 'remove all shared accounts before deleting the group' })
+  }
+  // B-3: Block deletion if there are unsettled transaction shares within this group
+  const unsettledShares = db.prepare(
+    `SELECT 1
+     FROM transaction_shares ts
+     JOIN transactions t ON t.id = ts.transaction_id
+     JOIN group_members gm ON gm.user_id = ts.user_id AND gm.group_id = ?
+     WHERE ts.settled_at IS NULL
+     LIMIT 1`
+  ).get(req.params.id)
+  if (unsettledShares) {
+    return res.status(409).json({ error: 'settle all outstanding balances before deleting the group' })
   }
   db.prepare('DELETE FROM groups WHERE id = ?').run(req.params.id)
   res.status(204).end()
@@ -138,6 +167,19 @@ groupsRouter.delete('/groups/:id/members/:userId', (req, res) => {
     if (ownerCount <= 1) {
       return res.status(409).json({ error: 'cannot remove the last owner; transfer ownership first' })
     }
+  }
+
+  // B-4: Block removal if this member has outstanding unsettled shares in the group
+  const unsettledMemberShares = db.prepare(
+    `SELECT 1
+     FROM transaction_shares ts
+     JOIN transactions t ON t.id = ts.transaction_id
+     JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
+     WHERE ts.user_id = ? AND ts.settled_at IS NULL
+     LIMIT 1`
+  ).get(groupId, targetId)
+  if (unsettledMemberShares) {
+    return res.status(409).json({ error: 'this member has unsettled balances in the group; settle first' })
   }
 
   db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?').run(groupId, targetId)
@@ -264,7 +306,7 @@ groupsRouter.delete('/invites/:id', (req, res) => {
 
 groupsRouter.get('/users/search', (req, res) => {
   const q = String(req.query.q ?? '').trim().toLowerCase()
-  if (!q || q.length < 1) return res.json([])
+  if (!q || q.length < 2) return res.json([])
   const rows = getDb()
     .prepare(
       `SELECT id, username FROM users
