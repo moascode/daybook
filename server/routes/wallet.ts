@@ -597,6 +597,98 @@ walletRouter.delete('/transactions/:id/shares', (req, res) => {
   res.status(204).end()
 })
 
+// ── Bulk transaction shares ───────────────────────────
+// POST /transactions/shares — Share multiple transactions at once
+walletRouter.post('/transactions/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+
+  const { transactionIds, shares }: { transactionIds: string[]; shares: Array<{ userId: string; shareAmount: number; note?: string }> } = req.body ?? {}
+
+  if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+    return res.status(400).json({ error: 'transactionIds array is required' })
+  }
+  if (!Array.isArray(shares) || shares.length === 0) {
+    return res.status(400).json({ error: 'shares array is required' })
+  }
+
+  // Validate each share amount is a positive finite number
+  for (const s of shares) {
+    const amt = Number(s.shareAmount)
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'each share amount must be a positive number' })
+    }
+  }
+
+  // Validate sum for each transaction
+  const txnMap = new Map<string, { amount: number; user_id: string; account_id: string }>()
+  const txns = db.prepare('SELECT id, user_id, amount, account_id FROM transactions WHERE id IN (' + transactionIds.map(() => '?').join(',') + ')').all(...transactionIds) as Array<{ id: string; user_id: string; amount: number; account_id: string }>
+  for (const txn of txns) {
+    txnMap.set(txn.id, { amount: txn.amount, user_id: txn.user_id, account_id: txn.account_id })
+  }
+
+  if (txnMap.size !== transactionIds.length) {
+    return res.status(400).json({ error: 'one or more transactions not found' })
+  }
+
+  // All transactions must belong to the requesting user or they must have write access
+  for (const txnId of transactionIds) {
+    const txn = txnMap.get(txnId)!
+    if (txn.user_id !== userId && !canWriteAccount(db, userId, txn.account_id)) {
+      return res.status(400).json({ error: `user does not own transaction ${txnId} and cannot write to its account` })
+    }
+  }
+
+  // All share userId values must be co-group members with each transaction's owner
+  for (const txnId of transactionIds) {
+    const txn = txnMap.get(txnId)!
+    const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
+    for (const s of shares) {
+      if (!allowedIds.has(String(s.userId))) {
+        return res.status(400).json({ error: `user ${s.userId} is not a group co-member with transaction ${txnId}'s owner` })
+      }
+    }
+  }
+
+  // Calculate shares per transaction (group shares by transaction)
+  const sharesByTxn = new Map<string, Array<{ userId: string; shareAmount: number; note?: string }>>()
+  for (const txnId of transactionIds) {
+    sharesByTxn.set(txnId, [])
+  }
+  for (const s of shares) {
+    // Assign each share to the next transaction in the list (round-robin)
+    const txnId = transactionIds[sharesByTxn.size % transactionIds.length]
+    sharesByTxn.get(txnId)!.push({ userId: s.userId, shareAmount: s.shareAmount, note: s.note })
+  }
+
+  // Atomically create shares for all transactions
+  db.transaction(() => {
+    for (const txnId of transactionIds) {
+      const txn = txnMap.get(txnId)!
+      const txnShares = sharesByTxn.get(txnId)!
+
+      // Validate sum for this transaction
+      const sum = txnShares.reduce((acc, s) => acc + s.shareAmount, 0)
+      if (Math.abs(sum - txn.amount) > 0.015) {
+        throw new Error(`share amounts for transaction ${txnId} must sum to ${txn.amount}; got ${sum}`)
+      }
+
+      // Delete existing shares and insert new ones
+      db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(txnId)
+      const insert = db.prepare(
+        `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+         VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
+         RETURNING *`,
+      )
+      for (const s of txnShares) {
+        insert.run(txnId, s.userId, s.shareAmount, s.note ?? '')
+      }
+    }
+  })()
+
+  res.status(201).json({ message: 'transactions shared successfully', transactionIds })
+})
+
 // ── Budgets ──────────────────────────────────────────
 
 walletRouter.get('/budgets', (req, res) => {
