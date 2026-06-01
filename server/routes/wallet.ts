@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getDb } from '../db.ts'
 import { updateRow, normalizeBind, ownsAllRefs } from '../lib.ts'
-import { visibleAccountIds, canWriteAccount } from '../lib/sharing.ts'
+import { visibleAccountIds, canWriteAccount, isGroupMember, coGroupUserIds } from '../lib/sharing.ts'
 
 export const walletRouter: Router = Router()
 
@@ -161,6 +161,10 @@ walletRouter.delete('/accounts/:id/shares/:groupId', (req, res) => {
   const userId = req.session.userId!
   const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
   if (!acct) return res.status(404).json({ error: 'account not found' })
+  // C-10: Verify caller is a member of the group being unshared from
+  if (!isGroupMember(db, userId, req.params.groupId)) {
+    return res.status(403).json({ error: 'you are not a member of this group' })
+  }
   db.prepare('DELETE FROM account_shares WHERE account_id = ? AND group_id = ?').run(req.params.id, req.params.groupId)
   res.status(204).end()
 })
@@ -535,10 +539,10 @@ walletRouter.post('/transactions/:id/shares', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
   const txn = db
-    .prepare('SELECT user_id, amount FROM transactions WHERE id = ?')
-    .get(req.params.id) as { user_id: string; amount: number } | undefined
+    .prepare('SELECT user_id, amount, account_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as { user_id: string; amount: number; account_id: string } | undefined
   if (!txn) return res.status(404).json({ error: 'transaction not found' })
-  if (txn.user_id !== userId && !canWriteAccount(db, userId, req.params.id)) {
+  if (txn.user_id !== userId && !canWriteAccount(db, userId, txn.account_id)) {
     return res.status(403).json({ error: 'only the transaction owner can set splits' })
   }
 
@@ -547,10 +551,26 @@ walletRouter.post('/transactions/:id/shares', (req, res) => {
     : []
   if (shares.length === 0) return res.status(400).json({ error: 'shares array is required' })
 
+  // Validate each share amount is a positive finite number
+  for (const s of shares) {
+    const amt = Number(s.shareAmount)
+    if (!Number.isFinite(amt) || amt <= 0) {
+      return res.status(400).json({ error: 'each share amount must be a positive number' })
+    }
+  }
+
   // Validate sum
   const sum = shares.reduce((acc, s) => acc + Number(s.shareAmount), 0)
   if (Math.abs(sum - txn.amount) > 0.015) {
     return res.status(400).json({ error: `share amounts must sum to the transaction amount (${txn.amount}); got ${sum}` })
+  }
+
+  // S-3: All share userId values must be co-group members with the transaction owner
+  const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
+  for (const s of shares) {
+    if (!allowedIds.has(String(s.userId))) {
+      return res.status(400).json({ error: `user ${s.userId} is not a group co-member with this transaction's owner` })
+    }
   }
 
   // Atomically replace all share rows
