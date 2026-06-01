@@ -200,8 +200,11 @@ walletRouter.get('/transactions', (req, res) => {
     ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
     : []
   // Multiple tags use OR logic: a transaction matching ANY selected tag is returned.
+  // Guard with CASE so json_each never receives invalid/empty JSON (rows with tag=''
+  // or non-array values would otherwise throw a SQLite runtime error).
   if (rawTags.length > 0) {
-    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(transactions.tag) WHERE value = @tag${i})`)
+    const safeTag = `CASE WHEN json_valid(transactions.tag) AND json_type(transactions.tag)='array' THEN transactions.tag ELSE '[]' END`
+    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value = @tag${i})`)
     conditions.push(`(${tagClauses.join(' OR ')})`)
     for (let i = 0; i < rawTags.length; i++) params[`tag${i}`] = rawTags[i]
   }
@@ -231,7 +234,8 @@ walletRouter.get('/transactions/export', (req, res) => {
     ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
     : []
   if (rawTags.length > 0) {
-    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(t.tag) WHERE value = @tag${i})`)
+    const safeTag = `CASE WHEN json_valid(t.tag) AND json_type(t.tag)='array' THEN t.tag ELSE '[]' END`
+    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value = @tag${i})`)
     conditions.push(`(${tagClauses.join(' OR ')})`)
     for (let i = 0; i < rawTags.length; i++) params[`tag${i}`] = rawTags[i]
   }
