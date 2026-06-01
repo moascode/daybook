@@ -848,10 +848,10 @@ cmd_release() {
     [[ "$answer" =~ ^[Yy]$ ]] || { info "Aborted."; exit 0; }
   fi
 
-  info "Creating tag $tag…"
+  info "Creating tag $tag..."
   git -C "$repo_root" tag -a "$tag" -m "Release $tag"
 
-  info "Pushing tag to origin…"
+  info "Pushing tag to origin..."
   git -C "$repo_root" push origin "$tag"
 
   ok "Tag $tag pushed."
