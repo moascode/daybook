@@ -8,6 +8,7 @@ interface WalletFilters {
   categoryId: string | null
   accountId: string | null
   tags: string[]
+  view: 'all' | 'mine' | 'shared-with-me'
 }
 
 interface WalletState {
@@ -63,6 +64,7 @@ function getDefaultFilters(): WalletFilters {
     categoryId: null,
     accountId: null,
     tags: [],
+    view: 'all',
   }
 }
 

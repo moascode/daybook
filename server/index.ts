@@ -9,6 +9,8 @@ import { healthRouter } from './routes/health.ts'
 import { authRouter, requireAuth } from './routes/auth.ts'
 import { tasksRouter } from './routes/tasks.ts'
 import { walletRouter } from './routes/wallet.ts'
+import { groupsRouter } from './routes/groups.ts'
+import { settlementsRouter } from './routes/settlements.ts'
 import { settingsRouter } from './routes/settings.ts'
 import { testRouter } from './routes/test.ts'
 
@@ -54,6 +56,8 @@ export function createApp(): express.Express {
   app.use('/api', requireAuth)
   app.use('/api', tasksRouter)
   app.use('/api', walletRouter)
+  app.use('/api', groupsRouter)
+  app.use('/api', settlementsRouter)
   app.use('/api', settingsRouter)
 
   // Production: serve the built frontend from this same process so the SPA and

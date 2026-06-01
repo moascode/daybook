@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   CheckSquare,
@@ -15,8 +15,13 @@ import {
   Target,
   BarChart2,
   Upload,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { InvitationsBadge } from '@/modules/household/InvitationsBadge'
+import { useHouseholdStore } from '@/stores/household.store'
+import { api } from '@/lib/api'
+import { mapInvite } from '@/lib/household.mappers'
 
 /**
  * Wallet sub-navigation, grouped by how often each destination is used.
@@ -75,6 +80,21 @@ const subLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function Sidebar({ open = true, onClose }: SidebarProps) {
   const location = useLocation()
   const isWalletRoute = location.pathname.startsWith('/wallet')
+  const setPendingInvites = useHouseholdStore((s) => s.setPendingInvites)
+
+  // Poll for pending invites so the badge stays up-to-date
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const raw = await api.get<Record<string, unknown>[]>('/invites')
+        if (!cancelled) setPendingInvites(raw.map(mapInvite))
+      } catch { /* ignore */ }
+    }
+    load()
+    const timer = setInterval(load, 60_000)
+    return () => { cancelled = true; clearInterval(timer) }
+  }, [setPendingInvites])
   // null = follow the route (auto-expand on /wallet/*); true/false = manual override.
   const [walletOverride, setWalletOverride] = useState<boolean | null>(null)
   // Clear a manual override once the user leaves /wallet so a later visit
@@ -115,6 +135,14 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         <NavLink to="/tasks" end onClick={onClose} className={topLinkClass}>
           <CheckSquare className="h-4 w-4 flex-shrink-0" />
           Tasks
+        </NavLink>
+
+        <NavLink to="/household" end onClick={onClose} className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
+          <span className="flex items-center gap-3">
+            <Users className="h-4 w-4 flex-shrink-0" />
+            Household
+          </span>
+          <InvitationsBadge />
         </NavLink>
 
         {/* Wallet — expandable section */}

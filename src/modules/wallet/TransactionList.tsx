@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft, Pencil, Copy } from 'lucide-react'
+import { Trash2, ArrowRightLeft, Pencil, Scissors } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -76,6 +76,7 @@ function TransactionRow({
   const category = transaction.categoryId
     ? categories.find((c) => c.id === transaction.categoryId)
     : null
+  const isOnSharedAccount = account?.isShared
 
   const amountColor =
     transaction.type === 'income'
@@ -149,6 +150,11 @@ function TransactionRow({
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
           {account && <span>{account.name}</span>}
+          {isOnSharedAccount && account?.sharedByUsername && (
+            <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
+              {account.sharedByUsername}
+            </span>
+          )}
           {destAccount && (
             <>
               <ArrowRightLeft className="h-3 w-3" />
@@ -182,8 +188,9 @@ function TransactionRow({
             size="sm"
             onClick={() => onSplit(transaction)}
             aria-label="Split transaction"
+            title="Split between household members"
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Scissors className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"

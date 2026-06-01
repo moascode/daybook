@@ -26,6 +26,11 @@ interface AccountRow {
   icon: string
   opening_balance: number
   created_at: string
+  // Sharing fields (only present on shared-in accounts)
+  is_shared?: number
+  shared_by_user_id?: string | null
+  shared_by_username?: string | null
+  can_write?: number
 }
 
 interface TransactionRow {
@@ -65,6 +70,10 @@ function mapAccount(row: AccountRow): Account {
     icon: row.icon,
     openingBalance: row.opening_balance ?? 0,
     createdAt: row.created_at,
+    isShared: !!row.is_shared,
+    sharedByUserId: row.shared_by_user_id ?? null,
+    sharedByUsername: row.shared_by_username ?? null,
+    canWrite: row.can_write,
   }
 }
 
@@ -222,6 +231,7 @@ interface TransactionFilters {
   categoryId?: string | null
   accountId?: string | null
   tags?: string[]
+  view?: 'all' | 'mine' | 'shared-with-me'
 }
 
 // ── Hook ────────────────────────────────────────────
@@ -285,6 +295,7 @@ export function useWallet() {
     if (filters?.tags?.length) {
       for (const t of filters.tags) qs.append('tags', t)
     }
+    if (filters?.view && filters.view !== 'all') qs.set('view', filters.view)
 
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)

@@ -10,8 +10,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
+import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
+import { useAppStore } from '@/stores/app.store'
 import { cn, formatMYR } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
@@ -33,6 +35,7 @@ function getMonthRange(monthOffset: number) {
 }
 
 export function WalletPage() {
+  const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const {
     accounts,
     transactions,
@@ -61,8 +64,8 @@ export function WalletPage() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
-  // Split transaction state
-  const [splitSource, setSplitSource] = useState<Transaction | null>(null)
+  // Split transaction state (for user-based share splitting)
+  const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
 
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
@@ -111,9 +114,8 @@ export function WalletPage() {
   }, [loadAccounts, loadCategories, loadTags])
 
   useEffect(() => {
-    loadTransactions(filters)
-    // dataVersion: re-fetch when data changed out-of-band (e.g. recurring
-    // rules auto-posted on boot).
+    // dataVersion: re-fetch when data changed out-of-band
+    loadTransactions({ ...filters, view: filters.view })
   }, [filters, loadTransactions, dataVersion])
 
   // Total balance across all accounts. Balances are independent of the active
@@ -165,36 +167,18 @@ export function WalletPage() {
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
 
-  // Stable prefill object — only recreates when splitSource identity changes,
-  // not on every WalletPage re-render. Prevents mid-session form resets.
-  const splitPrefill = useMemo(() => splitSource ? {
-    accountId: splitSource.accountId,
-    destinationAccountId: splitSource.destinationAccountId,
-    date: splitSource.date,
-    merchant: splitSource.merchant,
-    description: splitSource.description,
-    amount: splitSource.amount,
-    type: splitSource.type,
-    categoryId: splitSource.categoryId,
-    tags: splitSource.tags,
-  } : undefined, [splitSource])
-
   function openEditForm(transaction: Transaction) {
-    setSplitSource(null)
     setEditingTransaction(transaction)
     setFormOpen(true)
   }
 
   function openCreateForm() {
-    setSplitSource(null)
     setEditingTransaction(null)
     setFormOpen(true)
   }
 
-  function openSplitForm(transaction: Transaction) {
-    setEditingTransaction(null)
-    setSplitSource(transaction)
-    setFormOpen(true)
+  function openSplitDialog(transaction: Transaction) {
+    setSplitTarget(transaction)
   }
 
   function toggleSelectMode() {
@@ -429,6 +413,24 @@ export function WalletPage() {
       </>
       )}
 
+      {/* View filter pills — always visible so users in groups can see shared transactions */}
+      <div className="mb-3 flex items-center gap-1.5">
+        {(['all', 'mine', 'shared-with-me'] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setFilters({ view: v })}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs transition-colors capitalize',
+              filters.view === v
+                ? 'border-brand-500 bg-brand-50 text-brand-700'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300',
+            )}
+          >
+            {v === 'shared-with-me' ? 'Shared with me' : v.charAt(0).toUpperCase() + v.slice(1)}
+          </button>
+        ))}
+      </div>
+
       {/* Multi-select action bar */}
       {selectMode && (
         <div
@@ -490,7 +492,7 @@ export function WalletPage() {
             categories={categories}
             onEdit={openEditForm}
             onDelete={handleDeleteTransaction}
-            onSplit={openSplitForm}
+            onSplit={openSplitDialog}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -502,18 +504,22 @@ export function WalletPage() {
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open)
-          if (!open) {
-            setEditingTransaction(null)
-            setSplitSource(null)
-          }
+          if (!open) setEditingTransaction(null)
         }}
         transaction={editingTransaction}
-        prefill={splitPrefill}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}
         availableTags={tags}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
+      />
+
+      <SplitDialog
+        open={!!splitTarget}
+        onOpenChange={(open) => { if (!open) setSplitTarget(null) }}
+        transaction={splitTarget}
+        currentUserId={currentUserId}
+        onSaved={() => loadTransactions(filtersRef.current)}
       />
 
       <CategoryManager

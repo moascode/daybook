@@ -12,6 +12,7 @@ import { GoalsPage } from '@/modules/wallet/GoalsPage'
 import { ReportsPage } from '@/modules/wallet/ReportsPage'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { UATPage } from '@/modules/uat/UATPage'
+import { HouseholdPageWrapper } from '@/modules/household/HouseholdPageWrapper'
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
           { path: 'import', element: <CsvImport /> },
         ],
       },
+      { path: 'household', element: <HouseholdPageWrapper /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'uat', element: <UATPage /> },
     ],
