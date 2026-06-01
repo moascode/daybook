@@ -1158,6 +1158,16 @@ e2e/
 npx playwright test              # Full suite (headless)
 npx playwright test e2e/01-tasks # Single file
 npx playwright test --headed     # Watch mode (headed)
+
+### Development Workflow
+
+**Default behavior:** Branch → Plan (for non-trivial changes) → Implement → Test → PR → Wait for merge.
+
+**Full 12-step workflow** (branch → plan → implement → test → review → PR → CI → merge): Available on-demand via `/use dev-workflow` skill. Use this for significant changes where you want the complete process enforced.
+
+**Small tasks** (typos, one-line fixes): Skip the full workflow. Still branch first, still test, still PR.
+
+---
 npx playwright show-report       # View last HTML report
 ```
 
