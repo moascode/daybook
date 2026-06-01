@@ -74,8 +74,8 @@ test.describe('23 — Household groups, invites, memberships', () => {
     await expect(charlie.locator('main')).toBeVisible()
     await expect(charlie.getByText('Pending invitations')).toBeVisible()
 
-    // Charlie declines (second button in the invite row is the X/decline)
-    await charlie.locator('.rounded-lg.border.border-blue-100 button').nth(1).click()
+    // Charlie declines
+    await charlie.getByRole('button', { name: 'Decline invitation' }).click()
 
     // Invite section disappears
     await expect(charlie.getByText('Pending invitations')).not.toBeVisible()
@@ -92,5 +92,119 @@ test.describe('23 — Household groups, invites, memberships', () => {
     await expect(alice.getByText('No groups yet')).toBeVisible()
 
     await aliceCtx.close()
+  })
+
+  test('inviting a non-existent username shows an error', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const aliceName = `alice_inv_err_${Date.now()}`
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TestGroup' } })
+    const group = await groupRes.json()
+
+    await alicePage.goto('/household')
+    await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
+    await alicePage.getByRole('heading', { name: 'TestGroup' }).click()
+    await alicePage.getByRole('button', { name: 'Invite' }).click()
+    await alicePage.getByPlaceholder('Search by username…').fill('nobody_zzz_does_not_exist')
+    // Wait for debounce + search
+    await alicePage.waitForTimeout(500)
+    await expect(alicePage.getByText(/no users found/i)).toBeVisible({ timeout: 5000 })
+
+    await aliceCtx.close()
+  })
+
+  test('owner can remove a member; member loses access', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_rem_${ts}`
+    const bobName = `bob_rem_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'RemoveGroup' } })
+    const group = await groupRes.json()
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+
+    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    const invites = await invRes.json()
+    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+
+    // Alice removes Bob via UI
+    await alicePage.goto('/household')
+    await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
+    await alicePage.getByRole('heading', { name: 'RemoveGroup' }).click()
+    await expect(alicePage.getByText(bobName)).toBeVisible({ timeout: 5000 })
+    await alicePage.getByRole('button', { name: 'Remove member' }).click()
+    await expect(alicePage.getByText(bobName)).not.toBeVisible({ timeout: 5000 })
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
+  test('cannot delete a group while accounts are shared with it', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_del_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'DelGroup' } })
+    const group = await groupRes.json()
+    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    })
+    const acct = await acctRes.json()
+    // Share the account with the group
+    await alicePage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+      data: { groupId: group.id, canWrite: false },
+    })
+
+    await alicePage.goto('/household')
+    await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // Click delete group button
+    await alicePage.getByRole('button', { name: 'Delete group' }).click()
+    // Confirm deletion
+    await alicePage.getByRole('button', { name: 'Delete Group' }).click()
+    // Should see an error (alert or inline), group should still be visible
+    await expect(alicePage.getByRole('heading', { name: 'DelGroup' })).toBeVisible({ timeout: 5000 })
+
+    await aliceCtx.close()
+  })
+
+  test('member can leave a group', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_leave_${ts}`
+    const bobName = `bob_leave_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'LeaveGroup' } })
+    const group = await groupRes.json()
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+
+    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    const invites = await invRes.json()
+    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+
+    // Bob navigates to household and leaves the group
+    await bobPage.goto('/household')
+    await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    await bobPage.getByRole('heading', { name: 'LeaveGroup' }).click()
+    await bobPage.getByRole('button', { name: 'Leave group' }).click()
+    // Group should no longer appear for Bob
+    await expect(bobPage.getByRole('heading', { name: 'LeaveGroup' })).not.toBeVisible({ timeout: 5000 })
+
+    await aliceCtx.close()
+    await bobCtx.close()
   })
 })
