@@ -34,7 +34,7 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
     setAccounts(accts)
   }, [group.id])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
 
   const myAccounts = accounts
 
@@ -311,7 +311,7 @@ function GroupCard({
     try {
       const d = await api.get<Record<string, unknown>>(`/groups/${group.id}`)
       setDetail(mapGroupDetail(d))
-    } catch {}
+    } catch { /* ignore */ }
     onRefresh()
   }
 

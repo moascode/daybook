@@ -64,7 +64,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   }, [transaction])
 
   useEffect(() => {
-    if (open) { loadData() }
+    if (open) { loadData() } // eslint-disable-line react-hooks/set-state-in-effect
   }, [open, loadData])
 
   // Recalculate lines when mode or selection changes
@@ -73,7 +73,8 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
     const selected = groupMembers.filter((m) => selectedUserIds.has(m.userId))
     if (mode === 'equal' && selected.length > 0) {
       const base = Math.floor((amount / selected.length) * 100) / 100
-      let remainder = Math.round((amount - base * selected.length) * 100) / 100
+      const remainder = Math.round((amount - base * selected.length) * 100) / 100
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLines(
         selected.map((m, i) => ({
           userId: m.userId,

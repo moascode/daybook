@@ -530,31 +530,25 @@ test('clicking Split opens the Split Transaction modal', async () => {
   await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
 })
 
-test('split modal shows two part inputs with amounts summing to original', async () => {
+test('split modal shows the transaction being split and a group-members prompt', async () => {
   const dialog = page.getByRole('dialog')
-  // Default: each part is half of original (12 / 2 = 6)
-  await expect(dialog.locator('#split-amount-0')).toBeVisible()
-  await expect(dialog.locator('#split-amount-1')).toBeVisible()
-  // Total indicator shows a checkmark because the halves sum to the original
-  await expect(dialog.getByText('✓')).toBeVisible()
+  // Transaction details are shown at the top
+  await expect(dialog.getByText('Kopitiam')).toBeVisible()
+  // Without any household group, a prompt to add members is shown
+  await expect(dialog.getByText('No group members yet')).toBeVisible()
+  // Save Split button is disabled when there are no members to split with
+  await expect(dialog.getByRole('button', { name: 'Save Split' })).toBeDisabled()
 })
 
-test('changing amount in part 0 auto-updates part 1 to keep total', async () => {
+test('split modal mode selector shows equal and custom options', async () => {
   const dialog = page.getByRole('dialog')
-  const part0Amount = dialog.locator('#split-amount-0')
-  await part0Amount.fill('8')
-  await part0Amount.blur()
-  // Part 1 should now show 4 (12 - 8)
-  const part1Amount = dialog.locator('#split-amount-1')
-  await expect(part1Amount).toHaveValue('4')
-  // Checkmark shows totals match
-  await expect(dialog.getByText('✓')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Split equally' })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Custom amounts' })).toBeVisible()
 })
 
-test('confirming split creates two transactions and removes the original', async () => {
-  await page.getByTestId('confirm-split-btn').click()
+test('cancelling split modal closes it without creating new transactions', async () => {
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  // Original Kopitiam is replaced by two new Kopitiam rows
-  const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'Kopitiam' })
-  await expect(rows).toHaveCount(2)
+  // Original Kopitiam row is still present and unchanged
+  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
