@@ -558,3 +558,84 @@ test('confirming split creates two transactions and removes the original', async
   const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'Kopitiam' })
   await expect(rows).toHaveCount(2)
 })
+
+// ── Split transaction — decimal and edge-case tests ───────────────────────
+
+test('split: decimal input (e.g. 7.50) is preserved without snapping', async () => {
+  // Create a fresh $15 transaction to split with decimal amounts
+  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(page, { merchant: 'SplitDecimalTest', amount: '15', type: 'Expense' })
+
+  await transactionRowFor(page, 'SplitDecimalTest').hover()
+  await transactionRowFor(page, 'SplitDecimalTest').getByTestId('split-transaction-btn').click()
+
+  const dialog = page.getByRole('dialog')
+
+  // Default 50/50: 7.5 + 7.5 = 15
+  await expect(dialog.locator('#split-amount-0')).toHaveValue('7.5')
+  await expect(dialog.locator('#split-amount-1')).toHaveValue('7.5')
+  await expect(dialog.getByText('✓')).toBeVisible()
+
+  // Type a decimal amount — "9.99" must NOT snap back mid-entry
+  await dialog.locator('#split-amount-0').fill('9.99')
+  await expect(dialog.locator('#split-amount-0')).toHaveValue('9.99')
+  // Part 1 auto-adjusts: 15 - 9.99 = 5.01
+  await expect(dialog.locator('#split-amount-1')).toHaveValue('5.01')
+  await expect(dialog.getByText('✓')).toBeVisible()
+
+  // Confirm → two new transactions, original gone
+  await dialog.getByTestId('confirm-split-btn').click()
+  await expect(dialog).not.toBeVisible()
+  const rows = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'SplitDecimalTest' })
+  await expect(rows).toHaveCount(2)
+})
+
+test('split: confirm button is disabled when part amounts exceed total', async () => {
+  // Create a $20 transaction
+  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(page, { merchant: 'SplitLimitTest', amount: '20', type: 'Expense' })
+
+  await transactionRowFor(page, 'SplitLimitTest').hover()
+  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
+
+  const dialog = page.getByRole('dialog')
+
+  // Type an amount larger than the total — part 1 clamps to 0, sum ≠ 20
+  await dialog.locator('#split-amount-0').fill('25')
+  // Part 1 becomes 0 (cannot go negative)
+  await expect(dialog.locator('#split-amount-1')).toHaveValue('0')
+  // Running total shows mismatch
+  await expect(dialog.getByText('✓')).not.toBeVisible()
+  // Confirm button is disabled
+  await expect(dialog.getByTestId('confirm-split-btn')).toBeDisabled()
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).not.toBeVisible()
+})
+
+test('split: cancelling and reopening the modal resets amounts to 50/50', async () => {
+  // Reuse SplitLimitTest ($20 still exists, untouched from the cancelled split)
+  await transactionRowFor(page, 'SplitLimitTest').hover()
+  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
+
+  const dialog = page.getByRole('dialog')
+  // Default 50/50: 10 + 10 = 20
+  await expect(dialog.locator('#split-amount-0')).toHaveValue('10')
+
+  // Change part 0 to 15
+  await dialog.locator('#split-amount-0').fill('15')
+  await expect(dialog.locator('#split-amount-1')).toHaveValue('5')
+
+  // Cancel without confirming
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  await expect(dialog).not.toBeVisible()
+
+  // Reopen — should reset back to 10 + 10, not show the abandoned 15 + 5
+  await transactionRowFor(page, 'SplitLimitTest').hover()
+  await transactionRowFor(page, 'SplitLimitTest').getByTestId('split-transaction-btn').click()
+  await expect(dialog.locator('#split-amount-0')).toHaveValue('10')
+  await expect(dialog.locator('#split-amount-1')).toHaveValue('10')
+  await expect(dialog.getByText('✓')).toBeVisible()
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+})

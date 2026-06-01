@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useLayoutEffect } from 'react'
 import { Scissors } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
@@ -10,7 +10,8 @@ import type { Transaction, Category } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
 interface SplitPart {
-  amount: number
+  amount: number      // parsed value used for calculations and submission
+  amountStr: string   // raw string displayed in the input (preserves "8." mid-type)
   merchant: string
   description: string
   categoryId: string | null
@@ -26,14 +27,19 @@ interface SplitTransactionModalProps {
   onConfirm: (parts: [TransactionFormData, TransactionFormData]) => Promise<void>
 }
 
-function defaultPart(transaction: Transaction): SplitPart {
-  return {
-    amount: parseFloat((transaction.amount / 2).toFixed(2)),
+function buildParts(transaction: Transaction): [SplitPart, SplitPart] {
+  const half = parseFloat((transaction.amount / 2).toFixed(2))
+  const other = parseFloat((transaction.amount - half).toFixed(2))
+  const base = {
     merchant: transaction.merchant,
     description: transaction.description,
     categoryId: transaction.categoryId,
     tags: transaction.tags,
   }
+  return [
+    { ...base, amount: half, amountStr: String(half) },
+    { ...base, amount: other, amountStr: String(other) },
+  ]
 }
 
 export function SplitTransactionModal({
@@ -44,46 +50,53 @@ export function SplitTransactionModal({
   availableTags,
   onConfirm,
 }: SplitTransactionModalProps) {
-  const [parts, setParts] = useState<[SplitPart, SplitPart]>(() => {
-    if (!transaction) return [
-      { amount: 0, merchant: '', description: '', categoryId: null, tags: [] },
-      { amount: 0, merchant: '', description: '', categoryId: null, tags: [] },
-    ]
-    const half = parseFloat((transaction.amount / 2).toFixed(2))
-    const other = parseFloat((transaction.amount - half).toFixed(2))
-    return [
-      { ...defaultPart(transaction), amount: half },
-      { ...defaultPart(transaction), amount: other },
-    ]
-  })
+  const [parts, setParts] = useState<[SplitPart, SplitPart]>([
+    { amount: 0, amountStr: '', merchant: '', description: '', categoryId: null, tags: [] },
+    { amount: 0, amountStr: '', merchant: '', description: '', categoryId: null, tags: [] },
+  ])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  // Reset when transaction changes
-  const [prevTransaction, setPrevTransaction] = useState(transaction)
-  if (transaction !== prevTransaction) {
-    setPrevTransaction(transaction)
-    if (transaction && open) {
-      const half = parseFloat((transaction.amount / 2).toFixed(2))
-      const other = parseFloat((transaction.amount - half).toFixed(2))
-      setParts([
-        { ...defaultPart(transaction), amount: half },
-        { ...defaultPart(transaction), amount: other },
-      ])
-      setErrors({})
-    }
-  }
+  // Reset parts whenever the modal is opened or the source transaction changes.
+  // useLayoutEffect fires before paint, preventing a flash of zeroed-out amounts.
+  useLayoutEffect(() => {
+    if (!open || !transaction) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset modal state on open/transaction change
+    setParts(buildParts(transaction))
+    setErrors({})
+    setSubmitError(null)
+  }, [open, transaction?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const total = transaction?.amount ?? 0
 
+  // Updating one amount auto-adjusts the other to keep the sum equal to total.
+  // We store the raw string so the user can type "8." without it snapping back.
   const updateAmount = useCallback((idx: 0 | 1, raw: string) => {
-    const val = parseFloat(raw) || 0
-    const other = parseFloat((total - val).toFixed(2))
+    const trimmed = raw.trim()
+    const val = parseFloat(trimmed)
+    // Only accept plain decimals: "8", "8.", "8.5" — rejects "1e5", "-5", "abc", ""
+    const isValid = /^\d+(\.\d*)?$/.test(trimmed) && isFinite(val) && val >= 0
+
     setParts((prev) => {
       const next: [SplitPart, SplitPart] = [{ ...prev[0] }, { ...prev[1] }]
-      next[idx].amount = val
-      next[1 - idx as 0 | 1].amount = Math.max(0, other)
+      next[idx] = { ...next[idx], amountStr: raw }
+
+      if (isValid) {
+        next[idx].amount = val
+        const other = parseFloat((total - val).toFixed(2))
+        const otherClamped = Math.max(0, other)
+        next[1 - idx as 0 | 1] = {
+          ...next[1 - idx as 0 | 1],
+          amount: otherClamped,
+          amountStr: String(otherClamped),
+        }
+      } else {
+        // Invalid string (empty, non-numeric, etc.) — zero the numeric value so
+        // sumOk correctly becomes false and the confirm button is disabled.
+        next[idx].amount = 0
+      }
+
       return next
     })
   }, [total])
@@ -145,6 +158,10 @@ export function SplitTransactionModal({
     ...filteredCategories(type).map((c) => ({ value: c.id, label: c.name })),
   ]
 
+  // total > 0 guard prevents a zero-amount transaction from ever showing a
+  // valid-looking split (both halves would be 0, sumOk would incorrectly be true).
+  const sumOk = total > 0 && Math.abs(parts[0].amount + parts[1].amount - total) < 0.01
+
   return (
     <Modal
       open={open}
@@ -196,13 +213,16 @@ export function SplitTransactionModal({
                   </span>
                 </div>
 
+                {/* type="text" + inputMode="decimal" lets the user type "8." without
+                    the browser resetting the field (which happens with type="number"
+                    for any partial/invalid numeric string). */}
                 <Input
                   id={`split-amount-${idx}`}
                   label="Amount"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={part.amount || ''}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={part.amountStr}
                   onChange={(e) => updateAmount(idx, e.target.value)}
                   error={errors[`part${idx}amount`]}
                 />
@@ -252,13 +272,11 @@ export function SplitTransactionModal({
           </span>
           <span className={cn(
             'font-semibold',
-            Math.abs(parts[0].amount + parts[1].amount - total) < 0.01
-              ? 'text-green-600'
-              : 'text-red-600',
+            sumOk ? 'text-green-600' : 'text-red-600',
           )}>
             = {formatMYR(parts[0].amount + parts[1].amount)}
             {' '}
-            {Math.abs(parts[0].amount + parts[1].amount - total) < 0.01 ? '✓' : `(need ${formatMYR(total)})`}
+            {sumOk ? '✓' : `(need ${formatMYR(total)})`}
           </span>
         </div>
 
@@ -268,7 +286,7 @@ export function SplitTransactionModal({
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={submitting}
+            disabled={submitting || !sumOk}
             data-testid="confirm-split-btn"
           >
             {submitting ? 'Creating…' : 'Create 2 Transactions'}
