@@ -39,7 +39,7 @@ settlementsRouter.post('/settlements', (req, res) => {
   if (!owedRow || owedRow.total <= 0) {
     return res.status(400).json({ error: 'no outstanding balance owed to this user in this group' })
   }
-  // U-13: Warn if settling more than outstanding (cap to total owed)
+  // U-13: Cap at actual owed amount and warn via response
   const effectiveAmount = Math.min(amount, owedRow.total)
 
   // Verify account ownership
@@ -123,7 +123,11 @@ settlementsRouter.post('/settlements', (req, res) => {
         `INSERT INTO settlements (id, group_id, from_user, to_user, amount, currency, note, from_transaction_id, to_transaction_id, settled_at)
          VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'MYR', ?, ?, ?, datetime('now'))
          RETURNING *`
-      ).get(groupId, callerId, toUserId, effectiveAmount, note, fromTxn.id, toTxnId) as { id: string }
+      ).get(groupId, callerId, toUserId, effectiveAmount, note, fromTxn.id, toTxnId) as {
+          id: string;
+          from_user: string;
+          to_user: string;
+         }
 
       // S-2: Record exactly which shares this settlement cleared
       const insertShareLine = db.prepare(
@@ -140,7 +144,14 @@ settlementsRouter.post('/settlements', (req, res) => {
     return res.status(code).json({ error: (err as Error).message })
   }
 
-  res.status(201).json(settlement)
+  // U-13: Add warning message if amount was capped
+  const response: { id: string; message?: string } = {
+    id: (settlement as { id: string }).id,
+     }
+  if (amount > owedRow.total) {
+    response.message = `Only ${owedRow.total} was outstanding. Recording ${effectiveAmount}.`
+  }
+  res.status(201).json(response)
 })
 
 // GET /api/settlements — settlement history, filtered by groupId
@@ -195,7 +206,7 @@ settlementsRouter.delete('/settlements/:id', (req, res) => {
   if (settlement.to_transaction_id) {
     db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(
       settlement.to_transaction_id,
-      (settlement as unknown as { to_user: string }).to_user
+      settlement.to_user
     )
   }
 

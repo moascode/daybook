@@ -153,9 +153,10 @@ test.describe('26 — Settlement', () => {
 
     await expect(bobPage.getByText('No outstanding balances').or(bobPage.getByText('All settled up'))).toBeVisible({ timeout: 5000 })
 
-    // Bob clicks Undo — now requires confirmation modal
-    await bobPage.getByRole('button', { name: 'Undo' }).click()
-    await expect(bobPage.getByRole('dialog')).toBeVisible({ timeout: 3000 })
+    // Bob clicks Undo on the settlement row — now requires confirmation modal
+    await bobPage.getByText('Recent settlements').click()
+    await bobPage.getByRole('button', { name: 'Undo' }).nth(1).click()
+    await expect(bobPage.getByRole('dialog', { name: /Undo Settlement/ })).toBeVisible({ timeout: 3000 })
     await bobPage.getByRole('button', { name: 'Confirm Undo' }).click()
 
     // Balance should be restored
