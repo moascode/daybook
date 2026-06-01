@@ -99,8 +99,7 @@ test.describe('23 — Household groups, invites, memberships', () => {
     const alicePage = await aliceCtx.newPage()
     const aliceName = `alice_inv_err_${Date.now()}`
     await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TestGroup' } })
-    const group = await groupRes.json()
+    await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TestGroup' } })
 
     await alicePage.goto('/household')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })

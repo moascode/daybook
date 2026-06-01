@@ -44,7 +44,7 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
     return () => { cancelled = true }
   }, [group.id])
 
-  useEffect(() => { // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => {
     const cancel = load()
     return () => { cancel.then((fn) => fn?.()) }
   }, [load])
