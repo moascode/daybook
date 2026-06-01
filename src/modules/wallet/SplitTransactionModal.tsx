@@ -62,6 +62,7 @@ export function SplitTransactionModal({
   // useLayoutEffect fires before paint, preventing a flash of zeroed-out amounts.
   useLayoutEffect(() => {
     if (!open || !transaction) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: reset modal state on open/transaction change
     setParts(buildParts(transaction))
     setErrors({})
     setSubmitError(null)
