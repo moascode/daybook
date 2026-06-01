@@ -799,21 +799,31 @@ cmd_release() {
   repo_root="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)" \
     || die "infra/daybook release must be run from the git repo, not from DAYBOOK_HOME."
 
-  # Guard: working tree must be clean.
+  # Guard: working tree must be clean (can't checkout/pull with dirty state).
   if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet; then
     die "Working tree has uncommitted changes. Commit or stash them first."
   fi
 
-  # Guard: must be on main.
+  # Switch to main if not already there.
   local branch
   branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
-  [ "$branch" = "main" ] || die "Releases must be cut from main (currently on '$branch')."
+  if [ "$branch" != "main" ]; then
+    info "Switching from '$branch' → main…"
+    git -C "$repo_root" checkout main
+  fi
 
-  # Guard: main must be up-to-date with origin.
-  git -C "$repo_root" fetch --quiet origin main 2>/dev/null || warn "Could not fetch origin — proceeding anyway."
-  local behind
-  behind="$(git -C "$repo_root" rev-list --count HEAD..origin/main 2>/dev/null || echo 0)"
-  [ "$behind" = "0" ] || die "Local main is $behind commit(s) behind origin/main. Pull first."
+  # Pull latest from origin so the tag lands on the true tip of main.
+  info "Pulling latest main from origin…"
+  local pull_out
+  pull_out="$(git -C "$repo_root" pull --ff-only origin main 2>&1)" \
+    || die "Fast-forward pull failed — resolve divergence manually:\n$pull_out"
+  if echo "$pull_out" | grep -q "Already up to date"; then
+    info "main is already up to date."
+  else
+    # Log every commit that just landed so the user knows what's being tagged.
+    info "New commits pulled:"
+    git -C "$repo_root" log --oneline ORIG_HEAD..HEAD 2>/dev/null | sed 's/^/    /' || true
+  fi
 
   # Guard: tag must not already exist locally or on origin.
   if git -C "$repo_root" rev-parse "$tag" >/dev/null 2>&1; then
