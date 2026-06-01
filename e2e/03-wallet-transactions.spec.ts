@@ -427,6 +427,95 @@ test('Cancel exits select mode without deleting', async () => {
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 
+// ── Tag filter combined with date range (regression) ─────────────────────
+
+test('tag filter works when Last Month date range is active', async () => {
+  // Compute last-month date string dynamically so the test never needs updating.
+  const now = new Date()
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15)
+  const lastMonthDate = lastMonth.toISOString().slice(0, 10)
+
+  // Add two transactions dated last month: one tagged, one untagged.
+  await page.getByTestId('filter-clear-dates').click()
+
+  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(page, {
+    type: 'Expense',
+    date: lastMonthDate,
+    amount: '50',
+    account: 'Test Bank',
+    merchant: 'Brewers Coffee',
+    tags: ['lastmonthtag'],
+  })
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+
+  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await fillTransactionForm(page, {
+    type: 'Expense',
+    date: lastMonthDate,
+    amount: '75',
+    account: 'Test Bank',
+    merchant: 'Monthly Grocery',
+  })
+  await expect(page.getByRole('dialog')).not.toBeVisible()
+
+  // Both transactions should be visible with no date filter.
+  await expect(transactionRowFor(page, 'Brewers Coffee')).toBeVisible()
+  await expect(transactionRowFor(page, 'Monthly Grocery')).toBeVisible()
+
+  // Apply Last Month date filter.
+  await page.getByTestId('filter-last-month').click()
+  await expect(transactionRowFor(page, 'Brewers Coffee')).toBeVisible()
+  await expect(transactionRowFor(page, 'Monthly Grocery')).toBeVisible()
+
+  // Now apply the tag filter — only the tagged transaction should remain.
+  const filterTagInput = page.locator('#filter-tags')
+  await filterTagInput.click()
+  await filterTagInput.fill('lastmonthtag')
+  await filterTagInput.press('ArrowDown')
+  await filterTagInput.press('Enter')
+  await page.waitForTimeout(500)
+
+  await expect(transactionRowFor(page, 'Brewers Coffee')).toBeVisible()
+  await expect(transactionRowFor(page, 'Monthly Grocery')).not.toBeVisible()
+
+  // Clean up: remove tag filter and clear date range so later tests see all rows.
+  await page.getByLabel('Remove lastmonthtag').click()
+  await page.getByTestId('filter-clear-dates').click()
+})
+
+test('tag filter works when a legacy tag="" row exists in the same date range', async () => {
+  // Inject a row with tag='' directly into the DB — simulates data created before
+  // multi-tag support where SQLite stored the default empty string.
+  // Before the fix, json_each('') throws and breaks the entire filter query.
+  await page.request.post('http://localhost:5173/api/test/inject-legacy-tag-row')
+
+  // Reload so the page fetches the freshly injected row. The store resets to
+  // "This Month" on reload, so immediately switch to All Time to see all rows.
+  await page.reload()
+  await page.waitForSelector('main')
+  await page.getByTestId('filter-clear-dates').click()
+
+  // The injected row ("Legacy Row") should be visible in All Time view.
+  await expect(transactionRowFor(page, 'Legacy Row')).toBeVisible()
+
+  // Applying any tag filter must NOT crash (if it did, the list would stay unchanged).
+  const filterTagInput = page.locator('#filter-tags')
+  await filterTagInput.click()
+  await filterTagInput.fill('lastmonthtag')
+  await filterTagInput.press('ArrowDown')
+  await filterTagInput.press('Enter')
+  await page.waitForTimeout(500)
+
+  // "Legacy Row" has no tag — it must be filtered out.
+  // "Brewers Coffee" has the 'lastmonthtag' tag — it must be visible.
+  await expect(transactionRowFor(page, 'Legacy Row')).not.toBeVisible()
+  await expect(transactionRowFor(page, 'Brewers Coffee')).toBeVisible()
+
+  // Clean up.
+  await page.getByLabel('Remove lastmonthtag').click()
+})
+
 // ── Split transaction ────────────────────────────────────────────────────
 
 test('hover on transaction row reveals the Split (scissors) button', async () => {
