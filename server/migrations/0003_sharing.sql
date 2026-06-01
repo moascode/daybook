@@ -72,3 +72,10 @@ CREATE INDEX IF NOT EXISTS idx_txn_shares_user_settled  ON transaction_shares(us
 CREATE INDEX IF NOT EXISTS idx_txn_shares_txn           ON transaction_shares(transaction_id);
 CREATE INDEX IF NOT EXISTS idx_group_invites_invitee    ON group_invites(invitee_id, status);
 CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id);
+
+-- Junction table linking settlements to the shares they cleared
+CREATE TABLE IF NOT EXISTS settlement_share_lines (
+  settlement_id TEXT NOT NULL REFERENCES settlements(id) ON DELETE CASCADE,
+  share_id      TEXT NOT NULL REFERENCES transaction_shares(id) ON DELETE CASCADE,
+  PRIMARY KEY (settlement_id, share_id)
+);
