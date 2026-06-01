@@ -310,9 +310,14 @@ walletRouter.get('/transactions', (req, res) => {
   const rawTags = q.tags
     ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
     : []
-  for (let i = 0; i < rawTags.length; i++) {
-    conditions.push(`EXISTS (SELECT 1 FROM json_each(transactions.tag) WHERE value = @tag${i})`)
-    params[`tag${i}`] = rawTags[i]
+  // Multiple tags use OR logic: a transaction matching ANY selected tag is returned.
+  // Guard with CASE so json_each never receives invalid/empty JSON (rows with tag=''
+  // or non-array values would otherwise throw a SQLite runtime error).
+  if (rawTags.length > 0) {
+    const safeTag = `CASE WHEN json_valid(transactions.tag) AND json_type(transactions.tag)='array' THEN transactions.tag ELSE '[]' END`
+    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value = @tag${i})`)
+    conditions.push(`(${tagClauses.join(' OR ')})`)
+    for (let i = 0; i < rawTags.length; i++) params[`tag${i}`] = rawTags[i]
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -322,8 +327,42 @@ walletRouter.get('/transactions', (req, res) => {
   res.json(rows)
 })
 
-// Joined rows for export (category + account names).
+// Joined rows for export. Accepts the same filter params as GET /transactions
+// so the export respects the user's active filters.
 walletRouter.get('/transactions/export', (req, res) => {
+  const q = req.query
+  const conditions: string[] = ['t.user_id = @userId']
+  const params: Record<string, unknown> = { userId: req.session.userId! }
+
+  if (str(q.dateFrom)) { conditions.push('t.date >= @dateFrom'); params.dateFrom = q.dateFrom }
+  if (str(q.dateTo)) { conditions.push('t.date <= @dateTo'); params.dateTo = q.dateTo }
+  if (str(q.type) && q.type !== 'all') { conditions.push('t.type = @type'); params.type = q.type }
+  if (str(q.categoryId)) { conditions.push('t.category_id = @categoryId'); params.categoryId = q.categoryId }
+  if (str(q.accountId)) {
+    conditions.push('(t.account_id = @accountId OR t.destination_account_id = @accountId)')
+    params.accountId = q.accountId
+  }
+  const rawTags = q.tags
+    ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
+    : []
+  if (rawTags.length > 0) {
+    const safeTag = `CASE WHEN json_valid(t.tag) AND json_type(t.tag)='array' THEN t.tag ELSE '[]' END`
+    const tagClauses = rawTags.map((_, i) => `EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value = @tag${i})`)
+    conditions.push(`(${tagClauses.join(' OR ')})`)
+    for (let i = 0; i < rawTags.length; i++) params[`tag${i}`] = rawTags[i]
+  }
+
+  // If caller passes specific IDs, restrict to those (comma-separated).
+  const ids = str(q.ids as string)
+  if (ids) {
+    const idList = ids.split(',').filter(Boolean)
+    if (idList.length > 0) {
+      const placeholders = idList.map((_, i) => `@id${i}`).join(', ')
+      conditions.push(`t.id IN (${placeholders})`)
+      idList.forEach((id, i) => { params[`id${i}`] = id })
+    }
+  }
+
   const rows = getDb()
     .prepare(
       `SELECT t.date, t.merchant, t.description, t.amount, t.type,
@@ -331,10 +370,10 @@ walletRouter.get('/transactions/export', (req, res) => {
        FROM transactions t
        LEFT JOIN categories c ON c.id = t.category_id
        LEFT JOIN accounts a ON a.id = t.account_id
-       WHERE t.user_id = ?
+       WHERE ${conditions.join(' AND ')}
        ORDER BY t.date DESC, t.created_at DESC`,
     )
-    .all(req.session.userId!)
+    .all(params)
   res.json(rows)
 })
 

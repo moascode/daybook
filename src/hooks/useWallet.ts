@@ -484,27 +484,40 @@ export function useWallet() {
 
   // ── Export ───────────────────────────────────────
 
-  const exportTransactions = useCallback(async (format: 'csv' | 'json'): Promise<void> => {
-    interface ExportRow {
-      date: string; merchant: string; description: string; amount: number
-      type: string; category_name: string | null; account_name: string; tag: string
-    }
-
-    const rows = await api.get<ExportRow[]>('/transactions/export')
+  /**
+   * Export a specific set of transactions (by ID) as CSV or JSON.
+   * Reads from the store so it always operates on the currently filtered view.
+   */
+  const exportTransactions = useCallback((format: 'csv' | 'json', ids: string[]): void => {
+    const { transactions, accounts, categories } = useWalletStore.getState()
+    const idSet = new Set(ids)
+    // Only export IDs that exist in the current filtered view (prevents stale IDs from
+    // exporting rows the user can no longer see).
+    const toExport = transactions.filter((t) => idSet.has(t.id))
 
     const filename = `daybook-transactions-${todayISO()}.${format}`
 
     if (format === 'csv') {
-      const header = 'date,merchant,description,amount,type,category,account,tag'
-      const csvRows = rows.map((r) =>
-        [r.date, `"${(r.merchant ?? '').replace(/"/g, '""')}"`, `"${(r.description ?? '').replace(/"/g, '""')}"`,
-         r.amount, r.type, `"${(r.category_name ?? '').replace(/"/g, '""')}"`,
-         `"${(r.account_name ?? '').replace(/"/g, '""')}"`, `"${parseTags(r.tag).join(', ').replace(/"/g, '""')}"`].join(','),
-      )
+      const header = 'date,merchant,description,amount,type,category,account,tags'
+      const q = (s: string) => `"${s.replace(/"/g, '""')}"`
+      const csvRows = toExport.map((t) => {
+        const catName = t.categoryId ? (categories.find((c) => c.id === t.categoryId)?.name ?? '') : ''
+        const acctName = accounts.find((a) => a.id === t.accountId)?.name ?? ''
+        return [t.date, q(t.merchant), q(t.description), t.amount, t.type, q(catName), q(acctName), q(t.tags.join(', '))].join(',')
+      })
       triggerDownload([header, ...csvRows].join('\n'), filename, 'text/csv')
     } else {
-      const json = JSON.stringify(rows, null, 2)
-      triggerDownload(json, filename, 'application/json')
+      const rows = toExport.map((t) => ({
+        date: t.date,
+        merchant: t.merchant,
+        description: t.description,
+        amount: t.amount,
+        type: t.type,
+        category: t.categoryId ? (categories.find((c) => c.id === t.categoryId)?.name ?? null) : null,
+        account: accounts.find((a) => a.id === t.accountId)?.name ?? '',
+        tags: t.tags,
+      }))
+      triggerDownload(JSON.stringify(rows, null, 2), filename, 'application/json')
     }
   }, [])
 

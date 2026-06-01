@@ -123,6 +123,6 @@ export async function fillTransactionForm(
       await tagInput.press('Enter')
     }
   }
-  await dialog.getByRole('button', { name: /Add Transaction|Save Changes|Create Split/ }).click()
+  await dialog.getByRole('button', { name: /Add Transaction|Save Changes/ }).click()
   await expect(dialog).toBeHidden()
 }

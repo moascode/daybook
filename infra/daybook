@@ -17,6 +17,11 @@
 #
 # Usage:  infra/daybook <command>
 #
+#   release <version>  Tag HEAD as vX.Y.Z and push — triggers the GitHub
+#                      Actions release pipeline (build → e2e → artifact →
+#                      GitHub Release). Version can be given with or without
+#                      the leading "v" (1.3.0 and v1.3.0 both work).
+#                      Working tree must be clean and on main.
 #   install [path]     First-time setup: create DAYBOOK_HOME structure,
 #                      deploy (latest GitHub release or local .tar.gz path),
 #                      install the launchd service.
@@ -317,11 +322,11 @@ cmd_deploy() {
 
   local tag="$arg"
   if [ -n "$tag" ]; then
-    info "Fetching release $tag from $REPO"
+    info "Fetching release $tag from ${REPO}…"
     gh_api "/releases/tags/$tag" > "$tmp/release.json" 2>/dev/null \
       || die "Release '$tag' not found on $REPO."
   else
-    info "Fetching latest release from $REPO"
+    info "Fetching latest release from ${REPO}…"
     gh_api "/releases/latest" > "$tmp/release.json" 2>/dev/null \
       || die "No releases found on $REPO."
   fi
@@ -346,7 +351,7 @@ cmd_deploy() {
     sha_id="$(release_field "$tmp/release.json" '((r.assets||[]).find(a=>a.name.endsWith(".tar.gz.sha256"))||{}).id')"
     [ -n "$tarball_id" ] || die "Release $rel_tag has no .tar.gz artifact attached."
 
-    info "Downloading $tarball_name"
+    info "Downloading ${tarball_name}…"
     download_asset "$tarball_id" "$tmp/$tarball_name"
 
     if [ -n "$sha_id" ]; then
@@ -376,7 +381,7 @@ cmd_deploy() {
     chmod +x "$release_dir/infra/daybook" 2>/dev/null || true
 
     # Install runtime deps inside the release dir (compiles native modules).
-    info "Installing dependencies for $rel_tag"
+    info "Installing dependencies for ${rel_tag}…"
     ( cd "$release_dir" && npm ci )
     ok "Release $rel_tag staged at ${release_dir/#$HOME/\~}"
   fi
@@ -389,7 +394,7 @@ cmd_deploy() {
   # current points nowhere).
   ln -sfn "$release_dir" "$CURRENT_LINK.next"
   mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
-  ok "current  $rel_tag"
+  ok "current → $rel_tag"
 
   restart_service
   ok "Deployed $rel_tag."
@@ -777,12 +782,91 @@ cmd_teardown_lan() {
   warn "To restore: sudo scutil --set LocalHostName <your-mac-name>"
 }
 
+cmd_release() {
+  local version="${1:-}"
+  [ -n "$version" ] || die "Usage: infra/daybook release <version>  (e.g. 1.3.0)"
+
+  # Normalise: strip leading v, then re-add it for the tag.
+  version="${version#v}"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die "Version must be semver X.Y.Z — got: $version"
+  local tag="v$version"
+
+  # Must be run from inside the dev repo (not from DAYBOOK_HOME).
+  local repo_root
+  repo_root="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)" \
+    || die "infra/daybook release must be run from the git repo, not from DAYBOOK_HOME."
+
+  # Guard: working tree must be clean (can't checkout/pull with dirty state).
+  if ! git -C "$repo_root" diff --quiet || ! git -C "$repo_root" diff --cached --quiet; then
+    die "Working tree has uncommitted changes. Commit or stash them first."
+  fi
+
+  # Switch to main if not already there.
+  local branch
+  branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
+  if [ "$branch" != "main" ]; then
+    info "Switching from '$branch' → main…"
+    git -C "$repo_root" checkout main
+  fi
+
+  # Pull latest from origin so the tag lands on the true tip of main.
+  info "Pulling latest main from origin…"
+  local pull_out
+  pull_out="$(git -C "$repo_root" pull --ff-only origin main 2>&1)" \
+    || die "Fast-forward pull failed — resolve divergence manually:\n$pull_out"
+  if echo "$pull_out" | grep -q "Already up to date"; then
+    info "main is already up to date."
+  else
+    # Log every commit that just landed so the user knows what's being tagged.
+    info "New commits pulled:"
+    git -C "$repo_root" log --oneline ORIG_HEAD..HEAD 2>/dev/null | sed 's/^/    /' || true
+  fi
+
+  # Guard: tag must not already exist locally or on origin.
+  if git -C "$repo_root" rev-parse "$tag" >/dev/null 2>&1; then
+    die "Tag $tag already exists locally. Delete it first: git tag -d $tag"
+  fi
+  if git -C "$repo_root" ls-remote --tags origin "$tag" | grep -q "$tag"; then
+    die "Tag $tag already exists on origin."
+  fi
+
+  local commit
+  commit="$(git -C "$repo_root" rev-parse --short HEAD)"
+  printf '\n%s\n' "${c_bold}┌─ Cutting release $tag ────────────────────────────────┐${c_reset}"
+  printf   '%s\n' "  branch : main"
+  printf   '%s\n' "  commit : $commit"
+  printf   '%s\n' "  tag    : $tag"
+  printf   '%s\n' "${c_bold}└───────────────────────────────────────────────────────┘${c_reset}"
+  printf '\n'
+
+  # Confirm unless --yes was passed.
+  if [ "${DAYBOOK_YES:-0}" != "1" ]; then
+    read -r -p "  Push $tag to origin and trigger the release pipeline? [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]] || { info "Aborted."; exit 0; }
+  fi
+
+  info "Creating tag $tag..."
+  git -C "$repo_root" tag -a "$tag" -m "Release $tag"
+
+  info "Pushing tag to origin..."
+  git -C "$repo_root" push origin "$tag"
+
+  ok "Tag $tag pushed."
+  printf '\n'
+  info "GitHub Actions release pipeline is now running."
+  info "Monitor it at: https://github.com/$REPO/actions"
+  info "Once the release is published, deploy with:"
+  printf '    %s\n' "infra/daybook deploy $tag"
+}
+
 cmd_help() {
-  sed -n '3,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '3,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 #  Dispatch 
 case "${1:-help}" in
+  release)           shift; cmd_release "${1:-}" ;;
   install)           shift; cmd_install "${1:-}" ;;
   deploy)            shift; cmd_deploy "${1:-}" ;;
   rollback)          cmd_rollback ;;

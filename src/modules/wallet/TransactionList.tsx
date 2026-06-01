@@ -189,6 +189,7 @@ function TransactionRow({
             onClick={() => onSplit(transaction)}
             aria-label="Split transaction"
             title="Split between household members"
+            data-testid="split-transaction-btn"
           >
             <Scissors className="h-3.5 w-3.5" />
           </Button>
