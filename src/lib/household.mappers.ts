@@ -1,4 +1,4 @@
-import type { Group, GroupDetail, GroupInvite, GroupMember, Settlement } from '@/types/household.types'
+import type { Group, GroupDetail, GroupInvite, GroupMember, Settlement, AccountShare } from '@/types/household.types'
 
 type Raw = Record<string, unknown>
 
@@ -43,9 +43,9 @@ export function mapSettlement(r: Raw): Settlement {
   return {
     id: String(r.id),
     groupId: String(r.group_id ?? ''),
-    fromUser: String(r.from_user),
+    fromUserId: String(r.from_user),
     fromUsername: String(r.from_username),
-    toUser: String(r.to_user),
+    toUserId: String(r.to_user),
     toUsername: String(r.to_username),
     amount: Number(r.amount),
     currency: String(r.currency ?? 'MYR'),
@@ -53,5 +53,15 @@ export function mapSettlement(r: Raw): Settlement {
     fromTransactionId: r.from_transaction_id ? String(r.from_transaction_id) : null,
     toTransactionId: r.to_transaction_id ? String(r.to_transaction_id) : null,
     settledAt: String(r.settled_at),
+  }
+}
+
+export function mapAccountShare(r: Raw): AccountShare {
+  return {
+    accountId: String(r.account_id),
+    groupId: String(r.group_id),
+    groupName: String(r.group_name ?? ''),
+    canWrite: r.can_write === 1,
+    sharedAt: String(r.shared_at ?? ''),
   }
 }

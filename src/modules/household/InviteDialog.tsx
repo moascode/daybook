@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Search, UserPlus, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +19,11 @@ export function InviteDialog({ open, onOpenChange, groupId, groupName, onInvited
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState<string | null>(null)
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  // C-2: debounce ref to avoid timer leak
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // C-2: clean up timer on unmount
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
 
   const search = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); return }
@@ -34,8 +39,8 @@ export function InviteDialog({ open, onOpenChange, groupId, groupName, onInvited
   const handleInput = (val: string) => {
     setQuery(val)
     setMessage(null)
-    const t = setTimeout(() => search(val), 300)
-    return () => clearTimeout(t)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => search(val), 300)
   }
 
   const handleInvite = async (username: string) => {

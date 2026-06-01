@@ -19,33 +19,49 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
   const [balances, setBalances] = useState<GroupBalance[]>([])
   const [history, setHistory] = useState<Settlement[]>([])
   const [settleTarget, setSettleTarget] = useState<GroupBalance | null>(null)
-  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
+  const [accounts, setAccounts] = useState<{ id: string; name: string; isShared?: boolean; sharedByUsername?: string }[]>([])
   const [settleForm, setSettleForm] = useState({ fromAccountId: '', toAccountId: '', amount: '', note: '' })
   const [settling, setSettling] = useState(false)
+  const [settleError, setSettleError] = useState<string | null>(null)
+  const [undoTarget, setUndoTarget] = useState<string | null>(null)
+  const [undoError, setUndoError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const [bal, hist, accts] = await Promise.all([
-      api.get<GroupBalance[]>(`/groups/${group.id}/balances`),
-      api.get<Record<string, unknown>[]>(`/settlements?groupId=${group.id}`),
-      api.get<{ id: string; name: string }[]>('/accounts'),
-    ])
-    setBalances(bal)
-    setHistory(hist.map(mapSettlement))
-    setAccounts(accts)
+    let cancelled = false
+    const doLoad = async () => {
+      const [bal, hist, accts] = await Promise.all([
+        api.get<GroupBalance[]>(`/groups/${group.id}/balances`),
+        api.get<Record<string, unknown>[]>(`/settlements?groupId=${group.id}`),
+        api.get<{ id: string; name: string; isShared?: boolean; sharedByUsername?: string }[]>('/accounts'),
+      ])
+      if (!cancelled) {
+        setBalances(bal)
+        setHistory(hist.map(mapSettlement))
+        setAccounts(accts)
+      }
+    }
+    doLoad()
+    return () => { cancelled = true }
   }, [group.id])
 
-  useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
+  useEffect(() => { // eslint-disable-line react-hooks/set-state-in-effect
+    const cancel = load()
+    return () => { cancel.then((fn) => fn?.()) }
+  }, [load])
 
-  const myAccounts = accounts
+  // B-13: only own accounts (not shared-in)
+  const myAccounts = accounts.filter((a) => !a.isShared)
 
   const openSettle = (b: GroupBalance) => {
     setSettleTarget(b)
+    setSettleError(null)
     setSettleForm({ fromAccountId: '', toAccountId: '', amount: String(Math.round(b.amount * 100) / 100), note: '' })
   }
 
   const handleSettle = async () => {
     if (!settleTarget) return
     setSettling(true)
+    setSettleError(null)
     try {
       await api.post('/settlements', {
         groupId: group.id,
@@ -53,29 +69,44 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
         amount: Number(settleForm.amount),
         note: settleForm.note,
         fromAccountId: settleForm.fromAccountId,
-        toAccountId: settleForm.toAccountId,
+        toAccountId: settleForm.toAccountId || undefined,
       })
       setSettleTarget(null)
       await load()
+    } catch (err: unknown) {
+      setSettleError((err as Error)?.message ?? 'Failed to record settlement')
     } finally {
       setSettling(false)
     }
   }
 
   const handleUndoSettlement = async (id: string) => {
-    await api.delete(`/settlements/${id}`)
-    await load()
+    setUndoError(null)
+    try {
+      await api.delete(`/settlements/${id}`)
+      await load()
+    } catch (err: unknown) {
+      setUndoError((err as Error)?.message ?? 'Failed to undo settlement')
+    } finally {
+      setUndoTarget(null)
+    }
   }
 
   const myDebts = balances.filter((b) => b.fromUserId === currentUserId)
   const owedToMe = balances.filter((b) => b.toUserId === currentUserId)
 
+  // U-11: differentiate empty states
+  const emptyMessage = history.length > 0
+    ? 'All settled up! 🎉'
+    : 'No splits yet — split your first expense from the Wallet tab'
+
   return (
     <div className="space-y-6">
       {balances.length === 0 ? (
-        <p className="text-sm text-gray-500 py-4 text-center">No outstanding balances in this group.</p>
+        <p className="text-sm text-gray-500 py-4 text-center">{emptyMessage}</p>
       ) : (
         <div className="space-y-4">
+          {/* U-1: "Owed to you" section with Mark Received button */}
           {owedToMe.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Owed to you</h4>
@@ -86,6 +117,10 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
                     <span className="text-sm text-gray-500 ml-2">owes you</span>
                     <span className="ml-2 font-semibold text-green-700">{formatMYR(b.amount)}</span>
                   </div>
+                  <Button size="sm" variant="secondary" onClick={() => openSettle(b)}>
+                    <Check className="h-3.5 w-3.5 mr-1" />
+                    Mark Received
+                  </Button>
                 </div>
               ))}
             </div>
@@ -125,8 +160,9 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
                   <span className="ml-2 text-gray-700">{formatMYR(s.amount)}</span>
                   {s.note && <span className="ml-2 text-gray-400">({s.note})</span>}
                 </div>
-                {s.fromUser === currentUserId && (
-                  <Button size="sm" variant="ghost" onClick={() => handleUndoSettlement(s.id)}>
+                {/* C-3: use fromUserId (not fromUser) */}
+                {s.fromUserId === currentUserId && (
+                  <Button size="sm" variant="ghost" onClick={() => setUndoTarget(s.id)}>
                     Undo
                   </Button>
                 )}
@@ -136,12 +172,29 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
         </div>
       )}
 
+      {/* U-10: Undo settlement confirmation modal */}
+      <Modal open={!!undoTarget} onOpenChange={() => setUndoTarget(null)} title="Undo Settlement?">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">Undo this settlement? Balances will be restored.</p>
+          {undoError && <p className="text-sm text-red-600">{undoError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setUndoTarget(null)}>Cancel</Button>
+            <Button onClick={() => undoTarget && handleUndoSettlement(undoTarget)}>
+              Confirm Undo
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Settle up dialog */}
       {settleTarget && (
         <Modal open={!!settleTarget} onOpenChange={() => setSettleTarget(null)} title="Settle Up">
           <div className="space-y-4">
             <p className="text-sm text-gray-700">
-              Recording payment to <strong>{settleTarget.toUsername}</strong>
+              {settleTarget.toUserId === currentUserId
+                ? <>Recording receipt from <strong>{settleTarget.fromUsername}</strong></>
+                : <>Recording payment to <strong>{settleTarget.toUsername}</strong></>
+              }
             </p>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
@@ -163,14 +216,30 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
                 {myAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
+            {/* U-4: their account — show shared accounts from counterparty if any */}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">To account (their side — optional)</label>
-              <Input
-                placeholder="Their account ID (optional)"
-                value={settleForm.toAccountId}
-                onChange={(e) => setSettleForm((f) => ({ ...f, toAccountId: e.target.value }))}
-              />
-              <p className="text-xs text-gray-400 mt-0.5">Leave blank if you don't know their account.</p>
+              {(() => {
+                const targetUsername = settleTarget.toUserId === currentUserId
+                  ? settleTarget.fromUsername
+                  : settleTarget.toUsername
+                const theirAccounts = accounts.filter(
+                  (a) => a.isShared && a.sharedByUsername === targetUsername
+                )
+                if (theirAccounts.length === 0) {
+                  return <p className="text-xs text-gray-400">No shared accounts available from {targetUsername}.</p>
+                }
+                return (
+                  <select
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    value={settleForm.toAccountId}
+                    onChange={(e) => setSettleForm((f) => ({ ...f, toAccountId: e.target.value }))}
+                  >
+                    <option value="">— leave blank (records payer side only) —</option>
+                    {theirAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                )
+              })()}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Note (optional)</label>
@@ -180,6 +249,7 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
                 onChange={(e) => setSettleForm((f) => ({ ...f, note: e.target.value }))}
               />
             </div>
+            {settleError && <p className="text-sm text-red-600">{settleError}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="secondary" onClick={() => setSettleTarget(null)}>Cancel</Button>
               <Button
@@ -290,6 +360,8 @@ function GroupCard({
   const [expanded, setExpanded] = useState(false)
   const [activeTab, setActiveTab] = useState<'members' | 'balances'>('members')
   const [loading, setLoading] = useState(false)
+  // U-8: show balance summary on card surface
+  const [balanceSummary, setBalanceSummary] = useState<string | null>(null)
 
   const loadDetail = useCallback(async () => {
     setLoading(true)
@@ -300,6 +372,32 @@ function GroupCard({
       setLoading(false)
     }
   }, [group.id])
+
+  // U-8: load balance summary when card mounts
+  useEffect(() => {
+    let cancelled = false
+    api.get<{ fromUserId: string; toUserId: string; amount: number }[]>(`/groups/${group.id}/balances`)
+      .then((bal) => {
+        if (cancelled) return
+        if (bal.length === 0) {
+          setBalanceSummary(null)
+        } else {
+          const myDebt = bal.filter((b) => b.fromUserId === currentUserId)
+          const myCredit = bal.filter((b) => b.toUserId === currentUserId)
+          if (myDebt.length > 0) {
+            const total = myDebt.reduce((s, b) => s + b.amount, 0)
+            setBalanceSummary(`You owe ${formatMYR(total)}`)
+          } else if (myCredit.length > 0) {
+            const total = myCredit.reduce((s, b) => s + b.amount, 0)
+            setBalanceSummary(`Owed ${formatMYR(total)}`)
+          } else {
+            setBalanceSummary(null)
+          }
+        }
+      })
+      .catch(() => {/* ignore */})
+    return () => { cancelled = true }
+  }, [group.id, currentUserId])
 
   const toggle = () => {
     if (!expanded) loadDetail()
@@ -327,6 +425,16 @@ function GroupCard({
             <p className="text-xs text-gray-500 flex items-center gap-1">
               {group.role === 'owner' && <Crown className="h-3 w-3 text-yellow-500" />}
               {group.role}
+              {/* U-8: balance pill */}
+              {balanceSummary && (
+                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                  balanceSummary.startsWith('You owe')
+                    ? 'bg-orange-50 text-orange-600'
+                    : 'bg-green-50 text-green-600'
+                }`}>
+                  {balanceSummary}
+                </span>
+              )}
             </p>
           </div>
         </button>
@@ -383,11 +491,13 @@ function GroupCard({
 
 function PendingInvites({ invites, onRefresh }: { invites: GroupInvite[]; onRefresh: () => void }) {
   const [acting, setActing] = useState<string | null>(null)
+  const { removePendingInvite } = useHouseholdStore()
 
   const handle = async (id: string, action: 'accept' | 'decline') => {
     setActing(id)
     try {
       await api.post(`/invites/${id}/${action}`)
+      removePendingInvite(id) // C-7: optimistic update
       onRefresh()
     } finally {
       setActing(null)
@@ -410,7 +520,14 @@ function PendingInvites({ invites, onRefresh }: { invites: GroupInvite[]; onRefr
               <Check className="h-3.5 w-3.5 mr-1" />
               Accept
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => handle(inv.id, 'decline')} disabled={acting === inv.id}>
+            {/* U-5: aria-label on Decline button */}
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label="Decline invitation"
+              onClick={() => handle(inv.id, 'decline')}
+              disabled={acting === inv.id}
+            >
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -517,7 +634,6 @@ export function HouseholdPage({ currentUserId }: HouseholdPageProps) {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleCreate() }}
-              autoFocus
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -529,15 +645,15 @@ export function HouseholdPage({ currentUserId }: HouseholdPageProps) {
         </div>
       </Modal>
 
-      {/* Delete confirmation modal */}
-      <Modal open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)} title="Delete Group">
+      {/* Delete group confirmation */}
+      <Modal open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)} title="Delete Group?">
         <div className="space-y-4">
-          <p className="text-sm text-gray-700">
-            Deleting the group will revoke all shared account access for its members. This cannot be undone.
-          </p>
+          <p className="text-sm text-gray-700">Are you sure you want to delete this group? This action cannot be undone.</p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={handleDelete}>Delete Group</Button>
+            <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white border-red-600">
+              Delete Group
+            </Button>
           </div>
         </div>
       </Modal>

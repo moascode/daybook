@@ -23,6 +23,7 @@ interface AccountCardProps {
   account: Account
   onEdit: (account: Account) => void
   onDelete: (account: Account) => void
+  onShare?: (account: Account) => void
   sharesCount?: number
 }
 
@@ -46,7 +47,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?:
   coins: Coins,
 }
 
-export function AccountCard({ account, onEdit, onDelete, sharesCount }: AccountCardProps) {
+export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }: AccountCardProps) {
   const navigate = useNavigate()
   const { getAccountBalance } = useWallet()
   const [balance, setBalance] = useState<number | null>(null)
@@ -122,6 +123,18 @@ export function AccountCard({ account, onEdit, onDelete, sharesCount }: AccountC
             className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* U-2: share button — only shown for own (non-shared-in) accounts */}
+            {!account.isShared && onShare && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onShare(account)}
+                aria-label="Manage sharing"
+                title="Manage sharing"
+              >
+                <Share2 className="h-3.5 w-3.5 text-purple-500" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

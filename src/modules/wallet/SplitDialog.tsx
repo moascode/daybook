@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Scissors, Users } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -31,35 +31,34 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set([currentUserId]))
   const [lines, setLines] = useState<ShareLine[]>([])
   const [existingShares, setExistingShares] = useState<TransactionShare[]>([])
+  const [loadingMembers, setLoadingMembers] = useState(false)
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const amount = transaction?.amount ?? 0
 
   const loadData = useCallback(async () => {
     if (!transaction) return
-    const [groups, shares] = await Promise.all([
-      api.get<{ id: string; name: string }[]>('/groups').then(async (gs) => {
-        // Flatten all unique members across all groups
-        const members = new Map<string, GroupMember>()
-        for (const g of gs) {
-          const detail = await api.get<{ members: Record<string, unknown>[] }>(`/groups/${g.id}`)
-          for (const raw of detail.members) {
-            const m = mapMember(raw)
-            if (!members.has(m.userId)) members.set(m.userId, m)
-          }
-        }
-        return [...members.values()]
-      }),
-      api.get<TransactionShare[]>(`/transactions/${transaction.id}/shares`).catch(() => []),
-    ])
-    setGroupMembers(groups)
-    setExistingShares(shares)
+    setLoadingMembers(true)
+    try {
+      const [groups, shares] = await Promise.all([
+        api.get<Record<string, unknown>[]>('/groups/members').then((rows) =>
+          rows.map(mapMember)
+        ),
+        api.get<TransactionShare[]>(`/transactions/${transaction.id}/shares`).catch(() => []),
+      ])
+      setGroupMembers(groups)
+      setExistingShares(shares)
 
-    if (shares.length > 0) {
-      const ids = new Set(shares.map((s) => s.userId))
-      setSelectedUserIds(ids)
-      setLines(shares.map((s) => ({ userId: s.userId, username: s.username, amount: String(s.shareAmount) })))
+      if (shares.length > 0) {
+        const ids = new Set(shares.map((s) => s.userId))
+        setSelectedUserIds(ids)
+        setLines(shares.map((s) => ({ userId: s.userId, username: s.username, amount: String(s.shareAmount) })))
+      }
+    } finally {
+      setLoadingMembers(false)
     }
   }, [transaction])
 
@@ -86,8 +85,21 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, selectedUserIds, groupMembers, amount])
 
+  // Clean up timer on unmount
+  useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }, [])
+
+  const showTempError = (msg: string) => {
+    setError(msg)
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = setTimeout(() => setError(null), 3000)
+  }
+
   const toggleMember = (userId: string) => {
     if (userId === currentUserId) return // always include self
+    // B-5: warn if custom amounts will be discarded
+    if (mode === 'custom' && lines.length > 0) {
+      showTempError('Custom amounts reset to equal split')
+    }
     setSelectedUserIds((prev) => {
       const next = new Set(prev)
       if (next.has(userId)) next.delete(userId)
@@ -106,6 +118,8 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
 
   const handleSave = async () => {
     if (!transaction) return
+    // U-7: prevent split on zero-amount transaction
+    if (amount <= 0) { setError('Cannot split a zero-amount transaction'); return }
     if (sumDiff > 0.015) { setError(`Amounts must sum to ${formatMYR(amount)} — current sum: ${formatMYR(sumLines)}`); return }
     setSaving(true)
     setError(null)
@@ -124,14 +138,22 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
 
   const handleRemoveSplit = async () => {
     if (!transaction) return
-    await api.delete(`/transactions/${transaction.id}/shares`)
-    onSaved()
-    onOpenChange(false)
+    try {
+      await api.delete(`/transactions/${transaction.id}/shares`)
+      onSaved()
+      onOpenChange(false)
+    } catch (err: unknown) {
+      setError((err as Error)?.message ?? 'Failed to remove split')
+    } finally {
+      setRemoveConfirmOpen(false)
+    }
   }
 
   if (!transaction) return null
 
   const availableMembers = groupMembers.filter((m) => m.userId !== currentUserId)
+  // B-6: mode buttons disabled when viewing existing split
+  const modeDisabled = existingShares.length > 0
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Split Transaction">
@@ -147,10 +169,16 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
           {(['equal', 'custom'] as SplitMode[]).map((m) => (
             <button
               key={m}
+              disabled={modeDisabled}
+              title={modeDisabled ? 'Toggle a member to edit mode first' : undefined}
               className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors ${
-                mode === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                modeDisabled
+                  ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+                  : mode === m
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
-              onClick={() => { setMode(m); setExistingShares([]) }}
+              onClick={() => { if (!modeDisabled) { setMode(m); setExistingShares([]) } }}
             >
               {m === 'equal' ? 'Split equally' : 'Custom amounts'}
             </button>
@@ -158,7 +186,9 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
         </div>
 
         {/* Member selector */}
-        {availableMembers.length === 0 ? (
+        {loadingMembers ? (
+          <p className="text-sm text-gray-400 text-center py-2">Loading members…</p>
+        ) : availableMembers.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-2">
             <Users className="h-4 w-4 inline mr-1" />
             No group members yet. Add people to a household group first.
@@ -214,7 +244,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
 
         <div className="flex justify-between pt-2">
           {existingShares.length > 0 ? (
-            <Button variant="secondary" onClick={handleRemoveSplit} className="text-red-600 border-red-200">
+            <Button variant="secondary" onClick={() => setRemoveConfirmOpen(true)} className="text-red-600 border-red-200">
               Remove split
             </Button>
           ) : (
@@ -232,6 +262,19 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
           </div>
         </div>
       </div>
+
+      {/* B-10: Remove split confirmation */}
+      <Modal open={removeConfirmOpen} onOpenChange={setRemoveConfirmOpen} title="Remove Split?">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">Remove the split? Balances will be updated and this cannot be undone.</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRemoveConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleRemoveSplit} className="bg-red-600 hover:bg-red-700 text-white border-red-600">
+              Remove Split
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Modal>
   )
 }

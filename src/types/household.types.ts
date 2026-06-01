@@ -30,7 +30,7 @@ export interface AccountShare {
   accountId: string
   groupId: string
   groupName: string
-  canWrite: number  // 0 | 1
+  canWrite: boolean
   sharedAt: string
 }
 
@@ -56,9 +56,9 @@ export interface GroupBalance {
 export interface Settlement {
   id: string
   groupId: string
-  fromUser: string
+  fromUserId: string
   fromUsername: string
-  toUser: string
+  toUserId: string
   toUsername: string
   amount: number
   currency: string
