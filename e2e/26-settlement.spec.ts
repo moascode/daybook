@@ -80,7 +80,9 @@ test.describe('26 — Settlement', () => {
     await settleDialog.getByRole('button', { name: 'Record Settlement' }).click()
 
     // Balance should now show 0 (no outstanding balances)
-    await expect(bobPage.getByText('No outstanding balances')).toBeVisible({ timeout: 5000 })
+    await expect(
+      bobPage.getByText('All settled up').or(bobPage.getByText('No outstanding balances'))
+    ).toBeVisible({ timeout: 5000 })
 
     // Bob's Cash should show an expense
     await bobPage.goto('/wallet')

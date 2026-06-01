@@ -75,7 +75,10 @@ groupsRouter.get('/groups/:id', (req, res) => {
        ORDER BY gm.joined_at ASC`,
     )
     .all(req.params.id)
-  res.json({ ...group as object, members })
+  const myRole = (db
+    .prepare('SELECT role FROM group_members WHERE group_id = ? AND user_id = ?')
+    .get(req.params.id, userId) as { role: string } | undefined)?.role ?? 'member'
+  res.json({ ...group as object, members, role: myRole })
 })
 
 groupsRouter.patch('/groups/:id', (req, res) => {
