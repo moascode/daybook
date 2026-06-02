@@ -52,8 +52,6 @@ export function BulkShareDialog({
       const memberRows = await api.get<Record<string, unknown>[]>('/groups/members').then((rows) =>
         rows.map(mapMember)
        )
-      // members loaded
-
       const initial: TransactionShares[] = selectedTransactionIds
         .map((txnId) => {
           const txn = transactions.find((t) => t.id === txnId)
@@ -78,15 +76,6 @@ export function BulkShareDialog({
   useEffect(() => {
     if (open) { loadData() } // eslint-disable-line react-hooks/set-state-in-effect
   }, [open, loadData])
-
-  useEffect(() => {
-    if (open && selectedTransactionIds.length > 0) {
-      setShareMode('equal') // eslint-disable-line react-hooks/set-state-in-effect
-      setTransactionShares((prev) =>
-        prev.map((ts) => ({ ...ts, recipients: ts.recipients.map((r) => ({ ...r, selected: r.selected })) }))
-       )
-    }
-   }, [selectedTransactionIds, open])
 
   useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }, [])
 
@@ -206,15 +195,12 @@ export function BulkShareDialog({
     }
    }
 
-  const selectedCount = transactionShares.reduce((acc, ts) => acc + ts.recipients.filter((r: ShareRecipient) => r.selected).length, 0)
+  const selectedCount = transactionShares.reduce((acc, ts) => acc + ts.recipients.filter((r) => r.selected).length, 0)
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Share Transactions">
       <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-semibold">Share {transactionShares.length} Transaction{transactionShares.length > 1 ? 's' : ''}</h2>
-           <p className="text-sm text-gray-500">Split amounts among group members</p>
-        </div>
+        <p className="text-sm text-gray-500">{transactionShares.length} transaction{transactionShares.length > 1 ? 's' : ''} — split amounts among group members</p>
         <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
            <X className="h-4 w-4" />
         </Button>
@@ -290,11 +276,15 @@ export function BulkShareDialog({
                             placeholder={formatMYR(ts.transaction.amount / Math.max(selected.length, 1))}
                            />
                          )}
-                         {recipient.selected && shareMode === 'equal' && equalInfo.count > 0 && (
-                           <span className="text-sm text-gray-500 w-20 text-right">
-                             {formatMYR(equalInfo.base)}
-                           </span>
-                         )}
+                         {recipient.selected && shareMode === 'equal' && equalInfo.count > 0 && (() => {
+                           const selectedIdx = selected.findIndex((r) => r.userId === recipient.userId)
+                           const isLast = selectedIdx === selected.length - 1
+                           return (
+                             <span className="text-sm text-gray-500 w-20 text-right">
+                               {formatMYR(isLast ? equalInfo.base + equalInfo.remainder : equalInfo.base)}
+                             </span>
+                           )
+                         })()}
                        </div>
                      ))}
                    </div>
@@ -311,7 +301,7 @@ export function BulkShareDialog({
                <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancel
                </Button>
-               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || transactionShares.some((ts) => ts.recipients.filter((r: ShareRecipient) => r.selected).length < 2)}>
+               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || transactionShares.some((ts) => ts.recipients.filter((r) => r.selected).length < 2)}>
                  {saving ? 'Sharing...' : `Share ${transactionShares.length} Transaction${transactionShares.length > 1 ? 's' : ''}`}
                </Button>
              </div>

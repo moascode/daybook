@@ -47,6 +47,7 @@ interface TransactionRow {
   import_hash: string
   created_at: string
   updated_at: string
+  has_shares?: number
 }
 
 interface CategoryRow {
@@ -77,7 +78,7 @@ function mapAccount(row: AccountRow): Account {
   }
 }
 
-function mapTransaction(row: TransactionRow, hasShares?: boolean): Transaction {
+function mapTransaction(row: TransactionRow): Transaction {
   return {
     id: row.id,
     accountId: row.account_id,
@@ -92,7 +93,7 @@ function mapTransaction(row: TransactionRow, hasShares?: boolean): Transaction {
     importHash: row.import_hash ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    hasShares: hasShares ?? false,
+    hasShares: !!row.has_shares,
   }
 }
 
@@ -325,8 +326,9 @@ export function useWallet() {
   }, [])
 
   const updateAccount = useCallback(async (id: string, data: Partial<AccountInput>): Promise<void> => {
-    await api.patch<AccountRow>(`/accounts/${id}`, data)
-    useWalletStore.getState().updateAccount(id, data as Partial<Account>)
+    const row = await api.patch<AccountRow>(`/accounts/${id}`, data)
+    const mapped = mapAccount(row)
+    useWalletStore.getState().updateAccount(id, mapped)
   }, [])
 
   const deleteAccount = useCallback(async (id: string): Promise<void> => {

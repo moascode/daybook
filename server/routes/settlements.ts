@@ -197,27 +197,23 @@ settlementsRouter.delete('/settlements/:id', (req, res) => {
     return res.status(409).json({ error: 'can only undo a settlement on the same day it was created' })
   }
 
-  // Delete the two ledger transactions
-  if (settlement.from_transaction_id) {
-    db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(settlement.from_transaction_id, userId)
-  }
-  // S-5: Delete recipient's transaction with ownership guard
-  if (settlement.to_transaction_id) {
-    db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(
-      settlement.to_transaction_id,
-      settlement.to_user
-    )
-  }
+  db.transaction(() => {
+    if (settlement.from_transaction_id) {
+      db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(settlement.from_transaction_id, userId)
+    }
+    if (settlement.to_transaction_id) {
+      db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(
+        settlement.to_transaction_id,
+        settlement.to_user
+      )
+    }
+    db.prepare(
+      `UPDATE transaction_shares SET settled_at = NULL
+       WHERE id IN (SELECT share_id FROM settlement_share_lines WHERE settlement_id = ?)`
+    ).run(req.params.id)
+    db.prepare('DELETE FROM settlements WHERE id = ?').run(req.params.id)
+  })()
 
-  // S-2: Un-settle ONLY the exact shares that this settlement cleared (via junction table)
-  db.prepare(
-    `UPDATE transaction_shares SET settled_at = NULL
-     WHERE id IN (SELECT share_id FROM settlement_share_lines WHERE settlement_id = ?)`
-  ).run(req.params.id)
-
-  // B-2: No need for redundant SELECT queries — settlement row already has from_user/to_user
-
-  db.prepare('DELETE FROM settlements WHERE id = ?').run(req.params.id)
   res.status(204).end()
 })
 

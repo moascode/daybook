@@ -11,7 +11,6 @@ import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
-import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { BulkShareDialog } from '@/modules/wallet/BulkShareDialog'
 import { ShareDialog } from '@/modules/wallet/ShareDialog'
 import { useWallet } from '@/hooks/useWallet'
@@ -66,9 +65,6 @@ export function WalletPage() {
   const [exportOpen, setExportOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
-
-  // Split transaction state (for user-based share splitting)
-  const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
 
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
@@ -508,14 +504,6 @@ export function WalletPage() {
         defaultAccountId={filters.accountId}
         availableTags={tags}
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
-      />
-
-      <SplitDialog
-        open={!!splitTarget}
-        onOpenChange={(open) => { if (!open) setSplitTarget(null) }}
-        transaction={splitTarget}
-        currentUserId={currentUserId}
-        onSaved={() => loadTransactions(filtersRef.current)}
       />
 
       <ShareDialog

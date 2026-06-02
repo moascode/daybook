@@ -185,7 +185,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
                    />
                  </div>
                  <div className="text-right text-xs text-gray-500">
-                  Total: {formatMYR(parseFloat(customAmounts[0]) + parseFloat(customAmounts[1]))} / {formatMYR(amount)}
+                  Total: {formatMYR((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0))} / {formatMYR(amount)}
                  </div>
                </div>
              )}
@@ -200,7 +200,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
            </Button>
            <Button
             onClick={handleSave}
-            disabled={saving || !selectedRecipient || (splitMode === 'custom' && (parseFloat(customAmounts[0]) + parseFloat(customAmounts[1]) !== amount))}
+            disabled={saving || !selectedRecipient || (splitMode === 'custom' && Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015)}
            >
              <Users className="h-3.5 w-3.5 mr-1" />
              {saving ? 'Sharing…' : 'Share'}

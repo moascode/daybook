@@ -336,7 +336,11 @@ walletRouter.get('/transactions', (req, res) => {
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = db
-    .prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC`)
+    .prepare(`
+      SELECT transactions.*,
+        CASE WHEN EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id) THEN 1 ELSE 0 END AS has_shares
+      FROM transactions ${where} ORDER BY date DESC, created_at DESC
+    `)
     .all(params)
   res.json(rows)
 })
@@ -645,18 +649,24 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
     shares = [{ userId: recipientId, shareAmount: txn.amount, note: '' }]
   } else if (splitMode === 'equal') {
     // Split equally between owner + recipient (2 people)
+    // Payer absorbs any rounding remainder
     const base = Math.floor((txn.amount / 2) * 100) / 100
     const remainder = Math.round((txn.amount - base * 2) * 100) / 100
     shares = [
-      { userId: userId, shareAmount: base, note: '' },
-      { userId: recipientId, shareAmount: remainder, note: '' },
+      { userId: userId, shareAmount: Math.round((base + remainder) * 100) / 100, note: '' },
+      { userId: recipientId, shareAmount: base, note: '' },
     ]
   } else if (splitMode === 'custom') {
     // Use provided shareAmounts array
     if (!Array.isArray(shareAmounts) || shareAmounts.length !== 2) {
       return res.status(400).json({ error: 'shareAmounts must be array of 2 amounts' })
     }
-    const sum = shareAmounts.reduce((acc, a) => acc + a, 0)
+    for (const amt of shareAmounts) {
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: 'each share amount must be a positive finite number' })
+      }
+    }
+    const sum = shareAmounts.reduce((acc: number, a: number) => acc + a, 0)
     if (Math.abs(sum - txn.amount) > 0.015) {
       return res.status(400).json({ error: `amounts must sum to ${txn.amount}; got ${sum}` })
     }
@@ -792,16 +802,28 @@ walletRouter.post('/transactions/shares/status', (req, res) => {
     return res.json([])
    }
 
+  if (transactionIds.length > 500) {
+    return res.status(400).json({ error: 'cannot check more than 500 transactions at once' })
+  }
+
+  // Only return share status for transactions the caller owns
   const placeholders = transactionIds.map(() => '?').join(',')
+  const ownedRows = db.prepare(
+    `SELECT id FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`
+  ).all(...transactionIds, userId) as Array<{ id: string }>
+  const ownedIds = new Set(ownedRows.map((r) => r.id))
+
   const rows = db.prepare(`
       SELECT transaction_id, 1 AS hasShares
       FROM transaction_shares
       WHERE transaction_id IN (${placeholders}) AND user_id = ?
      `).all(...transactionIds, userId) as Array<{ transaction_id: string; hasShares: 1 }>
 
-  const result = transactionIds.map((id) => ({
-    transactionId: id,
-    hasShares: rows.some((r) => r.transaction_id === id),
+  const result = transactionIds
+    .filter((id) => ownedIds.has(id))
+    .map((id) => ({
+      transactionId: id,
+      hasShares: rows.some((r) => r.transaction_id === id),
     }))
 
   res.json(result)
