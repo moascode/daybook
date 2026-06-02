@@ -27,7 +27,9 @@ interface ShareRecipient {
 
 interface TransactionShares {
   transaction: Transaction
-  recipients: ShareRecipient[]
+  recipientId: string | null
+  splitMode: 'none' | 'equal' | 'custom'
+  customAmounts?: [string, string]
 }
 
 export function BulkShareDialog({
@@ -40,7 +42,7 @@ export function BulkShareDialog({
 }: BulkShareDialogProps) {
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [shareMode, setShareMode] = useState<ShareMode>('equal')
-  const [transactionShares, setTransactionShares] = useState<TransactionShares[]>([])
+  const [transactionShares, setTransactionShares] = useState<TransactionShare[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -312,7 +314,7 @@ export function BulkShareDialog({
                <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancel
                </Button>
-               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || hasErrors}>
+               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || transactionShares.some((ts) => !ts.recipientId)}>
                  {saving ? 'Sharing...' : `Share ${transactionShares.length} Transaction${transactionShares.length > 1 ? 's' : ''}`}
                </Button>
              </div>

@@ -9,6 +9,7 @@ interface WalletFilters {
   accountId: string | null
   tags: string[]
   view: 'all' | 'mine' | 'shared-with-me'
+  q: string // B1: free-text search on merchant/description
 }
 
 interface WalletState {
@@ -65,6 +66,7 @@ function getDefaultFilters(): WalletFilters {
     accountId: null,
     tags: [],
     view: 'all',
+    q: '', // B1: search query
   }
 }
 

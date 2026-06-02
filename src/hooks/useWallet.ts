@@ -77,7 +77,7 @@ function mapAccount(row: AccountRow): Account {
   }
 }
 
-function mapTransaction(row: TransactionRow): Transaction {
+function mapTransaction(row: TransactionRow, hasShares?: boolean): Transaction {
   return {
     id: row.id,
     accountId: row.account_id,
@@ -92,6 +92,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     importHash: row.import_hash ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    hasShares: hasShares ?? false,
   }
 }
 
@@ -231,7 +232,8 @@ interface TransactionFilters {
   categoryId?: string | null
   accountId?: string | null
   tags?: string[]
-  view?: 'all' | 'mine' | 'shared-with-me'
+  view?: 'all' | 'mine' | 'shared-with-me' | 'shared-with-others'
+  q?: string // B1: free-text search on merchant/description
 }
 
 // ── Hook ────────────────────────────────────────────
@@ -296,6 +298,8 @@ export function useWallet() {
       for (const t of filters.tags) qs.append('tags', t)
     }
     if (filters?.view && filters.view !== 'all') qs.set('view', filters.view)
+    // B1: Search query
+    if (filters?.q) qs.set('q', filters.q)
 
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)
