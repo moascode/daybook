@@ -307,8 +307,8 @@ cmd_deploy() {
     ok "Release $rel_tag staged at ${release_dir/#$HOME/\~}"
 
     cmd_backup_internal "pre-deploy-$version"
-    ln -sfn "$release_dir" "$CURRENT_LINK.next"
-    mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+    ln -sfn "$release_dir" "$DAYBOOK_HOME/.current.tmp"
+    mv -f "$DAYBOOK_HOME/.current.tmp" "$CURRENT_LINK"
     ok "current  $rel_tag"
     restart_service
     ok "Deployed $rel_tag (local build)."
@@ -392,10 +392,7 @@ cmd_deploy() {
   # Flip the symlink atomically.
   # Use a temp name + mv so the switch is an atomic rename (no window where
   # current points nowhere).
-  ln -sfn "$release_dir" "$CURRENT_LINK.next"
-  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
-  ok "current → $rel_tag"
-
+  ln -sfn "$release_dir" "$CURRENT_LINK"
   restart_service
   ok "Deployed $rel_tag."
 
@@ -424,8 +421,8 @@ cmd_rollback() {
   warn "Rolling back code: $(current_version)  $prev_version"
   warn "Database is NOT rolled back  user data entered after the deploy is kept."
 
-  ln -sfn "$prev" "$CURRENT_LINK.next"
-  mv -f "$CURRENT_LINK.next" "$CURRENT_LINK"
+  ln -sfn "$prev" "$DAYBOOK_HOME/.current.tmp"
+  mv -f "$DAYBOOK_HOME/.current.tmp" "$CURRENT_LINK"
   ok "current  $prev_version"
 
   restart_service
