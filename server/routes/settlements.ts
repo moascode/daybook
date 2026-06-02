@@ -16,6 +16,7 @@ settlementsRouter.post('/settlements', (req, res) => {
   const note = String(b.note ?? '')
   const fromAccountId = String(b.fromAccountId ?? '')
   const toAccountId = String(b.toAccountId ?? '') // recipient's account for the income entry
+  const originalTransactionId = b.originalTransactionId as string | undefined
 
   if (!groupId || !toUserId || !amount || amount <= 0) {
     return res.status(400).json({ error: 'groupId, toUserId, and a positive amount are required' })
@@ -161,7 +162,7 @@ settlementsRouter.get('/settlements', (req, res) => {
   const groupId = req.query.groupId ? String(req.query.groupId) : null
 
   let sql = `
-    SELECT s.*, uf.username AS from_username, ut.username AS to_username
+    SELECT s.*, uf.username AS from_username, ut.username AS to_username, s.original_transaction_id AS original_transaction_id
     FROM settlements s
     JOIN users uf ON uf.id = s.from_user
     JOIN users ut ON ut.id = s.to_user

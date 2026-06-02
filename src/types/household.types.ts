@@ -65,5 +65,6 @@ export interface Settlement {
   note: string
   fromTransactionId: string | null
   toTransactionId: string | null
+  originalTransactionId: string | null
   settledAt: string
 }

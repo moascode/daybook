@@ -20,7 +20,7 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
   const [history, setHistory] = useState<Settlement[]>([])
   const [settleTarget, setSettleTarget] = useState<GroupBalance | null>(null)
   const [accounts, setAccounts] = useState<{ id: string; name: string; isShared?: boolean; sharedByUsername?: string }[]>([])
-  const [settleForm, setSettleForm] = useState({ fromAccountId: '', toAccountId: '', amount: '', note: '' })
+  const [settleForm, setSettleForm] = useState({ fromAccountId: '', toAccountId: '', amount: '', note: '', originalTransactionId: '' })
   const [settling, setSettling] = useState(false)
   const [settleError, setSettleError] = useState<string | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
