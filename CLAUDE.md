@@ -427,6 +427,97 @@ CREATE TABLE sessions (                        -- express-session store
 - Migration: a pre-auth DB (no `user_id`) has its data tables dropped+recreated
   on startup (pre-v1, no real data). Otherwise delete `server/data/*.db`.
 
+### Phase 5b sharing additions (server SQLite — implemented PR #18)
+
+Household groups, shared accounts, transaction splits, and settlement tracking.
+
+```sql
+-- Household groups
+CREATE TABLE IF NOT EXISTS groups (
+  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  name        TEXT NOT NULL,
+  created_by  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+
+-- Group membership (a user can belong to multiple groups)
+CREATE TABLE IF NOT EXISTS group_members (
+  group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',  -- 'owner' | 'member'
+  joined_at  TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (group_id, user_id)
+);
+
+-- Pending username-based invites
+CREATE TABLE IF NOT EXISTS group_invites (
+  id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  group_id   TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  invitee_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  invited_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status     TEXT NOT NULL DEFAULT 'pending',  -- 'pending' | 'accepted' | 'declined' | 'revoked'
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE (group_id, invitee_id)
+);
+
+-- Per-account share grant (ownership stays with accounts.user_id)
+CREATE TABLE IF NOT EXISTS account_shares (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  group_id   TEXT NOT NULL REFERENCES groups(id)   ON DELETE CASCADE,
+  can_write  INTEGER NOT NULL DEFAULT 0,  -- 0=read-only, 1=can add/edit transactions
+  shared_at  TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (account_id, group_id)
+);
+
+-- Split lines (one row per user per split transaction; includes the payer)
+CREATE TABLE IF NOT EXISTS transaction_shares (
+  id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  transaction_id  TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  share_amount    REAL NOT NULL,
+  note            TEXT DEFAULT '',
+  settled_at      TEXT DEFAULT NULL,  -- NULL = outstanding; set when settled
+  created_at      TEXT DEFAULT (datetime('now')),
+  UNIQUE (transaction_id, user_id)
+);
+
+-- Settlement records linking two real ledger transfer transactions
+CREATE TABLE IF NOT EXISTS settlements (
+  id                   TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  group_id             TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  from_user            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_user              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  amount               REAL NOT NULL,
+  currency             TEXT NOT NULL DEFAULT 'MYR',
+  note                 TEXT DEFAULT '',
+  from_transaction_id  TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+  to_transaction_id    TEXT REFERENCES transactions(id) ON DELETE SET NULL,
+  settled_at           TEXT DEFAULT (datetime('now'))
+);
+
+-- Junction table linking settlements to the shares they cleared
+CREATE TABLE IF NOT EXISTS settlement_share_lines (
+  settlement_id TEXT NOT NULL REFERENCES settlements(id) ON DELETE CASCADE,
+  share_id      TEXT NOT NULL REFERENCES transaction_shares(id) ON DELETE CASCADE,
+  PRIMARY KEY (settlement_id, share_id)
+);
+
+-- Indexes for query performance
+CREATE INDEX IF NOT EXISTS idx_group_members_user       ON group_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_account_shares_group     ON account_shares(group_id);
+CREATE INDEX IF NOT EXISTS idx_txn_shares_user_settled  ON transaction_shares(user_id, settled_at);
+CREATE INDEX IF NOT EXISTS idx_txn_shares_txn           ON transaction_shares(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_group_invites_invitee    ON group_invites(invitee_id, status);
+CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id);
+```
+
+**Key invariants**:
+- Groups are opt-in; existing single-user data has no group visibility
+- Account shares grant visibility + optional write access; ownership stays with the original user
+- Transaction splits track who owes whom with `share_amount`; settlements create two real transfer transactions
+- Non-members never see shared accounts or splits; visibility is scoped per user and group membership
+- `settled_at` in `transaction_shares` marks when a share is cleared by a settlement
+
 ---
 
 ## 7. TypeScript Types
@@ -852,203 +943,61 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  4 — Home Network + Multi-User (v1) — COMPLETE (pending review/merge)
-Phase status:   PR1 (scaffold) + PR2 (data-layer migration) + PR3 (auth +
-                per-user) all done on branch. v1 milestone reached.
-                See docs/phase-4-plan.md.
-Last session:   2026-06-01
-Last completed: - Transaction UX improvements + CSV import hardening:
-                    • Quick date filters (This Month / Last Month / All Time) as
-                      pill buttons in the filter bar — sets dateFrom/dateTo.
-                    • Multi-select delete: "Select" button enters select mode,
-                      checkboxes on each row, select-all toggle, bulk delete
-                      with confirmation modal. Cancel exits without deleting.
-                    • CSV import: "First row is a header" toggle (default ON) —
-                      when OFF, first row is treated as data and included in
-                      import; row count updates live on toggle.
-                    • CSV import: no-account guard — if user has no accounts,
-                      upload step shows a warning and "Create an Account" link
-                      instead of the dropzone.
-                    • New e2e: +13 tests (03-wallet-transactions, 04-wallet-csv);
-                      65 pass, 0 new failures. Pre-existing flaky failures in
-                      01/02/05/07 unrelated to this work.
-                    • smart-delegate skill: model routing guide (Haiku for tests/
-                      git/verification, Sonnet for planning/dev). Symlinked into
-                      .claude/skills/. Section 17 added to CLAUDE.md.
-Last completed: - Release management + CI/CD (branch
-                  claude/release-management-cicd-dMkPq). See docs/ci-cd.md.
-                    • CI: .github/workflows/ci.yml — typecheck (client+server),
-                      lint, build, full Playwright e2e on every PR/push to main;
-                      uploads the HTML report; cancels superseded runs. Replaced
-                      the standalone playwright.yml (folded in).
-                    • Release: .github/workflows/release.yml — on a vX.Y.Z tag,
-                      builds + e2e-gates, packages a versioned artifact, and
-                      publishes a GitHub Release (tarball + .sha256, auto notes).
-                    • scripts/package-release.sh: assembles a self-contained
-                      artifact (built dist/ + server TS + manifests + infra tool +
-                      VERSION manifest); excludes server/data; emits sha256.
-                      Verified locally end-to-end (build → tar → checksum OK).
-                    • Deploy tool: new `deploy [tag]` + `rollback` commands in
-                      infra/daybook — pulls the release artifact from the GitHub
-                      API (anonymous; optional GITHUB_TOKEN), verifies checksum, backs up
-                      (.daybook/backups, keeps 5), swaps dist/+server/, npm ci
-                      (rebuilds native modules), restarts the launchd service.
-                      Refactored cmd_reload to share restart_service().
-                    • Docs: docs/ci-cd.md (CI, versioning, cutting a release,
-                      artifact layout, deploy/rollback, secrets, troubleshooting).
-                    • .gitignore: dist-release/. bash -n clean on both scripts.
-                - Phase 4 full adversarial review (4 agents) round 2 — fixes:
-                    • CsvImport: wrap importTransactions in try/catch/finally +
-                      error toast (was a stuck spinner + unhandled rejection on
-                      atomic-import failure). api.ts: 401 on a non-/auth request
-                      now re-gates to login (App registers the handler) — graceful
-                      session-expiry instead of silent failure.
-                    • auth.ts establishSession: surface regenerate/save errors as
-                      500 (was a "logged in" response with no usable session).
-                    • db.ts: schema-version guard via SQLite user_version (rebuilds
-                      data tables on any DDL change pre-v1) — replaces the
-                      column-sniff; covers the budgets-uniqueness change too.
-                    • session-store: corrupt sess JSON → treat as no session (drop
-                      it) instead of 500-ing every request for that sid.
-                    • useTasks.addTask: null-guard the POST response.
-                    • dev:all kills the API server on exit (trap); 22-auth uses a
-                      monotonic username counter (no random collision).
-                    • New e2e: session-survives-reload; isolation test extended to
-                      transactions + asserts B has its own 15 seeded categories.
-                    • Verified: build green, typecheck:server green, 272/272 e2e
-                      pass, lint 38 pre-existing (no new). Correctness review
-                      confirmed data-layer parity (booleans/nullables/timestamps/
-                      balance/filters/sort/restore/settings all clean).
-                - Phase 4 review hardening (adversarial security review + fixes):
-                    • IDOR-write fix: inserts/PATCH now verify referenced
-                      accountId/destinationAccountId/categoryId belong to the
-                      caller (server/lib.ts ownsAllRefs) across transactions,
-                      import, budgets, recurring, goals → 400 on cross-user refs.
-                      Closes a cross-tenant cascade-delete vector.
-                    • budgets UNIQUE(category_id) → UNIQUE(user_id, category_id).
-                    • check-duplicates batched (500/query) — param-limit safe.
-                    • Auth: usernames case-insensitive (lowercased), password
-                      length bounds (6–72), session.regenerate() on login/signup
-                      (anti-fixation), startup throws if prod & no SESSION_SECRET.
-                    • New e2e: 22-auth "two users have fully isolated data" drives
-                      the UI to prove user B sees none of user A's accounts/tasks.
-                    • Verified: build green, typecheck:server green, 271/271 e2e
-                      pass, lint 38 pre-existing (no new).
-                - Phase 4 PR3 — auth + per-user data (v1 milestone):
-                    • Schema: users + sessions tables; user_id NOT NULL FK on all
-                      8 data tables; settings PK now (user_id, key). Startup guard
-                      drops+recreates pre-auth data tables (pre-v1, no real data).
-                    • Auth (session cookies): server/routes/auth.ts —
-                      signup/login/logout/me + requireAuth guard. bcrypt hashes.
-                      express-session with a SQLite-backed store (server/
-                      session-store.ts) — no extra session-store package.
-                    • Every server query scoped by user_id (updateRow takes userId;
-                      all GET/POST/PATCH/DELETE filter/set user_id). Verified one
-                      user cannot read/write another's rows.
-                    • Per-user seeding: seedUserDefaults() seeds 15 categories +
-                      default settings on signup.
-                    • Client: app.store gains user/setUser; App.tsx checks
-                      /auth/me on boot and gates the app behind AuthPage
-                      (src/components/auth/AuthPage.tsx, login/signup). Sign-out
-                      added to Settings. api.ts already sent credentials.
-                    • Packages added: bcrypt ^6, express-session ^1 (+ @types) —
-                      already approved in CLAUDE.md §4.
-                    • e2e: newAppPage signs up a fresh user per page (per-user
-                      isolation = old fresh-DB-per-context); signUpOnPage helper
-                      for custom-context specs (mobile). New e2e/22-auth.spec.ts
-                      (signup/login/logout/gate/wrong-password).
-                    • Verified: client build green, typecheck:server green,
-                      270/270 e2e pass. Lint: 38 pre-existing errors only (no new).
-                - Phase 4 PR2 — data-layer migration (full REST swap, PGlite removed):
-                    • REST endpoints for every entity: server/routes/tasks.ts
-                      (tasks + templates), wallet.ts (accounts incl. balance,
-                      transactions incl. filters/import/export/check-duplicates,
-                      categories, budgets, recurring, goals), settings.ts.
-                    • server/lib.ts: updateRow() dynamic-UPDATE helper.
-                    • src/lib/api.ts: typed fetch client (credentials:'include'
-                      ready for PR3 cookies). Reads = snake_case rows (client
-                      mappers unchanged); writes = camelCase.
-                    • Rewrote useTasks + useWallet to call the API (store-update
-                      logic + tree/sort/balance helpers unchanged). Migrated
-                      csv.ts checkDuplicates, App.tsx boot, SettingsPage, and the
-                      /uat page's direct-DB checks to the API.
-                    • Removed in-browser PGlite: deleted src/db/, uninstalled
-                      @electric-sql/pglite + unused drizzle-orm/drizzle-kit.
-                    • e2e: test-only POST /api/test/reset (DAYBOOK_TEST=1);
-                      newAppPage resets the server DB per page = old fresh-state-
-                      per-context. Playwright now boots both servers (API on a
-                      throwaway server/data/e2e.db). Fixed a latent config bug —
-                      executablePath must live under launchOptions, not use.
-                    • Fixed fragile 05-dashboard locator (getByText('Dashboard')
-                      matched the "Dashboard Bank" chart label once charts render).
-                    • Verified: client build green, typecheck:server green,
-                      266/266 e2e pass. Lint: 38 pre-existing errors only (no new).
-                - Phase 4 PR1 — Node + SQLite server scaffold:
-                    • server/ : Express app (createApp + listen), better-sqlite3
-                      instance with SQLite-native schema (all 9 data tables),
-                      seed.ts (mirrors src/db/seed.ts), GET /api/health
-                    • Vite dev-proxies /api → localhost:3001
-                    • Scripts: server (watch), dev:all, typecheck:server
-                    • SQLite DB file under server/data/ (gitignored)
-                    • Packages added (CLAUDE.md §4 updated): express ^5,
-                      better-sqlite3 ^12, tsx ^4 (+ @types). bcrypt/express-session
-                      deferred to PR3 (auth). Fixed §4 Cloud label (Supabase = Phase 6).
-                    • Verified: better-sqlite3 native build OK, health returns
-                      {status:ok,db:true}, 15 categories + 3 settings seeded,
-                      client `npm run build` still green, eslint clean on server/.
-                - Decisions (owner sign-off): full REST swap (drop PGlite),
-                  Express + better-sqlite3, session-cookie auth, staged delivery.
-                - Earlier (2026-05-28) — Phase 3+ Tier 3 features shipped (e2e 16–21):
-                    • Wallet goals (/wallet/goals): savings target linked to an account,
-                      progress bar vs live account balance, full CRUD
-                    • Bill reminders on Dashboard: recurring bills due within 7 days,
-                      "due soon"/days-left badge, dismissible (persists via localStorage)
-                    • Advanced reports (/wallet/reports): year-on-year comparison chart
-                      (recharts) + fully custom date-range transaction view
-                    • Task templates: "Save as template" in BulletNode menu, "Templates"
-                      browser dialog to apply/delete; persisted in task_templates table
-                    • PWA: public/manifest.json + public/sw.js, manifest/theme-color/
-                      apple meta tags in index.html, SW registration in main.tsx
-                    • Mobile-responsive layout: hamburger drawer Sidebar + mobile top bar
-                      in AppShell; no horizontal overflow at 390px
-                - Schema additions: `goals`, `task_templates`
-                - New components: GoalsPage, ReportsPage; Goals/Reports tabs in WalletTabNav
-                - useWallet goal CRUD + useTasks template CRUD; wallet.store goals state
-                - Fixed e2e/16 strict-mode locator (saved-amount + percent both matched);
-                  helpers.waitForApp now checks <main> (aside is hidden on mobile)
-                - Full suite green: 266 Playwright tests pass (213 prior + 53 Tier 3)
-Last completed  - Stable deployment architecture (2026-05-31):
-(continued):        • infra/daybook fully rewritten: Capistrano-style releases at
-                      DAYBOOK_HOME (default ~/daybook). Deploy downloads artifact
-                      from GitHub, installs under releases/vX.Y.Z/, flips current
-                      symlink atomically, backs up DB, restarts service.
-                    • Rollback is instant symlink flip to previous release — no
-                      re-download. DB is never auto-rolled back (keeps user data).
-                    • `infra/daybook install` — one command first-time setup:
-                      creates DAYBOOK_HOME structure, deploys latest, installs
-                      launchd service.
-                    • `infra/daybook backup` — manual DB snapshot to backups/.
-                    • server/db.ts: replaced monolithic schema + drop+recreate
-                      guard with a file-based migration runner. Reads
-                      server/migrations/*.sql in lexicographic order, applies
-                      pending ones inside a transaction, records each in
-                      schema_migrations. Safe for post-v1 real data.
-                    • server/migrations/0001_initial.sql — baseline v1 schema.
-                      Future schema changes: add 0002_*.sql etc. (additive only).
-                    • DB path: DAYBOOK_HOME env var → shared/data/daybook.db.
-                      Dev fallback: server/data/daybook.db. e2e: DAYBOOK_DB_PATH.
-                    • scripts/package-release.sh: now includes infra/port-forward.js
-                      and server/migrations/ in the artifact.
-                    • Verified: typecheck:server green, client build green.
-Next task:      Phase 5 — AI Features (v2): Claude integration, NL task/transaction
-                entry, daily briefing, financial insights. Route the Anthropic key
-                through the backend (no key in the browser bundle). See §9.3.
-Blockers:       None. Deployment is now stable: versioned releases, DB safe from
-                deploys, file-based migrations for future schema changes.
-                Reminder: SESSION_SECRET is read from DAYBOOK_HOME/shared/session-secret
-                (generated on first install); no manual env var needed in production.
-                Note: pre-existing eslint warnings (react-hooks/set-state-in-effect,
-                test-only `window as any` shims) remain; not introduced this session.
+Current phase:  5b — Household Sharing & Multi-User (v1.0) — COMPLETE
+Phase status:   Phase 4 (home network backend) shipped v1.0.
+                Phase 5b (household sharing) shipped v1.0.1.
+                Phase 5c (wallet UX improvements) — IN PROGRESS.
+                See docs/phase-5c-wallet-ux.md.
+Last session:   2026-06-02
+Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
+                    • Household groups: users can create groups and invite members
+                      by username with optional role assignment.
+                    • Shared accounts: accounts visible to group members with
+                      optional write access per group (read-only by default).
+                    • Transaction splits: divide expenses across group members with
+                      automatic share tracking, proportional rescaling on amount edits,
+                      and optional notes per share.
+                    • Settlements: create real ledger transfers to settle balances
+                      between two users, with undo capability via settlement history.
+                    • Data isolation: non-members cannot see shared accounts or splits;
+                      members have visibility scoped to their group memberships only.
+                    • Wave 1 & 2 fixes: accessibility improvements, UI consistency,
+                      corner cases (over-settlement, balance precision, etc.).
+                    • e2e: 30 Playwright test files covering all sharing features
+                      (households, shared accounts, splits, settlements); all pass.
+                    • Migrations: 0003_sharing.sql + 0004_settlement_share_lines.sql
+                      applied; schema_migrations table tracks applied files.
+                    • Verified: client build green, typecheck:server green, 30/30 e2e pass.
+
+Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
+                  - Session-based multi-user auth (bcrypt + express-session)
+                  - Per-user data isolation (all queries scoped by user_id)
+                  - REST API for all entities (tasks, accounts, transactions, settings, etc.)
+                  - Capistrano-style releases with versioned artifacts + rollback
+                  - File-based migrations (additive only, applied in order)
+                  - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
+Next task:      Phase 5c — Wallet UX & Feature Improvements (backlog):
+                - B1: Free-text search on transactions (merchant/description)
+                - B2: "Save & add another" on transaction form
+                - B3: Mobile-safe modal scrolling (max-height + scroll)
+                - B4: Keyboard/screen-reader accessible rows & cards
+                - B5: Zero-account onboarding path ("Create account" CTA)
+                - B6: Always-visible account card actions (not hover-only)
+                - B7: Dashboard/Reports charts reflow on mobile
+                - B8: Label unification (Total Balance vs Total Net Worth)
+                - B9: Colour consistency (positive money green)
+                - B10: Surface Type & Category on recurring rule cards
+                - B11: Touch targets ≥ 40px (sidebar, row buttons)
+                - B12: Opening-balance caption clarity (editing case)
+                See docs/phase-5c-wallet-ux.md for full scope, effort, acceptance criteria.
+
+Blockers:       None. Phase 4 stable. Phase 5b stable. Phase 5c is scoped and ready.
+
+Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
+                - Releases versioned via infra/daybook deploy [tag].
+                - DB migrations are additive-only; applied in lexicographic order.
+                - e2e tests use fresh DB per context; CI shards tests across jobs.
+                - Pre-existing lint: 38 warnings (react-hooks, test-only shims).
 ```
 
 ---
@@ -1063,34 +1012,42 @@ Phase 0  →  Phase 1  →  Phase 2  →  Phase 3
                                    ★ ALPHA
                                    Core app on your machine
 
-Phase 4  →  ★ v1  Home network, multi-user
-Phase 5  →  ★ v2  AI-powered Daybook
-Phase 6  →  ★ v3  Cloud-hosted, anywhere access
-Phase 7  →  ★ v4+ Advanced features, ongoing
+Phase 4  →  ★ v1.0  Home network, multi-user
+Phase 5  →  Phase 5b (5c subtask)
+             ★ v1.0+ Household sharing, wallet UX polish
+Phase 6  →  ★ v2    Cloud-hosted, anywhere access
+Phase 7  →  ★ v3+   Advanced features, ongoing
 ```
 
 ### Phases
 
-| Phase | Name | Type | Goal | Est. time |
+| Phase | Name | Type | Goal | Status |
 |---|---|---|---|---|
-| 0 | Foundation Setup | **Your actions** | Accounts, tools, repo cloned | 1–2 days |
-| 1 | Core Scaffold | Dev | Vite + PGlite + layout shell + UI primitives | 1 week |
-| 2 | Tasks Module | Dev | Full Workflowy-style bullet tree | 2 weeks |
-| 3 | Wallet Module | Dev | Accounts + transactions + CSV + dashboard | 2 weeks |
-| 4 | Home Network + Multi-User | Architecture | Node backend, SQLite file, auth, per-user data | 1.5 weeks |
-| 5 | AI Features | AI | Claude integration, NL input, briefing, insights | 1.5 weeks |
-| 6 | Cloud Migration | Cloud | Supabase + Vercel + RLS + Edge Function for AI key | 1 week |
-| 7 | Advanced Features | v4+ | Budgets, goals, PWA, new modules — pick and choose | Ongoing |
+| 0 | Foundation Setup | **Your actions** | Accounts, tools, repo cloned | ✅ Done |
+| 1 | Core Scaffold | Dev | Vite + layout shell + UI primitives | ✅ v1.0 |
+| 2 | Tasks Module | Dev | Full Workflowy-style bullet tree | ✅ v1.0 |
+| 3 | Wallet Module | Dev | Accounts + transactions + CSV + dashboard | ✅ v1.0 |
+| 4 | Home Network + Multi-User | Architecture | Node backend, SQLite file, auth, per-user data | ✅ v1.0 |
+| 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🔄 Deferred |
+| 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
+| 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | 🔄 In Progress |
+| 6 | Cloud Migration | Cloud | Supabase + Vercel + RLS + Edge Function for AI key | Planned |
+| 7 | Advanced Features | v2+ | Recurring rules, budgets, goals, new modules | Planned |
+
+**Note**: Phase 5 has been split into three subtasks:
+- **Phase 5a (AI)** is deferred — requires API key proxying + model routing
+- **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
+- **Phase 5c (Wallet UX)** in progress — backlog of UX/feature improvements
 
 ### Delivery Milestones
 
 | Milestone | After phase | What it means |
 |---|---|---|
 | **Alpha** | 3 | Core app fully working on your machine. Single user. Data in browser IndexedDB. |
-| **v1** | 4 | Multi-user on home network. Any device on your WiFi can log in. Data on your hardware. |
-| **v2** | 5 | AI-powered. Natural language input. Daily briefings. Financial insights. |
-| **v3** | 6 | Cloud-hosted. Accessible from anywhere. Supabase auth + RLS. |
-| **v4+** | 7 | Power features — ship whatever matters most, one at a time. |
+| **v1.0** | 4 | Multi-user on home network. Any device on your WiFi can log in. Data on your hardware. |
+| **v1.0.1** | 5b | Household sharing added. Family members can share accounts and settle expenses. |
+| **v2** | 5a+6 | AI-powered + cloud-hosted. Accessible from anywhere. Natural language input. Supabase auth + RLS. |
+| **v3+** | 7+ | Power features — ship whatever matters most, one at a time. |
 
 > **Tracker:** Open `tracker.html` in a browser to see the interactive task-level breakdown with progress tracking.
 
