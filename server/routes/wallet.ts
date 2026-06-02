@@ -597,6 +597,108 @@ walletRouter.delete('/transactions/:id/shares', (req, res) => {
   res.status(204).end()
 })
 
+// ── Bulk transaction shares ───────────────────────────
+// POST /transactions/shares — Share multiple transactions at once.
+// Body: { transactions: Array<{ transactionId: string; shares: Array<{ userId, shareAmount, note? }> }> }
+walletRouter.post('/transactions/shares', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+
+  type ShareEntry = { userId: string; shareAmount: number; note?: string }
+  type TxnPayload = { transactionId: string; shares: ShareEntry[] }
+  const { transactions }: { transactions: TxnPayload[] } = req.body ?? {}
+
+  // 1. Top-level shape check (Issue 12)
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return res.status(400).json({ error: 'transactions array is required and must be non-empty' })
+  }
+
+  // 2. Unbounded IN clause guard (Issue 10)
+  if (transactions.length > 500) {
+    return res.status(400).json({ error: 'cannot share more than 500 transactions at once' })
+  }
+
+  // 3. Per-element structural validation (Issue 12)
+  for (const tx of transactions) {
+    if (typeof tx.transactionId !== 'string' || tx.transactionId.length === 0) {
+      return res.status(400).json({ error: 'each transactionId must be a non-empty string' })
+    }
+    if (!Array.isArray(tx.shares) || tx.shares.length === 0) {
+      return res.status(400).json({ error: `shares array is required for transaction ${tx.transactionId}` })
+    }
+  }
+
+  // 4. Share amount positivity check
+  for (const tx of transactions) {
+    for (const s of tx.shares) {
+      const amt = Number(s.shareAmount)
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: 'each share amount must be a positive number' })
+      }
+    }
+  }
+
+  // 5. Fetch all transactions in one query
+  const transactionIds = transactions.map((tx) => tx.transactionId)
+  const placeholders = transactionIds.map(() => '?').join(',')
+  const txnRows = db
+    .prepare(`SELECT id, user_id, amount, account_id FROM transactions WHERE id IN (${placeholders})`)
+    .all(...transactionIds) as Array<{ id: string; user_id: string; amount: number; account_id: string }>
+  const txnMap = new Map(txnRows.map((t) => [t.id, t]))
+
+  if (txnMap.size !== transactionIds.length) {
+    return res.status(400).json({ error: 'one or more transactions not found' })
+  }
+
+  // 6. Owner-only auth check — only the transaction owner may set bulk splits (Issue 3)
+  for (const tx of transactions) {
+    const txn = txnMap.get(tx.transactionId)!
+    if (txn.user_id !== userId) {
+      return res.status(403).json({ error: `only the owner can share transaction ${tx.transactionId}` })
+    }
+  }
+
+  // 7. Co-group membership check per transaction (S-3)
+  for (const tx of transactions) {
+    const txn = txnMap.get(tx.transactionId)!
+    const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
+    for (const s of tx.shares) {
+      if (!allowedIds.has(String(s.userId))) {
+        return res.status(400).json({
+          error: `user ${s.userId} is not a group co-member with transaction ${tx.transactionId}'s owner`,
+        })
+      }
+    }
+  }
+
+  // 8. Sum validation BEFORE opening db.transaction() (Issue 2)
+  for (const tx of transactions) {
+    const txn = txnMap.get(tx.transactionId)!
+    const sum = tx.shares.reduce((acc, s) => acc + Number(s.shareAmount), 0)
+    if (Math.abs(sum - txn.amount) > 0.015) {
+      return res.status(400).json({
+        error: `share amounts for transaction ${tx.transactionId} must sum to ${txn.amount}; got ${sum}`,
+      })
+    }
+  }
+
+  // 9. Atomic DB writes — only INSERT/DELETE inside, no throwing (Issue 2)
+  db.transaction(() => {
+    const insert = db.prepare(
+      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))`,
+    )
+    for (const tx of transactions) {
+      db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(tx.transactionId)
+      for (const s of tx.shares) {
+        insert.run(tx.transactionId, s.userId, s.shareAmount, s.note ?? '')
+      }
+    }
+  })()
+
+  res.status(201).json({ message: 'transactions shared successfully', transactionIds })
+})
+
 // ── Budgets ──────────────────────────────────────────
 
 walletRouter.get('/budgets', (req, res) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -12,6 +12,7 @@ import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
+import { BulkShareDialog } from '@/modules/wallet/BulkShareDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -75,6 +76,7 @@ export function WalletPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkShareOpen, setBulkShareOpen] = useState(false)
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
@@ -160,14 +162,13 @@ export function WalletPage() {
   const handleBulkDelete = useCallback(async () => {
     for (const id of Array.from(selectedIds)) {
       await deleteTransaction(id)
-    }
+     }
     setSelectedIds(new Set())
     setSelectMode(false)
     setBulkDeleteOpen(false)
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-  }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
-
+    }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
   function openEditForm(transaction: Transaction) {
     setEditingTransaction(transaction)
     setFormOpen(true)
@@ -431,15 +432,26 @@ export function WalletPage() {
           </span>
           <div className="ml-auto flex items-center gap-2">
             {selectedIds.size > 0 && (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-                data-testid="bulk-delete-btn"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete {selectedIds.size}
-              </Button>
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setBulkShareOpen(true)}
+                  data-testid="bulk-share-btn"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Share {selectedIds.size}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  data-testid="bulk-delete-btn"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete {selectedIds.size}
+                </Button>
+              </>
             )}
             <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
               Cancel
@@ -536,6 +548,18 @@ export function WalletPage() {
           </Button>
         </div>
       </Modal>
+
+        <BulkShareDialog
+         open={bulkShareOpen}
+         onOpenChange={setBulkShareOpen}
+         selectedTransactionIds={Array.from(selectedIds)}
+         transactions={transactions}
+         currentUserId={currentUserId}
+         onSave={() => {
+    setBulkShareOpen(false)
+    setSelectedIds(new Set())
+         }}
+        />
     </div>
   )
 }
