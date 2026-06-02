@@ -198,9 +198,9 @@ export function BulkShareDialog({
   const selectedCount = transactionShares.reduce((acc, ts) => acc + ts.recipients.filter((r) => r.selected).length, 0)
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="Share Transactions">
+    <Modal open={open} onOpenChange={onOpenChange} title={`Share ${transactionShares.length} Transaction${transactionShares.length !== 1 ? 's' : ''}`}>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{transactionShares.length} transaction{transactionShares.length > 1 ? 's' : ''} — split amounts among group members</p>
+        <p className="text-sm text-gray-500">Split amounts among group members</p>
         <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
            <X className="h-4 w-4" />
         </Button>
