@@ -28,7 +28,6 @@ interface ShareRecipient {
 interface TransactionShares {
   transaction: Transaction
   recipients: ShareRecipient[]
-  mode: ShareMode
 }
 
 export function BulkShareDialog({
@@ -60,14 +59,11 @@ export function BulkShareDialog({
         if (!txn) return null as any
         return {
           transaction: txn,
-          recipients: memberRows
-             .filter((m) => m.userId === currentUserId)
-             .map((m) => ({
-              userId: m.userId,
-              username: m.username,
-              selected: m.userId === currentUserId,
-             })),
-          mode: 'equal',
+          recipients: memberRows.map((m) => ({
+            userId: m.userId,
+            username: m.username,
+            selected: m.userId === currentUserId,
+          })),
          }
        }).filter(Boolean) as TransactionShares[]
 
@@ -85,7 +81,7 @@ export function BulkShareDialog({
     if (open && selectedTransactionIds.length > 0) {
       setShareMode('equal')
       setTransactionShares((prev) =>
-        prev.map((ts) => ({ ...ts, mode: 'equal', recipients: ts.recipients.map((r) => ({ ...r, selected: r.selected })) }))
+        prev.map((ts) => ({ ...ts, recipients: ts.recipients.map((r) => ({ ...r, selected: r.selected })) }))
        )
     }
    }, [selectedTransactionIds, open])
@@ -104,24 +100,26 @@ export function BulkShareDialog({
     setTransactionShares((prev) =>
       prev.map((ts) => {
         if (ts.transaction.id !== txnId) return ts
-        const exists = ts.recipients.some((r) => r.userId === userId)
-        if (exists) {
-          if (ts.mode === 'custom') {
+        const currentRecipient = ts.recipients.find((r) => r.userId === userId)
+        if (!currentRecipient) return ts
+        const isSelected = currentRecipient.selected
+        if (isSelected) {
+          if (shareMode === 'custom') {
             const hasAmounts = ts.recipients.some((r) => r.selected && r.amount !== undefined && r.amount !== '')
             if (hasAmounts) {
               showTempError('Custom amounts will be discarded for this recipient')
               return ts
             }
-           }
+          }
           return {
-             ...ts,
+            ...ts,
             recipients: ts.recipients.map((r) => (r.userId === userId ? { ...r, selected: false } : r)),
-           }
-         }
+          }
+        }
         return {
-           ...ts,
+          ...ts,
           recipients: ts.recipients.map((r) => (r.userId === userId ? { ...r, selected: true } : r)),
-         }
+        }
        })
      )
    }
@@ -148,9 +146,9 @@ export function BulkShareDialog({
     const selected = txnShares.recipients.filter((r) => r.selected)
     if (selected.length < 2) return 'Select at least 2 recipients (including yourself)'
 
-    if (txnShares.mode === 'equal') {
+    if (shareMode === 'equal') {
       return null
-     }
+    }
 
     const sum = selected.reduce((acc, r) => acc + (Number(r.amount) || 0), 0)
     if (Math.abs(sum - txnShares.transaction.amount) > 0.015) {
@@ -176,32 +174,27 @@ export function BulkShareDialog({
 
     setSaving(true)
     try {
-      const transactionIds = transactionShares.map((ts) => ts.transaction.id)
-      const shares: Array<{ userId: string; shareAmount: number; note?: string }> = []
-
-      for (const ts of transactionShares) {
+      const payload = transactionShares.map((ts) => {
         const selected = ts.recipients.filter((r) => r.selected)
-        if (ts.mode === 'equal') {
+        let shares: Array<{ userId: string; shareAmount: number; note?: string }>
+        if (shareMode === 'equal') {
           const count = selected.length
           const base = Math.floor((ts.transaction.amount / count) * 100) / 100
           const remainder = Math.round((ts.transaction.amount - base * count) * 100) / 100
-          selected.forEach((r, i) => {
-            shares.push({
-              userId: r.userId,
-              shareAmount: i === selected.length - 1 ? Math.round((base + remainder) * 100) / 100 : base,
-             })
-           })
-         } else {
-          selected.forEach((r) => {
-            shares.push({
-              userId: r.userId,
-              shareAmount: Number(r.amount) || 0,
-             })
-           })
-         }
-       }
+          shares = selected.map((r, i) => ({
+            userId: r.userId,
+            shareAmount: i === selected.length - 1 ? Math.round((base + remainder) * 100) / 100 : base,
+          }))
+        } else {
+          shares = selected.map((r) => ({
+            userId: r.userId,
+            shareAmount: Number(r.amount) || 0,
+          }))
+        }
+        return { transactionId: ts.transaction.id, shares }
+      })
 
-      await api.post('/transactions/shares', { transactionIds, shares })
+      await api.post('/transactions/shares', { transactions: payload })
       onSave()
      } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to share transactions'
@@ -298,7 +291,7 @@ export function BulkShareDialog({
                          )}
                          {recipient.selected && shareMode === 'equal' && equalInfo.count > 0 && (
                            <span className="text-sm text-gray-500 w-20 text-right">
-                             {formatMYR(ts.transaction.amount / (equalInfo?.count || 1))}
+                             {formatMYR(equalInfo.base)}
                            </span>
                          )}
                        </div>

@@ -432,26 +432,26 @@ export function WalletPage() {
           </span>
           <div className="ml-auto flex items-center gap-2">
             {selectedIds.size > 0 && (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => setBulkDeleteOpen(true)}
-                data-testid="bulk-delete-btn"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                  <>
-                     <Button
-                     variant="primary"
-                     size="sm"
-                     onClick={() => setBulkShareOpen(true)}
-                     data-testid="bulk-share-btn"
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                     Share {selectedIds.size}
-                     </Button>
-                  </>
-                Delete {selectedIds.size}
-              </Button>
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setBulkShareOpen(true)}
+                  data-testid="bulk-share-btn"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Share {selectedIds.size}
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  data-testid="bulk-delete-btn"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete {selectedIds.size}
+                </Button>
+              </>
             )}
             <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
               Cancel
