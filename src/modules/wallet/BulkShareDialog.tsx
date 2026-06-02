@@ -27,9 +27,7 @@ interface ShareRecipient {
 
 interface TransactionShares {
   transaction: Transaction
-  recipientId: string | null
-  splitMode: 'none' | 'equal' | 'custom'
-  customAmounts?: [string, string]
+  recipients: ShareRecipient[]
 }
 
 export function BulkShareDialog({
@@ -208,8 +206,7 @@ export function BulkShareDialog({
     }
    }
 
-  const hasErrors = transactionShares.some((ts) => validateTransaction(ts) !== null)
-  const selectedCount = transactionShares.reduce((acc, ts) => acc + ts.recipients.filter((r) => r.selected).length, 0)
+  const selectedCount = transactionShares.reduce((acc, ts) => acc + ts.recipients.filter((r: ShareRecipient) => r.selected).length, 0)
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Share Transactions">
@@ -314,7 +311,7 @@ export function BulkShareDialog({
                <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancel
                </Button>
-               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || transactionShares.some((ts) => !ts.recipientId)}>
+               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || transactionShares.some((ts) => ts.recipients.filter((r: ShareRecipient) => r.selected).length < 2)}>
                  {saving ? 'Sharing...' : `Share ${transactionShares.length} Transaction${transactionShares.length > 1 ? 's' : ''}`}
                </Button>
              </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { Users, X } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Users } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -27,7 +27,6 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const amount = transaction?.amount ?? 0
 
@@ -47,14 +46,6 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
   useEffect(() => {
     if (open) { loadData() } // eslint-disable-line react-hooks/set-state-in-effect
    }, [open, loadData])
-
-  useEffect(() => () => { if (errorTimerRef.current) clearTimeout(errorTimerRef.current) }, [])
-
-  const showTempError = (msg: string) => {
-    setError(msg)
-    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
-    errorTimerRef.current = setTimeout(() => setError(null), 3000)
-   }
 
   const handleSave = async () => {
     if (!transaction || !selectedRecipient) {

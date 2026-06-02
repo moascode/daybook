@@ -633,7 +633,7 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
 
   // 3. Validate splitMode
   const validModes = ['none', 'equal', 'custom'] as const
-  if (!validModes.includes(splitMode as any)) {
+  if (!(validModes as readonly string[]).includes(splitMode)) {
     return res.status(400).json({ error: 'splitMode must be "none", "equal", or "custom"' })
   }
 

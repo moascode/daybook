@@ -55,7 +55,7 @@ function BalancesTab({ group, currentUserId }: { group: GroupDetail; currentUser
   const openSettle = (b: GroupBalance) => {
     setSettleTarget(b)
     setSettleError(null)
-    setSettleForm({ fromAccountId: '', toAccountId: '', amount: String(Math.round(b.amount * 100) / 100), note: '' })
+    setSettleForm({ fromAccountId: '', toAccountId: '', amount: String(Math.round(b.amount * 100) / 100), note: '', originalTransactionId: '' })
   }
 
   const handleSettle = async () => {

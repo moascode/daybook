@@ -16,8 +16,6 @@ settlementsRouter.post('/settlements', (req, res) => {
   const note = String(b.note ?? '')
   const fromAccountId = String(b.fromAccountId ?? '')
   const toAccountId = String(b.toAccountId ?? '') // recipient's account for the income entry
-  const originalTransactionId = b.originalTransactionId as string | undefined
-
   if (!groupId || !toUserId || !amount || amount <= 0) {
     return res.status(400).json({ error: 'groupId, toUserId, and a positive amount are required' })
   }

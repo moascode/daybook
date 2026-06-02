@@ -303,7 +303,7 @@ export function useWallet() {
 
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)
-    const transactions = rows.map(mapTransaction)
+    const transactions = rows.map((row) => mapTransaction(row))
     useWalletStore.getState().setTransactions(transactions)
     return transactions
   }, [])

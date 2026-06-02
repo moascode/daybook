@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings, Users, Search } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -183,16 +183,8 @@ export function WalletPage() {
     setFormOpen(true)
   }
 
-  function openSplitDialog(transaction: Transaction) {
-    setSplitTarget(transaction)
-  }
-
   function openShareDialog(transaction: Transaction) {
     setShareTarget(transaction)
-  }
-
-  function handleShareSaved() {
-    loadTransactions(filtersRef.current)
   }
 
   function toggleSelectMode() {
@@ -524,6 +516,14 @@ export function WalletPage() {
         transaction={splitTarget}
         currentUserId={currentUserId}
         onSaved={() => loadTransactions(filtersRef.current)}
+      />
+
+      <ShareDialog
+        open={!!shareTarget}
+        onOpenChange={(open) => { if (!open) setShareTarget(null) }}
+        transaction={shareTarget}
+        currentUserId={currentUserId}
+        onSaved={() => { setShareTarget(null); loadTransactions(filtersRef.current) }}
       />
 
       <ExportModal
