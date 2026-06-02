@@ -74,7 +74,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
 
     // Dialog opens and shows a title
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 })
-    await expect(page.getByText('Share 1 Transaction')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Share 1 Transaction' })).toBeVisible()
   })
 
   test('Dialog shows correct transaction count in heading', async ({ browser }) => {
