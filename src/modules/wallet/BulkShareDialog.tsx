@@ -54,18 +54,20 @@ export function BulkShareDialog({
        )
       // members loaded
 
-      const initial: TransactionShares[] = selectedTransactionIds.map((txnId) => {
-        const txn = transactions.find((t) => t.id === txnId)
-        if (!txn) return null as any
-        return {
-          transaction: txn,
-          recipients: memberRows.map((m) => ({
-            userId: m.userId,
-            username: m.username,
-            selected: m.userId === currentUserId,
-          })),
-         }
-       }).filter(Boolean) as TransactionShares[]
+      const initial: TransactionShares[] = selectedTransactionIds
+        .map((txnId) => {
+          const txn = transactions.find((t) => t.id === txnId)
+          if (!txn) return null
+          return {
+            transaction: txn,
+            recipients: memberRows.map((m) => ({
+              userId: m.userId,
+              username: m.username,
+              selected: m.userId === currentUserId,
+            })),
+          }
+        })
+        .filter((ts): ts is TransactionShares => ts !== null)
 
       setTransactionShares(initial)
     } finally {
@@ -79,7 +81,7 @@ export function BulkShareDialog({
 
   useEffect(() => {
     if (open && selectedTransactionIds.length > 0) {
-      setShareMode('equal')
+      setShareMode('equal') // eslint-disable-line react-hooks/set-state-in-effect
       setTransactionShares((prev) =>
         prev.map((ts) => ({ ...ts, recipients: ts.recipients.map((r) => ({ ...r, selected: r.selected })) }))
        )
