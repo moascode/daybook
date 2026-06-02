@@ -42,7 +42,7 @@ export function BulkShareDialog({
 }: BulkShareDialogProps) {
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [shareMode, setShareMode] = useState<ShareMode>('equal')
-  const [transactionShares, setTransactionShares] = useState<TransactionShare[]>([])
+  const [transactionShares, setTransactionShares] = useState<TransactionShares[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
