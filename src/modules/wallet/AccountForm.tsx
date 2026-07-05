@@ -161,7 +161,8 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             }
           />
           <p className="mt-1 text-xs text-gray-500">
-            The account&apos;s current balance, before recording any transactions.
+            Starting balance — combined with recorded transactions to compute the
+            account&apos;s balance. Can be negative (e.g. credit card debt).
           </p>
         </div>
 
