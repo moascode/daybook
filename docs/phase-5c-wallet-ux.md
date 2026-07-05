@@ -1,6 +1,8 @@
 # Phase 5c — Wallet UX & Feature Improvements
 
-> **Status:** Ready to implement. Scoped from multi-expert reviews (2026-05-31) + backlog distillation.
+> **Status:** Sequenced — see `docs/phase-5c-implementation-plan.md` (5 wave PRs, approved 2026-07-05).
+> Scoped from multi-expert reviews (2026-05-31) + backlog distillation.
+> Statuses updated 2026-07-05 after PR #27 merged: B1 partial, B5 done, C4 partial, C7 obsolete.
 >
 > Phases A–D + opening balance have shipped (PR #6). This document tracks remaining UX wins, tech debt, and features that need owner sign-off.
 >
@@ -16,7 +18,11 @@ The wallet module is feature-complete for Phase 4 (home network multi-user) but 
 
 ## B — UX Wins (Highest User Value)
 
-### B1. Transaction free-text search ★ top pick
+### B1. Transaction free-text search ★ top pick — PARTIAL (UI-only remains)
+> **Update 2026-07-05:** PR #27 shipped the plumbing — `q` in `WalletFilters`
+> (`src/stores/wallet.store.ts:12`), hook wiring (`useWallet.ts:237,302`), and the server
+> `merchant/description LIKE` filter (`server/routes/wallet.ts:319-323`, also export route).
+> Only the debounced search input in the WalletPage filter bar is missing.
 - **Problem:** Filter bar has date/type/account/category/tag but **no merchant/description search**. Finding "that Grab ride" means manual narrowing.
 - **Where:** `src/modules/wallet/WalletPage.tsx:~196` (filter bar); `server/routes/wallet.ts` GET `/transactions`; `src/stores/wallet.store.ts` `WalletFilters`; `src/hooks/useWallet.ts` `TransactionFilters`.
 - **Fix:** Add a `q` filter → server `WHERE (merchant LIKE @q OR description LIKE @q)` (escape `%`/`_`); debounced search input in filter bar; thread `q` through store + `loadTransactions`.
@@ -44,7 +50,9 @@ The wallet module is feature-complete for Phase 4 (home network multi-user) but 
 - **Effort:** S–M. **Risk:** Low.
 - **Acceptance:** Tab reaches rows/cards; Enter opens editor; visible focus ring. Accessibility e2e spec.
 
-### B5. Zero-account onboarding (first-run dead end)
+### B5. Zero-account onboarding (first-run dead end) — DONE
+> **Update 2026-07-05:** implemented — `WalletPage.tsx:465` and `AccountsPage.tsx:88`
+> guard `accounts.length === 0` and render an `EmptyState` with a "Go to Accounts" CTA.
 - **Problem:** With zero accounts, "Add Transaction" button is live but form has empty account dropdown and **can't be submitted**. No guidance.
 - **Where:** `WalletPage.tsx:~150` (header button); `TransactionForm.tsx:~95` (empty options).
 - **Fix:** When `accounts.length === 0`, replace "Add Transaction" with "Create your first account" CTA (or show inline prompt).
@@ -118,7 +126,10 @@ The wallet module is feature-complete for Phase 4 (home network multi-user) but 
 - **Fix:** Wrap in try/catch + `addToast` on failure. Consider small `useMutationWithToast` helper.
 - **Effort:** M. **Risk:** Low.
 
-### C4. Export respects active filters + use PapaParse
+### C4. Export respects active filters + use PapaParse — PARTIAL (server half done)
+> **Update 2026-07-05:** the server export route already accepts filters incl. `q`
+> (`server/routes/wallet.ts:350-368`). Remaining: the client (`useWallet.ts:497-528`)
+> still builds CSV from the store and ignores that route.
 - **Problem:** `exportTransactions` always pulls **all** rows (ignores filters); CSV is hand-rolled despite PapaParse approved.
 - **Where:** `src/hooks/useWallet.ts:~423`; `server/routes/wallet.ts` `/transactions/export`.
 - **Fix:** Pass active filters to export query; build CSV with `Papa.unparse`.
@@ -136,7 +147,9 @@ The wallet module is feature-complete for Phase 4 (home network multi-user) but 
 - **Fix:** Route App's boot call through hook or delete; use `getMonthlySpending` in BudgetsPage or delete.
 - **Effort:** S. **Risk:** None.
 
-### C7. Replace hand-rolled export dropdown with Radix DropdownMenu
+### C7. Replace hand-rolled export dropdown with Radix DropdownMenu — OBSOLETE
+> **Update 2026-07-05:** the hand-rolled dropdown no longer exists — export moved to an
+> `ExportModal` (`WalletPage.tsx:517`). Nothing to do.
 - **Problem:** Export menu is custom `div` with no Escape, outside-click, `role="menu"`, focus management.
 - **Where:** `src/modules/wallet/WalletPage.tsx:~144`.
 - **Fix:** Use `@radix-ui/react-dropdown-menu` (already approved, CLAUDE.md §4).

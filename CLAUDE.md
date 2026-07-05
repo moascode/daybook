@@ -946,12 +946,16 @@ EOF
 Current phase:  5b — Household Sharing & Multi-User (v1.0) — COMPLETE
 Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Phase 5b (household sharing) shipped v1.0.1.
-                Phase 5c (wallet UX improvements) — IN PROGRESS (backlog not started).
-                See docs/phase-5c-wallet-ux.md.
-                Phase 5b extension: transaction quick-share (PR #27) adds a
-                one-click single-recipient share alongside the existing split
-                flow. Separate from the Phase 5c UX backlog below.
-Last session:   2026-06-03
+                Phase 5b extension: transaction quick-share (PR #27) MERGED
+                2026-07-05 — one-click single-recipient share alongside the
+                split flow, plus q free-text filter plumbing and filtered
+                server export route.
+                Phase 5c (wallet UX improvements) — PLANNED, not started.
+                Implementation sequenced into 5 wave PRs: see
+                docs/phase-5c-implementation-plan.md (approved 2026-07-05).
+                Backlog detail: docs/phase-5c-wallet-ux.md (statuses updated:
+                B1 partial, B5 done, C4 partial, C7 obsolete).
+Last session:   2026-07-05
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
                       by username with optional role assignment.
@@ -979,22 +983,17 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Phase 5c — Wallet UX & Feature Improvements (backlog):
-                - B1: Free-text search on transactions (merchant/description)
+Next task:      Phase 5c Wave 1 — branch feat/wallet-search-quick-add:
+                - B1: search input UI (plumbing already shipped in PR #27)
                 - B2: "Save & add another" on transaction form
-                - B3: Mobile-safe modal scrolling (max-height + scroll)
-                - B4: Keyboard/screen-reader accessible rows & cards
-                - B5: Zero-account onboarding path ("Create account" CTA)
-                - B6: Always-visible account card actions (not hover-only)
-                - B7: Dashboard/Reports charts reflow on mobile
-                - B8: Label unification (Total Balance vs Total Net Worth)
-                - B9: Colour consistency (positive money green)
-                - B10: Surface Type & Category on recurring rule cards
-                - B11: Touch targets ≥ 40px (sidebar, row buttons)
-                - B12: Opening-balance caption clarity (editing case)
-                See docs/phase-5c-wallet-ux.md for full scope, effort, acceptance criteria.
+                - C4: client export via filtered server route
+                - B12: opening-balance caption reword
+                Then Waves 2–5 sequentially per
+                docs/phase-5c-implementation-plan.md (mobile/a11y → server
+                hardening → visual polish → refactors). e2e spec prefixes
+                28–32 reserved per wave. D-items and C9 stay parked.
 
-Blockers:       None. Phase 4 stable. Phase 5b stable. Phase 5c is scoped and ready.
+Blockers:       None. Phase 4 stable. Phase 5b stable. Phase 5c is sequenced and ready.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
@@ -1040,7 +1039,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 **Note**: Phase 5 has been split into three subtasks:
 - **Phase 5a (AI)** is deferred — requires API key proxying + model routing
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
-- **Phase 5c (Wallet UX)** in progress — backlog of UX/feature improvements
+- **Phase 5c (Wallet UX)** planned — sequenced into 5 wave PRs, see docs/phase-5c-implementation-plan.md
 
 ### Delivery Milestones
 
