@@ -58,6 +58,18 @@ interface CategoryRow {
   type: string
 }
 
+// Joined row from GET /transactions/export (C4)
+interface ExportRow {
+  date: string
+  merchant: string | null
+  description: string | null
+  amount: number
+  type: string
+  category_name: string | null
+  account_name: string | null
+  tag: string | null
+}
+
 // ── Row → Model mappers ─────────────────────────────
 
 function mapAccount(row: AccountRow): Account {
@@ -492,38 +504,56 @@ export function useWallet() {
 
   /**
    * Export a specific set of transactions (by ID) as CSV or JSON.
-   * Reads from the store so it always operates on the currently filtered view.
+   * C4: fetches joined rows from the server export route with the active
+   * filters (incl. `q`), so the file always matches the filtered view and
+   * category/account names come from one query instead of store lookups.
    */
-  const exportTransactions = useCallback((format: 'csv' | 'json', ids: string[]): void => {
-    const { transactions, accounts, categories } = useWalletStore.getState()
-    const idSet = new Set(ids)
-    // Only export IDs that exist in the current filtered view (prevents stale IDs from
-    // exporting rows the user can no longer see).
-    const toExport = transactions.filter((t) => idSet.has(t.id))
+  const exportTransactions = useCallback(async (format: 'csv' | 'json', ids: string[]): Promise<void> => {
+    if (ids.length === 0) return
+    const { filters } = useWalletStore.getState()
+    const qs = new URLSearchParams()
+    if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom)
+    if (filters.dateTo) qs.set('dateTo', filters.dateTo)
+    if (filters.type !== 'all') qs.set('type', filters.type)
+    if (filters.categoryId) qs.set('categoryId', filters.categoryId)
+    if (filters.accountId) qs.set('accountId', filters.accountId)
+    for (const t of filters.tags) qs.append('tags', t)
+    if (filters.q) qs.set('q', filters.q)
+    // Restrict to the user's selection within the filtered view (stale IDs
+    // that no longer match the filters are excluded server-side).
+    qs.set('ids', ids.join(','))
 
+    const rows = await api.get<ExportRow[]>(`/transactions/export?${qs.toString()}`)
     const filename = `daybook-transactions-${todayISO()}.${format}`
 
     if (format === 'csv') {
       const header = 'date,merchant,description,amount,type,category,account,tags'
-      const q = (s: string) => `"${s.replace(/"/g, '""')}"`
-      const csvRows = toExport.map((t) => {
-        const catName = t.categoryId ? (categories.find((c) => c.id === t.categoryId)?.name ?? '') : ''
-        const acctName = accounts.find((a) => a.id === t.accountId)?.name ?? ''
-        return [t.date, q(t.merchant), q(t.description), t.amount, t.type, q(catName), q(acctName), q(t.tags.join(', '))].join(',')
-      })
+      const quote = (s: string) => `"${s.replace(/"/g, '""')}"`
+      const csvRows = rows.map((r) =>
+        [
+          r.date,
+          quote(r.merchant ?? ''),
+          quote(r.description ?? ''),
+          r.amount,
+          r.type,
+          quote(r.category_name ?? ''),
+          quote(r.account_name ?? ''),
+          quote(parseTags(r.tag).join(', ')),
+        ].join(','),
+      )
       triggerDownload([header, ...csvRows].join('\n'), filename, 'text/csv')
     } else {
-      const rows = toExport.map((t) => ({
-        date: t.date,
-        merchant: t.merchant,
-        description: t.description,
-        amount: t.amount,
-        type: t.type,
-        category: t.categoryId ? (categories.find((c) => c.id === t.categoryId)?.name ?? null) : null,
-        account: accounts.find((a) => a.id === t.accountId)?.name ?? '',
-        tags: t.tags,
+      const json = rows.map((r) => ({
+        date: r.date,
+        merchant: r.merchant ?? '',
+        description: r.description ?? '',
+        amount: r.amount,
+        type: r.type,
+        category: r.category_name,
+        account: r.account_name ?? '',
+        tags: parseTags(r.tag),
       }))
-      triggerDownload(JSON.stringify(rows, null, 2), filename, 'application/json')
+      triggerDownload(JSON.stringify(json, null, 2), filename, 'application/json')
     }
   }, [])
 

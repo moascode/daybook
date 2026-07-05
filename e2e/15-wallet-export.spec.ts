@@ -190,3 +190,42 @@ test('export modal only shows transactions matching the active type filter', asy
   await page.getByRole('button', { name: 'Cancel' }).click()
   await page.getByLabel('Type').selectOption('all')
 })
+
+// ── Server-side export honours active filters (Phase 5c C4) ───────────
+
+async function downloadContent(testid: string): Promise<string> {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId(testid).click(),
+  ])
+  const stream = await download.createReadStream()
+  const chunks: Buffer[] = []
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as ArrayBuffer))
+  return Buffer.concat(chunks).toString('utf-8')
+}
+
+test('exported file with an active type filter contains only matching rows', async () => {
+  await page.getByLabel('Type').selectOption('expense')
+  await page.getByRole('button', { name: /Export/i }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  const content = await downloadContent('export-csv-btn')
+  expect(content).toMatch(/Test Merchant/)
+  expect(content).not.toMatch(/Income Source/)
+  await page.getByLabel('Type').selectOption('all')
+})
+
+test('exported file with an active search filter contains only matching rows', async () => {
+  // The B1 search input drives the server `q` filter through to the export route
+  const response = page.waitForResponse(
+    (r) => r.url().includes('/api/transactions') && r.url().includes('q=Income'),
+  )
+  await page.getByTestId('transaction-search').fill('Income')
+  await response
+  await page.getByRole('button', { name: /Export/i }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  const content = await downloadContent('export-json-btn')
+  const data = JSON.parse(content) as Array<{ merchant?: string }>
+  expect(data.length).toBe(1)
+  expect(data[0].merchant).toBe('Income Source')
+  await page.getByTestId('transaction-search').fill('')
+})
