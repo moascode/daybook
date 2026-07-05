@@ -946,8 +946,11 @@ EOF
 Current phase:  5b — Household Sharing & Multi-User (v1.0) — COMPLETE
 Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Phase 5b (household sharing) shipped v1.0.1.
-                Phase 5c (wallet UX improvements) — COMPLETE.
-                See .claude/plans/share-transaction-does-not-kind-petal.md.
+                Phase 5c (wallet UX improvements) — IN PROGRESS (backlog not started).
+                See docs/phase-5c-wallet-ux.md.
+                Phase 5b extension: transaction quick-share (PR #27) adds a
+                one-click single-recipient share alongside the existing split
+                flow. Separate from the Phase 5c UX backlog below.
 Last session:   2026-06-03
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
