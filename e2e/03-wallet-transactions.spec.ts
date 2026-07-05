@@ -523,33 +523,28 @@ test('hover on transaction row reveals the Split (scissors) button', async () =>
   await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toBeVisible()
 })
 
-test('clicking Split opens the Split Transaction modal', async () => {
+test('clicking Split opens the Share Transaction modal', async () => {
   await transactionRowFor(page, 'Kopitiam').hover()
   await transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn').click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Share Transaction' })).toBeVisible()
 })
 
-test('split modal shows the transaction being split and a group-members prompt', async () => {
+test('share modal shows the transaction and a group-members prompt', async () => {
   const dialog = page.getByRole('dialog')
-  // Transaction details are shown at the top
   await expect(dialog.getByText('Kopitiam')).toBeVisible()
-  // Without any household group, a prompt to add members is shown
   await expect(dialog.getByText('No group members yet')).toBeVisible()
-  // Save Split button is disabled when there are no members to split with
-  await expect(dialog.getByRole('button', { name: 'Save Split' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Share' })).toBeDisabled()
 })
 
-test('split modal mode selector shows equal and custom options', async () => {
+test('share modal does not show split mode selector without a recipient', async () => {
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('button', { name: 'Split equally' })).toBeVisible()
-  await expect(dialog.getByRole('button', { name: 'Custom amounts' })).toBeVisible()
+  await expect(dialog.getByText('How to split')).not.toBeVisible()
 })
 
-test('cancelling split modal closes it without creating new transactions', async () => {
+test('cancelling share modal closes it without creating new transactions', async () => {
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  // Original Kopitiam row is still present and unchanged
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 

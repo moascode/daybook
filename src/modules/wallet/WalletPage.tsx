@@ -11,8 +11,8 @@ import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
-import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { BulkShareDialog } from '@/modules/wallet/BulkShareDialog'
+import { ShareDialog } from '@/modules/wallet/ShareDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -66,9 +66,6 @@ export function WalletPage() {
   const [netWorth, setNetWorth] = useState<number | null>(null)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
-  // Split transaction state (for user-based share splitting)
-  const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
-
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 
@@ -77,6 +74,9 @@ export function WalletPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkShareOpen, setBulkShareOpen] = useState(false)
+
+  // Share transaction state
+  const [shareTarget, setShareTarget] = useState<Transaction | null>(null)
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
@@ -179,8 +179,8 @@ export function WalletPage() {
     setFormOpen(true)
   }
 
-  function openSplitDialog(transaction: Transaction) {
-    setSplitTarget(transaction)
+  function openShareDialog(transaction: Transaction) {
+    setShareTarget(transaction)
   }
 
   function toggleSelectMode() {
@@ -396,7 +396,7 @@ export function WalletPage() {
 
       {/* View filter pills — always visible so users in groups can see shared transactions */}
       <div className="mb-3 flex items-center gap-1.5">
-        {(['all', 'mine', 'shared-with-me'] as const).map((v) => (
+        {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
           <button
             key={v}
             onClick={() => setFilters({ view: v })}
@@ -407,7 +407,7 @@ export function WalletPage() {
                 : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300',
             )}
           >
-            {v === 'shared-with-me' ? 'Shared with me' : v.charAt(0).toUpperCase() + v.slice(1)}
+            {v === 'shared-with-me' ? 'Shared with me' : v === 'shared-with-others' ? 'Shared with others' : v.charAt(0).toUpperCase() + v.slice(1)}
           </button>
         ))}
       </div>
@@ -484,7 +484,7 @@ export function WalletPage() {
             categories={categories}
             onEdit={openEditForm}
             onDelete={handleDeleteTransaction}
-            onSplit={openSplitDialog}
+            onSplit={openShareDialog}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -506,12 +506,12 @@ export function WalletPage() {
         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
       />
 
-      <SplitDialog
-        open={!!splitTarget}
-        onOpenChange={(open) => { if (!open) setSplitTarget(null) }}
-        transaction={splitTarget}
+      <ShareDialog
+        open={!!shareTarget}
+        onOpenChange={(open) => { if (!open) setShareTarget(null) }}
+        transaction={shareTarget}
         currentUserId={currentUserId}
-        onSaved={() => loadTransactions(filtersRef.current)}
+        onSaved={() => { setShareTarget(null); loadTransactions(filtersRef.current) }}
       />
 
       <ExportModal

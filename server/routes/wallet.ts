@@ -285,11 +285,16 @@ walletRouter.get('/transactions', (req, res) => {
     // Own transactions only (whether split or not)
     conditions.push('user_id = @userId')
   } else if (view === 'shared-with-me') {
-    // Transactions created by others where I have a share line
+      // Transactions created by others where I have a share line
     conditions.push(
-      `user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id = @userId)`
-    )
-  } else {
+        `user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id = @userId)`
+        )
+      } else if (view === 'shared-with-others') {
+      // My transactions that have been shared with others
+    conditions.push(
+        `user_id = @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id != @userId)`
+        )
+      } else {
     // All visible: own transactions + transactions on shared accounts
     const visible = visibleAccountIds(db, userId)
     if (visible.length === 0) {
@@ -311,6 +316,11 @@ walletRouter.get('/transactions', (req, res) => {
     conditions.push('(account_id = @accountId OR destination_account_id = @accountId)')
     params.accountId = q.accountId
   }
+  // B1: Free-text search on merchant/description
+  if (str(q.q)) {
+    conditions.push('(merchant LIKE @q OR description LIKE @q)')
+    params.q = `%${q.q}%`
+  }
   const rawTags = q.tags
     ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
     : []
@@ -326,7 +336,11 @@ walletRouter.get('/transactions', (req, res) => {
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
   const rows = db
-    .prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC`)
+    .prepare(`
+      SELECT transactions.*,
+        CASE WHEN EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id) THEN 1 ELSE 0 END AS has_shares
+      FROM transactions ${where} ORDER BY date DESC, created_at DESC
+    `)
     .all(params)
   res.json(rows)
 })
@@ -345,6 +359,11 @@ walletRouter.get('/transactions/export', (req, res) => {
   if (str(q.accountId)) {
     conditions.push('(t.account_id = @accountId OR t.destination_account_id = @accountId)')
     params.accountId = q.accountId
+  }
+  // B1: Free-text search on merchant/description for export
+  if (str(q.q)) {
+    conditions.push('(t.merchant LIKE @q OR t.description LIKE @q)')
+    params.q = `%${q.q}%`
   }
   const rawTags = q.tags
     ? (Array.isArray(q.tags) ? q.tags : [q.tags]).filter((t): t is string => typeof t === 'string' && t.length > 0)
@@ -597,6 +616,80 @@ walletRouter.delete('/transactions/:id/shares', (req, res) => {
   res.status(204).end()
 })
 
+// Quick single-transaction share — share with one recipient (full amount or split)
+walletRouter.post('/transactions/:id/share', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const { recipientId, splitMode, shareAmounts } = req.body ?? {}
+
+  // 1. Validate transaction exists and caller owns it
+  const txn = db.prepare('SELECT id, user_id, amount FROM transactions WHERE id = ?').get(req.params.id) as { id: string; user_id: string; amount: number } | undefined
+  if (!txn) return res.status(404).json({ error: 'transaction not found' })
+  if (txn.user_id !== userId) {
+    return res.status(403).json({ error: 'only the transaction owner can share' })
+  }
+
+  // 2. Validate recipient is a co-group member
+  const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
+  if (!allowedIds.has(String(recipientId))) {
+    return res.status(400).json({ error: 'recipient is not a group co-member' })
+  }
+
+  // 3. Validate splitMode
+  const validModes = ['none', 'equal', 'custom'] as const
+  if (!(validModes as readonly string[]).includes(splitMode)) {
+    return res.status(400).json({ error: 'splitMode must be "none", "equal", or "custom"' })
+  }
+
+  // 4. Calculate share amounts based on splitMode
+  let shares: Array<{ userId: string; shareAmount: number; note?: string }> = []
+
+  if (splitMode === 'none') {
+    // Recipient owes 100% of the amount
+    shares = [{ userId: recipientId, shareAmount: txn.amount, note: '' }]
+  } else if (splitMode === 'equal') {
+    // Split equally between owner + recipient (2 people)
+    // Payer absorbs any rounding remainder
+    const base = Math.floor((txn.amount / 2) * 100) / 100
+    const remainder = Math.round((txn.amount - base * 2) * 100) / 100
+    shares = [
+      { userId: userId, shareAmount: Math.round((base + remainder) * 100) / 100, note: '' },
+      { userId: recipientId, shareAmount: base, note: '' },
+    ]
+  } else if (splitMode === 'custom') {
+    // Use provided shareAmounts array
+    if (!Array.isArray(shareAmounts) || shareAmounts.length !== 2) {
+      return res.status(400).json({ error: 'shareAmounts must be array of 2 amounts' })
+    }
+    for (const amt of shareAmounts) {
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return res.status(400).json({ error: 'each share amount must be a positive finite number' })
+      }
+    }
+    const sum = shareAmounts.reduce((acc: number, a: number) => acc + a, 0)
+    if (Math.abs(sum - txn.amount) > 0.015) {
+      return res.status(400).json({ error: `amounts must sum to ${txn.amount}; got ${sum}` })
+    }
+    shares = [
+      { userId: userId, shareAmount: shareAmounts[0], note: '' },
+      { userId: recipientId, shareAmount: shareAmounts[1], note: '' },
+    ]
+  }
+
+  // 5. Atomically insert share rows
+  const result = db.transaction(() => {
+    db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
+    const insert = db.prepare(
+      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
+       RETURNING *`,
+    )
+    return shares.map((s) => insert.get(req.params.id, s.userId, s.shareAmount, s.note ?? ''))
+  })()
+
+  res.status(201).json(result)
+})
+
 // ── Bulk transaction shares ───────────────────────────
 // POST /transactions/shares — Share multiple transactions at once.
 // Body: { transactions: Array<{ transactionId: string; shares: Array<{ userId, shareAmount, note? }> }> }
@@ -697,6 +790,43 @@ walletRouter.post('/transactions/shares', (req, res) => {
   })()
 
   res.status(201).json({ message: 'transactions shared successfully', transactionIds })
+})
+
+// Batch share status check — returns { transactionId, hasShares } for each ID
+walletRouter.post('/transactions/shares/status', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const { transactionIds }: { transactionIds: string[] } = req.body ?? {}
+
+  if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
+    return res.json([])
+   }
+
+  if (transactionIds.length > 500) {
+    return res.status(400).json({ error: 'cannot check more than 500 transactions at once' })
+  }
+
+  // Only return share status for transactions the caller owns
+  const placeholders = transactionIds.map(() => '?').join(',')
+  const ownedRows = db.prepare(
+    `SELECT id FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`
+  ).all(...transactionIds, userId) as Array<{ id: string }>
+  const ownedIds = new Set(ownedRows.map((r) => r.id))
+
+  const rows = db.prepare(`
+      SELECT transaction_id, 1 AS hasShares
+      FROM transaction_shares
+      WHERE transaction_id IN (${placeholders}) AND user_id = ?
+     `).all(...transactionIds, userId) as Array<{ transaction_id: string; hasShares: 1 }>
+
+  const result = transactionIds
+    .filter((id) => ownedIds.has(id))
+    .map((id) => ({
+      transactionId: id,
+      hasShares: rows.some((r) => r.transaction_id === id),
+    }))
+
+  res.json(result)
 })
 
 // ── Budgets ──────────────────────────────────────────

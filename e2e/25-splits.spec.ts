@@ -48,25 +48,20 @@ test.describe('25 — Transaction splits', () => {
     // Alice clicks the split button on the Groceries transaction
     await expect(alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Groceries' })).toBeVisible()
     await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Groceries' }).hover()
-    await alicePage.getByRole('button', { name: 'Split transaction' }).click()
+    await alicePage.getByRole('button', { name: 'Share transaction' }).click()
 
-    // SplitDialog opens
-    const splitDialog = alicePage.getByRole('dialog')
-    await expect(splitDialog).toBeVisible()
-    await expect(splitDialog.getByText('Split Transaction')).toBeVisible()
+    // ShareDialog opens
+    const shareDialog = alicePage.getByRole('dialog')
+    await expect(shareDialog).toBeVisible()
+    await expect(shareDialog.getByText('Share Transaction')).toBeVisible()
 
-    // Bob should appear as a member to split with
-    await expect(splitDialog.getByText(bobName)).toBeVisible({ timeout: 5000 })
+    // Bob should appear as a recipient in the dropdown
+    await expect(shareDialog.locator('select')).toBeVisible({ timeout: 5000 })
+    await shareDialog.locator('select').selectOption({ label: bobName })
 
-    // Click Bob to include him in the split
-    await splitDialog.getByText(bobName).click()
-
-    // Verify the total section appears (amounts are in inputs, check the Total label)
-    await expect(splitDialog.getByText(/Total:/)).toBeVisible()
-
-    // Save the split
-    await splitDialog.getByRole('button', { name: 'Save Split' }).click()
-    await expect(splitDialog).not.toBeVisible()
+    // Save the share (default mode: keep as-is)
+    await shareDialog.getByRole('button', { name: 'Share' }).click()
+    await expect(shareDialog).not.toBeVisible()
 
     // E-2: Verify balance is reflected in Household page
     await alicePage.goto('/household')
@@ -123,15 +118,13 @@ test.describe('25 — Transaction splits', () => {
     // Wait for the transaction to appear in the list
     await expect(alicePage.getByText('Lunch')).toBeVisible({ timeout: 10_000 })
     // Click the split button on the Lunch transaction row using the test ID
-    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Lunch' }).getByRole('button', { name: 'Split transaction' }).click()
+    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Lunch' }).getByRole('button', { name: 'Share transaction' }).click()
 
-    // Wait for dialog; Bob should be listed as an available member
+    // Wait for dialog
     await expect(alicePage.getByRole('dialog')).toBeVisible({ timeout: 5000 })
-    // Bob is shown as a chip — click him to deselect (or verify he is NOT selected by default)
-    // The split dialog only includes self by default — lines.length = 1 (only Alice)
-    // When only self is participant, Save Split should be disabled
-    const saveSplitBtn = alicePage.getByRole('button', { name: 'Save Split' })
-    await expect(saveSplitBtn).toBeDisabled({ timeout: 5000 })
+    // Share button is disabled when no recipient is selected (default state)
+    const shareBtn = alicePage.getByRole('dialog').getByRole('button', { name: 'Share' })
+    await expect(shareBtn).toBeDisabled({ timeout: 5000 })
 
     await aliceCtx.close()
     await bobCtx.close()

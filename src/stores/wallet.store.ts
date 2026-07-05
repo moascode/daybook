@@ -8,7 +8,8 @@ interface WalletFilters {
   categoryId: string | null
   accountId: string | null
   tags: string[]
-  view: 'all' | 'mine' | 'shared-with-me'
+  view: 'all' | 'mine' | 'shared-with-me' | 'shared-with-others'
+  q: string // B1: free-text search on merchant/description
 }
 
 interface WalletState {
@@ -65,6 +66,7 @@ function getDefaultFilters(): WalletFilters {
     accountId: null,
     tags: [],
     view: 'all',
+    q: '', // B1: search query
   }
 }
 

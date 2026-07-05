@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft, Pencil, Scissors } from 'lucide-react'
+import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -142,6 +142,12 @@ function TransactionRow({
           <span className="truncate text-sm font-medium text-gray-900">
             {transaction.merchant || transaction.description || 'Untitled'}
           </span>
+          {transaction.hasShares && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+              <Users className="h-2.5 w-2.5" />
+              Shared
+            </span>
+          )}
           {category && (
             <Badge color={category.color} className="flex-shrink-0">
               {category.name}
@@ -189,8 +195,8 @@ function TransactionRow({
               variant="ghost"
               size="sm"
               onClick={() => onSplit(transaction)}
-              aria-label="Split transaction"
-              title="Split between household members"
+              aria-label="Share transaction"
+              title="Share with household members"
               data-testid="split-transaction-btn"
             >
               <Scissors className="h-3.5 w-3.5" />

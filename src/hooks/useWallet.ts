@@ -47,6 +47,7 @@ interface TransactionRow {
   import_hash: string
   created_at: string
   updated_at: string
+  has_shares?: number
 }
 
 interface CategoryRow {
@@ -92,6 +93,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     importHash: row.import_hash ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    hasShares: !!row.has_shares,
   }
 }
 
@@ -231,7 +233,8 @@ interface TransactionFilters {
   categoryId?: string | null
   accountId?: string | null
   tags?: string[]
-  view?: 'all' | 'mine' | 'shared-with-me'
+  view?: 'all' | 'mine' | 'shared-with-me' | 'shared-with-others'
+  q?: string // B1: free-text search on merchant/description
 }
 
 // ── Hook ────────────────────────────────────────────
@@ -296,10 +299,12 @@ export function useWallet() {
       for (const t of filters.tags) qs.append('tags', t)
     }
     if (filters?.view && filters.view !== 'all') qs.set('view', filters.view)
+    // B1: Search query
+    if (filters?.q) qs.set('q', filters.q)
 
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)
-    const transactions = rows.map(mapTransaction)
+    const transactions = rows.map((row) => mapTransaction(row))
     useWalletStore.getState().setTransactions(transactions)
     return transactions
   }, [])
@@ -321,8 +326,9 @@ export function useWallet() {
   }, [])
 
   const updateAccount = useCallback(async (id: string, data: Partial<AccountInput>): Promise<void> => {
-    await api.patch<AccountRow>(`/accounts/${id}`, data)
-    useWalletStore.getState().updateAccount(id, data as Partial<Account>)
+    const row = await api.patch<AccountRow>(`/accounts/${id}`, data)
+    const mapped = mapAccount(row)
+    useWalletStore.getState().updateAccount(id, mapped)
   }, [])
 
   const deleteAccount = useCallback(async (id: string): Promise<void> => {
