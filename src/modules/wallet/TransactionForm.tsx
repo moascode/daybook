@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -74,6 +74,7 @@ export function TransactionForm({
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
+  const amountRef = useRef<HTMLInputElement>(null)
 
   // Reset the form when the modal (re)opens or its inputs change — adjust state
   // during render rather than in an effect.
@@ -134,20 +135,31 @@ export function TransactionForm({
     return Object.keys(errs).length === 0
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!validate()) return
-
-    const data: TransactionFormData = {
+  function buildSubmitData(): TransactionFormData {
+    return {
       ...form,
       merchant: form.merchant.trim(),
       description: form.description.trim(),
       categoryId: form.type === 'transfer' ? null : (form.categoryId || null),
       destinationAccountId: form.type === 'transfer' ? form.destinationAccountId : null,
     }
+  }
 
-    await onSubmit(data)
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!validate()) return
+    await onSubmit(buildSubmitData())
     onOpenChange(false)
+  }
+
+  // B2: submit but keep the modal open for rapid entry — clear the per-item
+  // fields, keep date/account/type (and category), and refocus Amount.
+  async function handleSaveAndAddAnother() {
+    if (!validate()) return
+    await onSubmit(buildSubmitData())
+    setForm((f) => ({ ...f, amount: 0, merchant: '', description: '', tags: [] }))
+    setErrors({})
+    amountRef.current?.focus()
   }
 
   const isEdit = !!transaction
@@ -191,6 +203,7 @@ export function TransactionForm({
             error={errors.date}
           />
           <Input
+            ref={amountRef}
             label="Amount"
             type="number"
             step="0.01"
@@ -286,6 +299,16 @@ export function TransactionForm({
           >
             Cancel
           </Button>
+          {!isEdit && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleSaveAndAddAnother}
+              data-testid="save-add-another"
+            >
+              Save &amp; Add Another
+            </Button>
+          )}
           <Button type="submit">
             {isEdit ? 'Save Changes' : 'Add Transaction'}
           </Button>
