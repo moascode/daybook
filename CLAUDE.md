@@ -983,11 +983,15 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 27, 31, 06-uat) all pass — 125/125.
                 Wave 5 (C5 useCrudModal + ConfirmDeleteModal adopted in
                 Budgets/Goals/Recurring, C3 error toasts surfacing C12's
-                {error} message, C6 dead-code sweep in useWallet) — IN
-                PROGRESS on branch refactor/wallet-crud-modal-toasts.
-                Wave 5's stated dependencies (Waves 2 + 3 merged) are both
-                satisfied, and Wave 4 is now merged too. This is the final
-                wave of the Phase 5c plan.
+                {error} message via a fixed api.ts that now parses the
+                {error} body, C6 dead-code sweep in useWallet — wired
+                getMonthlySpending into BudgetsPage, deleted the unused
+                processRecurringTransactions wrapper) implemented on
+                branch refactor/wallet-crud-modal-toasts — PR #33 OPEN
+                (draft). New spec e2e/32-wallet-error-toasts (4/4).
+                Verified: tsc, typecheck:server, lint clean; affected e2e
+                specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
+                This is the final wave of the Phase 5c plan.
 Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -1016,16 +1020,13 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Implement Wave 5 (C5 useCrudModal + ConfirmDeleteModal
-                adopted in Budgets/Goals/Recurring, C3 error toasts
-                surfacing C12's {error} message, C6 dead-code sweep in
-                useWallet) per docs/phase-5c-implementation-plan.md; new
-                spec e2e/32-wallet-error-toasts uses page.route() to force
-                a mutation failure. This is the final wave of Phase 5c.
-                D-items and C9 stay parked after Wave 5 merges.
+Next task:      Owner reviews and merges Wave 5 (PR #33). After it merges,
+                Phase 5c is complete — only the parked D-items and C9
+                (deferred DB-side dashboard aggregation) remain in the
+                wallet UX backlog, each requiring individual owner
+                sign-off before any work starts (CLAUDE.md §2 Rule 3).
 
-Blockers:       None — Wave 4 (PR #32) is merged, so Wave 5's dependencies
-                (Waves 2 + 3 merged) are satisfied and it is unblocked.
+Blockers:       None — PR #33 is open and green, awaiting review/merge.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
