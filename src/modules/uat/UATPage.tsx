@@ -449,12 +449,16 @@ function buildTests(): TestDef[] {
     await deleteAccount(acct.id)
   })
 
-  t('Wallet › Transactions', 'Zero-amount transaction is accepted', async ({ addAccount, addTransaction, deleteTransaction, deleteAccount }): Promise<void> => {
+  t('Wallet › Transactions', 'Zero-amount transaction is rejected', async ({ addAccount, addTransaction, deleteAccount }): Promise<void> => {
+    // Wave 3 (C2): the server validates amount > 0 and returns 400.
     const acct = await addAccount({ name: 'UAT Zero Amt', type: 'cash' })
-    const txn = await addTransaction({ accountId: acct.id, amount: 0, type: 'expense' })
-    assert(txn.id.length > 0, 'zero-amount transaction created')
-    assertClose(txn.amount, 0, 0.001, 'amount is zero')
-    await deleteTransaction(txn.id)
+    let rejected = false
+    try {
+      await addTransaction({ accountId: acct.id, amount: 0, type: 'expense' })
+    } catch {
+      rejected = true
+    }
+    assert(rejected, 'zero-amount transaction should be rejected with 400')
     await deleteAccount(acct.id)
   }, true)
 

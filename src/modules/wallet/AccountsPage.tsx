@@ -12,7 +12,7 @@ import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
 
 export function AccountsPage() {
-  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalance } = useWallet()
+  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalances } = useWallet()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
@@ -22,15 +22,15 @@ export function AccountsPage() {
 
   useEffect(() => { loadAccounts() }, [loadAccounts, dataVersion])
 
-  // Compute net worth whenever accounts list changes. Promise.all([]) resolves
-  // to [] → reduces to 0, so the empty case needs no special handling.
+  // Compute net worth whenever accounts list changes. With no accounts the
+  // reduce over [] yields 0, so the empty case needs no special handling.
   useEffect(() => {
     let cancelled = false
-    Promise.all(accounts.map((a) => getAccountBalance(a.id))).then((balances) => {
-      if (!cancelled) setNetWorth(balances.reduce((sum, b) => sum + b, 0))
+    getAccountBalances().then((balances) => {
+      if (!cancelled) setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
     })
     return () => { cancelled = true }
-  }, [accounts, getAccountBalance])
+  }, [accounts, getAccountBalances])
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
     await addAccount(data)

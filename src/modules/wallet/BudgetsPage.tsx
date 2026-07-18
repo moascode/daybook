@@ -30,7 +30,12 @@ export function BudgetsPage() {
   useEffect(() => {
     loadCategories()
     loadBudgets()
-    loadTransactions({})
+    // C8: budget progress only looks at the current month, so bound the fetch
+    // instead of pulling the user's full transaction history.
+    const now = new Date()
+    const prefix = currentMonthYear()
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+    loadTransactions({ dateFrom: `${prefix}-01`, dateTo: `${prefix}-${String(lastDay).padStart(2, '0')}` })
   }, [loadBudgets, loadCategories, loadTransactions])
 
   const spending = useMemo(() => {

@@ -328,6 +328,12 @@ export function useWallet() {
     return balance
   }, [])
 
+  // C1: all visible account balances in one request, keyed by account id.
+  const getAccountBalances = useCallback(async (): Promise<Record<string, number>> => {
+    const rows = await api.get<{ id: string; balance: number }[]>('/accounts/balances')
+    return Object.fromEntries(rows.map((r) => [r.id, r.balance]))
+  }, [])
+
   // ── Account CRUD ────────────────────────────────
 
   const addAccount = useCallback(async (data: AccountInput): Promise<Account> => {
@@ -600,6 +606,7 @@ export function useWallet() {
 
     // Balance
     getAccountBalance,
+    getAccountBalances,
 
     // Account CRUD
     addAccount,
