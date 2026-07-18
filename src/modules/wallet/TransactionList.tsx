@@ -80,7 +80,7 @@ function TransactionRow({
 
   const amountColor =
     transaction.type === 'income'
-      ? 'text-green-600'
+      ? 'text-positive-600'
       : transaction.type === 'expense'
         ? 'text-red-600'
         : 'text-blue-600'
@@ -134,7 +134,7 @@ function TransactionRow({
           className={cn(
             'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold',
             transaction.type === 'income'
-              ? 'bg-green-50 text-green-600'
+              ? 'bg-positive-50 text-positive-600'
               : transaction.type === 'expense'
                 ? 'bg-red-50 text-red-600'
                 : 'bg-blue-50 text-blue-600'
@@ -282,7 +282,7 @@ export function TransactionList({
               </span>
               <div className="flex items-center gap-3 text-xs">
                 {group.totalIncome > 0 && (
-                  <span className="text-green-600">
+                  <span className="text-positive-600">
                     +{formatMYR(group.totalIncome)}
                   </span>
                 )}

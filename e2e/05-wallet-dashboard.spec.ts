@@ -125,3 +125,27 @@ test('account bar chart renders for Dashboard Bank', async () => {
   await expect(page.getByText('Spending by Account')).toBeVisible()
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible()
 })
+
+// ── Axis formatting (Phase 5c C10) ──────────────────────────────────────
+
+test('cash flow axis shows plain-ringgit ticks, not "k", for sub-10k data', async () => {
+  const cashFlow = page.getByRole('img', { name: /cash flow by week/i })
+  await expect(cashFlow).toBeVisible()
+  const ticks = cashFlow.locator('.recharts-cartesian-axis-tick-value')
+  // Max weekly figure is 6,000 → plain numeric ticks like "1500", never "1.5k"/"0k"
+  await expect(ticks.filter({ hasText: /^\d+$/ }).first()).toBeVisible()
+  await expect(ticks.filter({ hasText: /k$/ })).toHaveCount(0)
+})
+
+// ── Chart accessibility (Phase 5c C13) ──────────────────────────────────
+
+test('charts expose accessible data summaries', async () => {
+  await expect(page.getByRole('img', { name: /cash flow by week.*income/i })).toBeVisible()
+  await expect(page.getByRole('img', { name: /spending by category/i })).toBeVisible()
+  await expect(page.getByRole('img', { name: /spending by account/i })).toBeVisible()
+})
+
+test('positive net figure carries an explicit + glyph', async () => {
+  // Net = 6,500 − 490 = 6,010 → rendered with a "+" so the sign isn't colour-only
+  await expect(page.getByText(/\+\s*RM\s*6,010\.00/)).toBeVisible()
+})

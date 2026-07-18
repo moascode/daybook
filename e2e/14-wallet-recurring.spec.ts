@@ -100,6 +100,22 @@ test('weekly rule row shows "Weekly" frequency', async () => {
   await expect(row.getByText('Weekly', { exact: true })).toBeVisible()
 })
 
+// ── Type badge & category chip at rest (Phase 5c B10) ──────────────────
+
+test('rule card shows its type badge without opening the editor', async () => {
+  const row = page.getByTestId('recurring-row').filter({ hasText: 'Netflix' })
+  await expect(row.getByText('Expense', { exact: true })).toBeVisible()
+})
+
+test('rule card shows its category as a chip once one is set', async () => {
+  const row = page.getByTestId('recurring-row').filter({ hasText: 'Netflix' })
+  await row.getByRole('button', { name: /Edit/i }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.locator('#category').selectOption({ label: 'Entertainment' })
+  await dialog.getByRole('button', { name: /Save|Update/i }).click()
+  await expect(row.getByText('Entertainment', { exact: true })).toBeVisible()
+})
+
 // ── Edit rule ──────────────────────────────────────────────────────────
 
 test('edit button pre-fills the form with existing values', async () => {

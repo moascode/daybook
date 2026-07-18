@@ -133,7 +133,7 @@ export function ExportModal({
                     </div>
                     <span className={cn(
                       'flex-shrink-0 text-sm font-semibold',
-                      t.type === 'income' ? 'text-green-600' :
+                      t.type === 'income' ? 'text-positive-600' :
                       t.type === 'expense' ? 'text-red-600' : 'text-blue-600',
                     )}>
                       {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}

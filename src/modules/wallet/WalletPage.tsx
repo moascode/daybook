@@ -278,7 +278,7 @@ export function WalletPage() {
         <div className="mb-4 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-              Total Balance
+              Total Net Worth
             </p>
             <p className="mt-1.5 text-2xl font-bold text-brand-900">
               {netWorth === null ? '…' : formatMYR(netWorth)}
@@ -392,11 +392,11 @@ export function WalletPage() {
 
       {/* Summary row */}
       <div className="mb-4 grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+        <div className="rounded-lg border border-positive-100 bg-positive-50 px-4 py-3">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-positive-600">
             <TrendingUp className="h-3.5 w-3.5" /> Income
           </div>
-          <p className="mt-1 text-lg font-bold text-green-700">{formatMYR(summary.totalIncome)}</p>
+          <p className="mt-1 text-lg font-bold text-positive-700">{formatMYR(summary.totalIncome)}</p>
         </div>
         <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-red-600">
@@ -406,10 +406,12 @@ export function WalletPage() {
         </div>
         <div className={cn(
           'rounded-lg border px-4 py-3',
-          summary.net >= 0 ? 'border-green-100 bg-green-50' : 'border-red-100 bg-red-50',
+          summary.net >= 0 ? 'border-positive-100 bg-positive-50' : 'border-red-100 bg-red-50',
         )}>
           <div className="text-xs font-medium text-gray-500">Net</div>
-          <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-green-700' : 'text-red-700')}>
+          {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
+          <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')}>
+            {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>
         </div>

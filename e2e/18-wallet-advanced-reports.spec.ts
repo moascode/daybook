@@ -97,9 +97,12 @@ test('applying a custom date range updates the report to show that period', asyn
 })
 
 test('custom range report shows only transactions within the selected window', async () => {
-  // Jan expense (300) should appear; Mar expense (450) should not
-  await expect(page.getByText(/300|RM 300/)).toBeVisible()
-  await expect(page.getByText(/450|RM 450/)).not.toBeVisible()
+  // Jan expense (300) should appear; Mar expense (450) should not.
+  // Scoped to the custom-range card: the YoY chart above now renders
+  // plain-number axis ticks (e.g. "300") that a page-wide getByText matches.
+  const picker = page.getByTestId('custom-date-range')
+  await expect(picker.getByText(/300|RM 300/)).toBeVisible()
+  await expect(picker.getByText(/450|RM 450/)).not.toBeVisible()
 })
 
 test('changing date range to Q1 shows both transactions', async () => {
@@ -107,6 +110,6 @@ test('changing date range to Q1 shows both transactions', async () => {
   await picker.getByLabel(/From|Start/i).fill('2026-01-01')
   await picker.getByLabel(/To|End/i).fill('2026-03-31')
   await page.getByRole('button', { name: /Apply|Update/i }).click()
-  await expect(page.getByText(/300|RM 300/)).toBeVisible()
-  await expect(page.getByText(/450|RM 450/)).toBeVisible()
+  await expect(picker.getByText(/300|RM 300/)).toBeVisible()
+  await expect(picker.getByText(/450|RM 450/)).toBeVisible()
 })

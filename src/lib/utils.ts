@@ -13,6 +13,18 @@ export function formatMYR(amount: number): string {
   }).format(amount)
 }
 
+// Chart-fill greens for money series — mirror the Tailwind `positive` token
+// (brand green) so chart income matches income text elsewhere in the wallet.
+export const POSITIVE_MONEY_COLOR = '#1D9E75' // positive-500
+export const POSITIVE_MONEY_COLOR_FADED = '#86efb0' // positive-300 (prior-year series)
+
+// Chart axis ticks: plain ringgit below 10k ("2500"), thousands above ("12k").
+// Avoids the "0k" ticks a fixed /1000 formatter produces on typical amounts.
+export function formatAxisMYR(value: number): string {
+  if (Math.abs(value) >= 10_000) return `${Math.round(value / 1000)}k`
+  return String(Math.round(value))
+}
+
 export function generateId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)

@@ -29,7 +29,7 @@ test.afterAll(async () => {
 })
 
 test('with no accounts the balance hero and filter bar are hidden', async () => {
-  await expect(page.getByText('Total Balance')).toHaveCount(0)
+  await expect(page.getByText('Total Net Worth')).toHaveCount(0)
   await expect(page.getByLabel('From')).toHaveCount(0)
   // The primary action and the guiding empty state are still present.
   await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
@@ -47,7 +47,7 @@ test('once an account exists the balance hero and filters appear', async () => {
   await fillAccountForm(page, { name: 'Main', type: 'bank' })
 
   await page.goto('/wallet')
-  await expect(page.getByText('Total Balance')).toBeVisible()
+  await expect(page.getByText('Total Net Worth')).toBeVisible()
   await expect(page.getByLabel('From')).toBeVisible()
 })
 

@@ -33,7 +33,7 @@ export interface TransactionFormData {
 
 const TYPE_OPTIONS: { value: TransactionType; label: string; color: string }[] = [
   { value: 'expense', label: 'Expense', color: 'text-red-600 bg-red-50 border-red-200' },
-  { value: 'income', label: 'Income', color: 'text-green-600 bg-green-50 border-green-200' },
+  { value: 'income', label: 'Income', color: 'text-positive-600 bg-positive-50 border-positive-200' },
   { value: 'transfer', label: 'Transfer', color: 'text-blue-600 bg-blue-50 border-blue-200' },
 ]
 
