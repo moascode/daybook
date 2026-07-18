@@ -973,14 +973,21 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 C10 formatAxisMYR axis helper — plain ringgit <10k,
                 C13 role="img" aria data summaries on Dashboard/Reports
                 charts + explicit "+" glyph on positive Net figures)
-                implemented — PR IN REVIEW (draft). No new spec file:
-                new blocks in 05-wallet-dashboard + 14-wallet-recurring;
-                label/class assertions updated in specs 03, 25-splits,
+                MERGED (PR #32, 2026-07-18). No new spec file: new blocks
+                in 05-wallet-dashboard + 14-wallet-recurring; label/class
+                assertions updated in specs 03, 25-splits,
                 25-wallet-intuitiveness, 27 (specs 10/26/31 assert the
                 Accounts page and needed no change).
                 Verified: tsc, typecheck:server, lint clean; affected e2e
                 specs (03, 05, 10, 14, 25-splits, 25-intuitiveness, 26,
                 27, 31, 06-uat) all pass — 125/125.
+                Wave 5 (C5 useCrudModal + ConfirmDeleteModal adopted in
+                Budgets/Goals/Recurring, C3 error toasts surfacing C12's
+                {error} message, C6 dead-code sweep in useWallet) — IN
+                PROGRESS on branch refactor/wallet-crud-modal-toasts.
+                Wave 5's stated dependencies (Waves 2 + 3 merged) are both
+                satisfied, and Wave 4 is now merged too. This is the final
+                wave of the Phase 5c plan.
 Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -1009,18 +1016,16 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Owner merges the Wave 4 PR (visual polish). Then Wave 5 —
-                refactor/wallet-crud-modal-toasts (C5 useCrudModal +
-                ConfirmDeleteModal adopted in Budgets/Goals/Recurring, C3
-                error toasts surfacing C12's {error} message, C6 dead-code
-                sweep in useWallet) per
-                docs/phase-5c-implementation-plan.md. Wave 5's stated
-                dependencies (Waves 2 + 3 merged) are both satisfied; new
+Next task:      Implement Wave 5 (C5 useCrudModal + ConfirmDeleteModal
+                adopted in Budgets/Goals/Recurring, C3 error toasts
+                surfacing C12's {error} message, C6 dead-code sweep in
+                useWallet) per docs/phase-5c-implementation-plan.md; new
                 spec e2e/32-wallet-error-toasts uses page.route() to force
-                a mutation failure. D-items and C9 parked.
+                a mutation failure. This is the final wave of Phase 5c.
+                D-items and C9 stay parked after Wave 5 merges.
 
-Blockers:       Wave 5 blocked until the Wave 4 PR merges — waves land
-                sequentially per the plan.
+Blockers:       None — Wave 4 (PR #32) is merged, so Wave 5's dependencies
+                (Waves 2 + 3 merged) are satisfied and it is unblocked.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
