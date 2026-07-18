@@ -67,14 +67,28 @@ export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }:
     navigate(`/wallet?account=${account.id}`)
   }
 
+  function handleCardKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Nested action buttons handle their own keys; only act on the card itself.
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleCardClick()
+    }
+  }
+
   return (
     <div
       data-testid="account-card"
+      role="button"
+      tabIndex={0}
+      aria-label={`View transactions for ${account.name}`}
       className={cn(
         'group relative overflow-hidden rounded-xl border border-gray-200 bg-white',
-        'transition-shadow hover:shadow-md cursor-pointer'
+        'transition-shadow hover:shadow-md cursor-pointer',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2'
       )}
       onClick={handleCardClick}
+      onKeyDown={handleCardKeyDown}
     >
       {/* Color accent bar */}
       <div
@@ -118,9 +132,9 @@ export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }:
             </div>
           </div>
 
-          {/* Actions — visible on hover */}
+          {/* Actions — always visible (B6), emphasised on hover like transaction rows */}
           <div
-            className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+            className="flex gap-1 text-gray-400 transition-colors group-hover:text-gray-600"
             onClick={(e) => e.stopPropagation()}
           >
             {/* U-2: share button — only shown for own (non-shared-in) accounts */}
@@ -128,6 +142,7 @@ export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }:
               <Button
                 variant="ghost"
                 size="sm"
+                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
                 onClick={() => onShare(account)}
                 aria-label="Manage sharing"
                 title="Manage sharing"
@@ -138,6 +153,7 @@ export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }:
             <Button
               variant="ghost"
               size="sm"
+              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
               onClick={() => onEdit(account)}
               aria-label="Edit account"
             >
@@ -146,6 +162,7 @@ export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }:
             <Button
               variant="ghost"
               size="sm"
+              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
               onClick={() => onDelete(account)}
               aria-label="Delete account"
             >
