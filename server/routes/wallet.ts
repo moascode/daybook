@@ -277,6 +277,57 @@ const TRANSACTION_COLS: Record<string, string> = {
   tag: 'tag',
 }
 
+// C2: transaction payload validation. `partial` (PATCH) only checks fields
+// present in the body; `existing` supplies the row's current values so the
+// cross-field transfer rule still holds after a partial update.
+const TXN_TYPES = new Set(['income', 'expense', 'transfer'])
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function transactionInputError(
+  b: Record<string, unknown>,
+  opts: {
+    partial?: boolean
+    existing?: { type: string; account_id: string; destination_account_id: string | null }
+  } = {},
+): string | null {
+  const partial = opts.partial ?? false
+  const has = (k: string) => k in b && b[k] !== undefined
+
+  if (!partial || has('type')) {
+    if (typeof b.type !== 'string' || !TXN_TYPES.has(b.type)) {
+      return 'type must be income, expense, or transfer'
+    }
+  }
+  if (!partial || has('amount')) {
+    const amt = typeof b.amount === 'number' || typeof b.amount === 'string' ? Number(b.amount) : NaN
+    if (!Number.isFinite(amt) || amt <= 0) return 'amount must be a positive number'
+  }
+  if (!partial || has('date')) {
+    if (typeof b.date !== 'string' || !ISO_DATE_RE.test(b.date) || Number.isNaN(Date.parse(b.date))) {
+      return 'date must be an ISO date (YYYY-MM-DD)'
+    }
+  }
+  if (!partial || has('accountId')) {
+    if (typeof b.accountId !== 'string' || b.accountId.length === 0) {
+      return 'accountId is required'
+    }
+  }
+
+  // Transfers need a destination distinct from the source account.
+  const type = has('type') ? b.type : opts.existing?.type
+  const accountId = has('accountId') ? b.accountId : opts.existing?.account_id
+  const dest = has('destinationAccountId') ? b.destinationAccountId : opts.existing?.destination_account_id
+  if (type === 'transfer') {
+    if (typeof dest !== 'string' || dest.length === 0) {
+      return 'transfer requires a destinationAccountId'
+    }
+    if (dest === accountId) {
+      return 'transfer destination must differ from the source account'
+    }
+  }
+  return null
+}
+
 function insertTransaction(b: Record<string, unknown>, userId: string) {
   return getDb()
     .prepare(
@@ -456,6 +507,10 @@ walletRouter.post('/transactions/import', (req, res) => {
   const items: Record<string, unknown>[] = Array.isArray(req.body) ? req.body : []
   const userId = req.session.userId!
   const db = getDb()
+  for (let i = 0; i < items.length; i++) {
+    const err = transactionInputError(items[i])
+    if (err) return res.status(400).json({ error: `row ${i + 1}: ${err}` })
+  }
   for (const b of items) {
     if (!ownsAllRefs(db, userId, [['accounts', b.accountId], ['accounts', b.destinationAccountId], ['categories', b.categoryId]])) {
       return res.status(400).json({ error: 'invalid account or category reference' })
@@ -471,6 +526,9 @@ walletRouter.post('/transactions', (req, res) => {
   const b = req.body ?? {}
   const db = getDb()
   const userId = req.session.userId!
+
+  const inputErr = transactionInputError(b)
+  if (inputErr) return res.status(400).json({ error: inputErr })
 
   // Allow writing to shared accounts with can_write permission
   const accountId = String(b.accountId ?? '')
@@ -499,12 +557,17 @@ walletRouter.patch('/transactions/:id', (req, res) => {
 
   // Caller must own the transaction or have write permission on its account
   const existing = db
-    .prepare('SELECT user_id, account_id FROM transactions WHERE id = ?')
-    .get(req.params.id) as { user_id: string; account_id: string } | undefined
+    .prepare('SELECT user_id, account_id, type, destination_account_id FROM transactions WHERE id = ?')
+    .get(req.params.id) as
+      | { user_id: string; account_id: string; type: string; destination_account_id: string | null }
+      | undefined
   if (!existing) return res.status(404).json({ error: 'transaction not found' })
 
   const canEdit = existing.user_id === userId || canWriteAccount(db, userId, existing.account_id)
   if (!canEdit) return res.status(403).json({ error: 'no permission to edit this transaction' })
+
+  const inputErr = transactionInputError(b, { partial: true, existing })
+  if (inputErr) return res.status(400).json({ error: inputErr })
 
   // Scope updateRow by original owner's user_id
   const refs: Array<[string, unknown]> = []
@@ -866,8 +929,17 @@ walletRouter.get('/budgets', (req, res) => {
   res.json(getDb().prepare('SELECT * FROM budgets WHERE user_id = ? ORDER BY created_at ASC').all(req.session.userId!))
 })
 
+// C2: shared minimal check for budget limits and goal targets.
+function positiveAmountError(v: unknown, field: string): string | null {
+  const amt = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN
+  if (!Number.isFinite(amt) || amt <= 0) return `${field} must be a positive number`
+  return null
+}
+
 walletRouter.post('/budgets', (req, res) => {
   const b = req.body ?? {}
+  const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
+  if (amtErr) return res.status(400).json({ error: amtErr })
   if (!ownsAllRefs(getDb(), req.session.userId!, [['categories', b.categoryId]])) {
     return res.status(400).json({ error: 'invalid category reference' })
   }
@@ -882,7 +954,12 @@ walletRouter.post('/budgets', (req, res) => {
 })
 
 walletRouter.patch('/budgets/:id', (req, res) => {
-  const row = updateRow(getDb(), 'budgets', req.params.id, req.session.userId!, { limitAmount: 'limit_amount' }, req.body ?? {})
+  const b = req.body ?? {}
+  if ('limitAmount' in b) {
+    const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
+    if (amtErr) return res.status(400).json({ error: amtErr })
+  }
+  const row = updateRow(getDb(), 'budgets', req.params.id, req.session.userId!, { limitAmount: 'limit_amount' }, b)
   if (!row) return res.status(404).json({ error: 'budget not found' })
   res.json(row)
 })
@@ -1103,6 +1180,8 @@ walletRouter.get('/goals', (req, res) => {
 
 walletRouter.post('/goals', (req, res) => {
   const b = req.body ?? {}
+  const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
+  if (amtErr) return res.status(400).json({ error: amtErr })
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId]])) {
     return res.status(400).json({ error: 'invalid account reference' })
   }
@@ -1118,6 +1197,10 @@ walletRouter.post('/goals', (req, res) => {
 
 walletRouter.patch('/goals/:id', (req, res) => {
   const b = req.body ?? {}
+  if ('targetAmount' in b) {
+    const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
+    if (amtErr) return res.status(400).json({ error: amtErr })
+  }
   if ('accountId' in b && !ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId]])) {
     return res.status(400).json({ error: 'invalid account reference' })
   }
