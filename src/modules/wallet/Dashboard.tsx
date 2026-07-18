@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, POSITIVE_MONEY_COLOR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
@@ -257,10 +257,10 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <TrendingUp className="h-4 w-4 text-green-500" />
+            <TrendingUp className="h-4 w-4 text-positive-500" />
             Income
           </div>
-          <p className="mt-1 text-xl font-bold text-green-600">{formatMYR(summary.income)}</p>
+          <p className="mt-1 text-xl font-bold text-positive-600">{formatMYR(summary.income)}</p>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -274,7 +274,7 @@ export function Dashboard() {
             <ArrowUpDown className="h-4 w-4 text-blue-500" />
             Net
           </div>
-          <p className={`mt-1 text-xl font-bold ${summary.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`mt-1 text-xl font-bold ${summary.net >= 0 ? 'text-positive-600' : 'text-red-600'}`}>
             {formatMYR(summary.net)}
           </p>
         </div>
@@ -330,7 +330,7 @@ export function Dashboard() {
               <YAxis fontSize={12} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(value: number) => formatMYR(value)} />
               <Legend />
-              <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="income" fill={POSITIVE_MONEY_COLOR} radius={[4, 4, 0, 0]} />
               <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>

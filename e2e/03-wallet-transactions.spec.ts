@@ -111,7 +111,7 @@ test('add an income transaction', async () => {
 
 test('income shows positive amount in green', async () => {
   const row = transactionRowFor(page, 'Acme Corp')
-  await expect(row.getByText(/RM\s5,000\.00/)).toHaveClass(/text-green-600/)
+  await expect(row.getByText(/RM\s5,000\.00/)).toHaveClass(/text-positive-600/)
 })
 
 // ── Summary row ────────────────────────────────────────────────────────

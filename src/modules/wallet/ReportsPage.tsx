@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useWallet } from '@/hooks/useWallet'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import {
   BarChart,
@@ -102,8 +102,8 @@ export function ReportsPage() {
               <Legend />
               <Bar dataKey={`${lastYear} expense`} fill="#fca5a5" radius={[3, 3, 0, 0]} />
               <Bar dataKey={`${thisYear} expense`} fill="#ef4444" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={`${lastYear} income`} fill="#86efac" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={`${thisYear} income`} fill="#22c55e" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={`${lastYear} income`} fill={POSITIVE_MONEY_COLOR_FADED} radius={[3, 3, 0, 0]} />
+              <Bar dataKey={`${thisYear} income`} fill={POSITIVE_MONEY_COLOR} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -156,7 +156,7 @@ export function ReportsPage() {
                       <span className="font-medium text-gray-800">{t.merchant || '(no merchant)'}</span>
                       <span className="ml-2 text-xs text-gray-400">{t.date}</span>
                     </div>
-                    <span className={t.type === 'income' ? 'text-green-600 font-medium' : t.type === 'transfer' ? 'text-gray-500 font-medium' : 'text-red-600 font-medium'}>
+                    <span className={t.type === 'income' ? 'text-positive-600 font-medium' : t.type === 'transfer' ? 'text-gray-500 font-medium' : 'text-red-600 font-medium'}>
                       {t.type === 'income' ? '+' : t.type === 'transfer' ? '↔' : '-'}{formatMYR(t.amount)}
                     </span>
                   </div>

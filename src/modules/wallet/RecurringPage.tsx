@@ -204,7 +204,7 @@ export function RecurringPage() {
                     <span
                       className={
                         isIncome
-                          ? 'text-sm font-semibold text-green-700'
+                          ? 'text-sm font-semibold text-positive-700'
                           : 'text-sm font-semibold text-gray-900'
                       }
                     >

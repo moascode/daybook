@@ -13,6 +13,11 @@ export function formatMYR(amount: number): string {
   }).format(amount)
 }
 
+// Chart-fill greens for money series — mirror the Tailwind `positive` token
+// (brand green) so chart income matches income text elsewhere in the wallet.
+export const POSITIVE_MONEY_COLOR = '#1D9E75' // positive-500
+export const POSITIVE_MONEY_COLOR_FADED = '#86efb0' // positive-300 (prior-year series)
+
 export function generateId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
