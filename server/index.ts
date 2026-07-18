@@ -28,6 +28,16 @@ const SESSION_SECRET = process.env.SESSION_SECRET ?? 'daybook-dev-secret-change-
 
 export function createApp(): express.Express {
   const app = express()
+
+  // C12: minimal request logging for API calls — method, path, status, duration.
+  app.use('/api', (req, res, next) => {
+    const started = Date.now()
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - started}ms`)
+    })
+    next()
+  })
+
   app.use(express.json({ limit: '5mb' })) // CSV imports can be large
 
   app.use(
@@ -73,6 +83,21 @@ export function createApp(): express.Express {
       res.sendFile(resolve(DIST_DIR, 'index.html'))
     })
   }
+
+  // C12: single error handler so every failure — thrown route errors, body-parser
+  // rejections, async errors forwarded by Express 5 — returns the same `{error}`
+  // JSON shape the routes already use, instead of an HTML stack page.
+  app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(err)
+    const status =
+      typeof err === 'object' && err !== null && 'status' in err && typeof err.status === 'number'
+        ? err.status
+        : 500
+    const message =
+      status < 500 && err instanceof Error && err.message ? err.message : 'internal server error'
+    if (status >= 500) console.error(`ERROR ${req.method} ${req.originalUrl}:`, err)
+    res.status(status).json({ error: message })
+  })
 
   return app
 }
