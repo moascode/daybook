@@ -15,7 +15,7 @@ export function AppShell() {
         {/* Mobile top bar with hamburger */}
         <div className="flex h-12 shrink-0 items-center border-b border-gray-200 bg-white px-4 md:hidden">
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="Open sidebar"
           >

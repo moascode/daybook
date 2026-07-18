@@ -121,7 +121,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         {/* Close button — mobile only */}
         {onClose && (
           <button
-            className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
             onClick={onClose}
             aria-label="Close sidebar"
           >
@@ -131,7 +131,9 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       </div>
 
       {/* Main navigation */}
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
+      {/* min-h-0 lets this flex child actually shrink so the nav scrolls and
+          Settings below stays pinned on short viewports (C11) */}
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
         <NavLink to="/tasks" end onClick={onClose} className={topLinkClass}>
           <CheckSquare className="h-4 w-4 flex-shrink-0" />
           Tasks
@@ -167,7 +169,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
               onClick={() => setWalletOverride(!walletExpanded)}
               aria-label={walletExpanded ? 'Collapse Wallet' : 'Expand Wallet'}
               aria-expanded={walletExpanded}
-              className="ml-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              className="ml-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:h-7 md:w-7"
             >
               <ChevronDown
                 className={cn(
@@ -213,7 +215,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       </nav>
 
       {/* Bottom: Settings */}
-      <div className="border-t border-gray-200 px-3 py-3">
+      <div className="shrink-0 border-t border-gray-200 px-3 py-3">
         <NavLink to="/settings" end onClick={onClose} className={topLinkClass}>
           <Settings className="h-4 w-4 flex-shrink-0" />
           Settings

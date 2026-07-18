@@ -96,14 +96,28 @@ function TransactionRow({
     }
   }
 
+  function handleRowKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Nested action buttons handle their own keys; only act on the row itself.
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleRowClick()
+    }
+  }
+
   return (
     <div
       data-testid="transaction-row"
+      role="button"
+      tabIndex={0}
+      aria-label={`${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}`}
       className={cn(
         'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors cursor-pointer',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
         selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
       )}
       onClick={handleRowClick}
+      onKeyDown={handleRowKeyDown}
     >
       {/* Checkbox (select mode) or type indicator */}
       {selectMode ? (
@@ -194,6 +208,7 @@ function TransactionRow({
             <Button
               variant="ghost"
               size="sm"
+              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
               onClick={() => onSplit(transaction)}
               aria-label="Share transaction"
               title="Share with household members"
@@ -205,6 +220,7 @@ function TransactionRow({
           <Button
             variant="ghost"
             size="sm"
+            className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
             onClick={() => onEdit(transaction)}
             aria-label="Edit transaction"
           >
@@ -213,6 +229,7 @@ function TransactionRow({
           <Button
             variant="ghost"
             size="sm"
+            className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
             onClick={() => onRequestDelete(transaction)}
             aria-label="Delete transaction"
           >

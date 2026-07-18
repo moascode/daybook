@@ -254,7 +254,7 @@ export function Dashboard() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <TrendingUp className="h-4 w-4 text-green-500" />
@@ -337,7 +337,7 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Category pie chart */}
         {categoryData.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">

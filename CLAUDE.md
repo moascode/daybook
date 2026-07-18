@@ -956,12 +956,16 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Backlog detail: docs/phase-5c-wallet-ux.md (statuses updated:
                 B1 partial, B5 done, C4 partial, C7 obsolete).
                 Wave 1 (B1 search input UI, B2 save-&-add-another, C4
-                server-side filtered export, B12 caption reword) implemented
-                — PR #29 IN REVIEW. New specs: e2e/28-wallet-search,
-                e2e/29-transaction-quick-add, C4 block in e2e/15.
-                Verified: tsc, typecheck:server, lint clean; affected
-                e2e (02/03/15/26/28/29) 98/98 pass.
-Last session:   2026-07-05
+                server-side filtered export, B12 caption reword) MERGED
+                (PR #29, 2026-07-18).
+                Wave 2 (B3 modal max-height/scroll, B4 accessible
+                rows/cards, B6 always-visible card actions, B7 responsive
+                dashboard grids, B11 ≥40px touch targets, C11 sidebar
+                scroll region) implemented — PR #30 IN REVIEW (draft).
+                New spec e2e/30-wallet-a11y + 3 new blocks in e2e/21.
+                Verified: tsc, typecheck:server, lint clean; FULL e2e
+                suite (34 files) 360/360 pass.
+Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
                       by username with optional role assignment.
@@ -989,15 +993,16 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Owner merges PR #29 (Phase 5c Wave 1). Then Wave 2 —
-                fix/wallet-mobile-a11y (B3 modal scroll, B4 accessible
-                rows/cards, B6 visible card actions, B7 responsive grids,
-                B11 touch targets, C11 drawer height). B3 touches the shared
-                Modal primitive — run the FULL e2e suite for Wave 2. Then
-                Waves 3–5 sequentially per docs/phase-5c-implementation-plan.md.
-                e2e spec prefixes 30–32 still reserved. D-items and C9 parked.
+Next task:      Owner merges PR #30 (Phase 5c Wave 2). Then Wave 3 —
+                feat/wallet-server-hardening (C1 batched balances, C2 input
+                validation, C12 error middleware, C8 bounded budgets load).
+                New spec e2e/31-wallet-server-hardening; run 10/26/24-shared
+                as the C1 regression net, 22-auth for C12, 24-recurring +
+                04-csv for C2. Then Waves 4–5 sequentially per
+                docs/phase-5c-implementation-plan.md. e2e spec prefixes
+                31–32 still reserved. D-items and C9 parked.
 
-Blockers:       Waves 2–5 blocked until PR #29 (Wave 1) merges — waves land
+Blockers:       Waves 3–5 blocked until PR #30 (Wave 2) merges — waves land
                 sequentially per the plan.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
