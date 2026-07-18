@@ -83,7 +83,38 @@ walletRouter.delete('/accounts/:id', (req, res) => {
   res.status(204).end()
 })
 
+// C1: All visible account balances in one query. The per-account math below
+// (`/:id/balance`) is the reference — the CASE arms here must stay equivalent:
+// balance = opening balance + income − expense − transfers out + transfers in.
+walletRouter.get('/accounts/balances', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const visible = visibleAccountIds(db, userId)
+  if (visible.length === 0) return res.json([])
+  const placeholders = visible.map(() => '?').join(', ')
+  const rows = db
+    .prepare(
+      `SELECT a.id,
+              COALESCE(a.opening_balance, 0)
+              + COALESCE((SELECT SUM(CASE t.type
+                                       WHEN 'income' THEN t.amount
+                                       WHEN 'expense' THEN -t.amount
+                                       WHEN 'transfer' THEN -t.amount
+                                       ELSE 0 END)
+                          FROM transactions t WHERE t.account_id = a.id), 0)
+              + COALESCE((SELECT SUM(t.amount)
+                          FROM transactions t
+                          WHERE t.destination_account_id = a.id AND t.type = 'transfer'), 0)
+              AS balance
+       FROM accounts a
+       WHERE a.id IN (${placeholders})`,
+    )
+    .all(...visible) as { id: string; balance: number }[]
+  res.json(rows)
+})
+
 // Balance = opening balance + income − expense − transfers out + transfers in.
+// Kept for per-card fetches (AccountCard) — see the batched route above.
 walletRouter.get('/accounts/:id/balance', (req, res) => {
   const db = getDb()
   const id = req.params.id

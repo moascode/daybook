@@ -54,7 +54,7 @@ export function WalletPage() {
     updateTransaction,
     deleteTransaction,
     exportTransactions,
-    getAccountBalance,
+    getAccountBalances,
     addCategory,
     deleteCategory,
     getCategoryUsage,
@@ -137,17 +137,17 @@ export function WalletPage() {
   // filters, so this is keyed on `accounts` (and dataVersion) — NOT on the
   // filtered transaction list. Mutations refresh it explicitly below.
   const loadNetWorth = useCallback(async () => {
-    const balances = await Promise.all(accounts.map((a) => getAccountBalance(a.id)))
-    setNetWorth(balances.reduce((sum, b) => sum + b, 0))
-  }, [accounts, getAccountBalance])
+    const balances = await getAccountBalances()
+    setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
+  }, [accounts, getAccountBalances])
 
   useEffect(() => {
     let cancelled = false
-    Promise.all(accounts.map((a) => getAccountBalance(a.id))).then((balances) => {
-      if (!cancelled) setNetWorth(balances.reduce((sum, b) => sum + b, 0))
+    getAccountBalances().then((balances) => {
+      if (!cancelled) setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
     })
     return () => { cancelled = true }
-  }, [accounts, getAccountBalance, dataVersion])
+  }, [accounts, getAccountBalances, dataVersion])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     await addTransaction(data)
