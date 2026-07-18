@@ -278,7 +278,7 @@ export function WalletPage() {
         <div className="mb-4 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-              Total Balance
+              Total Net Worth
             </p>
             <p className="mt-1.5 text-2xl font-bold text-brand-900">
               {netWorth === null ? '…' : formatMYR(netWorth)}

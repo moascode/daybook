@@ -21,7 +21,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await setupAccountAndTransaction(page)
     await page.reload()
 
-    await expect(page.getByText('Total Balance')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 5_000 })
 
     // Enter select mode
@@ -92,7 +92,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     })
     await page.reload()
 
-    await expect(page.getByText('Total Balance')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: /Select/ }).click()
 
     // Select all via the header checkbox

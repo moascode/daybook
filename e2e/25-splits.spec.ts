@@ -114,7 +114,7 @@ test.describe('25 — Transaction splits', () => {
     // Alice opens wallet and opens split dialog
     await alicePage.goto('/wallet')
     // Wait for accounts to load (filter bar appears)
-    await expect(alicePage.getByText('Total Balance')).toBeVisible({ timeout: 10_000 })
+    await expect(alicePage.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
     // Wait for the transaction to appear in the list
     await expect(alicePage.getByText('Lunch')).toBeVisible({ timeout: 10_000 })
     // Click the split button on the Lunch transaction row using the test ID
