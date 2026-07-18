@@ -961,10 +961,16 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Wave 2 (B3 modal max-height/scroll, B4 accessible
                 rows/cards, B6 always-visible card actions, B7 responsive
                 dashboard grids, B11 ≥40px touch targets, C11 sidebar
-                scroll region) implemented — PR #30 IN REVIEW (draft).
-                New spec e2e/30-wallet-a11y + 3 new blocks in e2e/21.
-                Verified: tsc, typecheck:server, lint clean; FULL e2e
-                suite (34 files) 360/360 pass.
+                scroll region) MERGED (PR #30, 2026-07-18).
+                Wave 3 (C1 batched GET /api/accounts/balances + client
+                switch off the per-account fan-out, C2 transaction/budget/
+                goal input validation with 400 {error}, C12 Express error
+                middleware + request logging, C8 current-month-bounded
+                budgets load) implemented — PR IN REVIEW (draft).
+                New spec e2e/31-wallet-server-hardening.
+                Verified: tsc, typecheck:server, lint clean; affected e2e
+                specs (03, 04, 10, 13, 16, 22, 24-recurring, 24-shared,
+                26-opening-balance, 31) all pass.
 Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -993,16 +999,19 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Owner merges PR #30 (Phase 5c Wave 2). Then Wave 3 —
-                feat/wallet-server-hardening (C1 batched balances, C2 input
-                validation, C12 error middleware, C8 bounded budgets load).
-                New spec e2e/31-wallet-server-hardening; run 10/26/24-shared
-                as the C1 regression net, 22-auth for C12, 24-recurring +
-                04-csv for C2. Then Waves 4–5 sequentially per
-                docs/phase-5c-implementation-plan.md. e2e spec prefixes
-                31–32 still reserved. D-items and C9 parked.
+Next task:      Owner merges the Wave 3 PR (server hardening). Then Wave 4 —
+                fix/wallet-visual-polish (B8 "Total Net Worth" label
+                unification + spec updates in 10/26 same commit, B9 positive-
+                money colour token, B10 recurring card badges, C10 axis
+                formatting helper, C13 chart a11y). No new spec file — add
+                blocks to 05-wallet-dashboard + 14-wallet-recurring; grep all
+                specs for both label strings before B8 (25-wallet-
+                intuitiveness likely asserts one). Then Wave 5
+                (refactor/wallet-crud-modal-toasts) per
+                docs/phase-5c-implementation-plan.md. e2e spec prefix 32
+                still reserved for Wave 5. D-items and C9 parked.
 
-Blockers:       Waves 3–5 blocked until PR #30 (Wave 2) merges — waves land
+Blockers:       Waves 4–5 blocked until the Wave 3 PR merges — waves land
                 sequentially per the plan.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
