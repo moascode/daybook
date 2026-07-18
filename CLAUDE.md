@@ -966,11 +966,21 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 switch off the per-account fan-out, C2 transaction/budget/
                 goal input validation with 400 {error}, C12 Express error
                 middleware + request logging, C8 current-month-bounded
-                budgets load) implemented — PR IN REVIEW (draft).
-                New spec e2e/31-wallet-server-hardening.
+                budgets load) MERGED (PR #31, 2026-07-18).
+                Wave 4 (B8 "Total Net Worth" label unification, B9
+                `positive` money-colour token aliasing the brand green,
+                B10 type badge + category chip on recurring rule cards,
+                C10 formatAxisMYR axis helper — plain ringgit <10k,
+                C13 role="img" aria data summaries on Dashboard/Reports
+                charts + explicit "+" glyph on positive Net figures)
+                implemented — PR IN REVIEW (draft). No new spec file:
+                new blocks in 05-wallet-dashboard + 14-wallet-recurring;
+                label/class assertions updated in specs 03, 25-splits,
+                25-wallet-intuitiveness, 27 (specs 10/26/31 assert the
+                Accounts page and needed no change).
                 Verified: tsc, typecheck:server, lint clean; affected e2e
-                specs (03, 04, 10, 13, 16, 22, 24-recurring, 24-shared,
-                26-opening-balance, 31) all pass.
+                specs (03, 05, 10, 14, 25-splits, 25-intuitiveness, 26,
+                27, 31, 06-uat) all pass — 125/125.
 Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -999,19 +1009,17 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Owner merges the Wave 3 PR (server hardening). Then Wave 4 —
-                fix/wallet-visual-polish (B8 "Total Net Worth" label
-                unification + spec updates in 10/26 same commit, B9 positive-
-                money colour token, B10 recurring card badges, C10 axis
-                formatting helper, C13 chart a11y). No new spec file — add
-                blocks to 05-wallet-dashboard + 14-wallet-recurring; grep all
-                specs for both label strings before B8 (25-wallet-
-                intuitiveness likely asserts one). Then Wave 5
-                (refactor/wallet-crud-modal-toasts) per
-                docs/phase-5c-implementation-plan.md. e2e spec prefix 32
-                still reserved for Wave 5. D-items and C9 parked.
+Next task:      Owner merges the Wave 4 PR (visual polish). Then Wave 5 —
+                refactor/wallet-crud-modal-toasts (C5 useCrudModal +
+                ConfirmDeleteModal adopted in Budgets/Goals/Recurring, C3
+                error toasts surfacing C12's {error} message, C6 dead-code
+                sweep in useWallet) per
+                docs/phase-5c-implementation-plan.md. Wave 5's stated
+                dependencies (Waves 2 + 3 merged) are both satisfied; new
+                spec e2e/32-wallet-error-toasts uses page.route() to force
+                a mutation failure. D-items and C9 parked.
 
-Blockers:       Waves 4–5 blocked until the Wave 3 PR merges — waves land
+Blockers:       Wave 5 blocked until the Wave 4 PR merges — waves land
                 sequentially per the plan.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
