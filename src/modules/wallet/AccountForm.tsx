@@ -161,8 +161,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             }
           />
           <p className="mt-1 text-xs text-gray-500">
-            Starting balance — combined with recorded transactions to compute the
-            account&apos;s balance. Can be negative (e.g. credit card debt).
+            Starting balance — included in the computed balance. Can be negative.
           </p>
         </div>
 
