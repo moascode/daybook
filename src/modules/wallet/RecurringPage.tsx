@@ -175,6 +175,7 @@ export function RecurringPage() {
         <div className="flex flex-col gap-3">
           {recurringTransactions.map((rule) => {
             const account = accounts.find((a) => a.id === rule.accountId)
+            const category = rule.categoryId ? categories.find((c) => c.id === rule.categoryId) : undefined
             const freqLabel = rule.frequency === 'monthly' ? 'Monthly' : 'Weekly'
             const dueDateDisplay = format(parseISO(rule.nextDueDate), 'dd MMM yyyy')
             const isIncome = rule.type === 'income'
@@ -191,9 +192,23 @@ export function RecurringPage() {
                       <span className="font-medium text-gray-900 text-sm">
                         {rule.merchant || '(no merchant)'}
                       </span>
+                      <span
+                        className={
+                          isIncome
+                            ? 'text-xs font-medium text-positive-700 bg-positive-50 rounded-full px-2 py-0.5'
+                            : 'text-xs font-medium text-red-600 bg-red-50 rounded-full px-2 py-0.5'
+                        }
+                      >
+                        {isIncome ? 'Income' : 'Expense'}
+                      </span>
                       <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
                         {freqLabel}
                       </span>
+                      {category && (
+                        <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
+                          {category.name}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-500">
                       Next: {dueDateDisplay}
