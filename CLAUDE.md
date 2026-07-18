@@ -950,11 +950,17 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 2026-07-05 — one-click single-recipient share alongside the
                 split flow, plus q free-text filter plumbing and filtered
                 server export route.
-                Phase 5c (wallet UX improvements) — PLANNED, not started.
+                Phase 5c (wallet UX improvements) — IN PROGRESS.
                 Implementation sequenced into 5 wave PRs: see
                 docs/phase-5c-implementation-plan.md (approved 2026-07-05).
                 Backlog detail: docs/phase-5c-wallet-ux.md (statuses updated:
                 B1 partial, B5 done, C4 partial, C7 obsolete).
+                Wave 1 (B1 search input UI, B2 save-&-add-another, C4
+                server-side filtered export, B12 caption reword) implemented
+                — PR #29 IN REVIEW. New specs: e2e/28-wallet-search,
+                e2e/29-transaction-quick-add, C4 block in e2e/15.
+                Verified: tsc, typecheck:server, lint clean; affected
+                e2e (02/03/15/26/28/29) 98/98 pass.
 Last session:   2026-07-05
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -983,17 +989,16 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Phase 5c Wave 1 — branch feat/wallet-search-quick-add:
-                - B1: search input UI (plumbing already shipped in PR #27)
-                - B2: "Save & add another" on transaction form
-                - C4: client export via filtered server route
-                - B12: opening-balance caption reword
-                Then Waves 2–5 sequentially per
-                docs/phase-5c-implementation-plan.md (mobile/a11y → server
-                hardening → visual polish → refactors). e2e spec prefixes
-                28–32 reserved per wave. D-items and C9 stay parked.
+Next task:      Owner merges PR #29 (Phase 5c Wave 1). Then Wave 2 —
+                fix/wallet-mobile-a11y (B3 modal scroll, B4 accessible
+                rows/cards, B6 visible card actions, B7 responsive grids,
+                B11 touch targets, C11 drawer height). B3 touches the shared
+                Modal primitive — run the FULL e2e suite for Wave 2. Then
+                Waves 3–5 sequentially per docs/phase-5c-implementation-plan.md.
+                e2e spec prefixes 30–32 still reserved. D-items and C9 parked.
 
-Blockers:       None. Phase 4 stable. Phase 5b stable. Phase 5c is sequenced and ready.
+Blockers:       Waves 2–5 blocked until PR #29 (Wave 1) merges — waves land
+                sequentially per the plan.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].

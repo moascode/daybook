@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { TagInput } from '@/components/ui/TagInput'
@@ -92,6 +93,17 @@ export function WalletPage() {
     filtersRef.current = filters
     prevFiltersRef.current = filters
   }, [filters, selectMode])
+
+  // B1: free-text search — keep keystrokes local, push to filters.q debounced
+  // so each character doesn't fire a server round-trip.
+  const [searchDraft, setSearchDraft] = useState(filters.q)
+
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      if (searchDraft !== filtersRef.current.q) setFilters({ q: searchDraft })
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [searchDraft, setFilters])
 
   // Income/expense/net for the currently loaded transactions — derived state,
   // recomputed whenever the transaction list changes (transfers excluded).
@@ -206,7 +218,7 @@ export function WalletPage() {
   }
 
   const handleExport = useCallback((format: 'csv' | 'json', ids: string[]) => {
-    exportTransactions(format, ids)
+    void exportTransactions(format, ids)
   }, [exportTransactions])
 
   const typeOptions = [
@@ -329,6 +341,17 @@ export function WalletPage() {
           </div>
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[12rem] max-w-xs">
+            <Input
+              id="transaction-search"
+              label="Search"
+              type="search"
+              placeholder="Search merchant or description..."
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              data-testid="transaction-search"
+            />
+          </div>
           <div className="flex-1 min-w-[12rem] max-w-xs">
             <TagInput
               id="filter-tags"
