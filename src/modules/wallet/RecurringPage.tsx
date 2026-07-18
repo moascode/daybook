@@ -2,14 +2,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
+import { useCrudModal } from '@/hooks/useCrudModal'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, errorMessage } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import type {
   RecurringTransaction,
@@ -43,9 +45,7 @@ export function RecurringPage() {
   const { addToast } = useToastStore()
   const invalidate = useWalletStore((s) => s.invalidate)
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingRule, setEditingRule] = useState<RecurringTransaction | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const crud = useCrudModal<RecurringTransaction>()
   const [postingId, setPostingId] = useState<string | null>(null)
   const [form, setForm] = useState<RecurringFormData>({
     accountId: '',
@@ -73,7 +73,6 @@ export function RecurringPage() {
   )
 
   const openCreate = useCallback(() => {
-    setEditingRule(null)
     setForm({
       accountId: '',
       amount: '',
@@ -83,11 +82,10 @@ export function RecurringPage() {
       frequency: 'monthly',
       nextDueDate: '',
     })
-    setFormOpen(true)
-  }, [])
+    crud.openCreate()
+  }, [crud])
 
   const openEdit = useCallback((rule: RecurringTransaction) => {
-    setEditingRule(rule)
     setForm({
       accountId: rule.accountId,
       amount: String(rule.amount),
@@ -97,35 +95,39 @@ export function RecurringPage() {
       frequency: rule.frequency,
       nextDueDate: rule.nextDueDate,
     })
-    setFormOpen(true)
-  }, [])
+    crud.openEdit(rule)
+  }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const amount = parseFloat(form.amount)
     if (!form.accountId || isNaN(amount) || amount <= 0 || !form.nextDueDate) return
     const categoryId = form.categoryId || null
-    if (editingRule) {
-      await updateRecurringTransaction(editingRule.id, {
-        amount,
-        merchant: form.merchant,
-        type: form.type,
-        categoryId,
-        frequency: form.frequency,
-        nextDueDate: form.nextDueDate,
-      })
-    } else {
-      await addRecurringTransaction({
-        accountId: form.accountId,
-        amount,
-        merchant: form.merchant,
-        type: form.type,
-        categoryId,
-        frequency: form.frequency,
-        nextDueDate: form.nextDueDate,
-      })
+    try {
+      if (crud.editingItem) {
+        await updateRecurringTransaction(crud.editingItem.id, {
+          amount,
+          merchant: form.merchant,
+          type: form.type,
+          categoryId,
+          frequency: form.frequency,
+          nextDueDate: form.nextDueDate,
+        })
+      } else {
+        await addRecurringTransaction({
+          accountId: form.accountId,
+          amount,
+          merchant: form.merchant,
+          type: form.type,
+          categoryId,
+          frequency: form.frequency,
+          nextDueDate: form.nextDueDate,
+        })
+      }
+      crud.closeForm(false)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save recurring rule — please try again.'), duration: 4000 })
     }
-    setFormOpen(false)
-  }, [form, editingRule, addRecurringTransaction, updateRecurringTransaction])
+  }, [form, crud, addRecurringTransaction, updateRecurringTransaction, addToast])
 
   const handlePostNow = useCallback(async (rule: RecurringTransaction) => {
     setPostingId(rule.id)
@@ -138,15 +140,21 @@ export function RecurringPage() {
       })
       // A transaction was created — refresh balances/lists on other pages.
       invalidate()
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not post this recurring rule — please try again.'), duration: 4000 })
     } finally {
       setPostingId(null)
     }
   }, [postRecurringNow, addToast, accounts, invalidate])
 
   const handleDelete = useCallback(async (id: string) => {
-    await deleteRecurringTransaction(id)
-    setConfirmDeleteId(null)
-  }, [deleteRecurringTransaction])
+    try {
+      await deleteRecurringTransaction(id)
+      crud.closeDelete()
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete recurring rule — please try again.'), duration: 4000 })
+    }
+  }, [deleteRecurringTransaction, crud, addToast])
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -242,7 +250,7 @@ export function RecurringPage() {
                       </button>
                       <button
                         className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
-                        onClick={() => setConfirmDeleteId(rule.id)}
+                        onClick={() => crud.openDelete(rule.id)}
                       >
                         Delete
                       </button>
@@ -257,9 +265,9 @@ export function RecurringPage() {
 
       {/* Add / Edit modal */}
       <Modal
-        open={formOpen}
-        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingRule(null) }}
-        title={editingRule ? 'Edit Recurring Rule' : 'New Recurring Rule'}
+        open={crud.formOpen}
+        onOpenChange={crud.closeForm}
+        title={crud.editingItem ? 'Edit Recurring Rule' : 'New Recurring Rule'}
       >
         <div className="flex flex-col gap-4">
           <Select
@@ -323,33 +331,24 @@ export function RecurringPage() {
             onChange={(e) => setForm((f) => ({ ...f, nextDueDate: e.target.value }))}
           />
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>
+            <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>
               Cancel
             </Button>
             <Button size="sm" onClick={handleSubmit}>
-              {editingRule ? 'Save' : 'Create'}
+              {crud.editingItem ? 'Save' : 'Create'}
             </Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete confirm modal */}
-      <Modal
-        open={!!confirmDeleteId}
-        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null) }}
+      <ConfirmDeleteModal
+        open={!!crud.confirmDeleteId}
+        onOpenChange={(open) => { if (!open) crud.closeDelete() }}
         title="Delete recurring rule?"
         description="This will remove the recurring rule. Existing transactions are not affected."
-        className="max-w-sm"
-      >
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>
-            Confirm
-          </Button>
-        </div>
-      </Modal>
+        onConfirm={() => crud.confirmDeleteId && handleDelete(crud.confirmDeleteId)}
+      />
     </div>
   )
 }

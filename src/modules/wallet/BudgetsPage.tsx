@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, PieChart, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
-import { cn, formatMYR } from '@/lib/utils'
+import { useCrudModal } from '@/hooks/useCrudModal'
+import { useToastStore } from '@/stores/toast.store'
+import { cn, formatMYR, errorMessage } from '@/lib/utils'
 import type { Budget } from '@/types/wallet.types'
 
 interface BudgetFormData {
@@ -20,11 +23,10 @@ function currentMonthYear(): string {
 }
 
 export function BudgetsPage() {
-  const { budgets, categories, transactions, loadBudgets, loadCategories, loadTransactions, addBudget, updateBudget, deleteBudget } = useWallet()
+  const { budgets, categories, transactions, loadBudgets, loadCategories, loadTransactions, addBudget, updateBudget, deleteBudget, getMonthlySpending } = useWallet()
+  const { addToast } = useToastStore()
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const crud = useCrudModal<Budget>()
   const [form, setForm] = useState<BudgetFormData>({ categoryId: '', limitAmount: '' })
 
   useEffect(() => {
@@ -38,48 +40,52 @@ export function BudgetsPage() {
     loadTransactions({ dateFrom: `${prefix}-01`, dateTo: `${prefix}-${String(lastDay).padStart(2, '0')}` })
   }, [loadBudgets, loadCategories, loadTransactions])
 
-  const spending = useMemo(() => {
-    const prefix = currentMonthYear()
-    const map = new Map<string, number>()
-    for (const t of transactions) {
-      if (t.type !== 'expense' || !t.categoryId) continue
-      if (!t.date.startsWith(prefix)) continue
-      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount)
-    }
-    return map
-  }, [transactions])
+  // C6: wire up getMonthlySpending instead of reimplementing the same
+  // aggregation inline. `transactions` is a dep only to trigger recompute —
+  // getMonthlySpending itself reads the store directly.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const spending = useMemo(
+    () => getMonthlySpending(currentMonthYear()),
+    [transactions, getMonthlySpending],
+  )
 
   const openCreate = useCallback(() => {
-    setEditingBudget(null)
     setForm({ categoryId: '', limitAmount: '' })
-    setFormOpen(true)
-  }, [])
+    crud.openCreate()
+  }, [crud])
 
   const openEdit = useCallback((budget: Budget) => {
-    setEditingBudget(budget)
     setForm({ categoryId: budget.categoryId, limitAmount: String(budget.limitAmount) })
-    setFormOpen(true)
-  }, [])
+    crud.openEdit(budget)
+  }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const limit = parseFloat(form.limitAmount)
     if (!form.categoryId || isNaN(limit) || limit <= 0) return
-    if (editingBudget) {
-      await updateBudget(editingBudget.id, { limitAmount: limit })
-    } else {
-      await addBudget({ categoryId: form.categoryId, limitAmount: limit })
+    try {
+      if (crud.editingItem) {
+        await updateBudget(crud.editingItem.id, { limitAmount: limit })
+      } else {
+        await addBudget({ categoryId: form.categoryId, limitAmount: limit })
+      }
+      crud.closeForm(false)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save budget — please try again.'), duration: 4000 })
     }
-    setFormOpen(false)
-  }, [form, editingBudget, addBudget, updateBudget])
+  }, [form, crud, addBudget, updateBudget, addToast])
 
   const handleDelete = useCallback(async (id: string) => {
-    await deleteBudget(id)
-    setConfirmDeleteId(null)
-  }, [deleteBudget])
+    try {
+      await deleteBudget(id)
+      crud.closeDelete()
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete budget — please try again.'), duration: 4000 })
+    }
+  }, [deleteBudget, crud, addToast])
 
   const expenseCategories = categories.filter((c) => c.type === 'expense' || c.type === 'both')
   const usedCategoryIds = new Set(budgets.map((b) => b.categoryId))
-  const availableCategories = editingBudget
+  const availableCategories = crud.editingItem
     ? expenseCategories
     : expenseCategories.filter((c) => !usedCategoryIds.has(c.id))
 
@@ -168,7 +174,7 @@ export function BudgetsPage() {
                     </button>
                     <button
                       className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      onClick={() => setConfirmDeleteId(budget.id)}
+                      onClick={() => crud.openDelete(budget.id)}
                       aria-label="Delete"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -183,9 +189,9 @@ export function BudgetsPage() {
 
       {/* Add / Edit modal */}
       <Modal
-        open={formOpen}
-        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingBudget(null) }}
-        title={editingBudget ? 'Edit Budget' : 'New Budget'}
+        open={crud.formOpen}
+        onOpenChange={crud.closeForm}
+        title={crud.editingItem ? 'Edit Budget' : 'New Budget'}
       >
         <div className="flex flex-col gap-4">
           <Select
@@ -195,7 +201,7 @@ export function BudgetsPage() {
             placeholder="Select category"
             value={form.categoryId}
             onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-            disabled={!!editingBudget}
+            disabled={!!crud.editingItem}
           />
           <Input
             label="Limit"
@@ -211,33 +217,24 @@ export function BudgetsPage() {
             Budgets reset <span className="font-medium text-gray-700">monthly</span>.
           </p>
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>
+            <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>
               Cancel
             </Button>
             <Button size="sm" onClick={handleSubmit}>
-              {editingBudget ? 'Save Changes' : 'Create Budget'}
+              {crud.editingItem ? 'Save Changes' : 'Create Budget'}
             </Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete confirm modal */}
-      <Modal
-        open={!!confirmDeleteId}
-        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null) }}
+      <ConfirmDeleteModal
+        open={!!crud.confirmDeleteId}
+        onOpenChange={(open) => { if (!open) crud.closeDelete() }}
         title="Delete budget?"
         description="This will remove the monthly limit for this category. Transactions are not affected."
-        className="max-w-sm"
-      >
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" size="sm" onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>
-            Confirm
-          </Button>
-        </div>
-      </Modal>
+        onConfirm={() => crud.confirmDeleteId && handleDelete(crud.confirmDeleteId)}
+      />
     </div>
   )
 }

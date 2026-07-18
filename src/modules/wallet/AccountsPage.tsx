@@ -7,12 +7,14 @@ import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
-import { formatMYR } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
+import { formatMYR, errorMessage } from '@/lib/utils'
 import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
 
 export function AccountsPage() {
   const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalances } = useWallet()
+  const { addToast } = useToastStore()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
@@ -33,20 +35,34 @@ export function AccountsPage() {
   }, [accounts, getAccountBalances])
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
-    await addAccount(data)
-  }, [addAccount])
+    try {
+      await addAccount(data)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not create account — please try again.'), duration: 4000 })
+      throw err // keep the form open so the user can retry
+    }
+  }, [addAccount, addToast])
 
   const handleEdit = useCallback(async (data: AccountFormData) => {
     if (!editingAccount) return
-    await updateAccount(editingAccount.id, data)
-    setEditingAccount(null)
-  }, [editingAccount, updateAccount])
+    try {
+      await updateAccount(editingAccount.id, data)
+      setEditingAccount(null)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save account — please try again.'), duration: 4000 })
+      throw err
+    }
+  }, [editingAccount, updateAccount, addToast])
 
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) return
-    await deleteAccount(deleteTarget.id)
-    setDeleteTarget(null)
-  }, [deleteTarget, deleteAccount])
+    try {
+      await deleteAccount(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete account — please try again.'), duration: 4000 })
+    }
+  }, [deleteTarget, deleteAccount, addToast])
 
   function openCreateForm() { setEditingAccount(null); setFormOpen(true) }
   function openEditForm(account: Account) { setEditingAccount(account); setFormOpen(true) }

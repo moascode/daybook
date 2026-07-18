@@ -37,7 +37,18 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (res.status === 401 && !path.startsWith('/auth')) {
       onUnauthorized?.()
     }
-    throw new ApiError(res.status, `API ${method} ${path} failed: ${res.status}`)
+    // C12's error middleware returns `{error: string}`; surface that message
+    // when present, falling back to a generic one for non-JSON failures.
+    let message = `API ${method} ${path} failed: ${res.status}`
+    try {
+      const body: unknown = await res.json()
+      if (body && typeof body === 'object' && 'error' in body && typeof body.error === 'string') {
+        message = body.error
+      }
+    } catch {
+      // response body wasn't JSON — keep the generic message
+    }
+    throw new ApiError(res.status, message)
   }
 
   if (res.status === 204) return undefined as T

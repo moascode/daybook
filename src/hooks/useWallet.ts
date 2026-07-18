@@ -468,12 +468,6 @@ export function useWallet() {
     useWalletStore.getState().removeRecurringTransaction(id)
   }, [])
 
-  // Post all rules due on/before today (catch-up). Returns the number posted.
-  const processRecurringTransactions = useCallback(async (): Promise<number> => {
-    const { posted } = await api.post<{ posted: number }>('/recurring-transactions/process')
-    return posted
-  }, [])
-
   // Post a single rule immediately and advance its schedule one period.
   const postRecurringNow = useCallback(async (id: string): Promise<void> => {
     const row = await api.post<RecurringRow>(`/recurring-transactions/${id}/post`)
@@ -631,7 +625,6 @@ export function useWallet() {
     addRecurringTransaction,
     updateRecurringTransaction,
     deleteRecurringTransaction,
-    processRecurringTransactions,
     postRecurringNow,
 
     // Goal CRUD
