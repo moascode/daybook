@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
-import { formatMYR, POSITIVE_MONEY_COLOR } from '@/lib/utils'
+import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
@@ -274,7 +274,9 @@ export function Dashboard() {
             <ArrowUpDown className="h-4 w-4 text-blue-500" />
             Net
           </div>
+          {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
           <p className={`mt-1 text-xl font-bold ${summary.net >= 0 ? 'text-positive-600' : 'text-red-600'}`}>
+            {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>
         </div>
@@ -323,17 +325,24 @@ export function Dashboard() {
       {weeklyData.length > 0 && (
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <h3 className="mb-4 text-sm font-semibold text-gray-900">Cash Flow by Week</h3>
+          <div
+            role="img"
+            aria-label={`Cash flow by week bar chart. ${weeklyData
+              .map((w) => `Week of ${w.week}: income ${formatMYR(w.income)}, expense ${formatMYR(w.expense)}`)
+              .join('; ')}`}
+          >
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={weeklyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="week" fontSize={12} tickLine={false} />
-              <YAxis fontSize={12} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <YAxis fontSize={12} tickLine={false} tickFormatter={formatAxisMYR} />
               <Tooltip formatter={(value: number) => formatMYR(value)} />
               <Legend />
               <Bar dataKey="income" fill={POSITIVE_MONEY_COLOR} radius={[4, 4, 0, 0]} />
               <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 
@@ -342,6 +351,12 @@ export function Dashboard() {
         {categoryData.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
             <h3 className="mb-4 text-sm font-semibold text-gray-900">Spending by Category</h3>
+            <div
+              role="img"
+              aria-label={`Spending by category pie chart. ${categoryData
+                .map((c) => `${c.name}: ${formatMYR(c.value)}`)
+                .join('; ')}`}
+            >
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
                 <Pie
@@ -364,6 +379,7 @@ export function Dashboard() {
                 <Tooltip formatter={(value: number) => formatMYR(value)} />
               </PieChart>
             </ResponsiveContainer>
+            </div>
           </div>
         )}
 
@@ -371,15 +387,22 @@ export function Dashboard() {
         {accountData.length > 0 && (
           <div className="rounded-xl border border-gray-200 bg-white p-5">
             <h3 className="mb-4 text-sm font-semibold text-gray-900">Spending by Account</h3>
+            <div
+              role="img"
+              aria-label={`Spending by account bar chart. ${accountData
+                .map((a) => `${a.name}: ${formatMYR(a.amount)}`)
+                .join('; ')}`}
+            >
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={accountData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" fontSize={12} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+                <XAxis type="number" fontSize={12} tickFormatter={formatAxisMYR} />
                 <YAxis type="category" dataKey="name" fontSize={12} width={100} />
                 <Tooltip formatter={(value: number) => formatMYR(value)} />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
         )}
       </div>

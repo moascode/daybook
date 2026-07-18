@@ -409,7 +409,9 @@ export function WalletPage() {
           summary.net >= 0 ? 'border-positive-100 bg-positive-50' : 'border-red-100 bg-red-50',
         )}>
           <div className="text-xs font-medium text-gray-500">Net</div>
+          {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
           <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')}>
+            {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>
         </div>

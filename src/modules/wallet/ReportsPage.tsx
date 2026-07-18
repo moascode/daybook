@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useWallet } from '@/hooks/useWallet'
-import { formatMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
+import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import {
   BarChart,
@@ -67,6 +67,17 @@ export function ReportsPage() {
 
   const yoyData = useMemo(() => buildYoYData(allTransactions), [allTransactions])
 
+  // Yearly totals for the chart's accessible summary.
+  const yoyTotals = useMemo(() => {
+    const sum = (key: string) => yoyData.reduce((acc, m) => acc + Number(m[key] ?? 0), 0)
+    return {
+      lastIncome: sum(`${lastYear} income`),
+      lastExpense: sum(`${lastYear} expense`),
+      thisIncome: sum(`${thisYear} income`),
+      thisExpense: sum(`${thisYear} expense`),
+    }
+  }, [yoyData, lastYear, thisYear])
+
   const handleApply = useCallback(async () => {
     if (!customFrom || !customTo) return
     setAppliedFrom(customFrom)
@@ -93,11 +104,15 @@ export function ReportsPage() {
             <span className="font-medium text-gray-700">{lastYear}</span>
             <span className="font-medium text-gray-700">{thisYear}</span>
           </div>
+          <div
+            role="img"
+            aria-label={`Year-on-year bar chart of monthly income and expense. ${lastYear}: income ${formatMYR(yoyTotals.lastIncome)}, expense ${formatMYR(yoyTotals.lastExpense)}. ${thisYear}: income ${formatMYR(yoyTotals.thisIncome)}, expense ${formatMYR(yoyTotals.thisExpense)}`}
+          >
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={yoyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" fontSize={11} tickLine={false} />
-              <YAxis fontSize={11} tickLine={false} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <YAxis fontSize={11} tickLine={false} tickFormatter={formatAxisMYR} />
               <Tooltip formatter={(value: number) => formatMYR(value)} />
               <Legend />
               <Bar dataKey={`${lastYear} expense`} fill="#fca5a5" radius={[3, 3, 0, 0]} />
@@ -106,6 +121,7 @@ export function ReportsPage() {
               <Bar dataKey={`${thisYear} income`} fill={POSITIVE_MONEY_COLOR} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
