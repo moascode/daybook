@@ -50,6 +50,9 @@ walletRouter.get('/accounts', (req, res) => {
 
 walletRouter.post('/accounts', (req, res) => {
   const b = req.body ?? {}
+  if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
+    return res.status(400).json({ error: 'name is required' })
+  }
   const row = getDb()
     .prepare(
       `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, opening_balance, created_at)
@@ -1004,6 +1007,16 @@ walletRouter.get('/recurring-transactions', (req, res) => {
 const RECURRING_TYPES = new Set(['income', 'expense'])
 const RECURRING_FREQS = new Set(['monthly', 'weekly'])
 
+// §1.3: a rule with a bad amount or due date would auto-post corrupt
+// transactions on every boot via /recurring-transactions/process, so both are
+// validated like transactions (C2) — not left to the client-side form guard.
+function isoDateError(v: unknown, field: string): string | null {
+  if (typeof v !== 'string' || !ISO_DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
+    return `${field} must be an ISO date (YYYY-MM-DD)`
+  }
+  return null
+}
+
 walletRouter.post('/recurring-transactions', (req, res) => {
   const b = req.body ?? {}
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['categories', b.categoryId]])) {
@@ -1015,6 +1028,10 @@ walletRouter.post('/recurring-transactions', (req, res) => {
   if (!RECURRING_FREQS.has(b.frequency)) {
     return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
   }
+  const amtErr = positiveAmountError(b.amount, 'amount')
+  if (amtErr) return res.status(400).json({ error: amtErr })
+  const dateErr = isoDateError(b.nextDueDate, 'nextDueDate')
+  if (dateErr) return res.status(400).json({ error: dateErr })
   const row = getDb()
     .prepare(
       `INSERT INTO recurring_transactions
@@ -1159,6 +1176,14 @@ walletRouter.patch('/recurring-transactions/:id', (req, res) => {
   if ('frequency' in b && !RECURRING_FREQS.has(b.frequency)) {
     return res.status(400).json({ error: 'recurring frequency must be monthly or weekly' })
   }
+  if ('amount' in b) {
+    const amtErr = positiveAmountError(b.amount, 'amount')
+    if (amtErr) return res.status(400).json({ error: amtErr })
+  }
+  if ('nextDueDate' in b) {
+    const dateErr = isoDateError(b.nextDueDate, 'nextDueDate')
+    if (dateErr) return res.status(400).json({ error: dateErr })
+  }
   const refs: Array<[string, unknown]> = []
   if ('accountId' in b) refs.push(['accounts', b.accountId])
   if ('categoryId' in b) refs.push(['categories', b.categoryId])
@@ -1189,6 +1214,9 @@ walletRouter.get('/goals', (req, res) => {
 
 walletRouter.post('/goals', (req, res) => {
   const b = req.body ?? {}
+  if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
+    return res.status(400).json({ error: 'name is required' })
+  }
   const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
   if (amtErr) return res.status(400).json({ error: amtErr })
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId]])) {
