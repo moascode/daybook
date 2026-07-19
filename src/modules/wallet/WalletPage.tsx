@@ -579,17 +579,19 @@ export function WalletPage() {
         </div>
       </Modal>
 
-        <BulkShareDialog
-         open={bulkShareOpen}
-         onOpenChange={setBulkShareOpen}
-         selectedTransactionIds={Array.from(selectedIds)}
-         transactions={transactions}
-         currentUserId={currentUserId}
-         onSave={() => {
-    setBulkShareOpen(false)
-    setSelectedIds(new Set())
-         }}
-        />
+      <BulkShareDialog
+        open={bulkShareOpen}
+        onOpenChange={setBulkShareOpen}
+        selectedTransactionIds={Array.from(selectedIds)}
+        transactions={transactions}
+        currentUserId={currentUserId}
+        onSave={() => {
+          setBulkShareOpen(false)
+          setSelectedIds(new Set())
+          setSelectMode(false)
+          loadTransactions(filtersRef.current)
+        }}
+      />
     </div>
   )
 }
