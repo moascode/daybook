@@ -182,4 +182,31 @@ test.describe('25 — Transaction splits', () => {
     await aliceCtx.close()
     await bobCtx.close()
   })
+
+  // §2.3/§4.5: the legacy multi-line split endpoint (and its divergent
+  // co-writer permission rule) is removed — sharing goes through the
+  // owner-only /share and bulk /shares routes.
+  test('Legacy POST/DELETE /transactions/:id/shares routes are gone (404)', async ({ browser }) => {
+    const ctx = await browser.newContext()
+    const page = await ctx.newPage()
+    await page.request.post('http://localhost:5173/api/auth/signup', { data: { username: `legacy_${Date.now()}`, password: 'test-password' } })
+    const acct = await page.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Legacy Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const txn = await page.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: new Date().toISOString().slice(0, 10), merchant: 'Legacy', amount: 10, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    const post = await page.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {
+      data: { shares: [{ userId: 'someone', shareAmount: 10 }] },
+    })
+    expect(post.status()).toBe(404)
+    const del = await page.request.delete(`http://localhost:5173/api/transactions/${txn.id}/shares`)
+    expect(del.status()).toBe(404)
+    // The read route survives (both dialogs use it to show existing shares)
+    const get = await page.request.get(`http://localhost:5173/api/transactions/${txn.id}/shares`)
+    expect(get.status()).toBe(200)
+
+    await ctx.close()
+  })
 })

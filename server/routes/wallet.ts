@@ -660,68 +660,6 @@ walletRouter.get('/transactions/:id/shares', (req, res) => {
   res.json(rows)
 })
 
-walletRouter.post('/transactions/:id/shares', (req, res) => {
-  const db = getDb()
-  const userId = req.session.userId!
-  const txn = db
-    .prepare('SELECT user_id, amount, account_id FROM transactions WHERE id = ?')
-    .get(req.params.id) as { user_id: string; amount: number; account_id: string } | undefined
-  if (!txn) return res.status(404).json({ error: 'transaction not found' })
-  if (txn.user_id !== userId && !canWriteAccount(db, userId, txn.account_id)) {
-    return res.status(403).json({ error: 'only the transaction owner can set splits' })
-  }
-
-  const shares: Array<{ userId: string; shareAmount: number; note?: string }> = Array.isArray(req.body?.shares)
-    ? req.body.shares
-    : []
-  if (shares.length === 0) return res.status(400).json({ error: 'shares array is required' })
-
-  // Validate each share amount is a positive finite number
-  for (const s of shares) {
-    const amt = Number(s.shareAmount)
-    if (!Number.isFinite(amt) || amt <= 0) {
-      return res.status(400).json({ error: 'each share amount must be a positive number' })
-    }
-  }
-
-  // Validate sum
-  const sum = shares.reduce((acc, s) => acc + Number(s.shareAmount), 0)
-  if (Math.abs(sum - txn.amount) > 0.015) {
-    return res.status(400).json({ error: `share amounts must sum to the transaction amount (${txn.amount}); got ${sum}` })
-  }
-
-  // S-3: All share userId values must be co-group members with the transaction owner
-  const allowedIds = new Set(coGroupUserIds(db, txn.user_id))
-  for (const s of shares) {
-    if (!allowedIds.has(String(s.userId))) {
-      return res.status(400).json({ error: `user ${s.userId} is not a group co-member with this transaction's owner` })
-    }
-  }
-
-  // Atomically replace all share rows
-  const result = db.transaction(() => {
-    db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
-    const insert = db.prepare(
-      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
-       RETURNING *`,
-    )
-    return shares.map((s) => insert.get(req.params.id, s.userId, s.shareAmount, s.note ?? ''))
-  })()
-
-  res.status(201).json(result)
-})
-
-walletRouter.delete('/transactions/:id/shares', (req, res) => {
-  const db = getDb()
-  const userId = req.session.userId!
-  const txn = db.prepare('SELECT user_id FROM transactions WHERE id = ?').get(req.params.id) as { user_id: string } | undefined
-  if (!txn) return res.status(404).json({ error: 'transaction not found' })
-  if (txn.user_id !== userId) return res.status(403).json({ error: 'only the transaction owner can remove splits' })
-  db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
-  res.status(204).end()
-})
-
 // Quick single-transaction share — share with one recipient (full amount or split)
 walletRouter.post('/transactions/:id/share', (req, res) => {
   const db = getDb()

@@ -43,12 +43,15 @@ test.describe('26 — Settlement', () => {
     const txn = await txnRes.json()
 
     // Split 50/50 between Alice and Bob via API
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {
+    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
       data: {
-        shares: [
-          { userId: aliceMe.user.id, shareAmount: 100, note: '' },
-          { userId: bobMe.user.id, shareAmount: 100, note: '' },
-        ],
+        transactions: [{
+          transactionId: txn.id,
+          shares: [
+            { userId: aliceMe.user.id, shareAmount: 100, note: '' },
+            { userId: bobMe.user.id, shareAmount: 100, note: '' },
+          ],
+        }],
       },
     })
 
@@ -130,12 +133,15 @@ test.describe('26 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {
+    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
       data: {
-        shares: [
-          { userId: aliceMe.user.id, shareAmount: 100, note: '' },
-          { userId: bobMe.user.id, shareAmount: 100, note: '' },
-        ],
+        transactions: [{
+          transactionId: txn.id,
+          shares: [
+            { userId: aliceMe.user.id, shareAmount: 100, note: '' },
+            { userId: bobMe.user.id, shareAmount: 100, note: '' },
+          ],
+        }],
       },
     })
 
@@ -203,12 +209,15 @@ test.describe('26 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {
+    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
       data: {
-        shares: [
-          { userId: aliceMe.user.id, shareAmount: 100, note: '' },
-          { userId: bobMe.user.id, shareAmount: 100, note: '' },
-        ],
+        transactions: [{
+          transactionId: txn.id,
+          shares: [
+            { userId: aliceMe.user.id, shareAmount: 100, note: '' },
+            { userId: bobMe.user.id, shareAmount: 100, note: '' },
+          ],
+        }],
       },
     })
 
@@ -270,12 +279,15 @@ test.describe('26 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {
+    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
       data: {
-        shares: [
-          { userId: aliceMe.user.id, shareAmount: 100, note: '' },
-          { userId: bobMe.user.id, shareAmount: 100, note: '' },
-        ],
+        transactions: [{
+          transactionId: txn.id,
+          shares: [
+            { userId: aliceMe.user.id, shareAmount: 100, note: '' },
+            { userId: bobMe.user.id, shareAmount: 100, note: '' },
+          ],
+        }],
       },
     })
 
