@@ -75,6 +75,21 @@ export default function App() {
           .catch((err: unknown) => {
             console.error('Failed to process recurring transactions:', err)
           })
+        // Surface pending sharing invitations once per login so they aren't
+        // missed now that invites live under Settings → Sharing.
+        api
+          .get<Record<string, unknown>[]>('/invites')
+          .then((invites) => {
+            if (invites.length > 0) {
+              useToastStore.getState().addToast({
+                message: `You have ${invites.length} pending sharing invitation${invites.length === 1 ? '' : 's'} — see Settings → Sharing`,
+                duration: 8000,
+              })
+            }
+          })
+          .catch((err: unknown) => {
+            console.error('Failed to check pending invites:', err)
+          })
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : 'Unknown error'

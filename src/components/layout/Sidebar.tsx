@@ -140,14 +140,6 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
           Tasks
         </NavLink>
 
-        <NavLink to="/household" end onClick={onClose} className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
-          <span className="flex items-center gap-3">
-            <Users className="h-4 w-4 flex-shrink-0" />
-            Household
-          </span>
-          <InvitationsBadge />
-        </NavLink>
-
         {/* Wallet — expandable section */}
         <div>
           <div className="flex items-center">
@@ -217,9 +209,13 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
 
       {/* Bottom: Settings */}
       <div className="shrink-0 border-t border-gray-200 px-3 py-3">
-        <NavLink to="/settings" end onClick={onClose} className={topLinkClass}>
-          <Settings className="h-4 w-4 flex-shrink-0" />
-          Settings
+        {/* end=false: stay highlighted on /settings/sharing; badge surfaces pending invites */}
+        <NavLink to="/settings" end={false} onClick={onClose} className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
+          <span className="flex items-center gap-3">
+            <Settings className="h-4 w-4 flex-shrink-0" />
+            Settings
+          </span>
+          <InvitationsBadge />
         </NavLink>
         <p className="mt-2 px-3 text-xs text-gray-400">Daybook Alpha</p>
       </div>

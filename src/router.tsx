@@ -15,7 +15,6 @@ import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { SharingPage } from '@/modules/settings/SharingPage'
 import { UATPage } from '@/modules/uat/UATPage'
-import { HouseholdPageWrapper } from '@/modules/household/HouseholdPageWrapper'
 
 export const router = createBrowserRouter([
   {
@@ -39,7 +38,8 @@ export const router = createBrowserRouter([
           { path: 'import', element: <CsvImport /> },
         ],
       },
-      { path: 'household', element: <HouseholdPageWrapper /> },
+      // Sharing IA relocation (§3): keep the old URL working for one release
+      { path: 'household', element: <Navigate to="/settings/sharing" replace /> },
       {
         path: 'settings',
         element: <SettingsLayout />,

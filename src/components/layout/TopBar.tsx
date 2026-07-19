@@ -4,6 +4,7 @@ const routeTitles: Record<string, string> = {
   '/tasks':             'Tasks',
   '/wallet':            'Transactions',
   '/wallet/accounts':   'Accounts',
+  '/wallet/shared':     'Shared',
   '/wallet/dashboard':  'Dashboard',
   '/wallet/budgets':    'Budgets',
   '/wallet/recurring':  'Recurring',
@@ -11,6 +12,7 @@ const routeTitles: Record<string, string> = {
   '/wallet/reports':    'Reports',
   '/wallet/import':     'Import CSV',
   '/settings':          'Settings',
+  '/settings/sharing':  'Sharing',
   '/uat':               'UAT Tests',
 }
 

@@ -57,7 +57,7 @@ export function SharedPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadAll() }, [loadAll]) // eslint-disable-line react-hooks/set-state-in-effect
 
   const handleUndoSettlement = async (id: string) => {
     setUndoError(null)

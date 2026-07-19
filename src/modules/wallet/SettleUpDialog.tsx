@@ -33,7 +33,7 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
 
   useEffect(() => {
     if (balance) {
-      setError(null)
+      setError(null) // eslint-disable-line react-hooks/set-state-in-effect
       setForm({ fromAccountId: '', toAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
     }
   }, [balance])
