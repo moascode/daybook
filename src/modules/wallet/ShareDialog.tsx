@@ -4,10 +4,10 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
-import { formatMYR } from '@/lib/utils'
-import { mapMember } from '@/lib/household.mappers'
+import { formatMYR, splitEqually } from '@/lib/utils'
+import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
-import type { GroupMember } from '@/types/household.types'
+import type { GroupMember, TransactionShare } from '@/types/household.types'
 
 interface ShareDialogProps {
   open: boolean
@@ -21,6 +21,7 @@ type SplitMode = 'none' | 'equal' | 'custom'
 
 export function ShareDialog({ open, onOpenChange, transaction, currentUserId, onSaved }: ShareDialogProps) {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
+  const [existingShares, setExistingShares] = useState<TransactionShare[]>([])
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [splitMode, setSplitMode] = useState<SplitMode>('none')
   const [customAmounts, setCustomAmounts] = useState<[string, string]>(['', ''])
@@ -34,10 +35,17 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
     if (!transaction) return
     setLoadingMembers(true)
     try {
-      const memberRows = await api.get<Record<string, unknown>[]>('/groups/members').then((rows) =>
-        rows.map(mapMember),
-       )
+      // §2.2: also load existing share rows so re-opening an already-shared
+      // transaction shows who owes what instead of a blank form.
+      const [memberRows, shareRows] = await Promise.all([
+        api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
+        api
+          .get<Record<string, unknown>[]>(`/transactions/${transaction.id}/shares`)
+          .then((rows) => rows.map(mapTransactionShare))
+          .catch(() => [] as TransactionShare[]),
+      ])
       setGroupMembers(memberRows.filter((m) => m.userId !== currentUserId))
+      setExistingShares(shareRows)
      } finally {
       setLoadingMembers(false)
      }
@@ -63,9 +71,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
       let shareAmounts: number[] | undefined
 
       if (splitMode === 'equal') {
-        const base = Math.floor((amount / 2) * 100) / 100
-        const remainder = Math.round((amount - base * 2) * 100) / 100
-        shareAmounts = [base, remainder]
+        shareAmounts = splitEqually(amount, 2)
        } else if (splitMode === 'custom') {
         const [ownerAmt, recipientAmt] = customAmounts
         const sum = parseFloat(ownerAmt) + parseFloat(recipientAmt)
@@ -100,6 +106,23 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
            <p className="font-semibold text-gray-900">{transaction.merchant || 'Transaction'}</p>
            <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
          </div>
+
+         {/* §2.2: existing shares + overwrite warning */}
+         {existingShares.length > 0 && (
+           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
+             <p className="text-xs font-medium text-amber-800">Currently shared</p>
+             {existingShares.map((s) => (
+               <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
+                 <span>{s.userId === currentUserId ? 'You' : s.username}</span>
+                 <span>
+                   {formatMYR(s.shareAmount)}
+                   {s.settledAt ? ' · settled' : ''}
+                 </span>
+               </div>
+             ))}
+             <p className="text-xs text-amber-700 pt-1">Saving will replace these shares.</p>
+           </div>
+         )}
 
          {/* Recipient selector */}
          {loadingMembers ? (

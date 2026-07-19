@@ -469,7 +469,9 @@ CREATE TABLE IF NOT EXISTS account_shares (
   PRIMARY KEY (account_id, group_id)
 );
 
--- Split lines (one row per user per split transaction; includes the payer)
+-- Split lines (one row per participating user per split transaction; the payer
+-- has a row only when they participate in the split — "Keep as-is" shares
+-- write a single recipient-owes-100% row with no payer row)
 CREATE TABLE IF NOT EXISTS transaction_shares (
   id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   transaction_id  TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
@@ -515,6 +517,7 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 - Groups are opt-in; existing single-user data has no group visibility
 - Account shares grant visibility + optional write access; ownership stays with the original user
 - Transaction splits track who owes whom with `share_amount`; settlements create two real transfer transactions
+- A payer row is written only when the payer participates in the split ("Keep as-is" writes just the recipient's row); group balances only count debtor rows, so both shapes settle correctly
 - Non-members never see shared accounts or splits; visibility is scoped per user and group membership
 - `settled_at` in `transaction_shares` marks when a share is cleared by a settlement
 
