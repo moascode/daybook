@@ -129,4 +129,57 @@ test.describe('25 — Transaction splits', () => {
     await aliceCtx.close()
     await bobCtx.close()
   })
+
+  // §2.2: re-opening an already-shared transaction must show the existing
+  // shares and warn that saving replaces them (previously a blank form that
+  // silently overwrote).
+  test('Re-opening a shared transaction shows existing shares and overwrite warning', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_existing_${ts}`
+    const bobName = `bob_existing_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+
+    const group = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'ExistingGroup' } }).then((r) => r.json()) as { id: string }
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+
+    const acct = await alicePage.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const today = new Date().toISOString().slice(0, 10)
+    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Dinner', amount: 80, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    // Share equally with Bob via the quick-share API
+    const members = await alicePage.request.get('http://localhost:5173/api/groups/members').then((r) => r.json()) as Array<{ user_id: string; username: string }>
+    const bobId = members.find((m) => m.username === bobName)!.user_id
+    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/share`, {
+      data: { recipientId: bobId, splitMode: 'equal' },
+    })
+
+    // Re-open the share dialog on the same transaction
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Dinner')).toBeVisible({ timeout: 10_000 })
+    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Dinner' }).getByRole('button', { name: 'Share transaction' }).click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+    const existing = dialog.getByTestId('existing-shares')
+    await expect(existing).toBeVisible({ timeout: 5000 })
+    // Who-owes-what: both the payer and Bob are listed with their amounts
+    await expect(existing.getByText('You')).toBeVisible()
+    await expect(existing.getByText(bobName)).toBeVisible()
+    await expect(existing.getByText('Saving will replace these shares.')).toBeVisible()
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
 })

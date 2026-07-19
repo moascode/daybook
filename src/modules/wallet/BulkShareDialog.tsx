@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
 import { formatMYR, splitEqually } from '@/lib/utils'
-import { mapMember } from '@/lib/household.mappers'
+import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
-import type { GroupMember } from '@/types/household.types'
+import type { GroupMember, TransactionShare } from '@/types/household.types'
 
 interface BulkShareDialogProps {
   open: boolean
@@ -27,6 +27,8 @@ interface CardState {
   mode: SplitMode
   // Custom amounts keyed by userId; includes the payer under currentUserId.
   customAmounts: Record<string, string>
+  // §2.2: shares already on this transaction — shown with an overwrite warning.
+  existingShares: TransactionShare[]
 }
 
 export function BulkShareDialog({
@@ -47,15 +49,29 @@ export function BulkShareDialog({
     if (selectedTransactionIds.length === 0) return
     setLoadingMembers(true)
     try {
-      const memberRows = await api.get<Record<string, unknown>[]>('/groups/members').then((rows) =>
-        rows.map(mapMember),
-      )
+      const txns = selectedTransactionIds
+        .map((txnId) => transactions.find((t) => t.id === txnId))
+        .filter((t): t is Transaction => t !== undefined)
+      const [memberRows, shareLists] = await Promise.all([
+        api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
+        Promise.all(
+          txns.map((t) =>
+            api
+              .get<Record<string, unknown>[]>(`/transactions/${t.id}/shares`)
+              .then((rows) => rows.map(mapTransactionShare))
+              .catch(() => [] as TransactionShare[]),
+          ),
+        ),
+      ])
       setGroupMembers(memberRows.filter((m) => m.userId !== currentUserId))
       setCards(
-        selectedTransactionIds
-          .map((txnId) => transactions.find((t) => t.id === txnId))
-          .filter((t): t is Transaction => t !== undefined)
-          .map((transaction) => ({ transaction, recipientIds: [], mode: 'none' as SplitMode, customAmounts: {} })),
+        txns.map((transaction, i) => ({
+          transaction,
+          recipientIds: [],
+          mode: 'none' as SplitMode,
+          customAmounts: {},
+          existingShares: shareLists[i],
+        })),
       )
     } finally {
       setLoadingMembers(false)
@@ -168,6 +184,23 @@ export function BulkShareDialog({
                     <p className="text-xs text-gray-500">{format(parseISO(c.transaction.date), 'dd MMM yyyy')}</p>
                     <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
                   </div>
+
+                  {/* §2.2: existing shares + overwrite warning */}
+                  {c.existingShares.length > 0 && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
+                      <p className="text-xs font-medium text-amber-800">Currently shared</p>
+                      {c.existingShares.map((s) => (
+                        <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
+                          <span>{s.userId === currentUserId ? 'You' : s.username}</span>
+                          <span>
+                            {formatMYR(s.shareAmount)}
+                            {s.settledAt ? ' · settled' : ''}
+                          </span>
+                        </div>
+                      ))}
+                      <p className="text-xs text-amber-700 pt-1">Saving will replace these shares.</p>
+                    </div>
+                  )}
 
                   <div>
                     <p className="text-xs font-medium text-gray-700 mb-2">Share with</p>
