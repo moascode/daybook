@@ -38,6 +38,21 @@ export function generateId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+// §5.4: the one month-range implementation. Local year/month arithmetic only —
+// never toISOString(), which converts to UTC and shifts the date by up to a day
+// in non-UTC timezones (the §1.1 bug). offset 0 = this month, -1 = last month.
+export function monthRange(offset: number): { dateFrom: string; dateTo: string } {
+  const now = new Date()
+  const d = new Date(now.getFullYear(), now.getMonth() + offset, 1) // normalises overflow/underflow
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const lastDay = new Date(y, d.getMonth() + 1, 0).getDate()
+  return {
+    dateFrom: `${y}-${m}-01`,
+    dateTo: `${y}-${m}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
 export function todayISO(): string {
   const d = new Date()
   const yyyy = d.getFullYear()

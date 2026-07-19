@@ -9,17 +9,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useToastStore } from '@/stores/toast.store'
-import { cn, formatMYR, errorMessage } from '@/lib/utils'
+import { cn, formatMYR, errorMessage, monthRange } from '@/lib/utils'
 import type { Budget } from '@/types/wallet.types'
 
 interface BudgetFormData {
   categoryId: string
   limitAmount: string
-}
-
-function currentMonthYear(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
 export function BudgetsPage() {
@@ -34,10 +29,7 @@ export function BudgetsPage() {
     loadBudgets()
     // C8: budget progress only looks at the current month, so bound the fetch
     // instead of pulling the user's full transaction history.
-    const now = new Date()
-    const prefix = currentMonthYear()
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-    loadTransactions({ dateFrom: `${prefix}-01`, dateTo: `${prefix}-${String(lastDay).padStart(2, '0')}` })
+    loadTransactions(monthRange(0))
   }, [loadBudgets, loadCategories, loadTransactions])
 
   // C6: wire up getMonthlySpending instead of reimplementing the same
@@ -45,7 +37,7 @@ export function BudgetsPage() {
   // getMonthlySpending itself reads the store directly.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const spending = useMemo(
-    () => getMonthlySpending(currentMonthYear()),
+    () => getMonthlySpending(monthRange(0).dateFrom.slice(0, 7)),
     [transactions, getMonthlySpending],
   )
 

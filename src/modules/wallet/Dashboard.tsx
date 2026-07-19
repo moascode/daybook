@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
-import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR } from '@/lib/utils'
+import { formatMYR, formatAxisMYR, monthRange, POSITIVE_MONEY_COLOR } from '@/lib/utils'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
@@ -69,24 +69,10 @@ export function Dashboard() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
-  const { dateFrom, dateTo } = useMemo(() => {
-    const now = new Date()
-    if (dateRange === 'last-month') {
-      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const last = new Date(now.getFullYear(), now.getMonth(), 0)
-      return {
-        dateFrom: format(first, 'yyyy-MM-dd'),
-        dateTo: format(last, 'yyyy-MM-dd'),
-      }
-    }
-    // this-month
-    const first = new Date(now.getFullYear(), now.getMonth(), 1)
-    const last = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    return {
-      dateFrom: format(first, 'yyyy-MM-dd'),
-      dateTo: format(last, 'yyyy-MM-dd'),
-    }
-  }, [dateRange])
+  const { dateFrom, dateTo } = useMemo(
+    () => monthRange(dateRange === 'last-month' ? -1 : 0),
+    [dateRange],
+  )
 
   useEffect(() => {
     loadAccounts()
