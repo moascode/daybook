@@ -549,3 +549,34 @@ test('cancelling share modal closes it without creating new transactions', async
 })
 
 // Split transaction — household sharing is tested in 25-splits.spec.ts
+
+// ── §1.1 regression: default date filters are TZ-safe ────────────────────
+
+test('default From/To equal the current month bounds in a UTC+8 timezone', async ({ browser }) => {
+  // With the old toISOString()-based default, a UTC+ browser rendered From as
+  // the last day of the previous month and To as the day before month-end.
+  const context = await browser.newContext({ timezoneId: 'Asia/Kuala_Lumpur' })
+  const pg = await context.newPage()
+  await pg.request.post('http://localhost:5173/api/auth/signup', {
+    data: { username: `e2e_tz_${Date.now()}`, password: 'test-password' },
+  })
+  // The filter bar only renders once an account exists.
+  await pg.request.post('http://localhost:5173/api/accounts', {
+    data: { name: 'TZ Account', type: 'cash' },
+  })
+  await pg.goto('/wallet')
+  await expect(pg.locator('main')).toBeVisible({ timeout: 20_000 })
+
+  // Expected bounds computed in the page's own timezone with local arithmetic.
+  const expected = await pg.evaluate(() => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const last = new Date(y, m + 1, 0).getDate()
+    return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` }
+  })
+  await expect(pg.getByLabel('From')).toHaveValue(expected.from)
+  await expect(pg.getByLabel('To')).toHaveValue(expected.to)
+  await context.close()
+})

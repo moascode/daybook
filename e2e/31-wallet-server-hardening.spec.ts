@@ -178,3 +178,76 @@ test('hero net worth matches the sum of account balances', async () => {
   await expect(page.getByText('Total Net Worth')).toBeVisible()
   await expect(page.locator('p.text-2xl')).toContainText('190.00')
 })
+
+// ── §1.3: recurring-rule validation ────────────────────────────────────
+
+test('rejects a recurring rule with a zero or negative amount', async () => {
+  for (const amount of [0, -5]) {
+    const res = await page.request.post(`${API}/recurring-transactions`, {
+      data: { accountId: mainId, amount, type: 'expense', frequency: 'monthly', nextDueDate: '2030-01-01' },
+    })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toContain('amount')
+  }
+})
+
+test('rejects a recurring rule with a non-finite amount', async () => {
+  const res = await page.request.post(`${API}/recurring-transactions`, {
+    data: { accountId: mainId, amount: 'not-a-number', type: 'expense', frequency: 'monthly', nextDueDate: '2030-01-01' },
+  })
+  expect(res.status()).toBe(400)
+})
+
+test('rejects a recurring rule with a malformed nextDueDate', async () => {
+  const res = await page.request.post(`${API}/recurring-transactions`, {
+    data: { accountId: mainId, amount: 10, type: 'expense', frequency: 'monthly', nextDueDate: '01/07/2026' },
+  })
+  expect(res.status()).toBe(400)
+  expect((await res.json()).error).toContain('nextDueDate')
+})
+
+test('rejects a PATCH that sets an invalid recurring amount or date', async () => {
+  const created = await page.request.post(`${API}/recurring-transactions`, {
+    data: { accountId: mainId, amount: 10, type: 'expense', frequency: 'monthly', nextDueDate: '2030-01-01', merchant: 'Netflix' },
+  })
+  expect(created.status()).toBe(201)
+  const ruleId = (await created.json()).id
+
+  const badAmount = await page.request.patch(`${API}/recurring-transactions/${ruleId}`, {
+    data: { amount: -1 },
+  })
+  expect(badAmount.status()).toBe(400)
+
+  const badDate = await page.request.patch(`${API}/recurring-transactions/${ruleId}`, {
+    data: { nextDueDate: 'soon' },
+  })
+  expect(badDate.status()).toBe(400)
+
+  // The rule is untouched by the rejected PATCHes.
+  const rules = (await (await page.request.get(`${API}/recurring-transactions`)).json()) as Array<{
+    id: string
+    amount: number
+    next_due_date: string
+  }>
+  const rule = rules.find((r) => r.id === ruleId)
+  expect(rule?.amount).toBe(10)
+  expect(rule?.next_due_date).toBe('2030-01-01')
+})
+
+// ── §1.3: account and goal name validation ─────────────────────────────
+
+test('rejects an account without a name', async () => {
+  for (const data of [{ type: 'cash' }, { name: '', type: 'cash' }, { name: '   ', type: 'cash' }]) {
+    const res = await page.request.post(`${API}/accounts`, { data })
+    expect(res.status()).toBe(400)
+    expect((await res.json()).error).toContain('name')
+  }
+})
+
+test('rejects a goal without a name', async () => {
+  const res = await page.request.post(`${API}/goals`, {
+    data: { targetAmount: 100, accountId: mainId },
+  })
+  expect(res.status()).toBe(400)
+  expect((await res.json()).error).toContain('name')
+})
