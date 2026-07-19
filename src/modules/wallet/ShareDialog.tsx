@@ -61,7 +61,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
       return
      }
     if (amount <= 0) {
-      setError('Cannot share a zero-amount transaction')
+      setError('Cannot split a zero-amount transaction')
       return
      }
 
@@ -90,7 +90,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
       onSaved()
       onOpenChange(false)
      } catch (err: unknown) {
-      setError((err as Error)?.message ?? 'Failed to share transaction')
+      setError((err as Error)?.message ?? 'Failed to split transaction')
      } finally {
       setSaving(false)
      }
@@ -99,10 +99,10 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
   if (!transaction) return null
 
   return (
-     <Modal open={open} onOpenChange={onOpenChange} title="Share Transaction">
+     <Modal open={open} onOpenChange={onOpenChange} title="Split Transaction">
        <div className="space-y-4">
          <div className="rounded-lg bg-gray-50 px-4 py-3">
-           <p className="text-xs text-gray-500">Share</p>
+           <p className="text-xs text-gray-500">Split</p>
            <p className="font-semibold text-gray-900">{transaction.merchant || 'Transaction'}</p>
            <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
          </div>
@@ -110,7 +110,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
          {/* §2.2: existing shares + overwrite warning */}
          {existingShares.length > 0 && (
            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
-             <p className="text-xs font-medium text-amber-800">Currently shared</p>
+             <p className="text-xs font-medium text-amber-800">Currently split</p>
              {existingShares.map((s) => (
                <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
                  <span>{s.userId === currentUserId ? 'You' : s.username}</span>
@@ -130,11 +130,11 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
          ) : groupMembers.length === 0 ? (
            <p className="text-sm text-gray-500 text-center py-2">
              <Users className="h-4 w-4 inline mr-1" />
-            No group members yet. Add people to a household group first.
+            No group members yet. Invite people in Settings → Sharing first.
            </p>
          ) : (
            <div>
-             <p className="text-xs font-medium text-gray-700 mb-2">Share with</p>
+             <p className="text-xs font-medium text-gray-700 mb-2">Split with</p>
              <select
               className="w-full border rounded-lg px-3 py-2 text-sm"
               value={selectedRecipient ?? ''}
@@ -226,7 +226,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
             disabled={saving || !selectedRecipient || (splitMode === 'custom' && Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015)}
            >
              <Users className="h-3.5 w-3.5 mr-1" />
-             {saving ? 'Sharing…' : 'Share'}
+             {saving ? 'Splitting…' : 'Split'}
            </Button>
          </div>
        </div>

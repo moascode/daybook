@@ -475,7 +475,7 @@ export function WalletPage() {
                   data-testid="bulk-share-btn"
                 >
                   <Users className="h-3.5 w-3.5" />
-                  Share {selectedIds.size}
+                  Split {selectedIds.size}
                 </Button>
                 <Button
                   variant="danger"
