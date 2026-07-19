@@ -35,9 +35,9 @@ export function BudgetsPage() {
   // C6: wire up getMonthlySpending instead of reimplementing the same
   // aggregation inline. `transactions` is a dep only to trigger recompute —
   // getMonthlySpending itself reads the store directly.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const spending = useMemo(
     () => getMonthlySpending(monthRange(0).dateFrom.slice(0, 7)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [transactions, getMonthlySpending],
   )
 

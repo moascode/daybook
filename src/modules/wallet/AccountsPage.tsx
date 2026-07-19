@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, CreditCard, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -19,20 +19,28 @@ export function AccountsPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
-  const [netWorth, setNetWorth] = useState<number | null>(null)
+  const [balances, setBalances] = useState<Record<string, number> | null>(null)
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
   useEffect(() => { loadAccounts() }, [loadAccounts, dataVersion])
 
-  // Compute net worth whenever accounts list changes. With no accounts the
-  // reduce over [] yields 0, so the empty case needs no special handling.
+  // §1.4: one batched balances call feeds both the net-worth banner and every
+  // card (passed down as props) — no per-card fan-out. Refetches whenever the
+  // accounts list changes (edits, incl. openingBalance, replace the array).
   useEffect(() => {
     let cancelled = false
-    getAccountBalances().then((balances) => {
-      if (!cancelled) setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
+    getAccountBalances().then((b) => {
+      if (!cancelled) setBalances(b)
     })
     return () => { cancelled = true }
   }, [accounts, getAccountBalances])
+
+  // With no accounts the reduce over [] yields 0, so the empty case needs no
+  // special handling.
+  const netWorth = useMemo(
+    () => (balances === null ? null : accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)),
+    [accounts, balances],
+  )
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
     try {
@@ -118,6 +126,7 @@ export function AccountsPage() {
             <AccountCard
               key={account.id}
               account={account}
+              balance={balances?.[account.id] ?? null}
               onEdit={openEditForm}
               onDelete={setDeleteTarget}
               onShare={openEditForm}

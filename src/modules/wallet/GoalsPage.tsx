@@ -27,25 +27,20 @@ export function GoalsPage() {
     addGoal,
     updateGoal,
     deleteGoal,
-    getAccountBalance,
+    getAccountBalances,
   } = useWallet()
   const { addToast } = useToastStore()
 
   const crud = useCrudModal<Goal>()
-  const [balances, setBalances] = useState<Map<string, number>>(new Map())
+  const [balances, setBalances] = useState<Record<string, number>>({})
   const [form, setForm] = useState<GoalFormData>({ name: '', targetAmount: '', accountId: '' })
 
   useEffect(() => {
-    async function init() {
-      const [accs] = await Promise.all([loadAccounts(), loadGoals()])
-      if (accs.length === 0) return
-      const entries = await Promise.all(
-        accs.map(async (a) => [a.id, await getAccountBalance(a.id)] as const),
-      )
-      setBalances(new Map(entries))
-    }
-    init()
-  }, [loadGoals, loadAccounts, getAccountBalance])
+    // §1.4: one batched balances call instead of a per-account fan-out.
+    loadAccounts()
+    loadGoals()
+    getAccountBalances().then(setBalances)
+  }, [loadGoals, loadAccounts, getAccountBalances])
 
   const openCreate = useCallback(() => {
     setForm({ name: '', targetAmount: '', accountId: accounts[0]?.id ?? '' })
@@ -103,7 +98,7 @@ export function GoalsPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {goals.map((goal) => {
-            const balance = balances.get(goal.accountId) ?? 0
+            const balance = balances[goal.accountId] ?? 0
             const saved = Math.max(0, Math.min(balance, goal.targetAmount))
             const percent = goal.targetAmount > 0 ? (saved / goal.targetAmount) * 100 : 0
             const account = accounts.find((a) => a.id === goal.accountId)

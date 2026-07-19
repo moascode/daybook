@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Wallet,
@@ -16,11 +15,12 @@ import {
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { useWallet } from '@/hooks/useWallet'
 import type { Account } from '@/types/wallet.types'
 
 interface AccountCardProps {
   account: Account
+  // §1.4: supplied by the page from one batched balances call — null while loading.
+  balance: number | null
   onEdit: (account: Account) => void
   onDelete: (account: Account) => void
   onShare?: (account: Account) => void
@@ -47,20 +47,8 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?:
   coins: Coins,
 }
 
-export function AccountCard({ account, onEdit, onDelete, onShare, sharesCount }: AccountCardProps) {
+export function AccountCard({ account, balance, onEdit, onDelete, onShare, sharesCount }: AccountCardProps) {
   const navigate = useNavigate()
-  const { getAccountBalance } = useWallet()
-  const [balance, setBalance] = useState<number | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    getAccountBalance(account.id).then((bal) => {
-      if (!cancelled) setBalance(bal)
-    })
-    return () => { cancelled = true }
-    // openingBalance is part of the balance, so refetch when an edit changes it.
-  }, [account.id, account.openingBalance, getAccountBalance])
-
   const IconComponent = ICON_MAP[account.icon] ?? Wallet
 
   function handleCardClick() {
