@@ -15,11 +15,12 @@ test.describe('wallet left-panel navigation', () => {
     await expect(page.getByText('Daily', { exact: true })).toBeVisible()
     await expect(page.getByText('Planning', { exact: true })).toBeVisible()
 
-    // All eight destinations are reachable as sidebar links.
+    // All nine destinations are reachable as sidebar links.
     for (const name of [
       'Transactions',
       'Dashboard',
       'Accounts',
+      'Shared',
       'Budgets',
       'Goals',
       'Recurring',

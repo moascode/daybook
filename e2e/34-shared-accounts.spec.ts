@@ -19,7 +19,7 @@ async function setupTwoUsers(browser: import('@playwright/test').Browser) {
 }
 
 async function createGroupAndInvite(alicePage: import('@playwright/test').Page, bobPage: import('@playwright/test').Page, bobName: string) {
-  await alicePage.goto('/household')
+  await alicePage.goto('/settings/sharing')
   await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
   await alicePage.getByRole('button', { name: 'New Group' }).click()
   await alicePage.getByRole('dialog').getByRole('textbox').fill('Family')
@@ -31,13 +31,13 @@ async function createGroupAndInvite(alicePage: import('@playwright/test').Page, 
   await alicePage.getByRole('dialog').getByRole('button', { name: 'Invite' }).click()
   await alicePage.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
 
-  await bobPage.goto('/household')
+  await bobPage.goto('/settings/sharing')
   await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
   await expect(bobPage.getByRole('button', { name: 'Accept' })).toBeVisible({ timeout: 10_000 })
   await bobPage.getByRole('button', { name: 'Accept' }).click()
 }
 
-test.describe('24 — Shared accounts', () => {
+test.describe('34 — Shared accounts', () => {
   test('Alice shares account (read-only) → Bob sees it and its transactions', async ({ browser }) => {
     const { alicePage, bobPage, bobName, aliceCtx, bobCtx } = await setupTwoUsers(browser)
 

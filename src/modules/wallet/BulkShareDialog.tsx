@@ -158,7 +158,7 @@ export function BulkShareDialog({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`Share ${cards.length} Transaction${cards.length !== 1 ? 's' : ''}`}
+      title={`Split ${cards.length} Transaction${cards.length !== 1 ? 's' : ''}`}
     >
       <div className="space-y-4">
         {loadingMembers ? (
@@ -166,10 +166,10 @@ export function BulkShareDialog({
         ) : groupMembers.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-2">
             <Users className="h-4 w-4 inline mr-1" />
-            No group members yet. Add people to a household group first.
+            No group members yet. Invite people in Settings → Sharing first.
           </p>
         ) : cards.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-2">No transactions to share</p>
+          <p className="text-sm text-gray-500 text-center py-2">No transactions to split</p>
         ) : (
           <div className="space-y-4 max-h-96 overflow-y-auto">
             {cards.map((c) => {
@@ -306,7 +306,7 @@ export function BulkShareDialog({
             disabled={saving || loadingMembers || cards.length === 0 || groupMembers.length === 0 || cards.some((c) => cardError(c) !== null)}
           >
             <Users className="h-3.5 w-3.5 mr-1" />
-            {saving ? 'Sharing…' : `Share ${cards.length} Transaction${cards.length !== 1 ? 's' : ''}`}
+            {saving ? 'Splitting…' : `Split ${cards.length} Transaction${cards.length !== 1 ? 's' : ''}`}
           </Button>
         </div>
       </div>

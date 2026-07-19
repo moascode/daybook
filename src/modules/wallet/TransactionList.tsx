@@ -159,7 +159,7 @@ function TransactionRow({
           {transaction.hasShares && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
               <Users className="h-2.5 w-2.5" />
-              Shared
+              Split
             </span>
           )}
           {category && (
@@ -210,8 +210,8 @@ function TransactionRow({
               size="sm"
               className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
               onClick={() => onSplit(transaction)}
-              aria-label="Share transaction"
-              title="Share with household members"
+              aria-label="Split transaction"
+              title="Split with household members"
               data-testid="split-transaction-btn"
             >
               <Scissors className="h-3.5 w-3.5" />
