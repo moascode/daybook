@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { useWallet } from '@/hooks/useWallet'
 import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
@@ -129,26 +130,15 @@ export function ReportsPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-5" data-testid="custom-date-range">
         <h3 className="mb-4 text-sm font-semibold text-gray-900">Custom date range</h3>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">From</label>
-            <input
-              type="date"
-              aria-label="From"
-              value={customFrom}
-              onChange={(e) => setCustomFrom(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-gray-600">To</label>
-            <input
-              type="date"
-              aria-label="To"
-              value={customTo}
-              onChange={(e) => setCustomTo(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-            />
-          </div>
+          {/* Shared date-range widgets (§6.4); the range only loads on Apply. */}
+          <DateRangeControl
+            value={{ dateFrom: customFrom, dateTo: customTo }}
+            onChange={(v) => {
+              setCustomFrom(v.dateFrom)
+              setCustomTo(v.dateTo)
+            }}
+            presets={['custom']}
+          />
           <Button size="sm" onClick={handleApply}>Apply</Button>
         </div>
 
