@@ -53,6 +53,20 @@ export function monthRange(offset: number): { dateFrom: string; dateTo: string }
   }
 }
 
+// §6.4: which date-range preset matches a from/to pair. Lets the filter bar
+// show the active segment and tell "default this-month" apart from a narrowed
+// range (clear-all visibility) without storing a separate preset state.
+export type DateRangePreset = 'this-month' | 'last-month' | 'all-time' | 'custom'
+
+export function dateRangePreset({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }): DateRangePreset {
+  const thisMonth = monthRange(0)
+  if (dateFrom === thisMonth.dateFrom && dateTo === thisMonth.dateTo) return 'this-month'
+  const lastMonth = monthRange(-1)
+  if (dateFrom === lastMonth.dateFrom && dateTo === lastMonth.dateTo) return 'last-month'
+  if (!dateFrom && !dateTo) return 'all-time'
+  return 'custom'
+}
+
 // §5.9: the one equal-split implementation. Splits `amount` into n cent-exact
 // shares; index 0 is the payer/owner, who absorbs the rounding remainder
 // (owner-absorbs rule, §2.1 owner decision). Mirrored in server/lib.ts —
