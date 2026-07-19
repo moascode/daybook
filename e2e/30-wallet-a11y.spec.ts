@@ -89,7 +89,7 @@ test('account card actions are visible without hover', async ({ browser }) => {
 test('account edit modal with sharing section fits within the 1280×720 viewport', async ({ browser }) => {
   // Regression for the spec-24 clipping failure: with a household group, the
   // edit-account modal grows a Sharing section and used to overflow 720 px.
-  const page = await newAppPage(browser, '/household')
+  const page = await newAppPage(browser, '/settings/sharing')
   await page.getByRole('button', { name: 'New Group' }).click()
   await page.getByRole('dialog').getByRole('textbox').fill('Family')
   await page.getByRole('button', { name: 'Create Group' }).click()

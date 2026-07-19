@@ -74,7 +74,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
 
     // Dialog opens and shows a title
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 })
-    await expect(page.getByRole('heading', { name: 'Share 1 Transaction' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Split 1 Transaction' })).toBeVisible()
     // Without any group co-members, the dialog explains instead of listing recipients
     await expect(page.getByRole('dialog').getByText('No group members yet', { exact: false })).toBeVisible()
   })
@@ -103,8 +103,8 @@ test.describe('27 — Wallet bulk share dialog', () => {
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })
-    // Heading says "Share 2 Transactions"
-    await expect(dialog.getByRole('heading', { name: 'Share 2 Transactions' })).toBeVisible({ timeout: 5_000 })
+    // Heading says "Split 2 Transactions"
+    await expect(dialog.getByRole('heading', { name: 'Split 2 Transactions' })).toBeVisible({ timeout: 5_000 })
   })
 
   test('Cancel closes dialog without resetting select mode', async ({ browser }) => {
@@ -218,7 +218,7 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(dialog).toBeVisible({ timeout: 5_000 })
 
     // Validation copy aligned with ShareDialog: save disabled until a recipient is picked
-    const saveBtn = dialog.getByRole('button', { name: 'Share 1 Transaction' })
+    const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
     await expect(saveBtn).toBeDisabled()
 
     await dialog.getByLabel(bobName).check()

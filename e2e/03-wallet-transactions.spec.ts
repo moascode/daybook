@@ -523,18 +523,18 @@ test('hover on transaction row reveals the Split (scissors) button', async () =>
   await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toBeVisible()
 })
 
-test('clicking Split opens the Share Transaction modal', async () => {
+test('clicking Split opens the Split Transaction modal', async () => {
   await transactionRowFor(page, 'Kopitiam').hover()
   await transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn').click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Share Transaction' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
 })
 
 test('share modal shows the transaction and a group-members prompt', async () => {
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByText('Kopitiam')).toBeVisible()
   await expect(dialog.getByText('No group members yet')).toBeVisible()
-  await expect(dialog.getByRole('button', { name: 'Share' })).toBeDisabled()
+  await expect(dialog.getByRole('button', { name: 'Split', exact: true })).toBeDisabled()
 })
 
 test('share modal does not show split mode selector without a recipient', async () => {
@@ -548,7 +548,7 @@ test('cancelling share modal closes it without creating new transactions', async
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 
-// Split transaction — household sharing is tested in 25-splits.spec.ts
+// Split transaction — household sharing is tested in 35-splits.spec.ts
 
 // ── §1.1 regression: default date filters are TZ-safe ────────────────────
 

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-test.describe('26 — Settlement', () => {
+test.describe('36 — Settlement', () => {
   test('Bob settles RM100 with Alice; group balance becomes 0', async ({ browser }) => {
     const aliceCtx = await browser.newContext()
     const bobCtx = await browser.newContext()
@@ -69,11 +69,10 @@ test.describe('26 — Settlement', () => {
     })
     const bobAcct = await bobAcctRes.json()
 
-    // Bob navigates to household and settles
-    await bobPage.goto('/household')
+    // Bob navigates to the Wallet Shared page and settles
+    await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    await bobPage.getByRole('heading', { name: 'Family' }).click()
-    await bobPage.getByRole('button', { name: 'balances' }).click()
+    await expect(bobPage.getByRole('heading', { name: 'Family' })).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByRole('heading', { name: 'You owe' })).toBeVisible({ timeout: 5000 })
     await bobPage.getByRole('button', { name: 'Settle Up' }).click()
 
@@ -146,10 +145,9 @@ test.describe('26 — Settlement', () => {
     })
 
     // Bob settles via UI
-    await bobPage.goto('/household')
+    await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    await bobPage.getByRole('heading', { name: 'UndoGroup' }).click()
-    await bobPage.getByRole('button', { name: 'balances' }).click()
+    await expect(bobPage.getByRole('heading', { name: 'UndoGroup' })).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByRole('heading', { name: 'You owe' })).toBeVisible({ timeout: 5000 })
     await bobPage.getByRole('button', { name: 'Settle Up' }).click()
 
@@ -160,8 +158,8 @@ test.describe('26 — Settlement', () => {
     await expect(bobPage.getByText('No outstanding balances').or(bobPage.getByText('All settled up'))).toBeVisible({ timeout: 5000 })
 
     // Bob clicks Undo on the settlement row — now requires confirmation modal
-    await bobPage.getByText('Recent settlements').click()
-    await bobPage.getByRole('button', { name: 'Undo' }).nth(1).click()
+    await expect(bobPage.getByText('Recent settlements')).toBeVisible({ timeout: 5000 })
+    await bobPage.getByRole('button', { name: 'Undo', exact: true }).click()
     await expect(bobPage.getByRole('dialog', { name: /Undo Settlement/ })).toBeVisible({ timeout: 3000 })
     await bobPage.getByRole('button', { name: 'Confirm Undo' }).click()
 
@@ -296,11 +294,10 @@ test.describe('26 — Settlement', () => {
       data: { groupId: group.id, toUserId: aliceMe.user.id, amount: 100, note: 'cash', fromAccountId: bobAcct.id },
     })
 
-    // Bob reloads household and checks history
-    await bobPage.goto('/household')
+    // Bob reloads the Shared page and checks history
+    await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    await bobPage.getByRole('heading', { name: 'HistGroup' }).click()
-    await bobPage.getByRole('button', { name: 'balances' }).click()
+    await expect(bobPage.getByRole('heading', { name: 'HistGroup' })).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByText('Recent settlements')).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByText('cash')).toBeVisible({ timeout: 3000 })
 

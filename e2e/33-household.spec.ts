@@ -13,13 +13,13 @@ async function signUpAndGoTo(browser: import('@playwright/test').Browser, userna
   return { page, ctx }
 }
 
-test.describe('23 — Household groups, invites, memberships', () => {
+test.describe('33 — Sharing settings: groups, invites, memberships', () => {
   test('Alice creates a group and invites Bob; Bob accepts', async ({ browser }) => {
     const aliceName = `alice_hh_${Date.now()}`
     const bobName = `bob_hh_${Date.now()}`
 
-    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/household')
-    const { page: bob, ctx: bobCtx } = await signUpAndGoTo(browser, bobName, '/household')
+    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/settings/sharing')
+    const { page: bob, ctx: bobCtx } = await signUpAndGoTo(browser, bobName, '/settings/sharing')
 
     // Alice creates a group
     await alice.getByRole('button', { name: 'New Group' }).click()
@@ -56,8 +56,8 @@ test.describe('23 — Household groups, invites, memberships', () => {
     const aliceName = `alice_hh2_${Date.now()}`
     const charlieName = `charlie_hh_${Date.now()}`
 
-    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/household')
-    const { page: charlie, ctx: charlieCtx } = await signUpAndGoTo(browser, charlieName, '/household')
+    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/settings/sharing')
+    const { page: charlie, ctx: charlieCtx } = await signUpAndGoTo(browser, charlieName, '/settings/sharing')
 
     // Alice creates a group and invites Charlie
     await alice.getByRole('button', { name: 'New Group' }).click()
@@ -86,10 +86,20 @@ test.describe('23 — Household groups, invites, memberships', () => {
 
   test('User sees no groups when not a member of any', async ({ browser }) => {
     const aliceName = `alice_hh3_${Date.now()}`
-    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/household')
+    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/settings/sharing')
 
     // Alice has no groups — empty state
     await expect(alice.getByText('No groups yet')).toBeVisible()
+
+    await aliceCtx.close()
+  })
+
+  test('legacy /household URL redirects to /settings/sharing', async ({ browser }) => {
+    const aliceName = `alice_redir_${Date.now()}`
+    const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/household')
+
+    await expect(alice).toHaveURL(/\/settings\/sharing$/)
+    await expect(alice.getByRole('heading', { name: 'Sharing' })).toBeVisible()
 
     await aliceCtx.close()
   })
@@ -101,7 +111,7 @@ test.describe('23 — Household groups, invites, memberships', () => {
     await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
     await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TestGroup' } })
 
-    await alicePage.goto('/household')
+    await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
     await alicePage.getByRole('heading', { name: 'TestGroup' }).click()
     await alicePage.getByRole('button', { name: 'Invite' }).click()
@@ -134,7 +144,7 @@ test.describe('23 — Household groups, invites, memberships', () => {
     await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
 
     // Alice removes Bob via UI
-    await alicePage.goto('/household')
+    await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
     await alicePage.getByRole('heading', { name: 'RemoveGroup' }).click()
     await expect(alicePage.getByText(bobName)).toBeVisible({ timeout: 5000 })
@@ -163,7 +173,7 @@ test.describe('23 — Household groups, invites, memberships', () => {
       data: { groupId: group.id, canWrite: false },
     })
 
-    await alicePage.goto('/household')
+    await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
     // Click delete group button
     await alicePage.getByRole('button', { name: 'Delete group' }).click()
@@ -196,7 +206,7 @@ test.describe('23 — Household groups, invites, memberships', () => {
     await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
 
     // Bob navigates to household and leaves the group
-    await bobPage.goto('/household')
+    await bobPage.goto('/settings/sharing')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
     await bobPage.getByRole('heading', { name: 'LeaveGroup' }).click()
     await bobPage.getByRole('button', { name: 'Leave group' }).click()
