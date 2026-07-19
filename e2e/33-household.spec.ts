@@ -99,7 +99,7 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     const { page: alice, ctx: aliceCtx } = await signUpAndGoTo(browser, aliceName, '/household')
 
     await expect(alice).toHaveURL(/\/settings\/sharing$/)
-    await expect(alice.getByRole('heading', { name: 'Sharing' })).toBeVisible()
+    await expect(alice.getByRole('heading', { name: 'Sharing', level: 2 })).toBeVisible()
 
     await aliceCtx.close()
   })
