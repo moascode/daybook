@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, Settings, Users } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, SlidersHorizontal, X, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { DatePicker } from '@/components/ui/DatePicker'
+import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { TagInput } from '@/components/ui/TagInput'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -18,7 +18,8 @@ import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
-import { cn, formatMYR, errorMessage, monthRange } from '@/lib/utils'
+import { api } from '@/lib/api'
+import { cn, formatMYR, errorMessage, monthRange, dateRangePreset } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
@@ -55,6 +56,18 @@ export function WalletPage() {
 
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
+
+  // §6.4 filter bar: the occasional filters live in a collapsible section; the
+  // sharing view only renders for users who are actually in a group (it stays
+  // deep-linkable via ?view= either way).
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [hasGroups, setHasGroups] = useState(false)
+
+  useEffect(() => {
+    api.get<unknown[]>('/groups')
+      .then((groups) => setHasGroups(groups.length > 0))
+      .catch(() => {})
+  }, [])
 
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false)
@@ -243,10 +256,41 @@ export function WalletPage() {
     ...accounts.map((a) => ({ value: a.id, label: a.name })),
   ]
 
+  // The Category dropdown doubles as the entry point to category management —
+  // the "Manage categories…" footer option opens the manager without changing
+  // the active filter (the select is controlled, so it snaps back).
+  const MANAGE_CATEGORIES = '__manage__'
   const categoryOptions = [
     { value: '', label: 'All Categories' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
+    { value: MANAGE_CATEGORIES, label: 'Manage categories…' },
   ]
+
+  // Count of active occasional filters — shown on the Filters toggle so
+  // URL-driven narrowing (?account=, ?view=) stays visible even collapsed.
+  const activeFilterCount = [
+    filters.type !== 'all',
+    !!filters.accountId,
+    !!filters.categoryId,
+    filters.tags.length > 0,
+    filters.view !== 'all',
+  ].filter(Boolean).length
+
+  const anyFilterActive =
+    activeFilterCount > 0 || filters.q !== '' || dateRangePreset(filters) !== 'this-month'
+
+  const clearAllFilters = useCallback(() => {
+    setSearchDraft('')
+    setFilters({
+      ...monthRange(0),
+      type: 'all',
+      categoryId: null,
+      accountId: null,
+      tags: [],
+      view: 'all',
+      q: '',
+    })
+  }, [setFilters])
 
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
@@ -303,101 +347,127 @@ export function WalletPage() {
         </div>
       )}
 
-      {/* Filter bar + summary — hidden until there's an account to work with. */}
-      {accounts.length > 0 && (
+      {/* Filter bar + summary — hidden until there's an account to work with
+          (or a group: members can view shared transactions with no accounts). */}
+      {(accounts.length > 0 || hasGroups) && (
       <>
       <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <DatePicker
-            label="From"
-            value={filters.dateFrom}
-            onChange={(e) => setFilters({ dateFrom: e.target.value })}
-          />
-          <DatePicker
-            label="To"
-            value={filters.dateTo}
-            onChange={(e) => setFilters({ dateTo: e.target.value })}
-          />
-          <Select
-            label="Type"
-            options={typeOptions}
-            value={filters.type}
-            onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
-          />
-          <Select
-            label="Account"
-            options={accountOptions}
-            value={filters.accountId ?? ''}
-            onChange={(e) => setFilters({ accountId: e.target.value || null })}
-          />
-          <div className="flex items-end gap-1">
-            <div className="flex-1">
-              <Select
-                label="Category"
-                options={categoryOptions}
-                value={filters.categoryId ?? ''}
-                onChange={(e) => setFilters({ categoryId: e.target.value || null })}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setCategoryManagerOpen(true)}
-              className="mb-[1px] flex-shrink-0 rounded-lg border border-gray-300 p-2 text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Manage categories"
-              title="Manage categories"
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div className="flex-1 min-w-[12rem] max-w-xs">
+        {/* Search-first single row: search, date range, Filters toggle, Clear */}
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="min-w-[14rem] flex-1">
             <Input
               id="transaction-search"
-              label="Search"
               type="search"
+              aria-label="Search transactions"
               placeholder="Search merchant or description..."
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
               data-testid="transaction-search"
             />
           </div>
-          <div className="flex-1 min-w-[12rem] max-w-xs">
-            <TagInput
-              id="filter-tags"
-              label="Tags"
-              value={filters.tags}
-              onChange={(tags) => setFilters({ tags })}
-              suggestions={tags}
-              allowCreate={false}
-              placeholder="Filter by tags..."
-            />
-          </div>
-          {/* Quick date filter buttons */}
-          <div className="flex items-center gap-1.5 pb-0.5">
+          <DateRangeControl
+            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+            onChange={(range) => setFilters(range)}
+          />
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((o) => !o)}
+            data-testid="filter-toggle"
+            aria-expanded={filtersOpen}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+              filtersOpen || activeFilterCount > 0
+                ? 'border-brand-300 bg-brand-50 text-brand-700'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span
+                data-testid="filter-count"
+                className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-500 px-1 text-xs font-semibold text-white"
+              >
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          {anyFilterActive && (
             <button
-              onClick={() => setFilters(monthRange(0))}
-              data-testid="filter-this-month"
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              type="button"
+              onClick={clearAllFilters}
+              data-testid="filter-clear-all"
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
             >
-              This Month
+              <X className="h-3.5 w-3.5" />
+              Clear
             </button>
-            <button
-              onClick={() => setFilters(monthRange(-1))}
-              data-testid="filter-last-month"
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              Last Month
-            </button>
-            <button
-              onClick={() => setFilters({ dateFrom: '', dateTo: '' })}
-              data-testid="filter-clear-dates"
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-400 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              All Time
-            </button>
-          </div>
+          )}
         </div>
+
+        {/* Collapsible occasional filters */}
+        {filtersOpen && (
+          <div data-testid="filter-panel" className="mt-3 border-t border-gray-100 pt-3">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Select
+                label="Type"
+                options={typeOptions}
+                value={filters.type}
+                onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
+              />
+              <Select
+                label="Account"
+                options={accountOptions}
+                value={filters.accountId ?? ''}
+                onChange={(e) => setFilters({ accountId: e.target.value || null })}
+              />
+              <Select
+                label="Category"
+                options={categoryOptions}
+                value={filters.categoryId ?? ''}
+                onChange={(e) => {
+                  if (e.target.value === MANAGE_CATEGORIES) {
+                    setCategoryManagerOpen(true)
+                    return
+                  }
+                  setFilters({ categoryId: e.target.value || null })
+                }}
+              />
+              <TagInput
+                id="filter-tags"
+                label="Tags"
+                value={filters.tags}
+                onChange={(tags) => setFilters({ tags })}
+                suggestions={tags}
+                allowCreate={false}
+                placeholder="Filter by tags..."
+              />
+            </div>
+            {hasGroups && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs font-medium text-gray-500">Sharing</span>
+                {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setFilters({ view: v })}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs transition-colors',
+                      filters.view === v
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300',
+                    )}
+                  >
+                    {v === 'shared-with-me'
+                      ? 'Shared with me'
+                      : v === 'shared-with-others'
+                        ? 'Shared with others'
+                        : v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Summary row */}
@@ -428,24 +498,6 @@ export function WalletPage() {
       </div>
       </>
       )}
-
-      {/* View filter pills — always visible so users in groups can see shared transactions */}
-      <div className="mb-3 flex items-center gap-1.5">
-        {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setFilters({ view: v })}
-            className={cn(
-              'rounded-full border px-3 py-1 text-xs transition-colors capitalize',
-              filters.view === v
-                ? 'border-brand-500 bg-brand-50 text-brand-700'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300',
-            )}
-          >
-            {v === 'shared-with-me' ? 'Shared with me' : v === 'shared-with-others' ? 'Shared with others' : v.charAt(0).toUpperCase() + v.slice(1)}
-          </button>
-        ))}
-      </div>
 
       {/* Multi-select action bar */}
       {selectMode && (
