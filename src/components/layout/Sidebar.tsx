@@ -18,7 +18,7 @@ import {
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { InvitationsBadge } from '@/modules/household/InvitationsBadge'
+import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { useHouseholdStore } from '@/stores/household.store'
 import { api } from '@/lib/api'
 import { mapInvite } from '@/lib/household.mappers'

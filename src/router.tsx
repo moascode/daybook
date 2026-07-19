@@ -10,7 +10,9 @@ import { BudgetsPage } from '@/modules/wallet/BudgetsPage'
 import { RecurringPage } from '@/modules/wallet/RecurringPage'
 import { GoalsPage } from '@/modules/wallet/GoalsPage'
 import { ReportsPage } from '@/modules/wallet/ReportsPage'
+import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
+import { SharingPage } from '@/modules/settings/SharingPage'
 import { UATPage } from '@/modules/uat/UATPage'
 import { HouseholdPageWrapper } from '@/modules/household/HouseholdPageWrapper'
 
@@ -36,7 +38,14 @@ export const router = createBrowserRouter([
         ],
       },
       { path: 'household', element: <HouseholdPageWrapper /> },
-      { path: 'settings', element: <SettingsPage /> },
+      {
+        path: 'settings',
+        element: <SettingsLayout />,
+        children: [
+          { index: true, element: <SettingsPage /> },
+          { path: 'sharing', element: <SharingPage /> },
+        ],
+      },
       { path: 'uat', element: <UATPage /> },
     ],
   },
