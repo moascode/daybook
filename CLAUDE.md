@@ -943,14 +943,14 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  5b — Household Sharing & Multi-User (v1.0) — COMPLETE
+Current phase:  5c — Wallet UX Improvements — COMPLETE
 Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Phase 5b (household sharing) shipped v1.0.1.
                 Phase 5b extension: transaction quick-share (PR #27) MERGED
                 2026-07-05 — one-click single-recipient share alongside the
                 split flow, plus q free-text filter plumbing and filtered
                 server export route.
-                Phase 5c (wallet UX improvements) — IN PROGRESS.
+                Phase 5c (wallet UX improvements) — COMPLETE (v1.0.1).
                 Implementation sequenced into 5 wave PRs: see
                 docs/phase-5c-implementation-plan.md (approved 2026-07-05).
                 Backlog detail: docs/phase-5c-wallet-ux.md (statuses updated:
@@ -986,12 +986,12 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 {error} message via a fixed api.ts that now parses the
                 {error} body, C6 dead-code sweep in useWallet — wired
                 getMonthlySpending into BudgetsPage, deleted the unused
-                processRecurringTransactions wrapper) implemented on
-                branch refactor/wallet-crud-modal-toasts — PR #33 OPEN
-                (draft). New spec e2e/32-wallet-error-toasts (4/4).
+                processRecurringTransactions wrapper) MERGED (PR #33,
+                2026-07-19). New spec e2e/32-wallet-error-toasts (4/4).
                 Verified: tsc, typecheck:server, lint clean; affected e2e
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
-                This is the final wave of the Phase 5c plan.
+                This was the final wave of the Phase 5c plan — all 5 waves
+                (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
 Last session:   2026-07-18
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
@@ -1020,13 +1020,16 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Owner reviews and merges Wave 5 (PR #33). After it merges,
-                Phase 5c is complete — only the parked D-items and C9
-                (deferred DB-side dashboard aggregation) remain in the
-                wallet UX backlog, each requiring individual owner
-                sign-off before any work starts (CLAUDE.md §2 Rule 3).
+Next task:      Phase 5c is complete — all 5 wave PRs (#29–#33) merged.
+                Only the parked D-items and C9 (deferred DB-side dashboard
+                aggregation) remain in the wallet UX backlog
+                (docs/phase-5c-wallet-ux.md §D), each requiring individual
+                owner sign-off before any work starts (CLAUDE.md §2 Rule
+                3). Phase 5a (AI features) remains deferred. No active
+                work is queued; awaiting owner direction on what's next
+                (Phase 5a, Phase 6 cloud migration, or a new D-item).
 
-Blockers:       None — PR #33 is open and green, awaiting review/merge.
+Blockers:       None. Nothing in progress.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
@@ -1065,14 +1068,14 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 | 4 | Home Network + Multi-User | Architecture | Node backend, SQLite file, auth, per-user data | ✅ v1.0 |
 | 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🔄 Deferred |
 | 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
-| 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | 🔄 In Progress |
+| 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | ✅ v1.0.1 |
 | 6 | Cloud Migration | Cloud | Supabase + Vercel + RLS + Edge Function for AI key | Planned |
 | 7 | Advanced Features | v2+ | Recurring rules, budgets, goals, new modules | Planned |
 
 **Note**: Phase 5 has been split into three subtasks:
 - **Phase 5a (AI)** is deferred — requires API key proxying + model routing
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
-- **Phase 5c (Wallet UX)** planned — sequenced into 5 wave PRs, see docs/phase-5c-implementation-plan.md
+- **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/phase-5c-implementation-plan.md
 
 ### Delivery Milestones
 
