@@ -353,42 +353,46 @@ function insertTransaction(b: Record<string, unknown>, userId: string) {
     })
 }
 
+// view scoping ('mine' | 'shared-with-me' | 'shared-with-others' | 'all'),
+// shared by GET /transactions and GET /transactions/export so the exported
+// rows always match the on-screen selection (§1.2). `alias` is the
+// transactions table name/alias in the caller's query; extra bind params for
+// the 'all' view are written into `params`.
+function viewCondition(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  view: string,
+  alias: string,
+  params: Record<string, unknown>,
+): string {
+  if (view === 'mine') {
+    // Own transactions only (whether split or not)
+    return `${alias}.user_id = @userId`
+  }
+  if (view === 'shared-with-me') {
+    // Transactions created by others where I have a share line
+    return `${alias}.user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = @userId)`
+  }
+  if (view === 'shared-with-others') {
+    // My transactions that have been shared with others
+    return `${alias}.user_id = @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != @userId)`
+  }
+  // All visible: own transactions + transactions on shared accounts
+  const visible = visibleAccountIds(db, userId)
+  if (visible.length === 0) return `${alias}.user_id = @userId`
+  const placeholders = visible.map((_, i) => `@aid${i}`).join(', ')
+  visible.forEach((id, i) => { params[`aid${i}`] = id })
+  return `(${alias}.user_id = @userId OR ${alias}.account_id IN (${placeholders}) OR ${alias}.destination_account_id IN (${placeholders}))`
+}
+
 walletRouter.get('/transactions', (req, res) => {
   const q = req.query
   const userId = req.session.userId!
   const db = getDb()
 
-  // view: 'mine' | 'shared-with-me' | 'all' (default 'all')
   const view = str(q.view) ?? 'all'
   const params: Record<string, unknown> = { userId }
-  const conditions: string[] = []
-
-  if (view === 'mine') {
-    // Own transactions only (whether split or not)
-    conditions.push('user_id = @userId')
-  } else if (view === 'shared-with-me') {
-      // Transactions created by others where I have a share line
-    conditions.push(
-        `user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id = @userId)`
-        )
-      } else if (view === 'shared-with-others') {
-      // My transactions that have been shared with others
-    conditions.push(
-        `user_id = @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id AND ts.user_id != @userId)`
-        )
-      } else {
-    // All visible: own transactions + transactions on shared accounts
-    const visible = visibleAccountIds(db, userId)
-    if (visible.length === 0) {
-      conditions.push('user_id = @userId')
-    } else {
-      const placeholders = visible.map((_, i) => `@aid${i}`).join(', ')
-      visible.forEach((id, i) => { params[`aid${i}`] = id })
-      conditions.push(
-        `(user_id = @userId OR account_id IN (${placeholders}) OR destination_account_id IN (${placeholders}))`
-      )
-    }
-  }
+  const conditions: string[] = [viewCondition(db, userId, view, 'transactions', params)]
 
   if (str(q.dateFrom)) { conditions.push('date >= @dateFrom'); params.dateFrom = q.dateFrom }
   if (str(q.dateTo)) { conditions.push('date <= @dateTo'); params.dateTo = q.dateTo }
@@ -431,8 +435,13 @@ walletRouter.get('/transactions', (req, res) => {
 // so the export respects the user's active filters.
 walletRouter.get('/transactions/export', (req, res) => {
   const q = req.query
-  const conditions: string[] = ['t.user_id = @userId']
-  const params: Record<string, unknown> = { userId: req.session.userId! }
+  const userId = req.session.userId!
+  const params: Record<string, unknown> = { userId }
+  // §1.2: same view scoping as GET /transactions — the list view ("all") also
+  // shows other members' transactions on shared-in accounts, so a hard
+  // user_id-only scope silently dropped selected rows from the export.
+  const view = str(q.view) ?? 'all'
+  const conditions: string[] = [viewCondition(getDb(), userId, view, 't', params)]
 
   if (str(q.dateFrom)) { conditions.push('t.date >= @dateFrom'); params.dateFrom = q.dateFrom }
   if (str(q.dateTo)) { conditions.push('t.date <= @dateTo'); params.dateTo = q.dateTo }
