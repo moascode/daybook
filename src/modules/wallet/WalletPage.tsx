@@ -17,7 +17,8 @@ import { ShareDialog } from '@/modules/wallet/ShareDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
-import { cn, formatMYR } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
+import { cn, formatMYR, errorMessage } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
@@ -59,6 +60,7 @@ export function WalletPage() {
     deleteCategory,
     getCategoryUsage,
   } = useWallet()
+  const { addToast } = useToastStore()
 
   const dataVersion = useWalletStore((s) => s.dataVersion)
   const [searchParams] = useSearchParams()
@@ -150,37 +152,56 @@ export function WalletPage() {
   }, [accounts, getAccountBalances, dataVersion])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
-    await addTransaction(data)
+    try {
+      await addTransaction(data)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save transaction — please try again.'), duration: 4000 })
+      throw err // keep the form open so the user can retry
+    }
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
     await loadTags()
-  }, [addTransaction, loadTransactions, loadNetWorth, loadTags])
+  }, [addTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
     if (!editingTransaction) return
-    await updateTransaction(editingTransaction.id, data)
-    setEditingTransaction(null)
+    try {
+      await updateTransaction(editingTransaction.id, data)
+      setEditingTransaction(null)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save transaction — please try again.'), duration: 4000 })
+      throw err
+    }
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
     await loadTags()
-  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth, loadTags])
+  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
 
   const handleDeleteTransaction = useCallback(async (id: string) => {
-    await deleteTransaction(id)
+    try {
+      await deleteTransaction(id)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete transaction — please try again.'), duration: 4000 })
+      return
+    }
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-  }, [deleteTransaction, loadTransactions, loadNetWorth])
+  }, [deleteTransaction, loadTransactions, loadNetWorth, addToast])
 
   const handleBulkDelete = useCallback(async () => {
-    for (const id of Array.from(selectedIds)) {
-      await deleteTransaction(id)
-     }
+    try {
+      for (const id of Array.from(selectedIds)) {
+        await deleteTransaction(id)
+      }
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete all selected transactions — please try again.'), duration: 4000 })
+    }
     setSelectedIds(new Set())
     setSelectMode(false)
     setBulkDeleteOpen(false)
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-    }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth])
+  }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth, addToast])
   function openEditForm(transaction: Transaction) {
     setEditingTransaction(transaction)
     setFormOpen(true)

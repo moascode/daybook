@@ -2,11 +2,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { Target, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
-import { formatMYR } from '@/lib/utils'
+import { useCrudModal } from '@/hooks/useCrudModal'
+import { useToastStore } from '@/stores/toast.store'
+import { formatMYR, errorMessage } from '@/lib/utils'
 import type { Goal } from '@/types/wallet.types'
 
 interface GoalFormData {
@@ -26,10 +29,9 @@ export function GoalsPage() {
     deleteGoal,
     getAccountBalance,
   } = useWallet()
+  const { addToast } = useToastStore()
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const crud = useCrudModal<Goal>()
   const [balances, setBalances] = useState<Map<string, number>>(new Map())
   const [form, setForm] = useState<GoalFormData>({ name: '', targetAmount: '', accountId: '' })
 
@@ -46,32 +48,38 @@ export function GoalsPage() {
   }, [loadGoals, loadAccounts, getAccountBalance])
 
   const openCreate = useCallback(() => {
-    setEditingGoal(null)
     setForm({ name: '', targetAmount: '', accountId: accounts[0]?.id ?? '' })
-    setFormOpen(true)
-  }, [accounts])
+    crud.openCreate()
+  }, [accounts, crud])
 
   const openEdit = useCallback((goal: Goal) => {
-    setEditingGoal(goal)
     setForm({ name: goal.name, targetAmount: String(goal.targetAmount), accountId: goal.accountId })
-    setFormOpen(true)
-  }, [])
+    crud.openEdit(goal)
+  }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const targetAmount = parseFloat(form.targetAmount)
     if (!form.name.trim() || isNaN(targetAmount) || targetAmount <= 0 || !form.accountId) return
-    if (editingGoal) {
-      await updateGoal(editingGoal.id, { name: form.name.trim(), targetAmount, accountId: form.accountId })
-    } else {
-      await addGoal({ name: form.name.trim(), targetAmount, accountId: form.accountId })
+    try {
+      if (crud.editingItem) {
+        await updateGoal(crud.editingItem.id, { name: form.name.trim(), targetAmount, accountId: form.accountId })
+      } else {
+        await addGoal({ name: form.name.trim(), targetAmount, accountId: form.accountId })
+      }
+      crud.closeForm(false)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save goal — please try again.'), duration: 4000 })
     }
-    setFormOpen(false)
-  }, [form, editingGoal, addGoal, updateGoal])
+  }, [form, crud, addGoal, updateGoal, addToast])
 
   const handleDelete = useCallback(async (id: string) => {
-    await deleteGoal(id)
-    setConfirmDeleteId(null)
-  }, [deleteGoal])
+    try {
+      await deleteGoal(id)
+      crud.closeDelete()
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete goal — please try again.'), duration: 4000 })
+    }
+  }, [deleteGoal, crud, addToast])
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -120,7 +128,7 @@ export function GoalsPage() {
                     </button>
                     <button
                       className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
-                      onClick={() => setConfirmDeleteId(goal.id)}
+                      onClick={() => crud.openDelete(goal.id)}
                     >
                       Delete
                     </button>
@@ -151,9 +159,9 @@ export function GoalsPage() {
 
       {/* Create / Edit modal */}
       <Modal
-        open={formOpen}
-        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingGoal(null) }}
-        title={editingGoal ? 'Edit Goal' : 'New Goal'}
+        open={crud.formOpen}
+        onOpenChange={crud.closeForm}
+        title={crud.editingItem ? 'Edit Goal' : 'New Goal'}
       >
         <div className="flex flex-col gap-4">
           <Input
@@ -182,27 +190,20 @@ export function GoalsPage() {
             onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
           />
           <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" size="sm" onClick={() => setFormOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleSubmit}>{editingGoal ? 'Save' : 'Create'}</Button>
+            <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>Cancel</Button>
+            <Button size="sm" onClick={handleSubmit}>{crud.editingItem ? 'Save' : 'Create'}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete confirm modal */}
-      <Modal
-        open={!!confirmDeleteId}
-        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null) }}
+      <ConfirmDeleteModal
+        open={!!crud.confirmDeleteId}
+        onOpenChange={(open) => { if (!open) crud.closeDelete() }}
         title="Delete goal?"
         description="This will remove the goal. Your account and transactions are not affected."
-        className="max-w-sm"
-      >
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
-          <Button variant="danger" size="sm" onClick={() => confirmDeleteId && handleDelete(confirmDeleteId)}>
-            Confirm
-          </Button>
-        </div>
-      </Modal>
+        onConfirm={() => crud.confirmDeleteId && handleDelete(crud.confirmDeleteId)}
+      />
     </div>
   )
 }

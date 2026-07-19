@@ -25,6 +25,13 @@ export function formatAxisMYR(value: number): string {
   return String(Math.round(value))
 }
 
+// C3: extracts a user-facing message from a caught mutation error — ApiError's
+// message is now the server's `{error}` text (see lib/api.ts) — falling back to
+// a generic message for non-Error throws (e.g. network failures).
+export function errorMessage(err: unknown, fallback = 'Something went wrong — please try again.'): string {
+  return err instanceof Error && err.message ? err.message : fallback
+}
+
 export function generateId(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
