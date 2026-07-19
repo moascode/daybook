@@ -12,6 +12,14 @@ test.describe.configure({ mode: 'serial' })
 
 let page: Page
 
+/** The occasional filters (Type/Account/Category/Tags) live in the collapsible
+ *  Filters section of the §6.4 bar — open it if it isn't already. */
+async function ensureFiltersOpen() {
+  if (!(await page.getByTestId('filter-panel').isVisible())) {
+    await page.getByTestId('filter-toggle').click()
+  }
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   // Create two accounts needed throughout the spec
@@ -35,8 +43,7 @@ test('navigate to Transactions tab', async () => {
   await expect(page).toHaveURL(/\/wallet$/)
   await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
   // Clear the default current-month date filters so transactions with past dates are visible
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
 })
 
 test('shows "No transactions" placeholder when list is empty', async () => {
@@ -205,6 +212,7 @@ test('confirm delete removes the transaction', async () => {
 // ── Filters ─────────────────────────────────────────────────────────────
 
 test('filter by type: Income shows only income transactions', async () => {
+  await ensureFiltersOpen()
   await page.getByLabel('Type').selectOption('income')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
@@ -232,6 +240,8 @@ test('reset type filter to All Types', async () => {
 })
 
 test('filter by date range: future From date yields no results', async () => {
+  // From/To live behind the Custom… segment of the date-range control
+  await page.getByTestId('filter-custom-range').click()
   await page.getByLabel('From').fill('2030-01-01')
   await expect(page.getByText(/No transactions match/)).toBeVisible()
 })
@@ -353,10 +363,13 @@ test('account balance updates to reflect transactions', async () => {
 
 // ── Quick date filters ───────────────────────────────────────────────────
 
-test('quick filter "This Month" sets date range to current month', async () => {
+test('date range "This month" is applied and shown as active', async () => {
   await page.getByRole('link', { name: 'Transactions' }).click()
   await page.getByTestId('filter-this-month').click()
+  await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
 
+  // Custom… reveals From/To without changing the range — values are the month bounds
+  await page.getByTestId('filter-custom-range').click()
   const now = new Date()
   const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
@@ -364,9 +377,11 @@ test('quick filter "This Month" sets date range to current month', async () => {
   await expect(page.getByLabel('To')).toHaveValue(lastDay)
 })
 
-test('quick filter "Last Month" sets date range to previous month', async () => {
+test('date range "Last month" sets the previous month bounds', async () => {
   await page.getByTestId('filter-last-month').click()
+  await expect(page.getByTestId('filter-last-month')).toHaveClass(/bg-brand/)
 
+  await page.getByTestId('filter-custom-range').click()
   const now = new Date()
   const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10)
   const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10)
@@ -374,9 +389,11 @@ test('quick filter "Last Month" sets date range to previous month', async () => 
   await expect(page.getByLabel('To')).toHaveValue(lastDay)
 })
 
-test('quick filter "All Time" clears date range', async () => {
+test('date range "All time" clears the date range', async () => {
   // Date filters are currently set from last test; clear them
   await page.getByTestId('filter-clear-dates').click()
+  await expect(page.getByTestId('filter-clear-dates')).toHaveClass(/bg-brand/)
+  await page.getByTestId('filter-custom-range').click()
   await expect(page.getByLabel('From')).toHaveValue('')
   await expect(page.getByLabel('To')).toHaveValue('')
 })
@@ -469,6 +486,7 @@ test('tag filter works when Last Month date range is active', async () => {
   await expect(transactionRowFor(page, 'Monthly Grocery')).toBeVisible()
 
   // Now apply the tag filter — only the tagged transaction should remain.
+  await ensureFiltersOpen()
   const filterTagInput = page.locator('#filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
@@ -500,6 +518,7 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
   await expect(transactionRowFor(page, 'Legacy Row')).toBeVisible()
 
   // Applying any tag filter must NOT crash (if it did, the list would stay unchanged).
+  await ensureFiltersOpen()
   const filterTagInput = page.locator('#filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
@@ -576,6 +595,8 @@ test('default From/To equal the current month bounds in a UTC+8 timezone', async
     const last = new Date(y, m + 1, 0).getDate()
     return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` }
   })
+  // Custom… opens the From/To editors pre-filled with the active (default) range.
+  await pg.getByTestId('filter-custom-range').click()
   await expect(pg.getByLabel('From')).toHaveValue(expected.from)
   await expect(pg.getByLabel('To')).toHaveValue(expected.to)
   await context.close()

@@ -30,7 +30,7 @@ test.afterAll(async () => {
 
 test('with no accounts the balance hero and filter bar are hidden', async () => {
   await expect(page.getByText('Total Net Worth')).toHaveCount(0)
-  await expect(page.getByLabel('From')).toHaveCount(0)
+  await expect(page.getByTestId('transaction-search')).toHaveCount(0)
   // The primary action and the guiding empty state are still present.
   await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Go to Accounts' })).toBeVisible()
@@ -48,7 +48,10 @@ test('once an account exists the balance hero and filters appear', async () => {
 
   await page.goto('/wallet')
   await expect(page.getByText('Total Net Worth')).toBeVisible()
-  await expect(page.getByLabel('From')).toBeVisible()
+  // §6.4 single-row bar: search first, then the date-range control and Filters toggle
+  await expect(page.getByTestId('transaction-search')).toBeVisible()
+  await expect(page.getByTestId('filter-this-month')).toBeVisible()
+  await expect(page.getByTestId('filter-toggle')).toBeVisible()
 })
 
 test('the transaction form pre-selects the first account', async () => {
