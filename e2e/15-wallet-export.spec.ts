@@ -229,3 +229,53 @@ test('exported file with an active search filter contains only matching rows', a
   expect(data[0].merchant).toBe('Income Source')
   await page.getByTestId('transaction-search').fill('')
 })
+
+// ── §1.2: export includes visible shared-in rows ───────────────────────
+
+test('exported rows match the on-screen selection when shared-in rows are selected', async ({ browser }) => {
+  // Another user shares an account (with a transaction on it) into a group
+  // with the main spec user. The list "all" view shows that row; the export
+  // used to hard-scope to own rows and silently drop it from the file.
+  const me = (await (await page.request.get('http://localhost:5173/api/auth/me')).json()).user
+  const sharerCtx = await browser.newContext()
+  const sharerPage = await sharerCtx.newPage()
+  await sharerPage.request.post('http://localhost:5173/api/auth/signup', {
+    data: { username: `sharer_exp_${Date.now()}`, password: 'test-password' },
+  })
+  const group = await (await sharerPage.request.post('http://localhost:5173/api/groups', {
+    data: { name: 'ExportGroup' },
+  })).json()
+  await sharerPage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, {
+    data: { username: me.username },
+  })
+  const invites = await (await page.request.get('http://localhost:5173/api/invites')).json()
+  await page.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+
+  const acct = await (await sharerPage.request.post('http://localhost:5173/api/accounts', {
+    data: { name: 'Shared Export Acct', type: 'cash' },
+  })).json()
+  await sharerPage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+    data: { groupId: group.id, canWrite: false },
+  })
+  const txn = await sharerPage.request.post('http://localhost:5173/api/transactions', {
+    data: { accountId: acct.id, date: '2026-01-15', amount: 42, type: 'expense', merchant: 'Shared Spend' },
+  })
+  expect(txn.status()).toBe(201)
+
+  // Main user: all three rows visible (2 own + 1 shared-in), all pre-selected.
+  await page.goto('/wallet')
+  await page.getByLabel('From').fill('')
+  await page.getByLabel('To').fill('')
+  await expect(page.getByText('Shared Spend')).toBeVisible()
+  await page.getByRole('button', { name: /Export/i }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByText(/3 of 3 selected/)).toBeVisible()
+
+  const content = await downloadContent('export-json-btn')
+  const data = JSON.parse(content) as Array<{ merchant?: string }>
+  // The file contains exactly the selected rows — shared-in row included.
+  expect(data.length).toBe(3)
+  expect(data.map((t) => t.merchant)).toContain('Shared Spend')
+
+  await sharerCtx.close()
+})

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { monthRange } from '@/lib/utils'
 import type { Account, Transaction, Category, Budget, RecurringTransaction, Goal } from '@/types/wallet.types'
 
 interface WalletFilters {
@@ -52,15 +53,8 @@ interface WalletState {
 }
 
 function getDefaultFilters(): WalletFilters {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-
   return {
-    dateFrom: firstDay.toISOString().slice(0, 10),
-    dateTo: lastDay.toISOString().slice(0, 10),
+    ...monthRange(0),
     type: 'all',
     categoryId: null,
     accountId: null,

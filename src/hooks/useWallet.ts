@@ -519,6 +519,9 @@ export function useWallet() {
     if (filters.accountId) qs.set('accountId', filters.accountId)
     for (const t of filters.tags) qs.append('tags', t)
     if (filters.q) qs.set('q', filters.q)
+    // §1.2: pass the active view so shared-in rows visible on screen are not
+    // silently dropped from the export by the server's own-rows-only default.
+    if (filters.view !== 'all') qs.set('view', filters.view)
     // Restrict to the user's selection within the filtered view (stale IDs
     // that no longer match the filters are excluded server-side).
     qs.set('ids', ids.join(','))

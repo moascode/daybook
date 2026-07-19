@@ -18,25 +18,9 @@ import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
-import { cn, formatMYR, errorMessage } from '@/lib/utils'
+import { cn, formatMYR, errorMessage, monthRange } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
-
-function getMonthRange(monthOffset: number) {
-  const now = new Date()
-  // Use local year/month arithmetic — never toISOString() which converts to UTC
-  // and shifts the date by up to a day in non-UTC timezones.
-  const year = now.getFullYear()
-  const month = now.getMonth() + monthOffset        // JS handles underflow (month < 0)
-  const d = new Date(year, month, 1)                // normalises month overflow/underflow
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const lastDay = new Date(y, d.getMonth() + 1, 0).getDate()
-  return {
-    dateFrom: `${y}-${m}-01`,
-    dateTo: `${y}-${m}-${String(lastDay).padStart(2, '0')}`,
-  }
-}
 
 export function WalletPage() {
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
@@ -387,14 +371,14 @@ export function WalletPage() {
           {/* Quick date filter buttons */}
           <div className="flex items-center gap-1.5 pb-0.5">
             <button
-              onClick={() => setFilters(getMonthRange(0))}
+              onClick={() => setFilters(monthRange(0))}
               data-testid="filter-this-month"
               className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
               This Month
             </button>
             <button
-              onClick={() => setFilters(getMonthRange(-1))}
+              onClick={() => setFilters(monthRange(-1))}
               data-testid="filter-last-month"
               className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
