@@ -53,6 +53,17 @@ export function monthRange(offset: number): { dateFrom: string; dateTo: string }
   }
 }
 
+// §5.9: the one equal-split implementation. Splits `amount` into n cent-exact
+// shares; index 0 is the payer/owner, who absorbs the rounding remainder
+// (owner-absorbs rule, §2.1 owner decision). Mirrored in server/lib.ts —
+// keep the two in sync.
+export function splitEqually(amount: number, n: number): number[] {
+  if (n <= 0) return []
+  const base = Math.floor((amount / n) * 100) / 100
+  const remainder = Math.round((amount - base * n) * 100) / 100
+  return [Math.round((base + remainder) * 100) / 100, ...Array<number>(n - 1).fill(base)]
+}
+
 export function todayISO(): string {
   const d = new Date()
   const yyyy = d.getFullYear()

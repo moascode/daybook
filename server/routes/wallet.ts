@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getDb } from '../db.ts'
-import { updateRow, normalizeBind, ownsAllRefs } from '../lib.ts'
+import { updateRow, normalizeBind, ownsAllRefs, splitEqually } from '../lib.ts'
 import { visibleAccountIds, canWriteAccount, isGroupMember, coGroupUserIds } from '../lib/sharing.ts'
 
 export const walletRouter: Router = Router()
@@ -755,12 +755,10 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
     shares = [{ userId: recipientId, shareAmount: txn.amount, note: '' }]
   } else if (splitMode === 'equal') {
     // Split equally between owner + recipient (2 people)
-    // Payer absorbs any rounding remainder
-    const base = Math.floor((txn.amount / 2) * 100) / 100
-    const remainder = Math.round((txn.amount - base * 2) * 100) / 100
+    const [ownerShare, recipientShare] = splitEqually(txn.amount, 2)
     shares = [
-      { userId: userId, shareAmount: Math.round((base + remainder) * 100) / 100, note: '' },
-      { userId: recipientId, shareAmount: base, note: '' },
+      { userId: userId, shareAmount: ownerShare, note: '' },
+      { userId: recipientId, shareAmount: recipientShare, note: '' },
     ]
   } else if (splitMode === 'custom') {
     // Use provided shareAmounts array

@@ -4,7 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, splitEqually } from '@/lib/utils'
 import { mapMember } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember } from '@/types/household.types'
@@ -63,9 +63,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
       let shareAmounts: number[] | undefined
 
       if (splitMode === 'equal') {
-        const base = Math.floor((amount / 2) * 100) / 100
-        const remainder = Math.round((amount - base * 2) * 100) / 100
-        shareAmounts = [base, remainder]
+        shareAmounts = splitEqually(amount, 2)
        } else if (splitMode === 'custom') {
         const [ownerAmt, recipientAmt] = customAmounts
         const sum = parseFloat(ownerAmt) + parseFloat(recipientAmt)

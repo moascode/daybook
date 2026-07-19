@@ -51,6 +51,19 @@ export function normalizeBind(v: unknown): unknown {
 }
 
 /**
+ * §5.9: the one equal-split implementation. Splits `amount` into n cent-exact
+ * shares; index 0 is the payer/owner, who absorbs the rounding remainder
+ * (owner-absorbs rule, §2.1 owner decision). Mirrored in src/lib/utils.ts —
+ * keep the two in sync.
+ */
+export function splitEqually(amount: number, n: number): number[] {
+  if (n <= 0) return []
+  const base = Math.floor((amount / n) * 100) / 100
+  const remainder = Math.round((amount - base * n) * 100) / 100
+  return [Math.round((base + remainder) * 100) / 100, ...Array<number>(n - 1).fill(base)]
+}
+
+/**
  * True if `id` references a row in `table` owned by `userId`. Null/undefined ids
  * count as valid (optional references). `table` is always a hardcoded constant.
  */
