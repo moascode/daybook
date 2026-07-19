@@ -106,6 +106,11 @@ export function WalletPage() {
   useEffect(() => {
     const accountParam = searchParams.get('account')
     if (accountParam) setFilters({ accountId: accountParam })
+    // Deep link from the Shared page (and elsewhere): /wallet?view=shared-with-me
+    const viewParam = searchParams.get('view')
+    if (viewParam === 'all' || viewParam === 'mine' || viewParam === 'shared-with-me' || viewParam === 'shared-with-others') {
+      setFilters({ view: viewParam })
+    }
   }, [searchParams, setFilters])
 
   useEffect(() => {

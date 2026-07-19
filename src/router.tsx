@@ -10,6 +10,7 @@ import { BudgetsPage } from '@/modules/wallet/BudgetsPage'
 import { RecurringPage } from '@/modules/wallet/RecurringPage'
 import { GoalsPage } from '@/modules/wallet/GoalsPage'
 import { ReportsPage } from '@/modules/wallet/ReportsPage'
+import { SharedPage } from '@/modules/wallet/SharedPage'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { SharingPage } from '@/modules/settings/SharingPage'
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <WalletPage /> },
           { path: 'accounts', element: <AccountsPage /> },
+          { path: 'shared', element: <SharedPage /> },
           { path: 'dashboard', element: <Dashboard /> },
           { path: 'budgets', element: <BudgetsPage /> },
           { path: 'recurring', element: <RecurringPage /> },

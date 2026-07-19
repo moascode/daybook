@@ -36,6 +36,7 @@ const walletGroups = [
       { to: '/wallet', label: 'Transactions', icon: List, end: true },
       { to: '/wallet/dashboard', label: 'Dashboard', icon: BarChart3, end: false },
       { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false },
+      { to: '/wallet/shared', label: 'Shared', icon: Users, end: false },
     ],
   },
   {
