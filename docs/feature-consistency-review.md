@@ -1,6 +1,6 @@
 # Feature Consistency Review
 
-**Date:** 2026-07-19 (updated same day: behavioural-divergence pass; sharing information-architecture direction) · **Scope:** full codebase (client + server) as of `main` after PR #34
+**Date:** 2026-07-19 (updated same day: behavioural-divergence pass; sharing information-architecture direction; transactions filter-bar reorganisation) · **Scope:** full codebase (client + server) as of `main` after PR #34
 **Type:** analysis only — no code was changed. Each finding lists the files involved so any item can be turned into a scoped fix PR.
 
 The review confirms the suspicion: several core behaviours (delete confirmation, error surfacing, balance fetching, date-range math, split math, form validation) are each implemented 3–5 different ways, and — beyond code style — **several pairs of flows that do the same job behave differently for the user** (§2). Most divergence is the residue of features landing in different waves (Phase 4 → 5b → 5c) without the older paths being migrated to the newer pattern. §3 records the owner's direction for where sharing features should live.
@@ -243,6 +243,45 @@ WalletPage refetches list + net worth + tags after every add/edit/delete *in add
 ### 6.3 🟡 Sort-order rebalance contradicts CLAUDE.md §9.1
 Spec: "batch-update all affected rows in a single transaction". Implementation (`useTasks.ts:436-464`): one `PATCH /tasks/:id` per sibling, sequentially. With a big flat list a rebalance is dozens of round-trips mid-keystroke. → Add a batch endpoint (or accept and amend the spec).
 
+### 6.4 🟠 Transactions filter bar is disorganized (owner direction: reorganize)
+
+> **Owner note (2026-07-19): the filter area on the Transactions page is too messy — reorganize it.**
+
+**Current state — ten controls in three disconnected clusters** (`WalletPage.tsx:317-459`):
+
+| Cluster | Controls | Placement |
+|---|---|---|
+| Filter card, row 1 | From, To, Type, Account, Category **+ a "Manage categories" gear squeezed beside the Category select** (with a `mb-[1px]` alignment hack, :344-362) | 5-column grid |
+| Filter card, row 2 | Search, Tags, then three quick-date pills (This Month / Last Month / All Time) pushed to the right | flex-wrap row |
+| Outside the card, below the summary | Four sharing view pills (All / Mine / Shared with me / Shared with others) | :443-459 |
+
+**Why it reads as messy (analysis):**
+
+1. **No hierarchy of use.** Search — the control users reach for most (B1 was added *because* it was missing) — sits mid-row-2 at a capped `max-w-xs`, visually subordinate to five selects that are touched occasionally. All ten controls get equal weight, so every visit means scanning the full card.
+2. **Cause and effect are diagonal.** The quick-date pills (row 2, far right) drive the From/To pickers (row 1, far left). Worse, the pills have **no active state** — the default filter *is* "This Month", but nothing shows it (the sharing pills, by contrast, do highlight their selection, so the page has two pill styles with different behaviour). "All Time" is also styled a shade lighter than its siblings for no reason (:406).
+3. **One concept, five controls.** Date range = From + To + three pills. Sibling pages solved the identical problem two other ways — Dashboard's segmented This/Last-Month toggle, Reports' From/To + Apply — three date-range UIs across three wallet pages, on top of the four range-math implementations in §5.4.
+4. **A management action inside a filter bar.** The gear opens CategoryManager (add/delete categories) — not filtering, and this cramped icon is the **only entry point to category management in the entire app**. Under the §3 direction (configuration lives in Settings), it's in the wrong module, not just the wrong row.
+5. **The sharing view is a filter that doesn't live with the filters.** Different location (below the summary), different widget, different store field (`view`) — and the pills are rendered **outside the `accounts.length > 0` guard**, so even a brand-new user with zero accounts and zero groups sees four sharing pills above an empty list. A solo user (the day-one majority) carries this chrome forever.
+6. **No overview or reset of the active filter set.** Only dates have a reset ("All Time"); search/type/account/category/tags/view must each be unwound by hand; nothing counts active filters. Arriving from an account card (`?account=…`) silently narrows the list, with only the Account select's value as evidence.
+7. **Mobile cost.** The grid drops to two columns, so card row 1 alone is three rows tall on a phone; with row 2 the filter card fills most of the first screen before a single transaction is visible, and it has no collapsed state.
+
+**Proposed organization — progressive disclosure, one row by default:**
+
+```
+[ 🔍 Search merchant or description…        ] [ This month ▾ ] [ Filters (2) ] [ ✕ Clear ]
+```
+
+- **Search promoted** to the primary, widest control, first in the row.
+- **One date-range control** replacing five: a segmented/dropdown picker — *This month · Last month · All time · Custom…* — that reveals From/To only for Custom, always displays its active value, and is built on the shared `monthRange` helper (§5.4). Reuse the same component on Dashboard and Reports so the three pages converge on one date-range UI.
+- **A "Filters" button with an active-count badge** opening a collapsible row (or popover) holding the occasional controls: Type, Account, Category, Tags — and the Sharing view moved in here as a fifth filter, **hidden when the user has no groups** (it stays deep-linkable via the `?view=` param for the §3 Shared-page links).
+- **Clear-all** appears only when any filter is active. Phase 2: render active filters as removable chips under the bar, which also solves the invisible `?account=` narrowing.
+- **Manage categories moves out**: short-term, a "Manage…" footer item in the Category dropdown; proper home is Settings alongside Sharing per §3 (it's configuration).
+- Summary row and list are untouched; all state already exists in `wallet.store` — this is a layout/disclosure change, not a data change.
+
+**Optional enhancement while in there:** filters are currently one-way from the URL (only `?account` is read, nothing is written back). Mirroring filter state to query params would make refresh/back and the §3 deep links behave predictably.
+
+**e2e impact:** `03-wallet-transactions`, `28-wallet-search`, and any spec using `filter-this-month` / `filter-last-month` / `filter-clear-dates` / `transaction-search` test-ids, plus `25-wallet-intuitiveness` assertions on the filter layout.
+
 ---
 
 ## 7. Copy & visual consistency (quick wins)
@@ -273,9 +312,10 @@ Grouped so each wave is one reviewable PR, mirroring the Phase 5c playbook. Orde
 1. **W1 — Correctness** (§1.1 store month-range bug + §5.4 shared helper, §1.2 export scope, §1.3 server validation gaps, §1.4 balance fan-outs) + regression e2e for the filter-date bug.
 2. **W2 — Sharing model alignment** (owner-approved, §2.1): rebuild bulk share on the individual-share pattern (modes incl. "Keep as-is", per-transaction mode control, owner-absorbs-remainder via one shared `splitEqually` helper §5.9, refetch on save, persistent errors, standard dates, single close button); make existing shares viewable/editable with an overwrite warning (§2.2); collapse to one permission rule and delete the legacy `/shares` endpoint + `SplitDialog` (§2.3, §4.1, §4.5).
 3. **W3 — Sharing IA relocation** (owner-approved, §3): Household group admin → Settings → Sharing; balances/settlements → Wallet Shared page; invite badge → Settings nav item; `/household` redirect; settle the Share/Split naming (§2.10, §3.3.4); renumber the touched e2e specs (§8.4).
-4. **W4 — Cross-path behaviour** (§2.4 shared-account rules for import/recurring + dropdown filtering, §2.5 type-filtered categories in CSV review, §2.6 hide/disable actions on read-only rows, §2.8 form defaults, §2.7 undo policy).
-5. **W5 — Dead code & data flow** (§4.2–4.4, §1.5 non-store-mutating fetch variant, §1.6 bulk/sequential loops).
-6. **W6 — Interaction & code consistency** (§5.1 ConfirmDeleteModal everywhere, §5.2 useCrudModal adoption, §5.3 error-toast rule incl. Tasks, §5.5–5.8) — applied to the *post-relocation* pages.
-7. **W7 — Copy, settings & docs** (§6.1, §7, §8 CLAUDE.md refresh incl. the new IA, migration-prefix guard).
+4. **W4 — Transactions filter reorganisation** (owner-approved, §6.4): search-first single-row bar, one shared date-range control (built on W1's `monthRange` helper, reused by Dashboard/Reports), collapsible Filters section absorbing the sharing view pills (hidden for group-less users), clear-all, Manage-categories out of the bar. Sequenced after W3 so the Sharing-view and Manage-categories moves land in their final homes.
+5. **W5 — Cross-path behaviour** (§2.4 shared-account rules for import/recurring + dropdown filtering, §2.5 type-filtered categories in CSV review, §2.6 hide/disable actions on read-only rows, §2.8 form defaults, §2.7 undo policy).
+6. **W6 — Dead code & data flow** (§4.2–4.4, §1.5 non-store-mutating fetch variant, §1.6 bulk/sequential loops).
+7. **W7 — Interaction & code consistency** (§5.1 ConfirmDeleteModal everywhere, §5.2 useCrudModal adoption, §5.3 error-toast rule incl. Tasks, §5.5–5.8) — applied to the *post-relocation* pages.
+8. **W8 — Copy, settings & docs** (§6.1, §7, §8 CLAUDE.md refresh incl. the new IA, migration-prefix guard).
 
-Every item above needs owner sign-off per CLAUDE.md §2 (rule 8) before implementation. Decisions already made: §2.1 (individual share is the model) and §3 (sharing IA relocation); §3.3 lists the sub-decisions still open (per-group vs netted balances, settings route shape, final naming).
+Every item above needs owner sign-off per CLAUDE.md §2 (rule 8) before implementation. Decisions already made: §2.1 (individual share is the model), §3 (sharing IA relocation), and §6.4 (filter bar reorganisation); §3.3 lists the sub-decisions still open (per-group vs netted balances, settings route shape, final naming).
