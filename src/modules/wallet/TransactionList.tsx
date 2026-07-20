@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
 
 interface TransactionListProps {
@@ -12,7 +11,7 @@ interface TransactionListProps {
   accounts: Account[]
   categories: Category[]
   onEdit: (transaction: Transaction) => void
-  onDelete: (id: string) => void
+  onDelete: (transaction: Transaction) => void
   onSplit: (transaction: Transaction) => void
   selectMode?: boolean
   selectedIds?: Set<string>
@@ -54,7 +53,7 @@ function TransactionRow({
   categories,
   onEdit,
   onSplit,
-  onRequestDelete,
+  onDelete,
   selectMode,
   isSelected,
   onToggleSelect,
@@ -64,7 +63,7 @@ function TransactionRow({
   categories: Category[]
   onEdit: (t: Transaction) => void
   onSplit: (t: Transaction) => void
-  onRequestDelete: (t: Transaction) => void
+  onDelete: (t: Transaction) => void
   selectMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: string) => void
@@ -235,7 +234,7 @@ function TransactionRow({
             variant="ghost"
             size="sm"
             className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onRequestDelete(transaction)}
+            onClick={() => onDelete(transaction)}
             aria-label="Delete transaction"
           >
             <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -257,15 +256,7 @@ export function TransactionList({
   selectedIds,
   onToggleSelect,
 }: TransactionListProps) {
-  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
-
-  function handleConfirmDelete() {
-    if (deleteTarget) {
-      onDelete(deleteTarget.id)
-      setDeleteTarget(null)
-    }
-  }
 
   if (dailyGroups.length === 0) {
     return (
@@ -276,9 +267,8 @@ export function TransactionList({
   }
 
   return (
-    <>
-      <div className="space-y-1">
-        {dailyGroups.map((group) => (
+    <div className="space-y-1">
+      {dailyGroups.map((group) => (
           <div key={group.date}>
             {/* Day header */}
             <div className="flex items-center justify-between px-3 py-2">
@@ -309,7 +299,7 @@ export function TransactionList({
                   categories={categories}
                   onEdit={onEdit}
                   onSplit={onSplit}
-                  onRequestDelete={setDeleteTarget}
+                  onDelete={onDelete}
                   selectMode={selectMode}
                   isSelected={selectedIds?.has(t.id)}
                   onToggleSelect={onToggleSelect}
@@ -318,24 +308,6 @@ export function TransactionList({
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Delete confirmation */}
-      <Modal
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="Delete Transaction"
-        description={`Delete transaction "${deleteTarget?.merchant || deleteTarget?.description || 'Untitled'}" for ${deleteTarget ? formatMYR(deleteTarget.amount) : ''}?`}
-      >
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleConfirmDelete}>
-            Delete
-          </Button>
-        </div>
-      </Modal>
-    </>
+    </div>
   )
 }
