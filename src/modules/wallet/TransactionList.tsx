@@ -77,6 +77,10 @@ function TransactionRow({
     ? categories.find((c) => c.id === transaction.categoryId)
     : null
   const isOnSharedAccount = account?.isShared
+  // Read-only shared-in account: edit/delete/split would always 403, so the row
+  // exposes no mutating affordances and isn't clickable-to-edit.
+  const readOnly = !!(account?.isShared && account.canWrite !== 1)
+  const interactive = selectMode || !readOnly
 
   const amountColor =
     transaction.type === 'income'
@@ -91,7 +95,7 @@ function TransactionRow({
   function handleRowClick() {
     if (selectMode) {
       onToggleSelect?.(transaction.id)
-    } else {
+    } else if (!readOnly) {
       onEdit(transaction)
     }
   }
@@ -108,16 +112,17 @@ function TransactionRow({
   return (
     <div
       data-testid="transaction-row"
-      role="button"
-      tabIndex={0}
-      aria-label={`${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
       className={cn(
-        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors cursor-pointer',
+        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+        interactive && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
         selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
       )}
-      onClick={handleRowClick}
-      onKeyDown={handleRowKeyDown}
+      onClick={interactive ? handleRowClick : undefined}
+      onKeyDown={interactive ? handleRowKeyDown : undefined}
     >
       {/* Checkbox (select mode) or type indicator */}
       {selectMode ? (
@@ -197,8 +202,8 @@ function TransactionRow({
         {amountPrefix}{formatMYR(transaction.amount)}
       </span>
 
-      {/* Row actions — hidden in select mode */}
-      {!selectMode && (
+      {/* Row actions — hidden in select mode and on read-only shared rows */}
+      {!selectMode && !readOnly && (
         <div
           className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
           onClick={(e) => e.stopPropagation()}

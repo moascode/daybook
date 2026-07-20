@@ -147,15 +147,18 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
             >
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-              onClick={() => onDelete(account)}
-              aria-label="Delete account"
-            >
-              <Trash2 className="h-3.5 w-3.5 text-red-500" />
-            </Button>
+            {/* Delete is owner-only — a shared-in account can never be deleted here. */}
+            {!account.isShared && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+                onClick={() => onDelete(account)}
+                aria-label="Delete account"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-red-500" />
+              </Button>
+            )}
           </div>
         </div>
 
