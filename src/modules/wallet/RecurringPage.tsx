@@ -11,7 +11,7 @@ import { useWallet } from '@/hooks/useWallet'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
-import { formatMYR, errorMessage } from '@/lib/utils'
+import { formatMYR, errorMessage, todayISO } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import type {
   RecurringTransaction,
@@ -77,17 +77,20 @@ export function RecurringPage() {
   )
 
   const openCreate = useCallback(() => {
+    // Match the sibling forms (TransactionForm/Goals/CsvImport): pre-select the
+    // first account and default the next-due date to today, so a new rule needs
+    // no mandatory picks the other forms don't demand.
     setForm({
-      accountId: '',
+      accountId: ownAccounts[0]?.id ?? '',
       amount: '',
       merchant: '',
       type: 'expense',
       categoryId: '',
       frequency: 'monthly',
-      nextDueDate: '',
+      nextDueDate: todayISO(),
     })
     crud.openCreate()
-  }, [crud])
+  }, [crud, ownAccounts])
 
   const openEdit = useCallback((rule: RecurringTransaction) => {
     setForm({
