@@ -206,14 +206,27 @@ test('re-checking header toggle restores original row count', async () => {
 
 // ── Type-filtered category options (§2.5) ────────────────────────────────
 
-test('review category options are filtered by each row type', async () => {
-  // Continue from the mapping step left by the header-toggle tests.
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+test('review category options are filtered by each row type', async ({ browser }) => {
+  // Isolated fresh user so the CSV rows aren't duplicates (which would disable
+  // the row controls) — the shared `page` already imported this fixture.
+  const isoPage = await newAppPage(browser, '/wallet/accounts')
+  await isoPage.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(isoPage, { name: 'Filter Account', type: 'bank' })
+
+  await isoPage.getByRole('link', { name: 'Import CSV' }).click()
+  await expect(isoPage.getByRole('heading', { name: 'Import from CSV' })).toBeVisible()
+  const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
+  await isoPage.evaluate(async (content) => {
+    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
+    await window.__testCsvFileSelect(file)
+  }, csvContent)
+  await expect(isoPage.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await isoPage.getByRole('button', { name: /Review Rows/ }).click()
+  await expect(isoPage.getByText('Review Import')).toBeVisible()
 
   // Positive amounts parse as income → the category select offers income
   // categories, never an expense-only one.
-  const firstRow = page.locator('tbody tr').first()
+  const firstRow = isoPage.locator('tbody tr').first()
   const categorySelect = firstRow.locator('select').last()
   await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(1)
   await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(0)
@@ -223,6 +236,8 @@ test('review category options are filtered by each row type', async () => {
   await firstRow.locator('select').first().selectOption('expense')
   await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(1)
   await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(0)
+
+  await isoPage.context().close()
 })
 
 // ── Shared-account write permission on import (§2.4) ──────────────────────
