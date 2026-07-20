@@ -195,17 +195,16 @@ test('updated amount is reflected in the summary', async () => {
 
 // ── Delete transaction ──────────────────────────────────────────────────
 
-test('delete transaction — hover reveals delete button, modal confirms', async () => {
+test('delete transaction — hover reveals delete button, removes immediately with undo toast', async () => {
   const row = transactionRowFor(page, 'Costa Coffee')
   await row.hover()
   await row.getByRole('button', { name: 'Delete transaction' }).click()
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByText(/Delete Transaction|Are you sure/)).toBeVisible()
+  // No confirm dialog — the row disappears at once and an undo toast appears.
+  await expect(transactionRowFor(page, 'Costa Coffee')).not.toBeVisible()
+  await expect(page.getByText('Transaction deleted')).toBeVisible()
 })
 
-test('confirm delete removes the transaction', async () => {
-  await page.getByRole('button', { name: /Delete/ }).last().click()
-  await expect(page.getByRole('dialog')).not.toBeVisible()
+test('deleted transaction stays gone when the undo toast is not used', async () => {
   await expect(transactionRowFor(page, 'Costa Coffee')).not.toBeVisible()
 })
 
