@@ -63,6 +63,10 @@ export function RecurringPage() {
     loadCategories()
   }, [loadRecurringTransactions, loadAccounts, loadCategories])
 
+  // Recurring rules auto-post, so they stay own-accounts-only — never offer a
+  // shared-in account the server would reject at posting time.
+  const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+
   // Categories valid for the rule's direction (income/expense + 'both').
   const categoryOptions = useMemo(
     () =>
@@ -295,7 +299,7 @@ export function RecurringPage() {
           <Select
             label="Account"
             id="account"
-            options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+            options={ownAccounts.map((a) => ({ value: a.id, label: a.name }))}
             placeholder="Select account"
             value={form.accountId}
             onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}

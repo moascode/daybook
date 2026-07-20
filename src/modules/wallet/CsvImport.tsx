@@ -64,10 +64,15 @@ export function CsvImport() {
     }
   }, [handleFileSelect])
 
-  // Default to the first account once accounts load — converging conditional
-  // adjusted during render (no effect needed).
-  if (accounts.length > 0 && !selectedAccountId) {
-    setSelectedAccountId(accounts[0].id)
+  // Only accounts the import flow will actually accept: own accounts plus
+  // shared-in accounts with write access. Read-only shared accounts are the
+  // one case the server rejects, so never offer them as a target.
+  const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
+
+  // Default to the first importable account once accounts load — converging
+  // conditional adjusted during render (no effect needed).
+  if (importableAccounts.length > 0 && !selectedAccountId) {
+    setSelectedAccountId(importableAccounts[0].id)
   }
 
   const handleDrop = useCallback(
@@ -300,7 +305,7 @@ export function CsvImport() {
             />
             <Select
               label="Import into account *"
-              options={accounts.map((a) => ({ value: a.id, label: a.name }))}
+              options={importableAccounts.map((a) => ({ value: a.id, label: a.name }))}
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
             />
