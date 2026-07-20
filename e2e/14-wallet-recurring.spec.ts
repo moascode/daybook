@@ -57,6 +57,14 @@ test('recurring form has Amount, Account, Merchant, Frequency, and Next-due fiel
   await expect(dialog.getByLabel(/Next due|Start date/i)).toBeVisible()
 })
 
+test('create form pre-selects the first account and defaults next-due to today', async () => {
+  // §2.8: the rule form starts with the same low-friction defaults as the
+  // sibling forms — an account is already chosen and the next-due date is set.
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.locator('#account')).not.toHaveValue('')
+  await expect(dialog.getByLabel(/Next due|Start date/i)).toHaveValue(/^\d{4}-\d{2}-\d{2}$/)
+})
+
 test('save a monthly recurring expense (Netflix, MYR 55)', async () => {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel(/Amount/i).fill('55')

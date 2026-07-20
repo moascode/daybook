@@ -45,7 +45,7 @@ export function WalletPage() {
     deleteCategory,
     getCategoryUsage,
   } = useWallet()
-  const { addToast } = useToastStore()
+  const { addToast, removeToast } = useToastStore()
 
   const dataVersion = useWalletStore((s) => s.dataVersion)
   const [searchParams] = useSearchParams()
@@ -179,16 +179,50 @@ export function WalletPage() {
     await loadTags()
   }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
 
-  const handleDeleteTransaction = useCallback(async (id: string) => {
+  // Single-transaction delete: no confirm dialog — delete immediately and offer
+  // a 5-second undo toast, matching the tasks module. The row object is captured
+  // in the closure, so the restore doesn't depend on the post-delete refetch.
+  const undoToastIdRef = useRef<string | null>(null)
+  const handleDeleteTransaction = useCallback(async (transaction: Transaction) => {
     try {
-      await deleteTransaction(id)
+      await deleteTransaction(transaction.id)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not delete transaction — please try again.'), duration: 4000 })
       return
     }
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
-  }, [deleteTransaction, loadTransactions, loadNetWorth, addToast])
+
+    if (undoToastIdRef.current) removeToast(undoToastIdRef.current)
+    undoToastIdRef.current = addToast({
+      message: 'Transaction deleted',
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          undoToastIdRef.current = null
+          try {
+            await addTransaction({
+              accountId: transaction.accountId,
+              destinationAccountId: transaction.destinationAccountId,
+              date: transaction.date,
+              merchant: transaction.merchant,
+              description: transaction.description,
+              amount: transaction.amount,
+              type: transaction.type,
+              categoryId: transaction.categoryId,
+              tags: transaction.tags,
+              importHash: transaction.importHash,
+            })
+          } catch (err) {
+            addToast({ message: errorMessage(err, 'Could not restore transaction — please try again.'), duration: 4000 })
+          }
+          await loadTransactions(filtersRef.current)
+          await loadNetWorth()
+        },
+      },
+      duration: 5000,
+    })
+  }, [deleteTransaction, addTransaction, loadTransactions, loadNetWorth, addToast, removeToast])
 
   const handleBulkDelete = useCallback(async () => {
     try {

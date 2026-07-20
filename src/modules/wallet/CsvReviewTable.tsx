@@ -19,9 +19,13 @@ export function CsvReviewTable({
   onRowChange,
   onToggleInclude,
 }: CsvReviewTableProps) {
-  const categoryOptions = [
+  // Category options valid for a row's direction — an income category must not
+  // be selectable on an expense row (matches TransactionForm/RecurringPage).
+  const categoryOptionsFor = (type: 'income' | 'expense') => [
     { value: '', label: 'No category' },
-    ...categories.map((c) => ({ value: c.id, label: c.name })),
+    ...categories
+      .filter((c) => c.type === type || c.type === 'both')
+      .map((c) => ({ value: c.id, label: c.name })),
   ]
 
   const typeOptions = [
@@ -114,11 +118,18 @@ export function CsvReviewTable({
                 <Select
                   options={typeOptions}
                   value={row.type}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    // Drop a now-invalid category when the direction flips, so an
+                    // income category can't linger on an expense row.
+                    const type = e.target.value as 'income' | 'expense'
+                    const stillValid = categoryOptionsFor(type).some(
+                      (o) => o.value === (row.categoryId ?? ''),
+                    )
                     onRowChange(index, {
-                      type: e.target.value as 'income' | 'expense',
+                      type,
+                      categoryId: stillValid ? row.categoryId : null,
                     })
-                  }
+                  }}
                   className="text-xs"
                   disabled={!row.included}
                 />
@@ -127,7 +138,7 @@ export function CsvReviewTable({
               {/* Category */}
               <td className="px-3 py-2">
                 <Select
-                  options={categoryOptions}
+                  options={categoryOptionsFor(row.type)}
                   value={row.categoryId ?? ''}
                   onChange={(e) =>
                     onRowChange(index, {

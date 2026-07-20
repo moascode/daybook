@@ -121,6 +121,50 @@ test.describe('34 — Shared accounts', () => {
     await bobCtx.close()
   })
 
+  test('read-only shared account rows expose no mutating actions', async ({ browser }) => {
+    const { alicePage, bobPage, bobName, aliceCtx, bobCtx } = await setupTwoUsers(browser)
+
+    await createGroupAndInvite(alicePage, bobPage, bobName)
+
+    // Alice creates an account + transaction and shares it read-only.
+    await alicePage.goto('/wallet/accounts')
+    await expect(alicePage.locator('main')).toBeVisible({ timeout: 15_000 })
+    await alicePage.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(alicePage, { name: 'RO Card' })
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.locator('main')).toBeVisible()
+    await alicePage.getByRole('button', { name: 'Add Transaction' }).click()
+    await fillTransactionForm(alicePage, { amount: '80', merchant: 'Bakery' })
+
+    await alicePage.goto('/wallet/accounts')
+    await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'RO Card' }).hover()
+    await alicePage.getByRole('button', { name: 'Edit account' }).click()
+    const shareSelect = alicePage.getByRole('dialog').locator('select').last()
+    await shareSelect.selectOption({ label: 'Family' })
+    await alicePage.getByRole('dialog').getByRole('button', { name: 'Share' }).click()
+    await alicePage.getByRole('dialog').getByRole('button', { name: /Save Changes/ }).click()
+
+    // Bob has read-only access: the transaction row shows no edit/delete/split.
+    await bobPage.goto('/wallet')
+    const row = bobPage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Bakery' })
+    await expect(row).toBeVisible({ timeout: 5000 })
+    await row.hover()
+    await expect(row.getByRole('button', { name: 'Edit transaction' })).toHaveCount(0)
+    await expect(row.getByRole('button', { name: 'Delete transaction' })).toHaveCount(0)
+    await expect(row.getByRole('button', { name: 'Split transaction' })).toHaveCount(0)
+
+    // Bob's shared-in account card has no delete action either.
+    await bobPage.goto('/wallet/accounts')
+    const card = bobPage.locator('[data-testid="account-card"]').filter({ hasText: 'RO Card' })
+    await expect(card).toBeVisible({ timeout: 5000 })
+    await card.hover()
+    await expect(card.getByRole('button', { name: 'Delete account' })).toHaveCount(0)
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
   test('non-group-member cannot see a shared account', async ({ browser }) => {
     const aliceCtx = await browser.newContext()
     const carolCtx = await browser.newContext()

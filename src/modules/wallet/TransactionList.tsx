@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
 import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
 
 interface TransactionListProps {
@@ -12,7 +11,7 @@ interface TransactionListProps {
   accounts: Account[]
   categories: Category[]
   onEdit: (transaction: Transaction) => void
-  onDelete: (id: string) => void
+  onDelete: (transaction: Transaction) => void
   onSplit: (transaction: Transaction) => void
   selectMode?: boolean
   selectedIds?: Set<string>
@@ -54,7 +53,7 @@ function TransactionRow({
   categories,
   onEdit,
   onSplit,
-  onRequestDelete,
+  onDelete,
   selectMode,
   isSelected,
   onToggleSelect,
@@ -64,7 +63,7 @@ function TransactionRow({
   categories: Category[]
   onEdit: (t: Transaction) => void
   onSplit: (t: Transaction) => void
-  onRequestDelete: (t: Transaction) => void
+  onDelete: (t: Transaction) => void
   selectMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: string) => void
@@ -77,6 +76,10 @@ function TransactionRow({
     ? categories.find((c) => c.id === transaction.categoryId)
     : null
   const isOnSharedAccount = account?.isShared
+  // Read-only shared-in account: edit/delete/split would always 403, so the row
+  // exposes no mutating affordances and isn't clickable-to-edit.
+  const readOnly = !!(account?.isShared && account.canWrite !== 1)
+  const interactive = selectMode || !readOnly
 
   const amountColor =
     transaction.type === 'income'
@@ -91,7 +94,7 @@ function TransactionRow({
   function handleRowClick() {
     if (selectMode) {
       onToggleSelect?.(transaction.id)
-    } else {
+    } else if (!readOnly) {
       onEdit(transaction)
     }
   }
@@ -108,16 +111,17 @@ function TransactionRow({
   return (
     <div
       data-testid="transaction-row"
-      role="button"
-      tabIndex={0}
-      aria-label={`${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? `${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
       className={cn(
-        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors cursor-pointer',
+        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+        interactive && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
         selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
       )}
-      onClick={handleRowClick}
-      onKeyDown={handleRowKeyDown}
+      onClick={interactive ? handleRowClick : undefined}
+      onKeyDown={interactive ? handleRowKeyDown : undefined}
     >
       {/* Checkbox (select mode) or type indicator */}
       {selectMode ? (
@@ -197,8 +201,8 @@ function TransactionRow({
         {amountPrefix}{formatMYR(transaction.amount)}
       </span>
 
-      {/* Row actions — hidden in select mode */}
-      {!selectMode && (
+      {/* Row actions — hidden in select mode and on read-only shared rows */}
+      {!selectMode && !readOnly && (
         <div
           className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
           onClick={(e) => e.stopPropagation()}
@@ -230,7 +234,7 @@ function TransactionRow({
             variant="ghost"
             size="sm"
             className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onRequestDelete(transaction)}
+            onClick={() => onDelete(transaction)}
             aria-label="Delete transaction"
           >
             <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -252,15 +256,7 @@ export function TransactionList({
   selectedIds,
   onToggleSelect,
 }: TransactionListProps) {
-  const [deleteTarget, setDeleteTarget] = useState<Transaction | null>(null)
   const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
-
-  function handleConfirmDelete() {
-    if (deleteTarget) {
-      onDelete(deleteTarget.id)
-      setDeleteTarget(null)
-    }
-  }
 
   if (dailyGroups.length === 0) {
     return (
@@ -271,9 +267,8 @@ export function TransactionList({
   }
 
   return (
-    <>
-      <div className="space-y-1">
-        {dailyGroups.map((group) => (
+    <div className="space-y-1">
+      {dailyGroups.map((group) => (
           <div key={group.date}>
             {/* Day header */}
             <div className="flex items-center justify-between px-3 py-2">
@@ -304,7 +299,7 @@ export function TransactionList({
                   categories={categories}
                   onEdit={onEdit}
                   onSplit={onSplit}
-                  onRequestDelete={setDeleteTarget}
+                  onDelete={onDelete}
                   selectMode={selectMode}
                   isSelected={selectedIds?.has(t.id)}
                   onToggleSelect={onToggleSelect}
@@ -313,24 +308,6 @@ export function TransactionList({
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Delete confirmation */}
-      <Modal
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="Delete Transaction"
-        description={`Delete transaction "${deleteTarget?.merchant || deleteTarget?.description || 'Untitled'}" for ${deleteTarget ? formatMYR(deleteTarget.amount) : ''}?`}
-      >
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleConfirmDelete}>
-            Delete
-          </Button>
-        </div>
-      </Modal>
-    </>
+    </div>
   )
 }

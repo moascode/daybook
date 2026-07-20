@@ -204,6 +204,89 @@ test('re-checking header toggle restores original row count', async () => {
   await expect(page.getByText('4 rows')).toBeVisible()
 })
 
+// ── Type-filtered category options (§2.5) ────────────────────────────────
+
+test('review category options are filtered by each row type', async ({ browser }) => {
+  // Isolated fresh user so the CSV rows aren't duplicates (which would disable
+  // the row controls) — the shared `page` already imported this fixture.
+  const isoPage = await newAppPage(browser, '/wallet/accounts')
+  await isoPage.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(isoPage, { name: 'Filter Account', type: 'bank' })
+
+  await isoPage.getByRole('link', { name: 'Import CSV' }).click()
+  await expect(isoPage.getByRole('heading', { name: 'Import from CSV' })).toBeVisible()
+  const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
+  await isoPage.evaluate(async (content) => {
+    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
+    await window.__testCsvFileSelect(file)
+  }, csvContent)
+  await expect(isoPage.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await isoPage.getByRole('button', { name: /Review Rows/ }).click()
+  await expect(isoPage.getByText('Review Import')).toBeVisible()
+
+  // Positive amounts parse as income → the category select offers income
+  // categories, never an expense-only one.
+  const firstRow = isoPage.locator('tbody tr').first()
+  const categorySelect = firstRow.locator('select').last()
+  await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(1)
+  await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(0)
+
+  // Flip the row to Expense → the options swap: an income category can no
+  // longer be attached to an expense row.
+  await firstRow.locator('select').first().selectOption('expense')
+  await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(1)
+  await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(0)
+
+  await isoPage.context().close()
+})
+
+// ── Shared-account write permission on import (§2.4) ──────────────────────
+
+test('CSV import respects shared-account write permission', async ({ browser }) => {
+  const aliceCtx = await browser.newContext()
+  const bobCtx = await browser.newContext()
+  const alice = await aliceCtx.newPage()
+  const bob = await bobCtx.newPage()
+  const ts = Date.now()
+  const aliceName = `alice_csv_${ts}`
+  const bobName = `bob_csv_${ts}`
+  const API = 'http://localhost:5173/api'
+
+  await alice.request.post(`${API}/auth/signup`, { data: { username: aliceName, password: 'test-password' } })
+  await bob.request.post(`${API}/auth/signup`, { data: { username: bobName, password: 'test-password' } })
+
+  // Group with Bob as a member.
+  const group = await (await alice.request.post(`${API}/groups`, { data: { name: 'CsvGroup' } })).json()
+  await alice.request.post(`${API}/groups/${group.id}/invites`, { data: { username: bobName } })
+  const invites = await (await bob.request.get(`${API}/invites`)).json()
+  await bob.request.post(`${API}/invites/${invites[0].id}/accept`)
+
+  // Alice shares one writable account and one read-only account with the group.
+  const mkAccount = async (name: string) =>
+    (await alice.request.post(`${API}/accounts`, {
+      data: { name, type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    })).json()
+  const writable = await mkAccount('Writable Shared')
+  const readonly = await mkAccount('ReadOnly Shared')
+  await alice.request.post(`${API}/accounts/${writable.id}/shares`, { data: { groupId: group.id, canWrite: true } })
+  await alice.request.post(`${API}/accounts/${readonly.id}/shares`, { data: { groupId: group.id, canWrite: false } })
+
+  // Bob imports into the writable shared account → allowed.
+  const okRes = await bob.request.post(`${API}/transactions/import`, {
+    data: [{ accountId: writable.id, date: '2026-02-01', merchant: 'Shared Buy', amount: 12.5, type: 'expense', categoryId: null }],
+  })
+  expect(okRes.status()).toBe(201)
+
+  // Bob imports into the read-only shared account → still refused.
+  const denyRes = await bob.request.post(`${API}/transactions/import`, {
+    data: [{ accountId: readonly.id, date: '2026-02-01', merchant: 'Nope', amount: 5, type: 'expense', categoryId: null }],
+  })
+  expect(denyRes.status()).toBe(403)
+
+  await aliceCtx.close()
+  await bobCtx.close()
+})
+
 // ── No-account guard ────────────────────────────────────────────────────
 
 test('CSV import shows no-account warning when user has no accounts', async ({ browser }) => {

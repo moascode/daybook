@@ -523,9 +523,21 @@ walletRouter.post('/transactions/import', (req, res) => {
     const err = transactionInputError(items[i])
     if (err) return res.status(400).json({ error: `row ${i + 1}: ${err}` })
   }
-  for (const b of items) {
-    if (!ownsAllRefs(db, userId, [['accounts', b.accountId], ['accounts', b.destinationAccountId], ['categories', b.categoryId]])) {
-      return res.status(400).json({ error: 'invalid account or category reference' })
+  // Match manual add (POST /transactions): importing into a writable shared-in
+  // account is allowed, not just own accounts. Category must still be owned and
+  // any destination account must be visible — per-user scoping is preserved.
+  const visible = visibleAccountIds(db, userId)
+  for (let i = 0; i < items.length; i++) {
+    const b = items[i]
+    const accountId = String(b.accountId ?? '')
+    if (!accountId || !canWriteAccount(db, userId, accountId)) {
+      return res.status(403).json({ error: `row ${i + 1}: no write permission on this account` })
+    }
+    if (!ownsAllRefs(db, userId, [['categories', b.categoryId]])) {
+      return res.status(400).json({ error: `row ${i + 1}: invalid category reference` })
+    }
+    if (b.destinationAccountId && !visible.includes(String(b.destinationAccountId))) {
+      return res.status(400).json({ error: `row ${i + 1}: invalid destination account reference` })
     }
   }
   const insertMany = db.transaction((rows: Record<string, unknown>[]) =>
