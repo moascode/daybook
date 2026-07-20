@@ -20,8 +20,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Side Account', type: 'bank' })
   await page.goto('/wallet')
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
 })
 
 test.afterAll(async () => {

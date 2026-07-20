@@ -12,14 +12,20 @@ test.describe.configure({ mode: 'serial' })
 
 let page: Page
 
+/** Open the collapsible Filters section of the §6.4 bar if it isn't already. */
+async function ensureFiltersOpen() {
+  if (!(await page.getByTestId('filter-panel').isVisible())) {
+    await page.getByTestId('filter-toggle').click()
+  }
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Export Account', type: 'cash' })
   await page.goto('/wallet')
   // Clear date filters so our dated transactions are always visible
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
   await page.getByRole('button', { name: 'Add Transaction' }).click()
   await fillTransactionForm(page, {
     type: 'Expense',
@@ -45,8 +51,7 @@ test.afterAll(async () => {
 
 test('Export button is visible on the wallet transactions page', async () => {
   await page.goto('/wallet')
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByRole('button', { name: /Export/i })).toBeVisible()
 })
 
@@ -179,6 +184,7 @@ test('exporting with only one transaction selected produces a file with that tra
 
 test('export modal only shows transactions matching the active type filter', async () => {
   // Apply "Expense" type filter
+  await ensureFiltersOpen()
   await page.getByLabel('Type').selectOption('expense')
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
@@ -205,6 +211,7 @@ async function downloadContent(testid: string): Promise<string> {
 }
 
 test('exported file with an active type filter contains only matching rows', async () => {
+  await ensureFiltersOpen()
   await page.getByLabel('Type').selectOption('expense')
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
@@ -264,8 +271,7 @@ test('exported rows match the on-screen selection when shared-in rows are select
 
   // Main user: all three rows visible (2 own + 1 shared-in), all pre-selected.
   await page.goto('/wallet')
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByText('Shared Spend')).toBeVisible()
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()

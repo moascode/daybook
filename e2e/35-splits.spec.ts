@@ -68,9 +68,10 @@ test.describe('35 — Transaction splits', () => {
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 10_000 })
     await expect(alicePage.getByText('owes you')).toBeVisible({ timeout: 5000 })
 
-    // Bob's view: Shared with me filter
+    // Bob's view: Shared with me filter (a Sharing pill inside the Filters section)
     await bobPage.goto('/wallet')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 15_000 })
+    await bobPage.getByTestId('filter-toggle').click()
     await bobPage.getByRole('button', { name: 'Shared with me' }).click()
     // Bob should see the Groceries transaction in his shared view
     await expect(bobPage.getByText('Groceries')).toBeVisible({ timeout: 5000 })

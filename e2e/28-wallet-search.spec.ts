@@ -30,8 +30,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await fillAccountForm(page, { name: 'Search Account', type: 'cash' })
   await page.goto('/wallet')
   // Clear date filters so all seeded transactions are visible
-  await page.getByLabel('From').fill('')
-  await page.getByLabel('To').fill('')
+  await page.getByTestId('filter-clear-dates').click()
 
   await page.getByRole('button', { name: 'Add Transaction' }).click()
   await fillTransactionForm(page, {
@@ -101,6 +100,8 @@ test('search combines with the type filter', async () => {
   await expect(transactionRowFor(page, 'Starbucks Coffee')).toBeVisible()
   await expect(transactionRowFor(page, 'Starlight Studio')).toBeVisible()
 
+  // The Type filter lives in the collapsible Filters section
+  await page.getByTestId('filter-toggle').click()
   await page.getByLabel('Type').selectOption('income')
   await expect(transactionRowFor(page, 'Starlight Studio')).toBeVisible()
   await expect(transactionRowFor(page, 'Starbucks Coffee')).not.toBeVisible()

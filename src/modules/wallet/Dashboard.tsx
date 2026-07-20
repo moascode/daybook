@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { formatMYR, formatAxisMYR, monthRange, POSITIVE_MONEY_COLOR } from '@/lib/utils'
+import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { LayoutDashboard, TrendingUp, TrendingDown, ArrowUpDown, Bell, X } from 'lucide-react'
@@ -21,8 +22,6 @@ import {
   Cell,
 } from 'recharts'
 import type { Transaction } from '@/types/wallet.types'
-
-type DateRange = 'this-month' | 'last-month'
 
 interface WeeklyData {
   week: string
@@ -65,14 +64,11 @@ function saveDismissed(ids: Set<string>) {
 export function Dashboard() {
   const { loadTransactions, loadCategories, loadAccounts, loadRecurringTransactions, accounts, categories, recurringTransactions } = useWallet()
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [dateRange, setDateRange] = useState<DateRange>('this-month')
+  const [range, setRange] = useState<DateRangeValue>(() => monthRange(0))
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
-  const { dateFrom, dateTo } = useMemo(
-    () => monthRange(dateRange === 'last-month' ? -1 : 0),
-    [dateRange],
-  )
+  const { dateFrom, dateTo } = range
 
   useEffect(() => {
     loadAccounts()
@@ -216,21 +212,11 @@ export function Dashboard() {
           view. Custom ranges and historical comparison live on the Reports
           page (linked below) so the two pages don't duplicate each other. */}
       <div className="flex items-center justify-between gap-3">
-        <div className="flex rounded-lg border border-gray-200 bg-white">
-          {(['this-month', 'last-month'] as const).map((range) => (
-            <button
-              key={range}
-              onClick={() => setDateRange(range)}
-              className={`px-3 py-1.5 text-sm font-medium transition-colors first:rounded-l-lg last:rounded-r-lg ${
-                dateRange === range
-                  ? 'bg-brand-500 text-white'
-                  : 'text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {range === 'this-month' ? 'This Month' : 'Last Month'}
-            </button>
-          ))}
-        </div>
+        <DateRangeControl
+          value={range}
+          onChange={setRange}
+          presets={['this-month', 'last-month']}
+        />
         <Link
           to="/wallet/reports"
           className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
