@@ -27,33 +27,51 @@ interface SettleUpDialogProps {
  * account is chosen).
  */
 export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onClose, onSettled }: SettleUpDialogProps) {
-  const [form, setForm] = useState({ fromAccountId: '', toAccountId: '', amount: '', note: '' })
+  const [form, setForm] = useState({ myAccountId: '', theirAccountId: '', amount: '', note: '' })
   const [settling, setSettling] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     if (balance) {
       setError(null) // eslint-disable-line react-hooks/set-state-in-effect
-      setForm({ fromAccountId: '', toAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
+      setNotice(null)
+      setForm({ myAccountId: '', theirAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
     }
   }, [balance])
 
-  // B-13: only own accounts (not shared-in) on the payer side
+  // balance semantics: fromUserId owes toUserId. Direction from the caller's view:
+  const iAmCreditor = !!balance && balance.toUserId === currentUserId
+  const counterpartyUsername = balance ? (iAmCreditor ? balance.fromUsername : balance.toUsername) : ''
+
+  // Only my own accounts on my side; the counterparty's shared-in accounts on theirs.
   const myAccounts = accounts.filter((a) => !a.isShared)
+  const theirAccounts = accounts.filter((a) => a.isShared && a.sharedByUsername === counterpartyUsername)
 
   const handleSettle = async () => {
     if (!balance) return
     setSettling(true)
     setError(null)
     try {
-      await api.post('/settlements', {
+      // The debtor-side leg is an expense on fromAccountId; the creditor-side leg
+      // is an income on toAccountId. Map "my"/"their" account onto those roles by
+      // direction, and tell the server who the debtor is (B-01).
+      const fromAccountId = iAmCreditor ? form.theirAccountId : form.myAccountId
+      const toAccountId = iAmCreditor ? form.myAccountId : form.theirAccountId
+      const res = await api.post<{ id: string; message?: string }>('/settlements', {
         groupId,
-        toUserId: balance.toUserId,
+        ...(iAmCreditor ? { fromUserId: balance.fromUserId } : { toUserId: balance.toUserId }),
         amount: Number(form.amount),
         note: form.note,
-        fromAccountId: form.fromAccountId,
-        toAccountId: form.toAccountId || undefined,
+        fromAccountId: fromAccountId || undefined,
+        toAccountId: toAccountId || undefined,
       })
+      // B-18: surface a capped-amount notice; the settlement is already recorded.
+      if (res?.message) {
+        setNotice(res.message)
+        setSettling(false)
+        return
+      }
       onSettled()
     } catch (err: unknown) {
       setError((err as Error)?.message ?? 'Failed to record settlement')
@@ -68,9 +86,9 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
     <Modal open={!!balance} onOpenChange={onClose} title="Settle Up">
       <div className="space-y-4">
         <p className="text-sm text-gray-700">
-          {balance.toUserId === currentUserId
-            ? <>Recording receipt from <strong>{balance.fromUsername}</strong></>
-            : <>Recording payment to <strong>{balance.toUsername}</strong></>
+          {iAmCreditor
+            ? <>Recording that <strong>{balance.fromUsername}</strong> paid you</>
+            : <>Recording your payment to <strong>{balance.toUsername}</strong></>
           }
         </p>
         <div>
@@ -81,42 +99,39 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
             value={form.amount}
             onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
           />
+          <p className="mt-1 text-xs text-gray-400">Pay less than the full amount to settle part of it.</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">From account (your side)</label>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            {iAmCreditor ? 'Deposit into (your account)' : 'Pay from (your account)'}
+          </label>
           <select
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.fromAccountId}
-            onChange={(e) => setForm((f) => ({ ...f, fromAccountId: e.target.value }))}
+            value={form.myAccountId}
+            onChange={(e) => setForm((f) => ({ ...f, myAccountId: e.target.value }))}
           >
             <option value="">— select account —</option>
             {myAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
         </div>
-        {/* U-4: their account — show shared accounts from counterparty if any */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">To account (their side — optional)</label>
-          {(() => {
-            const targetUsername = balance.toUserId === currentUserId
-              ? balance.fromUsername
-              : balance.toUsername
-            const theirAccounts = accounts.filter(
-              (a) => a.isShared && a.sharedByUsername === targetUsername
-            )
-            if (theirAccounts.length === 0) {
-              return <p className="text-xs text-gray-400">No shared accounts available from {targetUsername}.</p>
-            }
-            return (
-              <select
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                value={form.toAccountId}
-                onChange={(e) => setForm((f) => ({ ...f, toAccountId: e.target.value }))}
-              >
-                <option value="">— leave blank (records payer side only) —</option>
-                {theirAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            )
-          })()}
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            {counterpartyUsername}&rsquo;s account (optional)
+          </label>
+          {theirAccounts.length === 0 ? (
+            <p className="text-xs text-gray-400">
+              No shared accounts from {counterpartyUsername}. Only your side will be recorded.
+            </p>
+          ) : (
+            <select
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+              value={form.theirAccountId}
+              onChange={(e) => setForm((f) => ({ ...f, theirAccountId: e.target.value }))}
+            >
+              <option value="">— leave blank (records your side only) —</option>
+              {theirAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          )}
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Note (optional)</label>
@@ -127,15 +142,24 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
           />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={handleSettle}
-            disabled={settling || !form.fromAccountId || !form.amount}
-          >
-            {settling ? 'Recording…' : 'Record Settlement'}
-          </Button>
-        </div>
+        {notice ? (
+          <>
+            <p className="text-sm text-amber-700">{notice}</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button onClick={onSettled}>Done</Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button
+              onClick={handleSettle}
+              disabled={settling || !form.myAccountId || !form.amount}
+            >
+              {settling ? 'Recording…' : 'Record Settlement'}
+            </Button>
+          </div>
+        )}
       </div>
     </Modal>
   )
