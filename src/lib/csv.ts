@@ -275,21 +275,23 @@ export function parseDateToISO(dateStr: string): string {
     return trimmed
   }
 
-  // DD/MM/YYYY
-  const ddmmyyyy = trimmed.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
-  if (ddmmyyyy) {
-    const [, day, month, year] = ddmmyyyy
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-  }
-
-  // MM/DD/YYYY (American format — less common in MY)
-  const mmddyyyy = trimmed.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
-  if (mmddyyyy) {
-    const [, month, day, year] = mmddyyyy
-    // If first number > 12, it's likely DD/MM/YYYY which we already handled
-    if (parseInt(month) > 12) {
-      return `${year}-${day.padStart(2, '0')}-${month.padStart(2, '0')}`
+  // DD/MM/YYYY or MM/DD/YYYY — disambiguate per row (B-13). A component > 12 can
+  // only be the day; when both are ≤ 12 the format is ambiguous, so default to
+  // DD/MM (the Malaysian convention). This also stops 12/31/2025 from producing
+  // an invalid "2025-31-12" that fails the whole atomic import.
+  const dmy = trimmed.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/)
+  if (dmy) {
+    const [, a, b, year] = dmy
+    const first = parseInt(a, 10)
+    const second = parseInt(b, 10)
+    let day = a
+    let month = b
+    if (first <= 12 && second > 12) {
+      // second component must be the day → MM/DD
+      day = b
+      month = a
     }
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
   }
 
   // YYYY/MM/DD
@@ -317,25 +319,32 @@ export function parseDateToISO(dateStr: string): string {
 export function parseAmount(amountStr: string): { amount: number; isNegative: boolean } {
   const trimmed = amountStr.trim()
 
-  // Remove currency symbols and whitespace
-  const cleaned = trimmed.replace(/[^\d.,-]/g, '')
+  // Sign can be leading (-12), trailing (12- — common in bank exports, B-14), or
+  // parenthesised ((12)). Detect all three before stripping non-numeric chars.
+  const inParens = /\(([^)]+)\)/.test(trimmed)
+  const leadingMinus = /^\s*-/.test(trimmed)
+  const trailingMinus = /-\s*$/.test(trimmed)
+  const isNegative = inParens || leadingMinus || trailingMinus
 
-  // Handle parentheses for negative: (123.45) → -123.45
-  const inParens = trimmed.match(/\(([^)]+)\)/)
-  if (inParens) {
-    const val = parseFloat(inParens[1].replace(/[^\d.]/g, ''))
-    return { amount: Math.abs(val), isNegative: true }
+  // Keep only digits and separators, then figure out which separator is the
+  // decimal point (B-14). A trailing "[.,]dd" (1–2 digits) is the decimal; every
+  // other separator is a thousands group. This makes both "1,234.56" and the
+  // European "1.234,56" parse to 1234.56 instead of 1.23456.
+  let s = trimmed.replace(/[^\d.,]/g, '')
+  const decimal = s.match(/[.,](\d{1,2})$/)
+  if (decimal) {
+    const sepIdx = s.length - decimal[0].length
+    const intPart = s.slice(0, sepIdx).replace(/[.,]/g, '')
+    s = `${intPart}.${decimal[1]}`
+  } else {
+    s = s.replace(/[.,]/g, '')
   }
 
-  // Handle negative sign
-  const isNegative = cleaned.startsWith('-')
-  const val = parseFloat(cleaned.replace(/[,-]/g, (match) => match === ',' ? '' : match))
-
+  const val = parseFloat(s)
   if (isNaN(val)) {
     return { amount: 0, isNegative: false }
   }
-
-  return { amount: Math.abs(val), isNegative: isNegative || val < 0 }
+  return { amount: Math.abs(val), isNegative }
 }
 
 // ── Build import rows from parsed CSV ───────────────

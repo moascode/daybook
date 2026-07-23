@@ -352,7 +352,16 @@ export function useWallet() {
   const deleteAccount = useCallback(async (id: string): Promise<void> => {
     // CASCADE will delete transactions automatically
     await api.delete(`/accounts/${id}`)
-    useWalletStore.getState().removeAccount(id)
+    const s = useWalletStore.getState()
+    s.removeAccount(id)
+    // B-17: mirror the DB cascade so store-derived summaries don't count ghost
+    // rows before the next fetch — drop this account's transactions, and null
+    // out any transfer that pointed at it (destination_account_id ON DELETE SET NULL).
+    s.setTransactions(
+      s.transactions
+        .filter((t) => t.accountId !== id)
+        .map((t) => (t.destinationAccountId === id ? { ...t, destinationAccountId: null } : t)),
+    )
   }, [])
 
   // ── Transaction CRUD ────────────────────────────
