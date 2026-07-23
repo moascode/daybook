@@ -32,7 +32,7 @@ test('navigate to Import CSV tab', async () => {
   await expect(page).toHaveURL(/\/wallet\/import$/)
   await page.waitForLoadState('networkidle')
   // Wait for the heading to render
-  await expect(page.getByRole('heading', { name: 'Import from CSV' })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
 })
 
 test('upload step shows a drop zone and Choose File button', async () => {
@@ -97,10 +97,13 @@ test('review table shows all 4 rows from the CSV', async () => {
 })
 
 test('review table shows the CSV rows with correct merchants', async () => {
-  await expect(page.getByText('Grab Food')).toBeVisible()
-  await expect(page.getByText('Petron')).toBeVisible()
-  await expect(page.getByText('Giant Supermarket')).toBeVisible()
-  await expect(page.getByText('Netflix')).toBeVisible()
+  // Merchant is now an editable input (U-14), so assert on the input values.
+  const merchantInputs = page.getByRole('textbox', { name: /^Merchant for row/ })
+  await expect(merchantInputs).toHaveCount(4)
+  const values = await merchantInputs.evaluateAll((els) =>
+    els.map((e) => (e as HTMLInputElement).value).sort(),
+  )
+  expect(values).toEqual(['Giant Supermarket', 'Grab Food', 'Netflix', 'Petron'])
 })
 
 test('review table has checkboxes (included column)', async () => {
@@ -214,7 +217,7 @@ test('review category options are filtered by each row type', async ({ browser }
   await fillAccountForm(isoPage, { name: 'Filter Account', type: 'bank' })
 
   await isoPage.getByRole('link', { name: 'Import CSV' }).click()
-  await expect(isoPage.getByRole('heading', { name: 'Import from CSV' })).toBeVisible()
+  await expect(isoPage.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
   const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
   await isoPage.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })

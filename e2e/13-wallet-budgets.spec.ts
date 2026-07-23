@@ -32,7 +32,7 @@ test('wallet navigation contains a "Budgets" link', async () => {
 test('navigating to /wallet/budgets shows the Budgets page', async () => {
   await page.goto('/wallet/budgets')
   await expect(page).toHaveURL(/\/wallet\/budgets$/)
-  await expect(page.locator('main').getByRole('heading', { name: /Budgets/i })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Budgets', exact: true })).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────

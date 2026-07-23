@@ -176,7 +176,7 @@ export function CsvImport() {
       {step === 'upload' && (
         <>
           <div className="mb-5">
-            <h2 className="text-base font-semibold text-gray-900">Import from CSV</h2>
+            <h2 className="text-base font-semibold text-gray-900">Import CSV</h2>
             <p className="text-xs text-gray-500 mt-0.5">Bank statements, transaction exports (.csv)</p>
           </div>
 
