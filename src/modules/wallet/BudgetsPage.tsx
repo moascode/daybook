@@ -23,6 +23,8 @@ export function BudgetsPage() {
 
   const crud = useCrudModal<Budget>()
   const [form, setForm] = useState<BudgetFormData>({ categoryId: '', limitAmount: '' })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     loadCategories()
@@ -43,17 +45,23 @@ export function BudgetsPage() {
 
   const openCreate = useCallback(() => {
     setForm({ categoryId: '', limitAmount: '' })
+    setFormError(null)
     crud.openCreate()
   }, [crud])
 
   const openEdit = useCallback((budget: Budget) => {
     setForm({ categoryId: budget.categoryId, limitAmount: String(budget.limitAmount) })
+    setFormError(null)
     crud.openEdit(budget)
   }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const limit = parseFloat(form.limitAmount)
-    if (!form.categoryId || isNaN(limit) || limit <= 0) return
+    // U-04: tell the user why the form won't submit instead of doing nothing.
+    if (!form.categoryId) { setFormError('Choose a category.'); return }
+    if (isNaN(limit) || limit <= 0) { setFormError('Enter a limit greater than 0.'); return }
+    setFormError(null)
+    setSaving(true)
     try {
       if (crud.editingItem) {
         await updateBudget(crud.editingItem.id, { limitAmount: limit })
@@ -63,6 +71,8 @@ export function BudgetsPage() {
       crud.closeForm(false)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save budget — please try again.'), duration: 4000 })
+    } finally {
+      setSaving(false)
     }
   }, [form, crud, addBudget, updateBudget, addToast])
 
@@ -208,11 +218,12 @@ export function BudgetsPage() {
           <p className="-mt-1 text-xs text-gray-500">
             Budgets reset <span className="font-medium text-gray-700">monthly</span>.
           </p>
+          {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSubmit}>
+            <Button size="sm" onClick={handleSubmit} loading={saving}>
               {crud.editingItem ? 'Save Changes' : 'Create Budget'}
             </Button>
           </div>
