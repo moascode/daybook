@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, PieChart, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Select } from '@/components/ui/Select'
@@ -123,13 +124,10 @@ export function BudgetsPage() {
                         {category?.name ?? 'Unknown'}
                       </span>
                       {isOver && (
-                        <span
-                          data-testid="over-budget-alert"
-                          className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
-                        >
+                        <Badge variant="danger" className="gap-1" data-testid="over-budget-alert">
                           <AlertTriangle className="h-3 w-3" />
                           Over budget
-                        </span>
+                        </Badge>
                       )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
@@ -157,20 +155,24 @@ export function BudgetsPage() {
                   </div>
                   {/* Actions */}
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
                       onClick={() => openEdit(budget)}
-                      aria-label="Edit"
+                      aria-label={`Edit ${category?.name ?? 'budget'} budget`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
                       onClick={() => crud.openDelete(budget.id)}
-                      aria-label="Delete"
+                      aria-label={`Delete ${category?.name ?? 'budget'} budget`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>

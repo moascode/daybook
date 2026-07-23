@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Target, Plus } from 'lucide-react'
+import { Target, Plus, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
@@ -115,18 +115,24 @@ export function GoalsPage() {
                     {account && <p className="text-xs text-gray-500 mt-0.5">{account.name}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
                       onClick={() => openEdit(goal)}
+                      aria-label={`Edit ${goal.name}`}
                     >
-                      Edit
-                    </button>
-                    <button
-                      className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
                       onClick={() => crud.openDelete(goal.id)}
+                      aria-label={`Delete ${goal.name}`}
                     >
-                      Delete
-                    </button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
 
