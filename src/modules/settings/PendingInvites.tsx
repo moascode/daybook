@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
 import { useHouseholdStore } from '@/stores/household.store'
+import { useToastStore } from '@/stores/toast.store'
 import type { GroupInvite } from '@/types/household.types'
 
 export function PendingInvites({ invites, onRefresh }: { invites: GroupInvite[]; onRefresh: () => void }) {
   const [acting, setActing] = useState<string | null>(null)
   const { removePendingInvite } = useHouseholdStore()
+  const addToast = useToastStore((s) => s.addToast)
 
   const handle = async (id: string, action: 'accept' | 'decline') => {
     setActing(id)
@@ -15,6 +18,8 @@ export function PendingInvites({ invites, onRefresh }: { invites: GroupInvite[];
       await api.post(`/invites/${id}/${action}`)
       removePendingInvite(id) // C-7: optimistic update
       onRefresh()
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, `Could not ${action} the invitation — please try again.`) })
     } finally {
       setActing(null)
     }

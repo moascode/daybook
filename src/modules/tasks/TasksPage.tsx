@@ -195,8 +195,12 @@ export function TasksPage() {
       const allTasks = useTasksStore.getState().tasks
       const task = allTasks.find((t) => t.id === id)
       if (!task) return
-      const newTask = await addTask('', task.parentId, id)
-      setFocusId(newTask.id)
+      try {
+        const newTask = await addTask('', task.parentId, id)
+        setFocusId(newTask.id)
+      } catch {
+        // addTask already surfaced the error and reconciled the store.
+      }
     },
     [addTask],
   )
@@ -245,8 +249,12 @@ export function TasksPage() {
   )
 
   const handleAddRootTask = useCallback(async () => {
-    const newTask = await addTask('', rootId)
-    setFocusId(newTask.id)
+    try {
+      const newTask = await addTask('', rootId)
+      setFocusId(newTask.id)
+    } catch {
+      // addTask already surfaced the error and reconciled the store.
+    }
   }, [addTask, rootId])
 
   const handleSaveAsTemplate = useCallback((task: Task) => {
@@ -274,9 +282,13 @@ export function TasksPage() {
   const handleApplyTemplate = useCallback(async () => {
     const tpl = templates.find((t) => t.id === selectedTemplateId)
     if (!tpl) return
-    const newTask = await applyTemplate(tpl, rootId)
-    setFocusId(newTask.id)
-    setTemplatesDialogOpen(false)
+    try {
+      const newTask = await applyTemplate(tpl, rootId)
+      setFocusId(newTask.id)
+      setTemplatesDialogOpen(false)
+    } catch {
+      // applyTemplate already surfaced the error and reconciled the store.
+    }
   }, [templates, selectedTemplateId, applyTemplate, rootId])
 
   const handleDeleteTemplate = useCallback(async (id: string) => {

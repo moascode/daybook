@@ -149,6 +149,8 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     await alicePage.getByRole('heading', { name: 'RemoveGroup' }).click()
     await expect(alicePage.getByText(bobName)).toBeVisible({ timeout: 5000 })
     await alicePage.getByRole('button', { name: 'Remove member' }).click()
+    // CD-01: confirm the removal in the dialog
+    await alicePage.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
     await expect(alicePage.getByText(bobName)).not.toBeVisible({ timeout: 5000 })
 
     await aliceCtx.close()
@@ -175,11 +177,11 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
 
     await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // Click delete group button
+    // Click delete group button (trash icon)
     await alicePage.getByRole('button', { name: 'Delete group' }).click()
-    // Confirm deletion
-    await alicePage.getByRole('button', { name: 'Delete Group' }).click()
-    // Should see an error (alert or inline), group should still be visible
+    // Confirm deletion in the dialog
+    await alicePage.getByRole('dialog').getByRole('button', { name: 'Delete group' }).click()
+    // Server rejects (shared account present) → toast + group still visible
     await expect(alicePage.getByRole('heading', { name: 'DelGroup' })).toBeVisible({ timeout: 5000 })
 
     await aliceCtx.close()
@@ -210,6 +212,8 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
     await bobPage.getByRole('heading', { name: 'LeaveGroup' }).click()
     await bobPage.getByRole('button', { name: 'Leave group' }).click()
+    // CD-01: confirm leaving in the dialog
+    await bobPage.getByRole('dialog').getByRole('button', { name: 'Leave' }).click()
     // Group should no longer appear for Bob
     await expect(bobPage.getByRole('heading', { name: 'LeaveGroup' })).not.toBeVisible({ timeout: 5000 })
 

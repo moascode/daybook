@@ -1,7 +1,24 @@
 import { useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useTasksStore } from '@/stores/tasks.store'
+import { useToastStore } from '@/stores/toast.store'
+import { errorMessage } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
+
+/**
+ * The Tasks store updates optimistically, so a failed server write would
+ * otherwise vanish silently on the next refresh (U-01). Surface the failure and
+ * reconcile the store with server truth so the UI never lies about what saved.
+ */
+async function reportAndReconcile(err: unknown): Promise<void> {
+  useToastStore.getState().addToast({ message: errorMessage(err, 'Could not save your change — please try again.') })
+  try {
+    const rows = await api.get<TaskRow[]>('/tasks')
+    useTasksStore.getState().setTasks(rows.map(rowToTask))
+  } catch {
+    // If even the reload fails, leave the store as-is; the toast already warned.
+  }
+}
 
 const ROOT_ID_KEY = 'daybook.rootId'
 
@@ -139,7 +156,13 @@ export function useTasks() {
 
       const sortOrder = computeSortOrder(siblings, afterId)
 
-      const row = await api.post<TaskRow | null>('/tasks', { parentId, content, sortOrder })
+      let row: TaskRow | null
+      try {
+        row = await api.post<TaskRow | null>('/tasks', { parentId, content, sortOrder })
+      } catch (err) {
+        await reportAndReconcile(err)
+        throw err
+      }
       // The server returns null only on an id conflict (ON CONFLICT DO NOTHING);
       // a fresh create never sends an id, so this is defensive.
       if (!row) throw new Error('Failed to create task')
@@ -161,7 +184,13 @@ export function useTasks() {
         Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>
       >,
     ) => {
-      const row = await api.patch<TaskRow>(`/tasks/${id}`, updates)
+      let row: TaskRow
+      try {
+        row = await api.patch<TaskRow>(`/tasks/${id}`, updates)
+      } catch (err) {
+        await reportAndReconcile(err)
+        return
+      }
 
       useTasksStore.getState().updateTask(id, {
         ...updates,
@@ -192,7 +221,13 @@ export function useTasks() {
       }
     }, 5000)
 
-    await api.delete(`/tasks/${id}`)
+    try {
+      await api.delete(`/tasks/${id}`)
+    } catch (err) {
+      useTasksStore.getState().setLastDeleted(null)
+      await reportAndReconcile(err)
+      return
+    }
 
     const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
     useTasksStore.getState().setTasks(remaining)
@@ -228,10 +263,16 @@ export function useTasks() {
   /** Move a task to a new parent and/or sort position (for DnD). */
   const moveTask = useCallback(
     async (id: string, newParentId: string | null, newSortOrder: number) => {
-      const row = await api.patch<TaskRow>(`/tasks/${id}`, {
-        parentId: newParentId,
-        sortOrder: newSortOrder,
-      })
+      let row: TaskRow
+      try {
+        row = await api.patch<TaskRow>(`/tasks/${id}`, {
+          parentId: newParentId,
+          sortOrder: newSortOrder,
+        })
+      } catch (err) {
+        await reportAndReconcile(err)
+        return
+      }
 
       useTasksStore.getState().updateTask(id, {
         parentId: newParentId,

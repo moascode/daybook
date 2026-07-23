@@ -31,30 +31,37 @@ export function SharedPage() {
   const [historyByGroup, setHistoryByGroup] = useState<Record<string, Settlement[]>>({})
   const [accounts, setAccounts] = useState<SettleAccount[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [settleTarget, setSettleTarget] = useState<{ groupId: string; balance: GroupBalance } | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
-    const [groupRows, accountRows] = await Promise.all([
-      api.get<Record<string, unknown>[]>('/groups'),
-      api.get<SettleAccount[]>('/accounts'),
-    ])
-    const mapped = groupRows.map(mapGroup)
-    const results = await Promise.all(
-      mapped.map(async (g) => {
-        const [bal, hist] = await Promise.all([
-          api.get<GroupBalance[]>(`/groups/${g.id}/balances`),
-          api.get<Record<string, unknown>[]>(`/settlements?groupId=${g.id}`),
-        ])
-        return { id: g.id, balances: bal, history: hist.map(mapSettlement) }
-      }),
-    )
-    setGroups(mapped)
-    setAccounts(accountRows)
-    setBalancesByGroup(Object.fromEntries(results.map((r) => [r.id, r.balances])))
-    setHistoryByGroup(Object.fromEntries(results.map((r) => [r.id, r.history])))
-    setLoading(false)
+    setLoadError(false)
+    try {
+      const [groupRows, accountRows] = await Promise.all([
+        api.get<Record<string, unknown>[]>('/groups'),
+        api.get<SettleAccount[]>('/accounts'),
+      ])
+      const mapped = groupRows.map(mapGroup)
+      const results = await Promise.all(
+        mapped.map(async (g) => {
+          const [bal, hist] = await Promise.all([
+            api.get<GroupBalance[]>(`/groups/${g.id}/balances`),
+            api.get<Record<string, unknown>[]>(`/settlements?groupId=${g.id}`),
+          ])
+          return { id: g.id, balances: bal, history: hist.map(mapSettlement) }
+        }),
+      )
+      setGroups(mapped)
+      setAccounts(accountRows)
+      setBalancesByGroup(Object.fromEntries(results.map((r) => [r.id, r.balances])))
+      setHistoryByGroup(Object.fromEntries(results.map((r) => [r.id, r.history])))
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { loadAll() }, [loadAll]) // eslint-disable-line react-hooks/set-state-in-effect
@@ -86,6 +93,17 @@ export function SharedPage() {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-2xl py-10 text-center">
+        <p className="text-sm text-gray-600">Couldn&rsquo;t load your shared balances.</p>
+        <Button size="sm" variant="secondary" className="mt-3" onClick={() => { setLoading(true); loadAll() }}>
+          Retry
+        </Button>
       </div>
     )
   }
