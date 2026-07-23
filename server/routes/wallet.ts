@@ -525,8 +525,7 @@ walletRouter.post('/transactions/import', (req, res) => {
   }
   // Match manual add (POST /transactions): importing into a writable shared-in
   // account is allowed, not just own accounts. Category must still be owned and
-  // any destination account must be visible — per-user scoping is preserved.
-  const visible = visibleAccountIds(db, userId)
+  // any transfer destination must be writable (B-07) — per-user scoping is preserved.
   for (let i = 0; i < items.length; i++) {
     const b = items[i]
     const accountId = String(b.accountId ?? '')
@@ -536,8 +535,8 @@ walletRouter.post('/transactions/import', (req, res) => {
     if (!ownsAllRefs(db, userId, [['categories', b.categoryId]])) {
       return res.status(400).json({ error: `row ${i + 1}: invalid category reference` })
     }
-    if (b.destinationAccountId && !visible.includes(String(b.destinationAccountId))) {
-      return res.status(400).json({ error: `row ${i + 1}: invalid destination account reference` })
+    if (b.destinationAccountId && !canWriteAccount(db, userId, String(b.destinationAccountId))) {
+      return res.status(400).json({ error: `row ${i + 1}: no write permission on the destination account` })
     }
   }
   const insertMany = db.transaction((rows: Record<string, unknown>[]) =>
@@ -562,12 +561,10 @@ walletRouter.post('/transactions', (req, res) => {
   if (!ownsAllRefs(db, userId, [['categories', b.categoryId]])) {
     return res.status(400).json({ error: 'invalid category reference' })
   }
-  // For transfers, destination account must be visible
-  if (b.destinationAccountId) {
-    const visible = visibleAccountIds(db, userId)
-    if (!visible.includes(String(b.destinationAccountId))) {
-      return res.status(400).json({ error: 'invalid destination account reference' })
-    }
+  // B-07: a transfer moves money INTO the destination, so it needs write
+  // permission there — a read-only shared-in account must not be a target.
+  if (b.destinationAccountId && !canWriteAccount(db, userId, String(b.destinationAccountId))) {
+    return res.status(400).json({ error: 'no write permission on the destination account' })
   }
 
   // When posting to a shared account, the transaction user_id is the caller
@@ -592,6 +589,21 @@ walletRouter.patch('/transactions/:id', (req, res) => {
 
   const inputErr = transactionInputError(b, { partial: true, existing })
   if (inputErr) return res.status(400).json({ error: inputErr })
+
+  // B-03: a moved transaction must land on an account the caller can write —
+  // otherwise a member could re-point their transaction at anyone's account
+  // (draining that balance) since the edit check only covered the OLD account.
+  if ('accountId' in b && String(b.accountId) !== existing.account_id) {
+    if (!canWriteAccount(db, userId, String(b.accountId))) {
+      return res.status(403).json({ error: 'no write permission on the destination account' })
+    }
+  }
+  if ('destinationAccountId' in b && b.destinationAccountId &&
+      String(b.destinationAccountId) !== (existing.destination_account_id ?? '')) {
+    if (!canWriteAccount(db, userId, String(b.destinationAccountId))) {
+      return res.status(400).json({ error: 'no write permission on the destination account' })
+    }
+  }
 
   // Scope updateRow by original owner's user_id
   const refs: Array<[string, unknown]> = []
