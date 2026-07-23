@@ -12,7 +12,7 @@ interface TransactionListProps {
   categories: Category[]
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => void
-  onSplit: (transaction: Transaction) => void
+  onSplit?: (transaction: Transaction) => void
   selectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
@@ -62,7 +62,7 @@ function TransactionRow({
   accounts: Account[]
   categories: Category[]
   onEdit: (t: Transaction) => void
-  onSplit: (t: Transaction) => void
+  onSplit?: (t: Transaction) => void
   onDelete: (t: Transaction) => void
   selectMode?: boolean
   isSelected?: boolean
@@ -207,8 +207,9 @@ function TransactionRow({
           className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* U-6: hide split button on transfer transactions */}
-          {transaction.type !== 'transfer' && (
+          {/* U-6: hide split button on transfers. U-07: and hide it entirely when
+              the user has no household group to split with (onSplit is undefined). */}
+          {transaction.type !== 'transfer' && onSplit && (
             <Button
               variant="ghost"
               size="sm"

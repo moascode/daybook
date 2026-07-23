@@ -605,7 +605,7 @@ export function WalletPage() {
             categories={categories}
             onEdit={openEditForm}
             onDelete={handleDeleteTransaction}
-            onSplit={openShareDialog}
+            onSplit={hasGroups ? openShareDialog : undefined}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}

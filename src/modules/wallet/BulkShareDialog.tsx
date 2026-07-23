@@ -99,7 +99,7 @@ export function BulkShareDialog({
   // Validation mirrors ShareDialog; returns null when the card can be saved.
   const cardError = (c: CardState): string | null => {
     if (c.recipientIds.length === 0) return 'Please select a recipient'
-    if (c.transaction.amount <= 0) return 'Cannot share a zero-amount transaction'
+    if (c.transaction.amount <= 0) return 'Cannot split a zero-amount transaction'
     if (c.mode === 'none' && c.recipientIds.length > 1) return 'Keep as-is shares the full amount with a single recipient'
     if (c.mode === 'custom') {
       const sum = [currentUserId, ...c.recipientIds].reduce(
@@ -185,10 +185,10 @@ export function BulkShareDialog({
                     <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
                   </div>
 
-                  {/* §2.2: existing shares + overwrite warning */}
+                  {/* §2.2: existing split lines + overwrite warning */}
                   {c.existingShares.length > 0 && (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
-                      <p className="text-xs font-medium text-amber-800">Currently shared</p>
+                      <p className="text-xs font-medium text-amber-800">Currently split</p>
                       {c.existingShares.map((s) => (
                         <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
                           <span>{s.userId === currentUserId ? 'You' : s.username}</span>
@@ -198,12 +198,12 @@ export function BulkShareDialog({
                           </span>
                         </div>
                       ))}
-                      <p className="text-xs text-amber-700 pt-1">Saving will replace these shares.</p>
+                      <p className="text-xs text-amber-700 pt-1">Saving will replace this split.</p>
                     </div>
                   )}
 
                   <div>
-                    <p className="text-xs font-medium text-gray-700 mb-2">Share with</p>
+                    <p className="text-xs font-medium text-gray-700 mb-2">Split with</p>
                     <div className="flex flex-wrap gap-2">
                       {groupMembers.map((m) => (
                         <label key={m.userId} className="flex items-center gap-1.5 text-sm text-gray-700">

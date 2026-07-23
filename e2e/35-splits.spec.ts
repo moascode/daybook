@@ -175,7 +175,7 @@ test.describe('35 — Transaction splits', () => {
     // Who-owes-what: both the payer and Bob are listed with their amounts
     await expect(existing.getByText('You')).toBeVisible()
     await expect(existing.getByText(bobName)).toBeVisible()
-    await expect(existing.getByText('Saving will replace these shares.')).toBeVisible()
+    await expect(existing.getByText('Saving will replace this split.')).toBeVisible()
 
     await aliceCtx.close()
     await bobCtx.close()
