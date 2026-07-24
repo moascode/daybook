@@ -22,6 +22,18 @@ async function reportAndReconcile(err: unknown): Promise<void> {
 
 const ROOT_ID_KEY = 'daybook.rootId'
 
+/**
+ * Task ids with a delete in flight. A focused editor's contenteditable div
+ * gets removed from the DOM once its task leaves the store, and removing a
+ * focused element fires a native blur first — which flushes a debounced save
+ * for a task that's already being deleted. Marking the id here synchronously,
+ * before the DELETE request even goes out, closes that race: a store-based
+ * check alone isn't enough, since the store only updates after the DELETE
+ * resolves, leaving a window where a blur-triggered PATCH can still reach the
+ * server and lose the race against the DELETE.
+ */
+const pendingDeletes = new Set<string>()
+
 /** DB row shape — column names match the SQL schema. */
 interface TaskRow {
   id: string
@@ -184,6 +196,11 @@ export function useTasks() {
         Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>
       >,
     ) => {
+      // Nothing to persist for a task that's already gone locally or has a
+      // delete in flight — see the `pendingDeletes` comment above.
+      if (pendingDeletes.has(id)) return
+      if (!useTasksStore.getState().tasks.some((t) => t.id === id)) return
+
       let row: TaskRow
       try {
         row = await api.patch<TaskRow>(`/tasks/${id}`, updates)
@@ -212,6 +229,8 @@ export function useTasks() {
     const idsToRemove = collectDescendantIds(id, allTasks)
     const descendants = allTasks.filter((t) => idsToRemove.has(t.id) && t.id !== id)
 
+    for (const removedId of idsToRemove) pendingDeletes.add(removedId)
+
     // Save snapshot for undo (auto-clears after 5 seconds)
     useTasksStore.getState().setLastDeleted({ task: taskToDelete, descendants })
     setTimeout(() => {
@@ -224,11 +243,19 @@ export function useTasks() {
     try {
       await api.delete(`/tasks/${id}`)
     } catch (err) {
+      // Delete failed — the task still exists, so it's editable again.
+      for (const removedId of idsToRemove) pendingDeletes.delete(removedId)
       useTasksStore.getState().setLastDeleted(null)
       await reportAndReconcile(err)
       return
     }
 
+    // Deliberately NOT clearing pendingDeletes here: React hasn't committed
+    // the re-render yet, so the deleted task's editor (if it was focused)
+    // hasn't unmounted — the native blur that unmounting triggers, and the
+    // debounced-save flush it causes, is still ahead of us. Clearing the
+    // guard now would reopen exactly the window it exists to close. The ids
+    // stay blocked until `restoreDeleted` makes them editable again.
     const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
     useTasksStore.getState().setTasks(remaining)
   }, [])
@@ -255,6 +282,8 @@ export function useTasks() {
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
+      // The restored task is editable again — see the pendingDeletes comment in deleteTask.
+      pendingDeletes.delete(t.id)
     }
 
     await loadTasks()
