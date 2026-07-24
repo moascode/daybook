@@ -119,7 +119,10 @@ export function WalletPage() {
 
   useEffect(() => {
     const accountParam = searchParams.get('account')
-    if (accountParam) setFilters({ accountId: accountParam })
+    // U-10: arriving via ?account= applies a filter that lives in the collapsed
+    // panel — open it so the narrowing is visible (the chip below also shows it).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (accountParam) { setFilters({ accountId: accountParam }); setFiltersOpen(true) }
     // Deep link from the Shared page (and elsewhere): /wallet?view=shared-with-me
     const viewParam = searchParams.get('view')
     if (viewParam === 'all' || viewParam === 'mine' || viewParam === 'shared-with-me' || viewParam === 'shared-with-others') {
@@ -317,6 +320,40 @@ export function WalletPage() {
     })
   }, [setFilters])
 
+  // U-10: surface the occasional (collapsed) filters as removable chips so a
+  // deep-link like ?account= doesn't silently narrow the list with no visible,
+  // clearable indicator. Date range and search have their own always-visible
+  // controls, so they're intentionally not chipped here.
+  const filterChips = useMemo(() => {
+    const chips: { key: string; label: string; onClear: () => void }[] = []
+    if (filters.type !== 'all') {
+      chips.push({
+        key: 'type',
+        label: `Type: ${filters.type.charAt(0).toUpperCase() + filters.type.slice(1)}`,
+        onClear: () => setFilters({ type: 'all' }),
+      })
+    }
+    if (filters.accountId) {
+      const name = accounts.find((a) => a.id === filters.accountId)?.name ?? 'Account'
+      chips.push({ key: 'account', label: `Account: ${name}`, onClear: () => setFilters({ accountId: null }) })
+    }
+    if (filters.categoryId) {
+      const name = categories.find((c) => c.id === filters.categoryId)?.name ?? 'Category'
+      chips.push({ key: 'category', label: `Category: ${name}`, onClear: () => setFilters({ categoryId: null }) })
+    }
+    for (const tag of filters.tags) {
+      chips.push({ key: `tag:${tag}`, label: `Tag: ${tag}`, onClear: () => setFilters({ tags: filters.tags.filter((t) => t !== tag) }) })
+    }
+    if (filters.view !== 'all') {
+      const vlabel =
+        filters.view === 'shared-with-me' ? 'Shared with me'
+          : filters.view === 'shared-with-others' ? 'Shared with others'
+            : filters.view.charAt(0).toUpperCase() + filters.view.slice(1)
+      chips.push({ key: 'view', label: `View: ${vlabel}`, onClear: () => setFilters({ view: 'all' }) })
+    }
+    return chips
+  }, [filters, accounts, categories, setFilters])
+
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
   return (
@@ -414,6 +451,29 @@ export function WalletPage() {
             </button>
           )}
         </div>
+
+        {/* U-10: removable chips for the active occasional filters */}
+        {filterChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="active-filter-chips">
+            {filterChips.map((chip) => (
+              <span
+                key={chip.key}
+                className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+              >
+                {chip.label}
+                <button
+                  type="button"
+                  onClick={chip.onClear}
+                  aria-label="Remove filter"
+                  title={`Remove ${chip.label}`}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-brand-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Collapsible occasional filters */}
         {filtersOpen && (
