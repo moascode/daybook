@@ -209,19 +209,22 @@ export function BulletNode({
         <div
           className={cn(
             'flex shrink-0 items-center gap-0.5 py-0.5',
-            'opacity-0 group-hover/node:opacity-100 transition-opacity duration-100',
+            // CD-13: touch devices have no hover, so keep the actions visible on
+            // small screens and only hide-until-hover from md up.
+            'opacity-100 md:opacity-0 md:group-hover/node:opacity-100 transition-opacity duration-100',
           )}
         >
           {/* Note indicator or toggle */}
           <button
             className={cn(
-              'flex h-6 w-6 items-center justify-center rounded transition-colors',
+              'flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded transition-colors',
               showNote || task.note.length > 0
                 ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50'
                 : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100',
             )}
             onClick={handleToggleNote}
             title={showNote ? 'Hide note' : task.note ? 'Show note' : 'Add note'}
+            aria-label={showNote ? 'Hide note' : task.note ? 'Show note' : 'Add note'}
             tabIndex={-1}
           >
             <StickyNote className="h-3.5 w-3.5" />
@@ -231,7 +234,7 @@ export function BulletNode({
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button
-                className="flex h-6 w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600"
                 aria-label="Task options"
                 tabIndex={-1}
               >

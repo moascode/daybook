@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, RefreshCw } from 'lucide-react'
+import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Select } from '@/components/ui/Select'
@@ -218,23 +219,11 @@ export function RecurringPage() {
                       <span className="font-medium text-gray-900 text-sm">
                         {rule.merchant || '(no merchant)'}
                       </span>
-                      <span
-                        className={
-                          isIncome
-                            ? 'text-xs font-medium text-positive-700 bg-positive-50 rounded-full px-2 py-0.5'
-                            : 'text-xs font-medium text-red-600 bg-red-50 rounded-full px-2 py-0.5'
-                        }
-                      >
+                      <Badge variant={isIncome ? 'success' : 'danger'}>
                         {isIncome ? 'Income' : 'Expense'}
-                      </span>
-                      <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
-                        {freqLabel}
-                      </span>
-                      {category && (
-                        <span className="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">
-                          {category.name}
-                        </span>
-                      )}
+                      </Badge>
+                      <Badge variant="default">{freqLabel}</Badge>
+                      {category && <Badge variant="default">{category.name}</Badge>}
                     </div>
                     <div className="text-xs text-gray-500">
                       Next: {dueDateDisplay}
@@ -260,18 +249,24 @@ export function RecurringPage() {
                       >
                         {postingId === rule.id ? 'Posting…' : 'Post now'}
                       </button>
-                      <button
-                        className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
                         onClick={() => openEdit(rule)}
+                        aria-label={`Edit ${rule.merchant || 'recurring rule'}`}
                       >
-                        Edit
-                      </button>
-                      <button
-                        className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-red-50 hover:text-red-600"
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
                         onClick={() => crud.openDelete(rule.id)}
+                        aria-label={`Delete ${rule.merchant || 'recurring rule'}`}
                       >
-                        Delete
-                      </button>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
                 </div>

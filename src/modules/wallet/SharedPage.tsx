@@ -145,11 +145,11 @@ export function SharedPage() {
       <div className="flex gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
         <div className="flex-1">
           <p className="text-xs text-gray-500">Owed to you</p>
-          <p className="text-lg font-bold text-green-700">{formatMYR(totalOwedToMe)}</p>
+          <p className="text-lg font-bold text-positive-700">{formatMYR(totalOwedToMe)}</p>
         </div>
         <div className="flex-1">
           <p className="text-xs text-gray-500">You owe</p>
-          <p className="text-lg font-bold text-orange-700">{formatMYR(totalIOwe)}</p>
+          <p className="text-lg font-bold text-red-700">{formatMYR(totalIOwe)}</p>
         </div>
       </div>
 
@@ -181,11 +181,11 @@ export function SharedPage() {
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Owed to you</h4>
                 {owedToMe.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-4 py-3 mb-2">
+                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-positive-200 bg-positive-50 px-4 py-3 mb-2">
                     <div>
                       <span className="font-medium text-gray-900">{b.fromUsername}</span>
                       <span className="text-sm text-gray-500 ml-2">owes you</span>
-                      <span className="ml-2 font-semibold text-green-700">{formatMYR(b.amount)}</span>
+                      <span className="ml-2 font-semibold text-positive-700">{formatMYR(b.amount)}</span>
                     </div>
                     <Button size="sm" variant="secondary" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
                       <Check className="h-3.5 w-3.5 mr-1" />
@@ -199,11 +199,11 @@ export function SharedPage() {
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">You owe</h4>
                 {myDebts.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 mb-2">
+                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-2">
                     <div>
                       <span className="text-sm text-gray-500">You owe</span>
                       <span className="font-medium text-gray-900 ml-2">{b.toUsername}</span>
-                      <span className="ml-2 font-semibold text-orange-700">{formatMYR(b.amount)}</span>
+                      <span className="ml-2 font-semibold text-red-700">{formatMYR(b.amount)}</span>
                     </div>
                     <Button size="sm" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
                       <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
