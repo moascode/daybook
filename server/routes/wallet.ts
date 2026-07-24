@@ -996,6 +996,48 @@ walletRouter.get('/budgets', (req, res) => {
   res.json(getDb().prepare('SELECT * FROM budgets WHERE user_id = ? ORDER BY created_at ASC').all(req.session.userId!))
 })
 
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+
+// B-15 residual: budgets must count only the caller's EFFECTIVE spend — when
+// a transaction they own has been split, their own `share_amount` (0 if they
+// have no share row), not the full transaction amount. Computed as one
+// set-based aggregate (see server/lib/sharing.ts effectiveAmount(), whose
+// per-transaction logic this mirrors) rather than a per-row loop over a
+// month of transactions.
+walletRouter.get('/budgets/spending', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+
+  const monthParam = str(req.query.month)
+  const month = monthParam ?? todayStr().slice(0, 7)
+  if (!MONTH_RE.test(month)) {
+    return res.status(400).json({ error: 'month must be in YYYY-MM format' })
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT t.category_id AS categoryId,
+              SUM(
+                CASE
+                  WHEN EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = t.id)
+                    THEN COALESCE(own.share_amount, 0)
+                  ELSE t.amount
+                END
+              ) AS spent
+       FROM transactions t
+       LEFT JOIN transaction_shares own
+         ON own.transaction_id = t.id AND own.user_id = @userId
+       WHERE t.user_id = @userId
+         AND t.type = 'expense'
+         AND t.category_id IS NOT NULL
+         AND t.date LIKE @monthPrefix
+       GROUP BY t.category_id`,
+    )
+    .all({ userId, monthPrefix: `${month}-%` }) as { categoryId: string; spent: number }[]
+
+  res.json(rows)
+})
+
 // C2: shared minimal check for budget limits and goal targets.
 function positiveAmountError(v: unknown, field: string): string | null {
   const amt = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN
