@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Coins, CheckSquare, Trash2, SlidersHorizontal, X, Users } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, X, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { TagInput } from '@/components/ui/TagInput'
-import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
+import { NetWorthBanner } from '@/components/ui/NetWorthBanner'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
@@ -18,6 +19,7 @@ import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
+import { useCrudModal } from '@/hooks/useCrudModal'
 import { api } from '@/lib/api'
 import { cn, formatMYR, errorMessage, monthRange, dateRangePreset } from '@/lib/utils'
 import type { Transaction } from '@/types/wallet.types'
@@ -49,10 +51,9 @@ export function WalletPage() {
 
   const dataVersion = useWalletStore((s) => s.dataVersion)
   const [searchParams] = useSearchParams()
-  const [formOpen, setFormOpen] = useState(false)
+  const crud = useCrudModal<Transaction>()
   const [exportOpen, setExportOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
 
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
@@ -166,10 +167,10 @@ export function WalletPage() {
   }, [addTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
-    if (!editingTransaction) return
+    if (!crud.editingItem) return
     try {
-      await updateTransaction(editingTransaction.id, data)
-      setEditingTransaction(null)
+      await updateTransaction(crud.editingItem.id, data)
+      crud.closeForm(false)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save transaction — please try again.'), duration: 4000 })
       throw err
@@ -177,7 +178,7 @@ export function WalletPage() {
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
     await loadTags()
-  }, [editingTransaction, updateTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
+  }, [crud, updateTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
 
   // Single-transaction delete: no confirm dialog — delete immediately and offer
   // a 5-second undo toast, matching the tasks module. The row object is captured
@@ -238,16 +239,6 @@ export function WalletPage() {
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth, addToast])
-  function openEditForm(transaction: Transaction) {
-    setEditingTransaction(transaction)
-    setFormOpen(true)
-  }
-
-  function openCreateForm() {
-    setEditingTransaction(null)
-    setFormOpen(true)
-  }
-
   function openShareDialog(transaction: Transaction) {
     setShareTarget(transaction)
   }
@@ -353,7 +344,7 @@ export function WalletPage() {
             Export
           </Button>
           {!selectMode && (
-            <Button size="sm" onClick={openCreateForm}>
+            <Button size="sm" onClick={crud.openCreate}>
               <Plus className="h-3.5 w-3.5" />
               Add Transaction
             </Button>
@@ -363,22 +354,7 @@ export function WalletPage() {
 
       {/* Total balance hero */}
       {accounts.length > 0 && (
-        <div className="mb-4 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-              Total Net Worth
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-brand-900">
-              {netWorth === null ? '…' : formatMYR(netWorth)}
-            </p>
-            <p className="mt-1 text-xs text-brand-700/60">
-              across {accounts.length} account{accounts.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100">
-            <Coins className="h-6 w-6 text-brand-600" />
-          </div>
-        </div>
+        <NetWorthBanner netWorth={netWorth} accountCount={accounts.length} className="mb-4" />
       )}
 
       {/* Filter bar + summary — hidden until there's an account to work with
@@ -603,7 +579,7 @@ export function WalletPage() {
             transactions={transactions}
             accounts={accounts}
             categories={categories}
-            onEdit={openEditForm}
+            onEdit={crud.openEdit}
             onDelete={handleDeleteTransaction}
             onSplit={hasGroups ? openShareDialog : undefined}
             selectMode={selectMode}
@@ -614,17 +590,14 @@ export function WalletPage() {
       </div>
 
       <TransactionForm
-        open={formOpen}
-        onOpenChange={(open) => {
-          setFormOpen(open)
-          if (!open) setEditingTransaction(null)
-        }}
-        transaction={editingTransaction}
+        open={crud.formOpen}
+        onOpenChange={crud.closeForm}
+        transaction={crud.editingItem}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}
         availableTags={tags}
-        onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
+        onSubmit={crud.editingItem ? handleUpdateTransaction : handleAddTransaction}
       />
 
       <ShareDialog
@@ -654,21 +627,15 @@ export function WalletPage() {
       />
 
       {/* Bulk delete confirmation */}
-      <Modal
+      <ConfirmDeleteModal
         open={bulkDeleteOpen}
         onOpenChange={(open) => { if (!open) setBulkDeleteOpen(false) }}
-        title="Delete Transactions"
-        description={`Delete ${selectedIds.size} selected transaction${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`}
-      >
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={() => setBulkDeleteOpen(false)}>
-            Cancel
-          </Button>
-          <Button variant="danger" onClick={handleBulkDelete} data-testid="confirm-bulk-delete">
-            Delete {selectedIds.size}
-          </Button>
-        </div>
-      </Modal>
+        title={`Delete ${selectedIds.size} transaction${selectedIds.size !== 1 ? 's' : ''}?`}
+        description="This cannot be undone."
+        onConfirm={handleBulkDelete}
+        confirmLabel={`Delete ${selectedIds.size}`}
+        confirmTestId="confirm-bulk-delete"
+      />
 
       <BulkShareDialog
         open={bulkShareOpen}

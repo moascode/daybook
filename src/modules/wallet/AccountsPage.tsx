@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, CreditCard, Coins } from 'lucide-react'
+import { Plus, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
+import { NetWorthBanner } from '@/components/ui/NetWorthBanner'
 import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
-import { formatMYR, errorMessage } from '@/lib/utils'
+import { useCrudModal } from '@/hooks/useCrudModal'
+import { errorMessage } from '@/lib/utils'
 import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account } from '@/types/wallet.types'
 
@@ -16,9 +18,7 @@ export function AccountsPage() {
   const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalances } = useWallet()
   const { addToast } = useToastStore()
 
-  const [formOpen, setFormOpen] = useState(false)
-  const [editingAccount, setEditingAccount] = useState<Account | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null)
+  const crud = useCrudModal<Account>()
   const [balances, setBalances] = useState<Record<string, number> | null>(null)
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
@@ -52,28 +52,27 @@ export function AccountsPage() {
   }, [addAccount, addToast])
 
   const handleEdit = useCallback(async (data: AccountFormData) => {
-    if (!editingAccount) return
+    if (!crud.editingItem) return
     try {
-      await updateAccount(editingAccount.id, data)
-      setEditingAccount(null)
+      await updateAccount(crud.editingItem.id, data)
+      crud.closeForm(false)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save account — please try again.'), duration: 4000 })
       throw err
     }
-  }, [editingAccount, updateAccount, addToast])
+  }, [crud, updateAccount, addToast])
 
   const handleDelete = useCallback(async () => {
-    if (!deleteTarget) return
+    if (!crud.confirmDeleteId) return
     try {
-      await deleteAccount(deleteTarget.id)
-      setDeleteTarget(null)
+      await deleteAccount(crud.confirmDeleteId)
+      crud.closeDelete()
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not delete account — please try again.'), duration: 4000 })
     }
-  }, [deleteTarget, deleteAccount, addToast])
+  }, [crud, deleteAccount, addToast])
 
-  function openCreateForm() { setEditingAccount(null); setFormOpen(true) }
-  function openEditForm(account: Account) { setEditingAccount(account); setFormOpen(true) }
+  const deleteTargetAccount = accounts.find((a) => a.id === crud.confirmDeleteId) ?? null
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -83,7 +82,7 @@ export function AccountsPage() {
           <h2 className="text-base font-semibold text-gray-900">Accounts</h2>
           <p className="text-xs text-gray-500 mt-0.5">Manage your accounts and balances</p>
         </div>
-        <Button size="sm" onClick={openCreateForm}>
+        <Button size="sm" onClick={crud.openCreate}>
           <Plus className="h-3.5 w-3.5" />
           Add Account
         </Button>
@@ -91,22 +90,7 @@ export function AccountsPage() {
 
       {/* Net worth banner */}
       {accounts.length > 0 && (
-        <div className="mb-5 flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
-              Total Net Worth
-            </p>
-            <p className="mt-1.5 text-2xl font-bold text-brand-900">
-              {netWorth === null ? '…' : formatMYR(netWorth)}
-            </p>
-            <p className="mt-1 text-xs text-brand-700/60">
-              {accounts.length} account{accounts.length !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100">
-            <Coins className="h-6 w-6 text-brand-600" />
-          </div>
-        </div>
+        <NetWorthBanner netWorth={netWorth} accountCount={accounts.length} className="mb-5" />
       )}
 
       {accounts.length === 0 ? (
@@ -115,7 +99,7 @@ export function AccountsPage() {
           title="No accounts yet"
           description="Create your first account to start tracking your finances."
           action={
-            <Button size="sm" onClick={openCreateForm}>
+            <Button size="sm" onClick={crud.openCreate}>
               <Plus className="h-3.5 w-3.5" /> Add Account
             </Button>
           }
@@ -127,32 +111,29 @@ export function AccountsPage() {
               key={account.id}
               account={account}
               balance={balances?.[account.id] ?? null}
-              onEdit={openEditForm}
-              onDelete={setDeleteTarget}
-              onShare={openEditForm}
+              onEdit={crud.openEdit}
+              onDelete={(a) => crud.openDelete(a.id)}
+              onShare={crud.openEdit}
             />
           ))}
         </div>
       )}
 
       <AccountForm
-        open={formOpen}
-        onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingAccount(null) }}
-        account={editingAccount}
-        onSubmit={editingAccount ? handleEdit : handleAdd}
+        open={crud.formOpen}
+        onOpenChange={crud.closeForm}
+        account={crud.editingItem}
+        onSubmit={crud.editingItem ? handleEdit : handleAdd}
       />
 
-      <Modal
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
-        title="Delete Account"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? All transactions in this account will be permanently deleted.`}
-      >
-        <div className="flex justify-end gap-3 pt-2">
-          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button variant="danger" onClick={handleDelete}>Delete Account</Button>
-        </div>
-      </Modal>
+      <ConfirmDeleteModal
+        open={!!crud.confirmDeleteId}
+        onOpenChange={(open) => { if (!open) crud.closeDelete() }}
+        title="Delete account?"
+        description={`Are you sure you want to delete "${deleteTargetAccount?.name}"? All transactions in this account will be permanently deleted.`}
+        onConfirm={handleDelete}
+        confirmLabel="Delete account"
+      />
     </div>
   )
 }

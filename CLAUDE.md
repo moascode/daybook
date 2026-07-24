@@ -849,6 +849,17 @@ async function addTask(content: string) {
 }
 ```
 
+### Delete confirmation policy
+Two patterns, chosen by consequence:
+- **Undo-toast** (no confirm dialog): single/low-consequence deletes — a task, a
+  single transaction. Delete immediately, then offer a 5-second "Undo" toast.
+- **`ConfirmDeleteModal`** (`src/components/ui/ConfirmDeleteModal.tsx`): high-consequence,
+  bulk, or cascading deletes — deleting an account (cascades to all its
+  transactions), bulk-deleting selected transactions, budgets, goals, recurring
+  rules. Never hand-roll a `Modal` + `variant="danger"` confirm dialog for these;
+  use `ConfirmDeleteModal` and, if a stable test hook is needed, its optional
+  `confirmTestId` prop.
+
 ---
 
 ## 11. Git Conventions

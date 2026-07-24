@@ -8,6 +8,9 @@ interface ConfirmDeleteModalProps {
   description: string
   onConfirm: () => void
   confirmLabel?: string
+  // Optional test hook for specs that need a stable selector distinct from
+  // the trigger button that opened this modal (e.g. bulk-delete flows).
+  confirmTestId?: string
 }
 
 export function ConfirmDeleteModal({
@@ -17,6 +20,7 @@ export function ConfirmDeleteModal({
   description,
   onConfirm,
   confirmLabel = 'Confirm',
+  confirmTestId,
 }: ConfirmDeleteModalProps) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={title} description={description} className="max-w-sm">
@@ -24,7 +28,7 @@ export function ConfirmDeleteModal({
         <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
           Cancel
         </Button>
-        <Button variant="danger" size="sm" onClick={onConfirm}>
+        <Button variant="danger" size="sm" onClick={onConfirm} data-testid={confirmTestId}>
           {confirmLabel}
         </Button>
       </div>

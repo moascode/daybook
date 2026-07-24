@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { api } from '@/lib/api'
 import type { GroupBalance } from '@/types/household.types'
 
@@ -101,38 +102,44 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
           />
           <p className="mt-1 text-xs text-gray-400">Pay less than the full amount to settle part of it.</p>
         </div>
+        <Select
+          label={iAmCreditor ? 'Deposit into (your account)' : 'Pay from (your account)'}
+          id="settle-my-account"
+          options={[
+            { value: '', label: '— select account —' },
+            ...myAccounts.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+          value={form.myAccountId}
+          onChange={(e) => setForm((f) => ({ ...f, myAccountId: e.target.value }))}
+        />
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            {iAmCreditor ? 'Deposit into (your account)' : 'Pay from (your account)'}
-          </label>
-          <select
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={form.myAccountId}
-            onChange={(e) => setForm((f) => ({ ...f, myAccountId: e.target.value }))}
-          >
-            <option value="">— select account —</option>
-            {myAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            {counterpartyUsername}&rsquo;s account (optional)
-          </label>
           {theirAccounts.length === 0 ? (
-            <p className="text-xs text-gray-400">
-              No shared accounts from {counterpartyUsername}. Only your side will be recorded.
-            </p>
+            <>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                {counterpartyUsername}&rsquo;s account (optional)
+              </label>
+              <p className="text-xs text-gray-400">
+                No shared accounts from {counterpartyUsername}. Only your side will be recorded.
+              </p>
+            </>
           ) : (
-            <select
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            <Select
+              label={`${counterpartyUsername}’s account (optional)`}
+              id="settle-their-account"
+              options={[
+                { value: '', label: '— leave blank (records your side only) —' },
+                ...theirAccounts.map((a) => ({ value: a.id, label: a.name })),
+              ]}
               value={form.theirAccountId}
               onChange={(e) => setForm((f) => ({ ...f, theirAccountId: e.target.value }))}
-            >
-              <option value="">— leave blank (records your side only) —</option>
-              {theirAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            />
           )}
         </div>
+        {/* U-13: clarify that this books a real ledger transfer, and nudges
+            toward filling in the counterparty's account when one is shared. */}
+        <p className="text-xs text-gray-400">
+          This books a real transfer in your ledger; add their account too if they&rsquo;ve shared one with you.
+        </p>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Note (optional)</label>
           <Input

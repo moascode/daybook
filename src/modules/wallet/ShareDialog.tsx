@@ -3,6 +3,7 @@ import { Users } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { api } from '@/lib/api'
 import { formatMYR, splitEqually } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
@@ -133,22 +134,17 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
             No group members yet. Invite people in Settings → Sharing first.
            </p>
          ) : (
-           <div>
-             <p className="text-xs font-medium text-gray-700 mb-2">Split with</p>
-             <select
-              className="w-full border rounded-lg px-3 py-2 text-sm"
-              value={selectedRecipient ?? ''}
-              onChange={(e) => setSelectedRecipient(e.target.value || null)}
-              disabled={saving}
-             >
-               <option value="">Select a recipient</option>
-               {groupMembers.map((m) => (
-                 <option key={m.userId} value={m.userId}>
-                   {m.username}
-                 </option>
-               ))}
-             </select>
-           </div>
+           <Select
+             label="Split with"
+             id="split-recipient"
+             options={[
+               { value: '', label: 'Select a recipient' },
+               ...groupMembers.map((m) => ({ value: m.userId, label: m.username })),
+             ]}
+             value={selectedRecipient ?? ''}
+             onChange={(e) => setSelectedRecipient(e.target.value || null)}
+             disabled={saving}
+           />
          )}
 
          {/* Split mode selector */}

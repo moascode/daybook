@@ -420,7 +420,7 @@ test('selecting another row updates the count', async () => {
 test('Delete button in action bar opens confirmation modal', async () => {
   await page.getByTestId('bulk-delete-btn').click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByText(/Delete 2 selected/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Delete 2 transactions?' })).toBeVisible()
 })
 
 test('confirming bulk delete removes the selected transactions', async () => {
