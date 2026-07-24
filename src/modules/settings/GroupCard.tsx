@@ -1,9 +1,12 @@
 import { useState, useCallback } from 'react'
 import { Users, Trash2, UserMinus, Crown, UserPlus, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { InviteDialog } from './InviteDialog'
 import { api } from '@/lib/api'
-import type { Group, GroupDetail } from '@/types/household.types'
+import { errorMessage } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
+import type { Group, GroupDetail, GroupMember } from '@/types/household.types'
 import { mapGroupDetail } from '@/lib/household.mappers'
 
 /**
@@ -23,14 +26,19 @@ function MemberList({
 }) {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<GroupMember | null>(null)
+  const addToast = useToastStore((s) => s.addToast)
 
   const handleRemove = async (memberId: string) => {
     setRemoving(memberId)
     try {
       await api.delete(`/groups/${group.id}/members/${memberId}`)
       onRefresh()
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not update membership — please try again.') })
     } finally {
       setRemoving(null)
+      setConfirmTarget(null)
     }
   }
 
@@ -65,7 +73,7 @@ function MemberList({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => handleRemove(m.userId)}
+                onClick={() => setConfirmTarget(m)}
                 disabled={removing === m.userId}
                 aria-label={m.userId === currentUserId ? 'Leave group' : 'Remove member'}
               >
@@ -82,6 +90,20 @@ function MemberList({
         groupId={group.id}
         groupName={group.name}
         onInvited={onRefresh}
+      />
+
+      {/* CD-01: confirm before removing a member or leaving the group */}
+      <ConfirmDeleteModal
+        open={!!confirmTarget}
+        onOpenChange={() => setConfirmTarget(null)}
+        title={confirmTarget?.userId === currentUserId ? 'Leave group?' : 'Remove member?'}
+        description={
+          confirmTarget?.userId === currentUserId
+            ? 'You will lose access to this group’s shared accounts and splits.'
+            : `Remove ${confirmTarget?.username ?? 'this member'} from the group?`
+        }
+        confirmLabel={confirmTarget?.userId === currentUserId ? 'Leave' : 'Remove'}
+        onConfirm={() => confirmTarget && handleRemove(confirmTarget.userId)}
       />
     </div>
   )
@@ -101,16 +123,22 @@ export function GroupCard({
   const [detail, setDetail] = useState<GroupDetail | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [detailError, setDetailError] = useState(false)
+  const addToast = useToastStore((s) => s.addToast)
 
   const loadDetail = useCallback(async () => {
     setLoading(true)
+    setDetailError(false)
     try {
       const d = await api.get<Record<string, unknown>>(`/groups/${group.id}`)
       setDetail(mapGroupDetail(d))
+    } catch (err: unknown) {
+      setDetailError(true)
+      addToast({ message: errorMessage(err, 'Could not load this group — please try again.') })
     } finally {
       setLoading(false)
     }
-  }, [group.id])
+  }, [group.id, addToast])
 
   const toggle = () => {
     if (!expanded) loadDetail()
@@ -155,7 +183,12 @@ export function GroupCard({
 
       {expanded && (
         <div className="border-t border-gray-100 px-5 py-4">
-          {loading || !detail ? (
+          {detailError && !loading ? (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-gray-500">Couldn&rsquo;t load this group.</p>
+              <Button size="sm" variant="secondary" onClick={loadDetail}>Retry</Button>
+            </div>
+          ) : loading || !detail ? (
             <p className="text-sm text-gray-400">Loading…</p>
           ) : (
             <MemberList group={detail} currentUserId={currentUserId} onRefresh={handleRefresh} />

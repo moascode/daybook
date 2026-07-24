@@ -3,12 +3,15 @@ import { Users, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { GroupCard } from './GroupCard'
 import { PendingInvites } from './PendingInvites'
 import { useAppStore } from '@/stores/app.store'
 import { useHouseholdStore } from '@/stores/household.store'
+import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
 import { mapGroup, mapInvite } from '@/lib/household.mappers'
 
 /**
@@ -19,21 +22,31 @@ import { mapGroup, mapInvite } from '@/lib/household.mappers'
 export function SharingPage() {
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const { groups, pendingInvites, setGroups, setPendingInvites, addGroup, removeGroup } = useHouseholdStore()
+  const addToast = useToastStore((s) => s.addToast)
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
 
   const loadAll = useCallback(async () => {
-    const [g, inv] = await Promise.all([
-      api.get<Record<string, unknown>[]>('/groups'),
-      api.get<Record<string, unknown>[]>('/invites'),
-    ])
-    setGroups(g.map(mapGroup))
-    setPendingInvites(inv.map(mapInvite))
+    setLoadError(false)
+    try {
+      const [g, inv] = await Promise.all([
+        api.get<Record<string, unknown>[]>('/groups'),
+        api.get<Record<string, unknown>[]>('/invites'),
+      ])
+      setGroups(g.map(mapGroup))
+      setPendingInvites(inv.map(mapInvite))
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
   }, [setGroups, setPendingInvites])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadAll() }, [loadAll]) // eslint-disable-line react-hooks/set-state-in-effect
 
   const handleCreate = async () => {
     if (!newName.trim()) return
@@ -43,6 +56,8 @@ export function SharingPage() {
       addGroup(mapGroup(raw))
       setNewName('')
       setCreateOpen(false)
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not create the group — please try again.') })
     } finally {
       setCreating(false)
     }
@@ -54,8 +69,7 @@ export function SharingPage() {
       await api.delete(`/groups/${deleteTarget}`)
       removeGroup(deleteTarget)
     } catch (err: unknown) {
-      const msg = (err as { message?: string })?.message ?? 'Could not delete group'
-      alert(msg)
+      addToast({ message: errorMessage(err, 'Could not delete the group — please try again.') })
     } finally {
       setDeleteTarget(null)
     }
@@ -78,6 +92,19 @@ export function SharingPage() {
         </Button>
       </div>
 
+      {loadError ? (
+        <div className="rounded-xl border border-gray-200 bg-white px-5 py-6 text-center">
+          <p className="text-sm text-gray-600">Couldn&rsquo;t load your groups.</p>
+          <Button size="sm" variant="secondary" className="mt-3" onClick={() => { setLoading(true); loadAll() }}>
+            Retry
+          </Button>
+        </div>
+      ) : loading ? (
+        <div className="flex items-center justify-center py-10">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+        </div>
+      ) : (
+      <>
       <PendingInvites invites={pendingInvites} onRefresh={loadAll} />
 
       {groups.length === 0 && pendingInvites.length === 0 ? (
@@ -99,6 +126,8 @@ export function SharingPage() {
             />
           ))}
         </div>
+      )}
+      </>
       )}
 
       {/* Create group modal */}
@@ -123,17 +152,14 @@ export function SharingPage() {
       </Modal>
 
       {/* Delete group confirmation */}
-      <Modal open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)} title="Delete Group?">
-        <div className="space-y-4">
-          <p className="text-sm text-gray-700">Are you sure you want to delete this group? This action cannot be undone.</p>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white border-red-600">
-              Delete Group
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <ConfirmDeleteModal
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete group?"
+        description="This permanently deletes the group for everyone. This action cannot be undone."
+        confirmLabel="Delete group"
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
