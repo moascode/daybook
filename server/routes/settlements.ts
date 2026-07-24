@@ -1,51 +1,93 @@
 import { Router } from 'express'
 import { getDb } from '../db.ts'
-import { isGroupMember } from '../lib/sharing.ts'
+import { isGroupMember, canWriteAccount } from '../lib/sharing.ts'
+import { todayStr } from '../lib.ts'
 
 export const settlementsRouter: Router = Router()
 
-// POST /api/settlements — record that fromUser paid toUser; creates two ledger transactions
+// POST /api/settlements — record that a debtor paid a creditor; books the two
+// ledger legs and clears the debtor's outstanding shares (partial-aware).
+//
+// Direction (B-01): the settlement always stores from_user=debtor, to_user=creditor,
+// regardless of who calls. Either party can record it:
+//   • Debtor-initiated ("Settle Up"): caller owes → pass toUserId=creditor.
+//   • Creditor-initiated ("Mark Received"): caller is owed → pass fromUserId=debtor.
+// The debtor-side leg is an expense on fromAccountId; the creditor-side leg is an
+// income on toAccountId. Each leg is booked on its own account and only when that
+// account is given and writable by the caller.
 settlementsRouter.post('/settlements', (req, res) => {
   const callerId = req.session.userId!
   const db = getDb()
   const b = req.body ?? {}
 
   const groupId = String(b.groupId ?? '')
-  const toUserId = String(b.toUserId ?? '')
   const amount = Number(b.amount)
   const note = String(b.note ?? '')
-  const fromAccountId = String(b.fromAccountId ?? '')
-  const toAccountId = String(b.toAccountId ?? '') // recipient's account for the income entry
-  if (!groupId || !toUserId || !amount || amount <= 0) {
-    return res.status(400).json({ error: 'groupId, toUserId, and a positive amount are required' })
-  }
-  if (!fromAccountId) {
-    return res.status(400).json({ error: 'fromAccountId is required' })
+  const fromAccountId = String(b.fromAccountId ?? '') // debtor-side expense account
+  const toAccountId = String(b.toAccountId ?? '')     // creditor-side income account
+
+  // B-01: resolve debtor/creditor from the direction hint, defaulting the caller
+  // to the debtor for backward compatibility with the legacy toUserId-only body.
+  const rawFrom = String(b.fromUserId ?? '')
+  const rawTo = String(b.toUserId ?? '')
+  let debtorId: string
+  let creditorId: string
+  if (rawFrom && rawFrom !== callerId) {
+    debtorId = rawFrom
+    creditorId = callerId
+  } else if (rawTo) {
+    debtorId = callerId
+    creditorId = rawTo
+  } else {
+    return res.status(400).json({ error: 'toUserId (creditor) or fromUserId (debtor) is required' })
   }
 
-  if (!isGroupMember(db, callerId, groupId) || !isGroupMember(db, toUserId, groupId)) {
+  if (!groupId || !amount || amount <= 0) {
+    return res.status(400).json({ error: 'groupId and a positive amount are required' })
+  }
+  if (debtorId === creditorId) {
+    return res.status(400).json({ error: 'debtor and creditor must be different users' })
+  }
+  const callerIsDebtor = debtorId === callerId
+
+  if (
+    !isGroupMember(db, callerId, groupId) ||
+    !isGroupMember(db, debtorId, groupId) ||
+    !isGroupMember(db, creditorId, groupId)
+  ) {
     return res.status(403).json({ error: 'both users must be in the group' })
   }
 
-  // S-6: Verify caller actually owes toUserId in this group
+  // Verify the debtor actually owes the creditor in this group (partial-aware).
   const owedRow = db.prepare(
-    `SELECT COALESCE(SUM(ts.share_amount), 0) AS total
+    `SELECT COALESCE(SUM(ts.share_amount - ts.settled_amount), 0) AS total
      FROM transaction_shares ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
      WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL`
-  ).get(groupId, callerId, toUserId) as { total: number }
-  if (!owedRow || owedRow.total <= 0) {
-    return res.status(400).json({ error: 'no outstanding balance owed to this user in this group' })
+  ).get(groupId, debtorId, creditorId) as { total: number }
+  if (!owedRow || owedRow.total <= 0.005) {
+    return res.status(400).json({ error: 'no outstanding balance owed in this group' })
   }
-  // U-13: Cap at actual owed amount and warn via response
-  const effectiveAmount = Math.min(amount, owedRow.total)
+  // U-13: cap at the actual outstanding amount and warn via the response.
+  const owed = Math.round(owedRow.total * 100) / 100
+  const effectiveAmount = Math.round(Math.min(amount, owed) * 100) / 100
 
-  // Verify account ownership
-  const fromAcct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(fromAccountId, callerId)
-  if (!fromAcct) return res.status(400).json({ error: 'fromAccountId must be one of your accounts' })
+  // The caller must supply their own side and be able to write every account that
+  // will receive a leg (B-07 spirit: no writing to accounts you can't write).
+  const callerSideAccount = callerIsDebtor ? fromAccountId : toAccountId
+  if (!callerSideAccount) {
+    return res.status(400).json({
+      error: callerIsDebtor ? 'fromAccountId is required' : 'toAccountId is required',
+    })
+  }
+  for (const acctId of [fromAccountId, toAccountId]) {
+    if (acctId && !canWriteAccount(db, callerId, acctId)) {
+      return res.status(400).json({ error: 'you do not have write access to the selected account' })
+    }
+  }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
 
   const insertTxn = db.prepare(
     `INSERT INTO transactions
@@ -56,84 +98,89 @@ settlementsRouter.post('/settlements', (req, res) => {
      RETURNING id`,
   )
 
-  // C-9: Wrap the entire handler body in a single db.transaction
+  // Wrap the entire handler body in a single db.transaction.
   let settlement: unknown
   try {
     settlement = db.transaction(() => {
-      // B-12: Look up recipient username once, use fallback string (not UUID)
-      const toUsername = (db.prepare('SELECT username FROM users WHERE id = ?').get(toUserId) as { username: string } | undefined)?.username ?? '(unknown user)'
-      const callerUsername = (db.prepare('SELECT username FROM users WHERE id = ?').get(callerId) as { username: string } | undefined)?.username ?? '(unknown user)'
+      const debtorUsername = (db.prepare('SELECT username FROM users WHERE id = ?').get(debtorId) as { username: string } | undefined)?.username ?? '(unknown user)'
+      const creditorUsername = (db.prepare('SELECT username FROM users WHERE id = ?').get(creditorId) as { username: string } | undefined)?.username ?? '(unknown user)'
 
-      const fromTxn = insertTxn.get({
-        userId: callerId,
-        accountId: fromAccountId,
-        date: today,
-        merchant: 'Settlement',
-        description: `Settlement to ${toUsername}${note ? ' — ' + note : ''}`,
-        amount: effectiveAmount,
-        type: 'expense',
-      }) as { id: string }
-
-      // B-11: If toAccountId provided but invalid, return error instead of silently skipping
+      // Book each leg on its own account, owned by that account's owner. The
+      // debtor side is an expense; the creditor side is an income.
+      let fromTxnId: string | null = null
+      if (fromAccountId) {
+        const owner = (db.prepare('SELECT user_id FROM accounts WHERE id = ?').get(fromAccountId) as { user_id: string }).user_id
+        fromTxnId = (insertTxn.get({
+          userId: owner,
+          accountId: fromAccountId,
+          date: today,
+          merchant: 'Settlement',
+          description: `Settlement to ${creditorUsername}${note ? ' — ' + note : ''}`,
+          amount: effectiveAmount,
+          type: 'expense',
+        }) as { id: string }).id
+      }
       let toTxnId: string | null = null
       if (toAccountId) {
-        const toAcct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(toAccountId, toUserId)
-        if (!toAcct) {
-          throw Object.assign(new Error('toAccountId not found or not owned by the recipient'), { statusCode: 400 })
-        }
-        const toTxn = insertTxn.get({
-          userId: toUserId,
+        const owner = (db.prepare('SELECT user_id FROM accounts WHERE id = ?').get(toAccountId) as { user_id: string }).user_id
+        toTxnId = (insertTxn.get({
+          userId: owner,
           accountId: toAccountId,
           date: today,
           merchant: 'Settlement',
-          description: `Settlement from ${callerUsername}${note ? ' — ' + note : ''}`,
+          description: `Settlement from ${debtorUsername}${note ? ' — ' + note : ''}`,
           amount: effectiveAmount,
           type: 'income',
-        }) as { id: string }
-        toTxnId = toTxn.id
+        }) as { id: string }).id
       }
 
-      // S-4: FIFO only within this group (filter shares to transactions owned by toUserId who is in this group)
-      // B-1: Only mark settled if remaining >= share_amount (no over-crediting)
+      // B-02: FIFO across the debtor's outstanding shares owed to the creditor,
+      // applying a partial amount to each share (not whole-share-or-nothing).
       let remaining = effectiveAmount
       const pendingShares = db.prepare(
-        `SELECT ts.id, ts.share_amount
+        `SELECT ts.id, ts.share_amount, ts.settled_amount
          FROM transaction_shares ts
          JOIN transactions t ON t.id = ts.transaction_id
          JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
          WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
          ORDER BY ts.created_at ASC`
-      ).all(groupId, callerId, toUserId) as { id: string; share_amount: number }[]
+      ).all(groupId, debtorId, creditorId) as { id: string; share_amount: number; settled_amount: number }[]
 
-      const markSettled = db.prepare(`UPDATE transaction_shares SET settled_at = datetime('now') WHERE id = ?`)
-      const settledShareIds: string[] = []
+      // settled_at is set only once a share is fully cleared (kept for history/back-compat).
+      const applyToShare = db.prepare(
+        `UPDATE transaction_shares
+         SET settled_amount = @settled,
+             settled_at = CASE WHEN @settled >= share_amount THEN datetime('now') ELSE NULL END
+         WHERE id = @id`
+      )
+      const shareLines: { id: string; amount: number }[] = []
       for (const share of pendingShares) {
-        if (remaining <= 0) break
-        // B-1: Only settle this share if we have enough remaining
-        if (remaining >= share.share_amount) {
-          markSettled.run(share.id)
-          settledShareIds.push(share.id)
-          remaining -= share.share_amount
-        }
+        if (remaining <= 0.005) break
+        const outstanding = Math.round((share.share_amount - share.settled_amount) * 100) / 100
+        if (outstanding <= 0) continue
+        const applied = Math.min(remaining, outstanding)
+        const newSettled = Math.round((share.settled_amount + applied) * 100) / 100
+        applyToShare.run({ settled: newSettled, id: share.id })
+        shareLines.push({ id: share.id, amount: Math.round(applied * 100) / 100 })
+        remaining -= applied
       }
 
-      // S-2: Create settlement record first, then link settled shares
       const newSettlement = db.prepare(
         `INSERT INTO settlements (id, group_id, from_user, to_user, amount, currency, note, from_transaction_id, to_transaction_id, settled_at)
          VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'MYR', ?, ?, ?, datetime('now'))
          RETURNING *`
-      ).get(groupId, callerId, toUserId, effectiveAmount, note, fromTxn.id, toTxnId) as {
+      ).get(groupId, debtorId, creditorId, effectiveAmount, note, fromTxnId, toTxnId) as {
           id: string;
           from_user: string;
           to_user: string;
          }
 
-      // S-2: Record exactly which shares this settlement cleared
+      // Record how much this settlement applied to each share (partial-aware undo).
       const insertShareLine = db.prepare(
-        `INSERT INTO settlement_share_lines (settlement_id, share_id) VALUES (?, ?)`
+        `INSERT INTO settlement_share_lines (settlement_id, share_id, amount) VALUES (?, ?, ?)`
       )
-      for (const shareId of settledShareIds) {
-        insertShareLine.run(newSettlement.id, shareId)
+      for (const line of shareLines) {
+        insertShareLine.run(newSettlement.id, line.id, line.amount)
       }
 
       return newSettlement
@@ -143,12 +190,12 @@ settlementsRouter.post('/settlements', (req, res) => {
     return res.status(code).json({ error: (err as Error).message })
   }
 
-  // U-13: Add warning message if amount was capped
+  // U-13/B-18: surface when the amount was capped below what was requested.
   const response: { id: string; message?: string } = {
     id: (settlement as { id: string }).id,
-     }
-  if (amount > owedRow.total) {
-    response.message = `Only ${owedRow.total} was outstanding. Recording ${effectiveAmount}.`
+  }
+  if (amount > owed) {
+    response.message = `Only ${owed.toFixed(2)} was outstanding. Recorded ${effectiveAmount.toFixed(2)}.`
   }
   res.status(201).json(response)
 })
@@ -181,25 +228,25 @@ settlementsRouter.get('/settlements', (req, res) => {
 settlementsRouter.delete('/settlements/:id', (req, res) => {
   const userId = req.session.userId!
   const db = getDb()
+  // B-01: either party (debtor or creditor) may undo their settlement.
   const settlement = db
-    .prepare('SELECT * FROM settlements WHERE id = ? AND from_user = ?')
-    .get(req.params.id, userId) as {
+    .prepare('SELECT * FROM settlements WHERE id = ? AND (from_user = ? OR to_user = ?)')
+    .get(req.params.id, userId, userId) as {
       id: string; from_transaction_id: string | null; to_transaction_id: string | null;
       settled_at: string; from_user: string; to_user: string
     } | undefined
 
   if (!settlement) return res.status(404).json({ error: 'settlement not found' })
 
-  // Only allow undo within same calendar day
+  // Only allow undo within same calendar day (local, not UTC).
   const settledDay = settlement.settled_at.slice(0, 10)
-  const today = new Date().toISOString().slice(0, 10)
-  if (settledDay !== today) {
+  if (settledDay !== todayStr()) {
     return res.status(409).json({ error: 'can only undo a settlement on the same day it was created' })
   }
 
   db.transaction(() => {
     if (settlement.from_transaction_id) {
-      db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(settlement.from_transaction_id, userId)
+      db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(settlement.from_transaction_id, settlement.from_user)
     }
     if (settlement.to_transaction_id) {
       db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').run(
@@ -207,10 +254,20 @@ settlementsRouter.delete('/settlements/:id', (req, res) => {
         settlement.to_user
       )
     }
-    db.prepare(
-      `UPDATE transaction_shares SET settled_at = NULL
-       WHERE id IN (SELECT share_id FROM settlement_share_lines WHERE settlement_id = ?)`
-    ).run(req.params.id)
+    // B-02: subtract exactly what this settlement applied to each share, and
+    // re-open (settled_at = NULL) any share that is no longer fully cleared.
+    const lines = db
+      .prepare('SELECT share_id, amount FROM settlement_share_lines WHERE settlement_id = ?')
+      .all(req.params.id) as { share_id: string; amount: number }[]
+    const reverse = db.prepare(
+      `UPDATE transaction_shares
+       SET settled_amount = MAX(0, ROUND(settled_amount - @amount, 2)),
+           settled_at = CASE WHEN ROUND(settled_amount - @amount, 2) >= share_amount THEN settled_at ELSE NULL END
+       WHERE id = @id`
+    )
+    for (const line of lines) {
+      reverse.run({ amount: line.amount, id: line.share_id })
+    }
     db.prepare('DELETE FROM settlements WHERE id = ?').run(req.params.id)
   })()
 
@@ -225,7 +282,7 @@ settlementsRouter.post('/transaction-shares/:id/settle', (req, res) => {
     .prepare('SELECT id FROM transaction_shares WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId)
   if (!share) return res.status(404).json({ error: 'share not found' })
-  db.prepare("UPDATE transaction_shares SET settled_at = datetime('now') WHERE id = ?").run(req.params.id)
+  db.prepare("UPDATE transaction_shares SET settled_amount = share_amount, settled_at = datetime('now') WHERE id = ?").run(req.params.id)
   res.json({ ok: true })
 })
 
@@ -237,6 +294,6 @@ settlementsRouter.post('/transaction-shares/:id/unsettle', (req, res) => {
     .prepare('SELECT id FROM transaction_shares WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId)
   if (!share) return res.status(404).json({ error: 'share not found' })
-  db.prepare('UPDATE transaction_shares SET settled_at = NULL WHERE id = ?').run(req.params.id)
+  db.prepare('UPDATE transaction_shares SET settled_amount = 0, settled_at = NULL WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
 })

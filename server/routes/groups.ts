@@ -334,7 +334,7 @@ groupsRouter.get('/groups/:id/balances', (req, res) => {
   const shares = db
     .prepare(
       `SELECT ts.user_id AS debtor_id, t.user_id AS creditor_id,
-              SUM(ts.share_amount) AS total_owed
+              SUM(ts.share_amount - ts.settled_amount) AS total_owed
        FROM transaction_shares ts
        JOIN transactions t ON t.id = ts.transaction_id
        JOIN group_members gm_d ON gm_d.user_id = ts.user_id AND gm_d.group_id = ?

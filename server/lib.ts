@@ -43,6 +43,19 @@ export function updateRow<T = Record<string, unknown>>(
     .get(params) as T | undefined
 }
 
+/**
+ * Local calendar date (YYYY-MM-DD), matching the client's todayISO() — NOT UTC.
+ * Settlements and other server-dated rows use this so they land on the user's
+ * "today" rather than drifting a day in +8 timezones (B-11).
+ */
+export function todayStr(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 /** better-sqlite3 only binds numbers/strings/bigints/buffers/null — coerce the rest. */
 export function normalizeBind(v: unknown): unknown {
   if (typeof v === 'boolean') return v ? 1 : 0
