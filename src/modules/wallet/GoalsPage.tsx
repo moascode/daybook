@@ -103,8 +103,9 @@ export function GoalsPage() {
       {goals.length === 0 ? (
         <EmptyState
           icon={<Target className="h-10 w-10" />}
-          title="Nothing here yet"
-          description="No goals have been created. Add your first goal to track your savings progress."
+          title="No goals yet"
+          description="Add a savings goal to track your progress toward a target."
+          action={<Button size="sm" onClick={openCreate}>Add your first goal</Button>}
         />
       ) : (
         <div className="flex flex-col gap-3">

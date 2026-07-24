@@ -1,10 +1,13 @@
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { useAppStore, type AuthUser } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
 type Mode = 'login' | 'signup'
+
+const MIN_PASSWORD_LENGTH = 6
 
 /**
  * First screen when no session exists. Handles login + signup against the
@@ -16,6 +19,8 @@ export function AuthPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -25,6 +30,17 @@ export function AuthPage() {
     if (!username.trim() || !password) {
       setError('Enter a username and password.')
       return
+    }
+    // U-20: guard against a too-short or mistyped password at signup.
+    if (mode === 'signup') {
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.')
+        return
+      }
     }
     setSubmitting(true)
     try {
@@ -64,13 +80,32 @@ export function AuthPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <Input
-            label="Password"
-            type="password"
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="relative">
+            <Input
+              label="Password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-[30px] text-gray-400 hover:text-gray-600"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+          {mode === 'signup' && (
+            <Input
+              label="Confirm password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+          )}
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 

@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
+import { useAppStore } from '@/stores/app.store'
 import { formatMYR, formatAxisMYR, monthRange, POSITIVE_MONEY_COLOR } from '@/lib/utils'
 import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -46,26 +47,31 @@ interface MerchantSpend {
   count: number
 }
 
-const DISMISSED_KEY = 'daybook:dismissed_reminders'
+// U-15: namespace dismissals per user so one account's dismissed reminders
+// don't carry over to another on a shared home-network browser.
+function dismissedKey(userId: string): string {
+  return `daybook:dismissed_reminders:${userId || 'anon'}`
+}
 
-function getDismissed(): Set<string> {
+function getDismissed(userId: string): Set<string> {
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY)
+    const raw = localStorage.getItem(dismissedKey(userId))
     return new Set(raw ? (JSON.parse(raw) as string[]) : [])
   } catch {
     return new Set()
   }
 }
 
-function saveDismissed(ids: Set<string>) {
-  localStorage.setItem(DISMISSED_KEY, JSON.stringify(Array.from(ids)))
+function saveDismissed(userId: string, ids: Set<string>) {
+  localStorage.setItem(dismissedKey(userId), JSON.stringify(Array.from(ids)))
 }
 
 export function Dashboard() {
   const { loadTransactions, loadCategories, loadAccounts, loadRecurringTransactions, accounts, categories, recurringTransactions } = useWallet()
+  const userId = useAppStore((s) => s.user?.id ?? '')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [range, setRange] = useState<DateRangeValue>(() => monthRange(0))
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(getDismissed)
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => getDismissed(userId))
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
   const { dateFrom, dateTo } = range
@@ -173,7 +179,7 @@ export function Dashboard() {
     const next = new Set(dismissedIds)
     next.add(id)
     setDismissedIds(next)
-    saveDismissed(next)
+    saveDismissed(userId, next)
   }
 
   const topMerchants = useMemo((): MerchantSpend[] => {

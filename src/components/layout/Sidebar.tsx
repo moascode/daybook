@@ -217,7 +217,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
           </span>
           <InvitationsBadge />
         </NavLink>
-        <p className="mt-2 px-3 text-xs text-gray-400">Daybook Alpha</p>
+        <p className="mt-2 px-3 text-xs text-gray-400">Daybook</p>
       </div>
     </>
   )

@@ -102,7 +102,12 @@ export function BudgetsPage() {
           <h2 className="text-base font-semibold text-gray-900">Budgets</h2>
           <p className="text-xs text-gray-500 mt-0.5">Monthly spend limits per category</p>
         </div>
-        <Button size="sm" onClick={openCreate} disabled={availableCategories.length === 0}>
+        <Button
+          size="sm"
+          onClick={openCreate}
+          disabled={availableCategories.length === 0}
+          title={availableCategories.length === 0 ? 'Every expense category already has a budget' : undefined}
+        >
           <Plus className="h-3.5 w-3.5" />
           Add Budget
         </Button>
@@ -112,8 +117,13 @@ export function BudgetsPage() {
       {budgets.length === 0 ? (
         <EmptyState
           icon={<PieChart className="h-10 w-10" />}
-          title="No limits configured"
-          description="No budgets set. Set monthly spend limits per category to track your spending."
+          title="No budgets yet"
+          description="Set a monthly spend limit per category to track how much you have left."
+          action={
+            availableCategories.length > 0
+              ? <Button size="sm" onClick={openCreate}>Add your first budget</Button>
+              : undefined
+          }
         />
       ) : (
         <div className="flex flex-col gap-3">

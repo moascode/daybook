@@ -32,13 +32,13 @@ test('wallet navigation contains a "Goals" link', async () => {
 test('navigating to /wallet/goals shows the Goals page', async () => {
   await page.goto('/wallet/goals')
   await expect(page).toHaveURL(/\/wallet\/goals$/)
-  await expect(page.locator('main').getByRole('heading', { name: /Goals/i })).toBeVisible()
+  await expect(page.locator('main').getByRole('heading', { name: 'Goals', exact: true })).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────
 
 test('shows empty state when no goals have been created', async () => {
-  await expect(page.getByText(/No goals|Add your first goal/i)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'No goals yet' })).toBeVisible()
 })
 
 // ── Create goal ────────────────────────────────────────────────────────

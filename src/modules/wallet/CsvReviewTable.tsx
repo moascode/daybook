@@ -89,11 +89,16 @@ export function CsvReviewTable({
                 />
               </td>
 
-              {/* Merchant */}
+              {/* Merchant — editable so a garbled bank column can be fixed here (U-14) */}
               <td className="px-3 py-2">
-                <span className={cn('text-sm text-gray-900', !row.included && 'opacity-60')}>
-                  {row.merchant || <span className="text-gray-400">—</span>}
-                </span>
+                <Input
+                  value={row.merchant}
+                  onChange={(e) => onRowChange(index, { merchant: e.target.value })}
+                  className="w-40 text-xs"
+                  placeholder="—"
+                  disabled={!row.included}
+                  aria-label={`Merchant for row ${index + 1}`}
+                />
               </td>
 
               {/* Amount */}

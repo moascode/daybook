@@ -1,20 +1,5 @@
 import { useLocation } from 'react-router-dom'
-
-const routeTitles: Record<string, string> = {
-  '/tasks':             'Tasks',
-  '/wallet':            'Transactions',
-  '/wallet/accounts':   'Accounts',
-  '/wallet/shared':     'Shared',
-  '/wallet/dashboard':  'Dashboard',
-  '/wallet/budgets':    'Budgets',
-  '/wallet/recurring':  'Recurring',
-  '/wallet/goals':      'Goals',
-  '/wallet/reports':    'Reports',
-  '/wallet/import':     'Import CSV',
-  '/settings':          'Settings',
-  '/settings/sharing':  'Sharing',
-  '/uat':               'UAT Tests',
-}
+import { routeTitles } from './routeTitles'
 
 export function TopBar() {
   const location = useLocation()

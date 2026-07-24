@@ -30,11 +30,34 @@ test('sign up creates an account and lands in the app', async ({ browser }) => {
 
   await page.getByRole('button', { name: 'Sign up' }).click()
   await page.getByLabel('Username').fill(unique())
-  await page.getByLabel('Password').fill('test-password')
+  await page.getByLabel('Password', { exact: true }).fill('test-password')
+  await page.getByLabel('Confirm password').fill('test-password')
   await page.getByRole('button', { name: 'Create account' }).click()
 
   // Lands in the app: the main content area renders.
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
+  await context.close()
+})
+
+test('signup validates password length and confirmation (U-20)', async ({ browser }) => {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Sign up' }).click()
+  await page.getByLabel('Username').fill(unique())
+
+  // Too short → blocked with a clear message.
+  await page.getByLabel('Password', { exact: true }).fill('abc')
+  await page.getByLabel('Confirm password').fill('abc')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page.getByText(/at least 6 characters/i)).toBeVisible()
+
+  // Mismatched confirmation → blocked.
+  await page.getByLabel('Password', { exact: true }).fill('longenough')
+  await page.getByLabel('Confirm password').fill('different')
+  await page.getByRole('button', { name: 'Create account' }).click()
+  await expect(page.getByText(/do not match/i)).toBeVisible()
+
   await context.close()
 })
 
@@ -56,7 +79,7 @@ test('log out returns to the sign-in screen, and the same credentials log back i
 
   // Log back in with the same credentials.
   await page.getByLabel('Username').fill(username)
-  await page.getByLabel('Password').fill('test-password')
+  await page.getByLabel('Password', { exact: true }).fill('test-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
   await context.close()
@@ -147,7 +170,7 @@ test('login with wrong password shows an error', async ({ browser }) => {
   await freshPage.goto('/')
 
   await freshPage.getByLabel('Username').fill(username)
-  await freshPage.getByLabel('Password').fill('wrong-password')
+  await freshPage.getByLabel('Password', { exact: true }).fill('wrong-password')
   await freshPage.getByRole('button', { name: 'Sign in' }).click()
 
   await expect(freshPage.getByText('Invalid username or password.')).toBeVisible()
