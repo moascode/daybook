@@ -151,7 +151,10 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     await alicePage.getByRole('button', { name: 'Remove member' }).click()
     // CD-01: confirm the removal in the dialog
     await alicePage.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
-    await expect(alicePage.getByText(bobName)).not.toBeVisible({ timeout: 5000 })
+    // Waits on a DELETE + refetch round trip plus the dialog's close animation,
+    // so give it more headroom than the other UI-only checks in this file —
+    // CI runners have shown this taking longer than 5s under load.
+    await expect(alicePage.getByText(bobName)).not.toBeVisible({ timeout: 15_000 })
 
     await aliceCtx.close()
     await bobCtx.close()

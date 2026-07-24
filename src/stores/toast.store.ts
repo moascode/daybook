@@ -10,7 +10,7 @@ export interface ToastItem {
 
 interface ToastState {
   toasts: ToastItem[]
-  addToast: (toast: Omit<ToastItem, 'id'> & { duration?: number }) => string
+  addToast: (toast: Omit<ToastItem, 'id' | 'duration'> & { duration?: number }) => string
   removeToast: (id: string) => void
 }
 
