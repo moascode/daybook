@@ -236,17 +236,18 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             )}
             <div className="flex items-end gap-2">
               <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-600 mb-1">Share with group</label>
-                <select
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                <Select
+                  label="Share with group"
+                  id="share-with-group"
+                  options={[
+                    { value: '', label: '— select group —' },
+                    ...groups
+                      .filter((g) => !shares.some((s) => s.groupId === g.id))
+                      .map((g) => ({ value: g.id, label: g.name })),
+                  ]}
                   value={shareGroupId}
                   onChange={(e) => setShareGroupId(e.target.value)}
-                >
-                  <option value="">— select group —</option>
-                  {groups.filter((g) => !shares.some((s) => s.groupId === g.id)).map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </select>
+                />
               </div>
               <label className="flex items-center gap-1 text-xs text-gray-600 pb-2">
                 <input

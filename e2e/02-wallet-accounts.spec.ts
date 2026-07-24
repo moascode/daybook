@@ -128,7 +128,7 @@ test('open delete confirmation dialog', async () => {
   await card.hover()
   await card.getByRole('button', { name: 'Delete account' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Delete Account' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Delete account?' })).toBeVisible()
   await expect(page.getByText(/Are you sure you want to delete "Touch n Go"/)).toBeVisible()
 })
 
@@ -142,7 +142,9 @@ test('confirm delete removes the account', async () => {
   const card = accountCardFor(page, 'Touch n Go')
   await card.hover()
   await card.getByRole('button', { name: 'Delete account' }).click()
-  await page.getByRole('button', { name: 'Delete Account' }).click()
+  // Scoped to the dialog: the card's own "Delete account" trigger button stays
+  // in the DOM behind the overlay and shares the same accessible name.
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete account' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(accountCardFor(page, 'Touch n Go')).not.toBeVisible()
   await expect(page.locator('[data-testid="account-card"]')).toHaveCount(2)
