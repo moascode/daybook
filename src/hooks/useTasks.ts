@@ -243,13 +243,19 @@ export function useTasks() {
     try {
       await api.delete(`/tasks/${id}`)
     } catch (err) {
+      // Delete failed — the task still exists, so it's editable again.
       for (const removedId of idsToRemove) pendingDeletes.delete(removedId)
       useTasksStore.getState().setLastDeleted(null)
       await reportAndReconcile(err)
       return
     }
 
-    for (const removedId of idsToRemove) pendingDeletes.delete(removedId)
+    // Deliberately NOT clearing pendingDeletes here: React hasn't committed
+    // the re-render yet, so the deleted task's editor (if it was focused)
+    // hasn't unmounted — the native blur that unmounting triggers, and the
+    // debounced-save flush it causes, is still ahead of us. Clearing the
+    // guard now would reopen exactly the window it exists to close. The ids
+    // stay blocked until `restoreDeleted` makes them editable again.
     const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
     useTasksStore.getState().setTasks(remaining)
   }, [])
@@ -276,6 +282,8 @@ export function useTasks() {
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
+      // The restored task is editable again — see the pendingDeletes comment in deleteTask.
+      pendingDeletes.delete(t.id)
     }
 
     await loadTasks()
