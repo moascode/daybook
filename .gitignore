@@ -39,3 +39,6 @@ server/data/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Claude Code agent worktree checkouts (ephemeral, harness-managed)
+.claude/worktrees/
