@@ -82,7 +82,32 @@ walletRouter.patch('/accounts/:id', (req, res) => {
 })
 
 walletRouter.delete('/accounts/:id', (req, res) => {
-  getDb().prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, req.session.userId!)
+  const db = getDb()
+  const userId = req.session.userId!
+  const acct = db.prepare('SELECT id FROM accounts WHERE id = ? AND user_id = ?').get(req.params.id, userId)
+  if (!acct) return res.status(204).end() // idempotent: nothing owned to delete
+
+  // B-05: deleting an account cascades its transactions (and their shares) away.
+  // Don't let that silently erase live household debts or other members' history.
+  const outstandingShare = db
+    .prepare(
+      `SELECT 1 FROM transaction_shares ts
+       JOIN transactions t ON t.id = ts.transaction_id
+       WHERE t.account_id = ? AND ts.settled_at IS NULL AND ts.user_id != t.user_id
+       LIMIT 1`,
+    )
+    .get(req.params.id)
+  if (outstandingShare) {
+    return res.status(409).json({ error: 'settle the outstanding splits on this account before deleting it' })
+  }
+  const othersTxn = db
+    .prepare('SELECT 1 FROM transactions WHERE account_id = ? AND user_id != ? LIMIT 1')
+    .get(req.params.id, userId)
+  if (othersTxn) {
+    return res.status(409).json({ error: 'this shared account has transactions from other members; unshare it first' })
+  }
+
+  db.prepare('DELETE FROM accounts WHERE id = ? AND user_id = ?').run(req.params.id, userId)
   res.status(204).end()
 })
 
@@ -600,7 +625,7 @@ walletRouter.patch('/transactions/:id', (req, res) => {
     return res.status(400).json({ error: 'invalid category reference' })
   }
 
-  // If amount changed and splits exist, auto-rescale
+  // If amount changed and splits exist, auto-rescale the shares proportionally.
   if ('amount' in b && b.amount !== undefined) {
     const oldTxn = db
       .prepare('SELECT amount FROM transactions WHERE id = ?')
@@ -610,20 +635,35 @@ walletRouter.patch('/transactions/:id', (req, res) => {
         .prepare('SELECT id, share_amount FROM transaction_shares WHERE transaction_id = ? ORDER BY created_at ASC')
         .all(req.params.id) as { id: string; share_amount: number }[]
       if (shareRows.length > 0) {
+        // B-06: never rewrite a settled/partially-paid split — the recorded
+        // settlement would no longer match the share it cleared.
+        if (hasSettledShare(db, req.params.id)) {
+          return res.status(409).json({ error: 'cannot change the amount of a transaction with settled splits; undo the settlement first' })
+        }
         const newAmount = Number(b.amount)
+        // B-06: reject an amount too small to keep every split positive.
+        if (newAmount < shareRows.length * 0.01) {
+          return res.status(400).json({ error: 'amount is too small to keep every split positive' })
+        }
         let allocated = 0
-        const updShare = db.prepare('UPDATE transaction_shares SET share_amount = ? WHERE id = ?')
+        const scaledShares: Array<{ id: string; amount: number }> = []
         for (let i = 0; i < shareRows.length; i++) {
           const row = shareRows[i]
           if (i === shareRows.length - 1) {
-            // Last share absorbs rounding remainder
-            updShare.run(Math.round((newAmount - allocated) * 100) / 100, row.id)
+            scaledShares.push({ id: row.id, amount: Math.round((newAmount - allocated) * 100) / 100 })
           } else {
-            const scaled = Math.round((row.share_amount / oldTxn.amount) * newAmount * 100) / 100
-            updShare.run(scaled, row.id)
+            const scaled = Math.max(0.01, Math.round((row.share_amount / oldTxn.amount) * newAmount * 100) / 100)
+            scaledShares.push({ id: row.id, amount: scaled })
             allocated += scaled
           }
         }
+        // If rounding/clamping pushed the remainder non-positive, reject rather than
+        // write a zero/negative share.
+        if (scaledShares.some((s) => s.amount <= 0)) {
+          return res.status(400).json({ error: 'amount is too small to keep every split positive' })
+        }
+        const updShare = db.prepare('UPDATE transaction_shares SET share_amount = ? WHERE id = ?')
+        for (const s of scaledShares) updShare.run(s.amount, s.id)
       }
     }
   }
@@ -647,6 +687,18 @@ walletRouter.delete('/transactions/:id', (req, res) => {
 })
 
 // ── Transaction shares (splits) ───────────────────────
+
+// True if any share on this transaction has been settled or partially paid.
+// Used to protect settled splits from being rewritten (B-04, B-06).
+function hasSettledShare(db: ReturnType<typeof getDb>, transactionId: string): boolean {
+  return !!db
+    .prepare(
+      `SELECT 1 FROM transaction_shares
+       WHERE transaction_id = ? AND (settled_at IS NOT NULL OR settled_amount > 0)
+       LIMIT 1`,
+    )
+    .get(transactionId)
+}
 
 walletRouter.get('/transactions/:id/shares', (req, res) => {
   const db = getDb()
@@ -683,6 +735,13 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
   if (!txn) return res.status(404).json({ error: 'transaction not found' })
   if (txn.user_id !== userId) {
     return res.status(403).json({ error: 'only the transaction owner can share' })
+  }
+
+  // B-04: re-splitting replaces every share row, which would erase settlement
+  // history and resurrect an already-paid debt. Block it while any share on this
+  // transaction has been settled or partially paid.
+  if (hasSettledShare(db, req.params.id)) {
+    return res.status(409).json({ error: 'this split has been (partly) settled; undo the settlement before changing it' })
   }
 
   // 2. Validate recipient is a co-group member
@@ -829,6 +888,15 @@ walletRouter.post('/transactions/shares', (req, res) => {
     }
   }
 
+  // 8b. B-04: refuse to replace shares that have been (partly) settled.
+  for (const tx of transactions) {
+    if (hasSettledShare(db, tx.transactionId)) {
+      return res.status(409).json({
+        error: `transaction ${tx.transactionId} has a settled split; undo the settlement before re-sharing`,
+      })
+    }
+  }
+
   // 9. Atomic DB writes — only INSERT/DELETE inside, no throwing (Issue 2)
   db.transaction(() => {
     const insert = db.prepare(
@@ -867,17 +935,22 @@ walletRouter.post('/transactions/shares/status', (req, res) => {
   ).all(...transactionIds, userId) as Array<{ id: string }>
   const ownedIds = new Set(ownedRows.map((r) => r.id))
 
+  // B-08: match the transaction list's own EXISTS check — a "Keep as-is" share
+  // writes only the recipient's row, so filtering by the owner's user_id here made
+  // the status say hasShares:false while the list badged the row as split. Owner
+  // scoping is already enforced by the ownedIds filter below.
   const rows = db.prepare(`
-      SELECT transaction_id, 1 AS hasShares
+      SELECT DISTINCT transaction_id
       FROM transaction_shares
-      WHERE transaction_id IN (${placeholders}) AND user_id = ?
-     `).all(...transactionIds, userId) as Array<{ transaction_id: string; hasShares: 1 }>
+      WHERE transaction_id IN (${placeholders})
+     `).all(...transactionIds) as Array<{ transaction_id: string }>
+  const sharedIds = new Set(rows.map((r) => r.transaction_id))
 
   const result = transactionIds
     .filter((id) => ownedIds.has(id))
     .map((id) => ({
       transactionId: id,
-      hasShares: rows.some((r) => r.transaction_id === id),
+      hasShares: sharedIds.has(id),
     }))
 
   res.json(result)
