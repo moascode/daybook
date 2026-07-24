@@ -451,6 +451,17 @@ export function useWallet() {
     return map
   }, [])
 
+  // B-15 residual: server-computed spending per category for the given month
+  // (YYYY-MM), using each transaction's EFFECTIVE amount (the caller's own
+  // share_amount when split, else the full amount) instead of the raw amount
+  // `getMonthlySpending` above would double-count for a split expense.
+  const getBudgetSpending = useCallback(async (month: string): Promise<Map<string, number>> => {
+    const rows = await api.get<{ categoryId: string; spent: number }[]>(
+      `/budgets/spending?month=${encodeURIComponent(month)}`,
+    )
+    return new Map(rows.map((r) => [r.categoryId, r.spent]))
+  }, [])
+
   // ── Recurring CRUD ───────────────────────────────
 
   const loadRecurringTransactions = useCallback(async () => {
@@ -632,6 +643,7 @@ export function useWallet() {
     updateBudget,
     deleteBudget,
     getMonthlySpending,
+    getBudgetSpending,
 
     // Recurring CRUD
     addRecurringTransaction,

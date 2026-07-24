@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, PieChart, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -19,32 +19,25 @@ interface BudgetFormData {
 }
 
 export function BudgetsPage() {
-  const { budgets, categories, transactions, loadBudgets, loadCategories, loadTransactions, addBudget, updateBudget, deleteBudget, getMonthlySpending } = useWallet()
+  const { budgets, categories, loadBudgets, loadCategories, addBudget, updateBudget, deleteBudget, getBudgetSpending } = useWallet()
   const { addToast } = useToastStore()
 
   const crud = useCrudModal<Budget>()
   const [form, setForm] = useState<BudgetFormData>({ categoryId: '', limitAmount: '' })
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [spending, setSpending] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     loadCategories()
     loadBudgets()
-    // C8: budget progress only looks at the current month, so bound the fetch
-    // instead of pulling the user's full transaction history.
-    // B-15: scope to the user's OWN transactions so a housemate's spending on a
-    // shared account doesn't inflate this user's budget.
-    loadTransactions({ ...monthRange(0), view: 'mine' })
-  }, [loadBudgets, loadCategories, loadTransactions])
-
-  // C6: wire up getMonthlySpending instead of reimplementing the same
-  // aggregation inline. `transactions` is a dep only to trigger recompute —
-  // getMonthlySpending itself reads the store directly.
-  const spending = useMemo(
-    () => getMonthlySpending(monthRange(0).dateFrom.slice(0, 7)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [transactions, getMonthlySpending],
-  )
+    // B-15 residual: budget spend must reflect the user's EFFECTIVE share —
+    // when they've split an expense, their own share_amount, not the full
+    // transaction total. GET /budgets/spending computes this server-side as
+    // one aggregate query, scoped to the caller's own transactions and
+    // bounded to the current month.
+    getBudgetSpending(monthRange(0).dateFrom.slice(0, 7)).then(setSpending)
+  }, [loadBudgets, loadCategories, getBudgetSpending])
 
   const openCreate = useCallback(() => {
     setForm({ categoryId: '', limitAmount: '' })
