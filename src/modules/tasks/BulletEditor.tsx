@@ -213,7 +213,16 @@ export function BulletEditor({
         const text = el.textContent ?? ''
         if (text.length === 0) {
           e.preventDefault()
-          flushUpdate()
+          // Content is already empty, so there's nothing worth persisting —
+          // just drop any pending debounced save instead of flushing it. A
+          // flush here raced the DELETE that onBackspaceEmpty triggers: if the
+          // delete won, the update PATCH landed on an already-gone task and
+          // 404'd, popping a spurious "task not found" toast on top of the
+          // delete's own undo toast.
+          if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current)
+            debounceTimer.current = null
+          }
           onBackspaceEmpty(taskId)
           return
         }

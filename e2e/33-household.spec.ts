@@ -147,14 +147,17 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
     await alicePage.getByRole('heading', { name: 'RemoveGroup' }).click()
-    await expect(alicePage.getByText(bobName)).toBeVisible({ timeout: 5000 })
+    // Scope to the member-list row, not raw page text — the confirm dialog's own
+    // description ("Remove {bobName} from the group?") also contains bobName as a
+    // substring, and getByText(bobName) matches both, so waiting for it to fully
+    // disappear was really waiting on the dialog's close animation to finish
+    // rather than on the actual removal, which is what this test cares about.
+    const bobRow = alicePage.getByRole('listitem').filter({ hasText: bobName })
+    await expect(bobRow).toBeVisible({ timeout: 5000 })
     await alicePage.getByRole('button', { name: 'Remove member' }).click()
     // CD-01: confirm the removal in the dialog
     await alicePage.getByRole('dialog').getByRole('button', { name: 'Remove' }).click()
-    // Waits on a DELETE + refetch round trip plus the dialog's close animation,
-    // so give it more headroom than the other UI-only checks in this file —
-    // CI runners have shown this taking longer than 5s under load.
-    await expect(alicePage.getByText(bobName)).not.toBeVisible({ timeout: 15_000 })
+    await expect(bobRow).not.toBeVisible({ timeout: 15_000 })
 
     await aliceCtx.close()
     await bobCtx.close()
