@@ -71,9 +71,12 @@ export function normalizeBind(v: unknown): unknown {
  */
 export function splitEqually(amount: number, n: number): number[] {
   if (n <= 0) return []
-  const base = Math.floor((amount / n) * 100) / 100
-  const remainder = Math.round((amount - base * n) * 100) / 100
-  return [Math.round((base + remainder) * 100) / 100, ...Array<number>(n - 1).fill(base)]
+  // B-09: work in integer cents so a cleanly divisible amount splits exactly
+  // (RM8.20 ÷ 4 = 2.05 each). Index 0 (owner) absorbs the leftover cents.
+  const cents = Math.round(amount * 100)
+  const base = Math.floor(cents / n)
+  const remainder = cents - base * n
+  return [(base + remainder) / 100, ...Array<number>(n - 1).fill(base / 100)]
 }
 
 /**

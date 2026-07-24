@@ -516,7 +516,9 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 **Key invariants**:
 - Groups are opt-in; existing single-user data has no group visibility
 - Account shares grant visibility + optional write access; ownership stays with the original user
-- Transaction splits track who owes whom with `share_amount`; settlements create two real transfer transactions
+- Transaction splits track who owes whom with `share_amount`; settling books two real ledger
+  transactions — an expense on the payer's account and a matching income on the recipient's
+  account (B-16: they are income/expense entries, not `transfer`-type rows)
 - A payer row is written only when the payer participates in the split ("Keep as-is" writes just the recipient's row); group balances only count debtor rows, so both shapes settle correctly
 - Non-members never see shared accounts or splits; visibility is scoped per user and group membership
 - `settled_at` in `transaction_shares` marks when a share is cleared by a settlement

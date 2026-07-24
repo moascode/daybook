@@ -31,7 +31,9 @@ export function BudgetsPage() {
     loadBudgets()
     // C8: budget progress only looks at the current month, so bound the fetch
     // instead of pulling the user's full transaction history.
-    loadTransactions(monthRange(0))
+    // B-15: scope to the user's OWN transactions so a housemate's spending on a
+    // shared account doesn't inflate this user's budget.
+    loadTransactions({ ...monthRange(0), view: 'mine' })
   }, [loadBudgets, loadCategories, loadTransactions])
 
   // C6: wire up getMonthlySpending instead of reimplementing the same

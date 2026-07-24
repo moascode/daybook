@@ -20,6 +20,27 @@ const ACCOUNT_COLS: Record<string, string> = {
   openingBalance: 'opening_balance',
 }
 
+const ACCOUNT_TYPES = new Set(['cash', 'card', 'e-wallet', 'bank', 'investment', 'other'])
+
+// B-21/CD-11: validate account fields on both create and edit so the API can't
+// store a blank name or a non-numeric opening balance (which SQLite would then
+// silently coerce to 0 in the balance sum) the way the UI forms already prevent.
+function accountInputError(b: Record<string, unknown>, partial: boolean): string | null {
+  const has = (k: string) => k in b
+  if (!partial || has('name')) {
+    if (typeof b.name !== 'string' || !b.name.trim()) return 'name is required'
+  }
+  if (has('type') && (typeof b.type !== 'string' || !ACCOUNT_TYPES.has(b.type))) {
+    return 'type must be one of: cash, card, e-wallet, bank, investment, other'
+  }
+  if (has('openingBalance')) {
+    const n = typeof b.openingBalance === 'number' || typeof b.openingBalance === 'string'
+      ? Number(b.openingBalance) : NaN
+    if (!Number.isFinite(n)) return 'openingBalance must be a number'
+  }
+  return null
+}
+
 walletRouter.get('/accounts', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
@@ -50,9 +71,8 @@ walletRouter.get('/accounts', (req, res) => {
 
 walletRouter.post('/accounts', (req, res) => {
   const b = req.body ?? {}
-  if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
-    return res.status(400).json({ error: 'name is required' })
-  }
+  const err = accountInputError(b, false)
+  if (err) return res.status(400).json({ error: err })
   const row = getDb()
     .prepare(
       `INSERT INTO accounts (id, user_id, name, description, currency, type, color, icon, opening_balance, created_at)
@@ -73,6 +93,8 @@ walletRouter.post('/accounts', (req, res) => {
 })
 
 walletRouter.patch('/accounts/:id', (req, res) => {
+  const err = accountInputError(req.body ?? {}, true)
+  if (err) return res.status(400).json({ error: err })
   // accounts has no updated_at column.
   const row = updateRow(getDb(), 'accounts', req.params.id, req.session.userId!, ACCOUNT_COLS, req.body ?? {}, {
     touchUpdatedAt: false,
@@ -1050,6 +1072,19 @@ function isoDateError(v: unknown, field: string): string | null {
   return null
 }
 
+// B-20: a next-due-date far in the past would catch-up-post a burst of back-dated
+// transactions (capped at 120) on the next boot — almost always a fat-finger.
+// Reject anything more than a year before today; legitimate catch-up is recent.
+function farPastDueError(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  if (v < oneYearAgo.toISOString().slice(0, 10)) {
+    return 'next due date is too far in the past (more than a year ago)'
+  }
+  return null
+}
+
 walletRouter.post('/recurring-transactions', (req, res) => {
   const b = req.body ?? {}
   if (!ownsAllRefs(getDb(), req.session.userId!, [['accounts', b.accountId], ['categories', b.categoryId]])) {
@@ -1063,7 +1098,7 @@ walletRouter.post('/recurring-transactions', (req, res) => {
   }
   const amtErr = positiveAmountError(b.amount, 'amount')
   if (amtErr) return res.status(400).json({ error: amtErr })
-  const dateErr = isoDateError(b.nextDueDate, 'nextDueDate')
+  const dateErr = isoDateError(b.nextDueDate, 'nextDueDate') ?? farPastDueError(b.nextDueDate)
   if (dateErr) return res.status(400).json({ error: dateErr })
   const row = getDb()
     .prepare(
@@ -1098,8 +1133,12 @@ function advanceDate(dateStr: string, frequency: string): string {
   let ny = y
   let nm = m + 1
   if (nm > 12) { nm = 1; ny += 1 }
-  const lastDay = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
-  const nd = Math.min(d, lastDay)
+  const lastDayThis = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const lastDayNext = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  // B-10: keep an end-of-month rule anchored to month-end (31 Jan → 28/29 Feb →
+  // 31 Mar → 30 Apr …) instead of drifting to the 28th forever after the first
+  // short month. A mid-month day just clamps to the next month's length.
+  const nd = d >= lastDayThis ? lastDayNext : Math.min(d, lastDayNext)
   return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
 }
 
@@ -1214,7 +1253,7 @@ walletRouter.patch('/recurring-transactions/:id', (req, res) => {
     if (amtErr) return res.status(400).json({ error: amtErr })
   }
   if ('nextDueDate' in b) {
-    const dateErr = isoDateError(b.nextDueDate, 'nextDueDate')
+    const dateErr = isoDateError(b.nextDueDate, 'nextDueDate') ?? farPastDueError(b.nextDueDate)
     if (dateErr) return res.status(400).json({ error: dateErr })
   }
   const refs: Array<[string, unknown]> = []
