@@ -47,6 +47,8 @@ export function RecurringPage() {
 
   const crud = useCrudModal<RecurringTransaction>()
   const [postingId, setPostingId] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<RecurringFormData>({
     accountId: '',
     amount: '',
@@ -89,6 +91,7 @@ export function RecurringPage() {
       frequency: 'monthly',
       nextDueDate: todayISO(),
     })
+    setFormError(null)
     crud.openCreate()
   }, [crud, ownAccounts])
 
@@ -102,12 +105,18 @@ export function RecurringPage() {
       frequency: rule.frequency,
       nextDueDate: rule.nextDueDate,
     })
+    setFormError(null)
     crud.openEdit(rule)
   }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const amount = parseFloat(form.amount)
-    if (!form.accountId || isNaN(amount) || amount <= 0 || !form.nextDueDate) return
+    // U-04: surface the specific blocker instead of a dead button.
+    if (!form.accountId) { setFormError('Choose an account.'); return }
+    if (isNaN(amount) || amount <= 0) { setFormError('Enter an amount greater than 0.'); return }
+    if (!form.nextDueDate) { setFormError('Pick the next due date.'); return }
+    setFormError(null)
+    setSaving(true)
     const categoryId = form.categoryId || null
     try {
       if (crud.editingItem) {
@@ -133,6 +142,8 @@ export function RecurringPage() {
       crud.closeForm(false)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save recurring rule — please try again.'), duration: 4000 })
+    } finally {
+      setSaving(false)
     }
   }, [form, crud, addRecurringTransaction, updateRecurringTransaction, addToast])
 
@@ -337,12 +348,13 @@ export function RecurringPage() {
             value={form.nextDueDate}
             onChange={(e) => setForm((f) => ({ ...f, nextDueDate: e.target.value }))}
           />
+          {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>
               Cancel
             </Button>
-            <Button size="sm" onClick={handleSubmit}>
-              {crud.editingItem ? 'Save' : 'Create'}
+            <Button size="sm" onClick={handleSubmit} loading={saving}>
+              {crud.editingItem ? 'Save Changes' : 'Create Rule'}
             </Button>
           </div>
         </div>

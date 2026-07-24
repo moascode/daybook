@@ -34,6 +34,8 @@ export function GoalsPage() {
   const crud = useCrudModal<Goal>()
   const [balances, setBalances] = useState<Record<string, number>>({})
   const [form, setForm] = useState<GoalFormData>({ name: '', targetAmount: '', accountId: '' })
+  const [formError, setFormError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     // §1.4: one batched balances call instead of a per-account fan-out.
@@ -44,17 +46,24 @@ export function GoalsPage() {
 
   const openCreate = useCallback(() => {
     setForm({ name: '', targetAmount: '', accountId: accounts[0]?.id ?? '' })
+    setFormError(null)
     crud.openCreate()
   }, [accounts, crud])
 
   const openEdit = useCallback((goal: Goal) => {
     setForm({ name: goal.name, targetAmount: String(goal.targetAmount), accountId: goal.accountId })
+    setFormError(null)
     crud.openEdit(goal)
   }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const targetAmount = parseFloat(form.targetAmount)
-    if (!form.name.trim() || isNaN(targetAmount) || targetAmount <= 0 || !form.accountId) return
+    // U-04: explain the blocker rather than silently ignoring the click.
+    if (!form.name.trim()) { setFormError('Give the goal a name.'); return }
+    if (isNaN(targetAmount) || targetAmount <= 0) { setFormError('Enter a target greater than 0.'); return }
+    if (!form.accountId) { setFormError('Choose an account.'); return }
+    setFormError(null)
+    setSaving(true)
     try {
       if (crud.editingItem) {
         await updateGoal(crud.editingItem.id, { name: form.name.trim(), targetAmount, accountId: form.accountId })
@@ -64,6 +73,8 @@ export function GoalsPage() {
       crud.closeForm(false)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save goal — please try again.'), duration: 4000 })
+    } finally {
+      setSaving(false)
     }
   }, [form, crud, addGoal, updateGoal, addToast])
 
@@ -184,9 +195,10 @@ export function GoalsPage() {
             value={form.accountId}
             onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
           />
+          {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleSubmit}>{crud.editingItem ? 'Save' : 'Create'}</Button>
+            <Button size="sm" onClick={handleSubmit} loading={saving}>{crud.editingItem ? 'Save Changes' : 'Create Goal'}</Button>
           </div>
         </div>
       </Modal>

@@ -71,6 +71,7 @@ export function TransactionForm({
     getInitialState(transaction, defaultAccountId, accounts)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
@@ -147,19 +148,29 @@ export function TransactionForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!validate()) return
-    await onSubmit(buildSubmitData())
-    onOpenChange(false)
+    if (saving || !validate()) return
+    setSaving(true)
+    try {
+      await onSubmit(buildSubmitData())
+      onOpenChange(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   // B2: submit but keep the modal open for rapid entry — clear the per-item
   // fields, keep date/account/type (and category), and refocus Amount.
   async function handleSaveAndAddAnother() {
-    if (!validate()) return
-    await onSubmit(buildSubmitData())
-    setForm((f) => ({ ...f, amount: 0, merchant: '', description: '', tags: [] }))
-    setErrors({})
-    amountRef.current?.focus()
+    if (saving || !validate()) return
+    setSaving(true)
+    try {
+      await onSubmit(buildSubmitData())
+      setForm((f) => ({ ...f, amount: 0, merchant: '', description: '', tags: [] }))
+      setErrors({})
+      amountRef.current?.focus()
+    } finally {
+      setSaving(false)
+    }
   }
 
   const isEdit = !!transaction
@@ -304,12 +315,13 @@ export function TransactionForm({
               type="button"
               variant="secondary"
               onClick={handleSaveAndAddAnother}
+              disabled={saving}
               data-testid="save-add-another"
             >
               Save &amp; Add Another
             </Button>
           )}
-          <Button type="submit">
+          <Button type="submit" loading={saving}>
             {isEdit ? 'Save Changes' : 'Add Transaction'}
           </Button>
         </div>
