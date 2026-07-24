@@ -536,37 +536,13 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
 
 // ── Split transaction ────────────────────────────────────────────────────
 
-test('hover on transaction row reveals the Split (scissors) button', async () => {
+// U-07: a user with no household group has nobody to split with, so the split
+// (scissors) affordance is hidden rather than leading to a dead-end dialog. The
+// full split flow (with a group) is covered in 35-splits.spec.ts.
+test('the Split button is hidden for a user with no household group (U-07)', async () => {
   await transactionRowFor(page, 'Kopitiam').hover()
-  await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toBeVisible()
+  await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toHaveCount(0)
 })
-
-test('clicking Split opens the Split Transaction modal', async () => {
-  await transactionRowFor(page, 'Kopitiam').hover()
-  await transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn').click()
-  await expect(page.getByRole('dialog')).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Split Transaction' })).toBeVisible()
-})
-
-test('share modal shows the transaction and a group-members prompt', async () => {
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByText('Kopitiam')).toBeVisible()
-  await expect(dialog.getByText('No group members yet')).toBeVisible()
-  await expect(dialog.getByRole('button', { name: 'Split', exact: true })).toBeDisabled()
-})
-
-test('share modal does not show split mode selector without a recipient', async () => {
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByText('How to split')).not.toBeVisible()
-})
-
-test('cancelling share modal closes it without creating new transactions', async () => {
-  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
-})
-
-// Split transaction — household sharing is tested in 35-splits.spec.ts
 
 // ── §1.1 regression: default date filters are TZ-safe ────────────────────
 

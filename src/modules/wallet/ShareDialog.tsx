@@ -120,7 +120,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
                  </span>
                </div>
              ))}
-             <p className="text-xs text-amber-700 pt-1">Saving will replace these shares.</p>
+             <p className="text-xs text-amber-700 pt-1">Saving will replace this split.</p>
            </div>
          )}
 
