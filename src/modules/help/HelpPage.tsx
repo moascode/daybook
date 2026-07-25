@@ -15,9 +15,9 @@ import {
 import { cn } from '@/lib/utils'
 
 /**
- * In-app user guide. Mirrors docs/USER_GUIDE.md — keep the two in sync when the
- * app's behaviour changes (see the note at the top of that file). Rendered as
- * native components (no markdown dependency) to stay within the approved stack.
+ * In-app user guide — the single source of truth for user-facing docs. Rendered
+ * as native components (no markdown dependency) to stay within the approved
+ * stack. When the app's behaviour changes, update the relevant section below.
  */
 
 // ── Small presentational helpers ─────────────────────────
