@@ -40,23 +40,43 @@
 
 ## 3. Architecture Overview
 
+> **CURRENT (as shipped, v1.0+).** Phase 4 landed as a **local Node + SQLite
+> backend on home hardware**, not Supabase (Supabase/Vercel remain the *Phase 6*
+> cloud plan). The browser no longer stores data; it calls the server over `/api`.
+
+```
+Browser (React 18 + Vite)                    Home-network server (Node + Express)
+├── React Router (client routes)      ──►    ├── /api/* REST routes (routes/*.ts)
+├── Zustand stores (in-memory UI state)      ├── express-session + bcrypt auth
+└── src/lib/api.ts (fetch, cookie)    ◄──    └── better-sqlite3 → daybook.db
+                                                 (file-based migrations, per-user rows)
+```
+
+- **Persistence:** one SQLite file owned by the server (`DAYBOOK_HOME/shared/data/daybook.db`).
+- **Auth:** session cookie + bcrypt; every query scoped by `user_id`.
+- **AI:** not wired up yet — see §9.3 (Phase 5a, deferred). No Anthropic calls happen today.
+
+<details><summary>Original Phase 0–3 plan (historical — superseded)</summary>
+
 ```
 Browser (React + Vite)
-├── SQLite (PGlite — runs in-browser, persists in IndexedDB)
+├── SQLite (PGlite — runs in-browser, persists in IndexedDB)   ← removed in Phase 4
 ├── Zustand stores (in-memory state)
-├── Anthropic API (called from browser during local phase)
+├── Anthropic API (called from browser during local phase)     ← never shipped (5a deferred)
 │
-└── [Phase 4 additions]
-    ├── Supabase Postgres (replaces SQLite for cloud sync)
-    ├── Supabase Auth (email/password)
-    └── Vercel Edge Function (proxies Anthropic API key)
+└── [Phase 4 additions — actually built as local Node+SQLite, NOT Supabase]
+    ├── Supabase Postgres (replaces SQLite for cloud sync)      ← Phase 6, not done
+    ├── Supabase Auth (email/password)                          ← Phase 6, not done
+    └── Vercel Edge Function (proxies Anthropic API key)        ← Phase 6, not done
 ```
 
-**Local-first principle:** The app works 100% offline in Phases 1–3. PGlite stores all data in the browser's IndexedDB. No server required. Claude API calls go directly from the browser using the user's API key stored in the settings table (never sent to any server the user doesn't control).
-
-**Security note — Phase 4 requirement:** `VITE_` prefixed env vars are compiled into the browser bundle and readable in devtools. The API key must move behind a Vercel Edge Function before Phase 4 deploys to a public URL. This is non-negotiable.
-
-**PGlite storage note:** IndexedDB quotas vary by browser (Chrome ~60% of disk, Safari can be more aggressive). Test storage behaviour under realistic data volumes before Phase 4. For a personal finance app accumulating years of data, this matters.
+The original **local-first principle** (Phases 1–3: PGlite in IndexedDB, fully
+offline, browser-side Claude calls) applied before Phase 4. It has been replaced
+by the home-network server above. IndexedDB storage-quota concerns no longer
+apply. When the app reaches public cloud hosting (Phase 6), the browser-exposed
+`VITE_` API-key security note still stands: the key must move behind a server-side
+function before any public deploy.
+</details>
 
 ---
 
@@ -69,8 +89,13 @@ Browser (React + Vite)
 |---|---|---|
 | `react` | ^18.3 | UI framework |
 | `react-dom` | ^18.3 | DOM rendering |
-| `typescript` | ^5.4 | Type safety |
-| `vite` | ^5.2 | Build tool + dev server |
+| `typescript` | ~6.0 | Type safety (bumped from ^5.4 during Phase 4/5; `@types/react`/`@types/react-dom` track v19 even though the React runtime stays on 18.3) |
+| `vite` | ^8.0 | Build tool + dev server (bumped from ^5.2 during Phase 4/5) |
+
+> **Version note:** the pins above reflect what is actually installed
+> (`package.json` is the source of truth). Toolchain versions have advanced past
+> the original Phase-1 pins — keep this table and `package.json` in sync when
+> upgrading, and still ask before adding any *new* package not listed here.
 
 #### Styling
 | Package | Version | Purpose |
@@ -85,14 +110,21 @@ Browser (React + Vite)
 | Package | Version | Purpose |
 |---|---|---|
 | `zustand` | ^4.5 | Global client state |
-| `@tanstack/react-query` | ^5.40 | Async state (Phase 4 only — do not use before Phase 4) |
+| `@tanstack/react-query` | ^5.40 | Async state — **not installed.** Was planned for Phase 4; the client instead talks to the server through `src/lib/api.ts`. Do not add without approval. |
 
-#### Database (Local)
-| Package | Version | Purpose |
+#### Database — ⚠️ SUPERSEDED (was: Phase 1–3 in-browser store)
+> **Phase 4 replaced the in-browser database with the Node + SQLite backend.**
+> `@electric-sql/pglite`, `drizzle-orm`, and `drizzle-kit` are **no longer
+> installed** and there is no `src/db/` in the browser. The server owns the
+> database file (`better-sqlite3`) and applies plain-SQL migrations from
+> `server/migrations/`. The rows below are kept only as historical record of the
+> pre-v1 local-first architecture — do not reintroduce these packages.
+
+| Package | Version | Status |
 |---|---|---|
-| `@electric-sql/pglite` | ^0.2 | SQLite running in browser |
-| `drizzle-orm` | ^0.31 | Type-safe SQL query builder |
-| `drizzle-kit` | ^0.22 | Schema migrations (dev tool) |
+| `@electric-sql/pglite` | ^0.2 | Removed in Phase 4 (was: SQLite in browser) |
+| `drizzle-orm` | ^0.31 | Removed in Phase 4 (was: type-safe query builder) |
+| `drizzle-kit` | ^0.22 | Removed in Phase 4 (was: schema migrations) |
 
 #### Routing
 | Package | Version | Purpose |
@@ -151,6 +183,14 @@ Browser (React + Vite)
 
 ## 5. Folder Structure
 
+> **Heads-up:** this tree is the *original* Phase-1 layout and is now partly
+> historical. Lines tagged **⛔ removed** no longer exist (replaced by the Phase 4
+> server) and lines tagged **🔮 not built** are deferred Phase 5a (AI) files that
+> were never created. The app has since grown many more real files not shown here
+> (e.g. `modules/wallet/{BudgetsPage,GoalsPage,RecurringPage,ReportsPage,SharedPage,
+> SplitDialog,SettleUpDialog,…}`, `modules/settings/*`, `components/auth/AuthPage.tsx`,
+> `stores/household.store.ts`, `lib/api.ts`). Treat `src/` on disk as the real map.
+
 ```
 daybook/
 ├── CLAUDE.md                        ← YOU ARE HERE — read every session
@@ -163,34 +203,37 @@ daybook/
 ├── tsconfig.json
 ├── tsconfig.node.json
 ├── vite.config.ts
-├── drizzle.config.ts                ← Drizzle ORM config
+├── drizzle.config.ts                ← ⛔ removed (Drizzle gone since Phase 4)
 │
 └── src/
     ├── main.tsx                     ← App entry point
-    ├── App.tsx                      ← Root component + providers
+    ├── App.tsx                      ← Root component + providers (auth gate)
     ├── router.tsx                   ← All routes defined here
     │
-    ├── db/
-    │   ├── index.ts                 ← PGlite instance (singleton)
-    │   ├── schema.ts                ← Drizzle schema = source of truth
-    │   └── seed.ts                  ← Default categories seed data
+    ├── db/                          ← ⛔ removed — server owns the DB (server/db.ts)
+    │   ├── index.ts                 ← ⛔ was: PGlite instance (singleton)
+    │   ├── schema.ts                ← ⛔ was: Drizzle schema
+    │   └── seed.ts                  ← ⛔ was: default categories seed (now server/seed.ts)
     │
     ├── stores/
     │   ├── tasks.store.ts           ← Zustand: task state + actions
     │   ├── wallet.store.ts          ← Zustand: wallet state + actions
-    │   └── app.store.ts             ← Zustand: global app state (settings, theme)
+    │   ├── household.store.ts       ← Zustand: groups + pending invites
+    │   ├── toast.store.ts           ← Zustand: undo/error toasts
+    │   └── app.store.ts             ← Zustand: global app state (auth user, settings, theme)
     │
     ├── hooks/
     │   ├── useTasks.ts              ← Task CRUD + sort order rebalance utility
     │   ├── useWallet.ts             ← Wallet CRUD operations
-    │   ├── useClaude.ts             ← Claude API calls + streaming
-    │   └── useSettings.ts          ← App settings (API key, currency)
+    │   ├── useClaude.ts             ← 🔮 not built (Phase 5a AI — deferred)
+    │   └── useSettings.ts          ← App settings (currency, theme)
     │
     ├── lib/
-    │   ├── claude.ts                ← Anthropic client + prompt builders
-    │   ├── claude-prompts.ts        ← All system prompts in one place
+    │   ├── api.ts                   ← fetch wrapper for /api (session cookie, {error} parsing)
+    │   ├── claude.ts                ← 🔮 not built (Phase 5a AI — deferred)
+    │   ├── claude-prompts.ts        ← 🔮 not built (Phase 5a AI — deferred)
     │   ├── csv.ts                   ← CSV parsing + bank format detection + duplicate hash
-    │   └── utils.ts                 ← Shared helpers (cn, formatCurrency, etc.)
+    │   └── utils.ts                 ← Shared helpers (cn, formatMYR, todayISO, etc.)
     │
     ├── modules/
     │   ├── tasks/
@@ -227,10 +270,10 @@ daybook/
     │   │   ├── DatePicker.tsx
     │   │   └── EmptyState.tsx
     │   │
-    │   └── claude/
-    │       ├── ClaudePanel.tsx      ← Slide-in AI chat panel
-    │       ├── DailyBriefing.tsx    ← One-click briefing button + display
-    │       └── ApiKeySetup.tsx      ← First-time API key entry screen
+    │   └── claude/                  ← 🔮 not built (Phase 5a AI — deferred; none of these exist yet)
+    │       ├── ClaudePanel.tsx      ← 🔮 planned: slide-in AI chat panel
+    │       ├── DailyBriefing.tsx    ← 🔮 planned: one-click briefing button + display
+    │       └── ApiKeySetup.tsx      ← 🔮 planned: first-time API key entry screen
     │
     └── types/
         ├── tasks.types.ts           ← Task, BulletNode interfaces
@@ -368,6 +411,12 @@ CREATE TABLE IF NOT EXISTS transactions (
   -- type values: 'income' | 'expense' | 'transfer'
   category_id           TEXT REFERENCES categories(id) ON DELETE SET NULL,
   tag                   TEXT DEFAULT '',
+  -- Despite the singular column name, `tag` stores a JSON array of tag strings
+  -- (e.g. '["groceries","reimbursable"]'); '' or '[]' means no tags. Transactions
+  -- support MULTIPLE tags. Migrations 0002_normalize_tags / 0003_fix_empty_tags
+  -- converted legacy plain-string values to JSON arrays so json_each() filtering
+  -- works on every row. The client/API layer exposes this as `tags: string[]`;
+  -- GET /api/tags returns the distinct tag values via json_each(t.tag).
   import_hash           TEXT DEFAULT '',
   -- import_hash: SHA-256 of (date + amount + merchant) used for CSV duplicate detection.
   -- Empty string for manually entered transactions.
@@ -387,7 +436,9 @@ CREATE TABLE IF NOT EXISTS settings (
 -- Known keys:
 -- 'anthropic_api_key'   → user's API key (stored in DB, never in env vars at runtime)
 -- 'default_currency'    → 'MYR'
--- 'theme'               → 'light' | 'dark' | 'system'
+-- 'theme'               → 'light' | 'system'  (a full 'dark' theme is planned but
+--                          not yet shipped; the Settings UI currently offers only
+--                          Light and System)
 -- 'hide_completed'      → '0' | '1'
 -- 'default_account_id'  → UUID of preferred account
 ```
@@ -564,7 +615,13 @@ export interface Account {
   type: 'cash' | 'card' | 'e-wallet' | 'bank' | 'investment' | 'other'
   color: string
   icon: string
+  openingBalance: number                 // starting balance; included in the computed balance
   createdAt: string
+  // Sharing (Phase 5b) — populated only on accounts shared in from another user:
+  isShared?: boolean
+  sharedByUserId?: string | null
+  sharedByUsername?: string | null
+  canWrite?: number                      // 0 | 1; only present on shared-in accounts
 }
 
 export type TransactionType = 'income' | 'expense' | 'transfer'
@@ -579,10 +636,11 @@ export interface Transaction {
   amount: number                         // always positive
   type: TransactionType
   categoryId: string | null
-  tag: string
+  tags: string[]                         // multiple free-text tags; stored in the DB `tag` column as a JSON array
   importHash: string                     // '' for manual entries; hash for CSV imports
   createdAt: string
   updatedAt: string
+  hasSplits?: boolean                    // true when this transaction has been split with a group member
 }
 
 export interface Category {
@@ -677,12 +735,12 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 - Deleting an account deletes all its transactions (CASCADE)
 
 #### Transactions
-- Add transaction: date (default today), merchant, description, amount, type (income/expense/transfer), category, tag
-- For **transfer** type: show a second account selector for `destinationAccountId`; hide category field (transfers are not categorised)
+- Add transaction: date (default today), merchant, description, amount, type (income/expense/transfer), category, tags (multiple, free-text)
+- For **transfer** type: show a second account selector for `destinationAccountId`; hide category and tags fields (transfers are not categorised)
 - Edit transaction: same form, pre-filled
-- Delete transaction: confirm dialog
+- Delete transaction: undo-toast (single deletes are reversible; no confirm dialog)
 - List view: grouped by day, shows date header with day total
-- Filter bar: date range | type (all/income/expense/transfer) | category | account | tag
+- Filter bar: date range | type (all/income/expense/transfer) | category | account | tag(s) | free-text search (active filters shown as removable chips)
 - Summary row: total income, total expense, net for selected period (transfers excluded from totals)
 
 #### CSV Import flow
@@ -691,7 +749,8 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 3. For each row, compute `import_hash = SHA-256(date + '|' + amount + '|' + merchant)`
 4. **Duplicate check:** query DB for existing `import_hash` values; mark matching rows as "already imported" and skip them by default
 5. Show review table: all rows, each row editable, checkbox to exclude (duplicates pre-unchecked)
-6. Claude auto-suggests category for each non-duplicate row based on merchant name (one batch call)
+6. 🔮 *(Phase 5a — deferred, NOT implemented)* Claude was planned to auto-suggest a
+   category per non-duplicate row. Today categorisation in the review step is **manual**.
 7. User reviews + confirms → batch insert transactions with `import_hash` set
 8. Show success summary: X imported, Y skipped (duplicates), Z excluded by user
 
@@ -706,6 +765,14 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 ---
 
 ### 9.3 Claude AI Layer
+
+> ⛔ **STATUS: NOT IMPLEMENTED — Phase 5a is deferred.** Nothing in this section
+> is wired into the app today. There is no Claude panel, daily briefing, natural-
+> language task/transaction entry, CSV auto-categorisation, or model routing, and
+> no Anthropic API calls are made anywhere. The `src/components/claude/*`,
+> `src/hooks/useClaude.ts`, `src/lib/claude.ts`, and `src/lib/claude-prompts.ts`
+> files referenced below do **not exist**. This entire subsection is a forward
+> spec for when Phase 5a is picked up — treat it as design intent, not current behaviour.
 
 #### API setup
 - On first launch (or if no key set): show ApiKeySetup component
@@ -851,14 +918,21 @@ const display = format(parseISO(transaction.date), 'dd MMM yyyy')
 const today = format(new Date(), 'yyyy-MM-dd')
 ```
 
-### Zustand ↔ PGlite sync pattern
-Zustand is the source of truth for UI rendering. PGlite is the source of truth for persistence. Always write to PGlite first, then update the Zustand store on success. Never update the store optimistically without a DB write, as this creates divergence on refresh.
+### Zustand ↔ server sync pattern
+> **Updated for Phase 4.** Persistence now lives on the Node + SQLite backend,
+> reached through `src/lib/api.ts` (not the removed in-browser PGlite). The
+> principle is unchanged: **server write first, then update the store on success.**
+
+Zustand is the source of truth for UI rendering. The server (SQLite) is the source
+of truth for persistence. Always write to the server (`api.post`/`api.put`/…) first,
+then update the Zustand store on success. Never update the store optimistically
+without a server write, as this creates divergence on refresh.
 
 ```typescript
-// Pattern: DB write first, then store update
+// Pattern: server write first, then store update
 async function addTask(content: string) {
-  const newTask = await db.insert(tasks).values({ content }).returning()
-  useTasksStore.getState().setTasks([...currentTasks, newTask[0]])
+  const newTask = await api.post<Task>('/tasks', { content })
+  useTasksStore.getState().setTasks([...currentTasks, newTask])
 }
 ```
 

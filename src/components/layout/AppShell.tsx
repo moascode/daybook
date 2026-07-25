@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { HelpButton } from './HelpButton'
 import { routeTitles } from './routeTitles'
 import { ToastContainer } from '@/components/ui/Toast'
 
@@ -25,6 +26,9 @@ export function AppShell() {
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{mobileTitle}</h1>
+          <div className="ml-auto">
+            <HelpButton />
+          </div>
         </div>
         {/* Desktop top bar */}
         <div className="hidden md:block">

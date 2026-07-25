@@ -14,5 +14,6 @@ export const routeTitles: Record<string, string> = {
   '/wallet/import':     'Import CSV',
   '/settings':          'Settings',
   '/settings/sharing':  'Sharing',
+  '/help':              'Help & Guide',
   '/uat':               'UAT Tests',
 }
