@@ -1,3 +1,9 @@
+<!--
+  This guide is mirrored in-app at /help (src/modules/help/HelpPage.tsx).
+  When the app's behaviour changes, update BOTH this file and that page so the
+  written guide and the in-app guide stay in sync.
+-->
+
 # Daybook — User Guide
 
 Daybook is your personal **productivity + finance** app. It keeps two things in

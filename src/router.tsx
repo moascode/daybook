@@ -14,6 +14,7 @@ import { SharedPage } from '@/modules/wallet/SharedPage'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { SharingPage } from '@/modules/settings/SharingPage'
+import { HelpPage } from '@/modules/help/HelpPage'
 import { UATPage } from '@/modules/uat/UATPage'
 
 export const router = createBrowserRouter([
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
           { path: 'sharing', element: <SharingPage /> },
         ],
       },
+      { path: 'help', element: <HelpPage /> },
       { path: 'uat', element: <UATPage /> },
     ],
   },
