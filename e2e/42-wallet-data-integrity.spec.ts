@@ -95,7 +95,7 @@ test.describe('42 — Wallet data integrity', () => {
       data: { accountId: acct.id, date: '2026-01-01', merchant: 'Snacks', amount: 8.25, type: 'expense', tag: '[]' },
     })).json()
 
-    const shares = await (await alice.request.post(`${API}/transactions/${txn.id}/share`, {
+    const shares = await (await alice.request.post(`${API}/transactions/${txn.id}/split`, {
       data: { recipientId: bobMe.user.id, splitMode: 'equal' },
     })).json()
 

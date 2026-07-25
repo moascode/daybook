@@ -39,7 +39,7 @@ test.describe('41 — Settled-share lifecycle', () => {
     const txn = await (await alice.request.post(`${API}/transactions`, {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })).json()
-    await alice.request.post(`${API}/transactions/shares`, {
+    await alice.request.post(`${API}/transactions/splits`, {
       data: { transactions: [{ transactionId: txn.id, shares: [
         { userId: aliceMe.user.id, shareAmount: 100, note: '' },
         { userId: bobMe.user.id, shareAmount: 100, note: '' },
@@ -60,7 +60,7 @@ test.describe('41 — Settled-share lifecycle', () => {
     const s = await setup(browser, 'resplit')
     await bobSettles(s)
 
-    const bulk = await s.alice.request.post(`${API}/transactions/shares`, {
+    const bulk = await s.alice.request.post(`${API}/transactions/splits`, {
       data: { transactions: [{ transactionId: s.txn.id, shares: [
         { userId: s.aliceId, shareAmount: 150, note: '' },
         { userId: s.bobId, shareAmount: 50, note: '' },
@@ -68,7 +68,7 @@ test.describe('41 — Settled-share lifecycle', () => {
     })
     expect(bulk.status()).toBe(409)
 
-    const single = await s.alice.request.post(`${API}/transactions/${s.txn.id}/share`, {
+    const single = await s.alice.request.post(`${API}/transactions/${s.txn.id}/split`, {
       data: { recipientId: s.bobId, splitMode: 'none' },
     })
     expect(single.status()).toBe(409)
@@ -115,14 +115,14 @@ test.describe('41 — Settled-share lifecycle', () => {
     const txn2 = await (await s.alice.request.post(`${API}/transactions`, {
       data: { accountId: s.aliceAcct.id, date: '2026-01-02', merchant: 'Taxi', amount: 30, type: 'expense', tag: '[]' },
     })).json()
-    await s.alice.request.post(`${API}/transactions/${txn2.id}/share`, {
+    await s.alice.request.post(`${API}/transactions/${txn2.id}/split`, {
       data: { recipientId: s.bobId, splitMode: 'none' },
     })
 
-    const status = await (await s.alice.request.post(`${API}/transactions/shares/status`, {
+    const status = await (await s.alice.request.post(`${API}/transactions/splits/status`, {
       data: { transactionIds: [txn2.id] },
     })).json()
-    expect(status).toEqual([{ transactionId: txn2.id, hasShares: true }])
+    expect(status).toEqual([{ transactionId: txn2.id, hasSplits: true }])
 
     await s.aliceCtx.close(); await s.bobCtx.close()
   })

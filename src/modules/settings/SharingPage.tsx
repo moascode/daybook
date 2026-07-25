@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { GroupCard } from './GroupCard'
 import { PendingInvites } from './PendingInvites'
 import { useAppStore } from '@/stores/app.store'
@@ -106,6 +107,19 @@ export function SharingPage() {
       ) : (
       <>
       <PendingInvites invites={pendingInvites} onRefresh={loadAll} />
+
+      {/* U-16: first-run orientation when the user has no groups or invites yet. */}
+      {groups.length === 0 && pendingInvites.length === 0 && (
+        <WelcomeCard
+          settingKey="onboarding_dismissed_sharing"
+          icon={<Users className="h-5 w-5" />}
+          title="Share with your household"
+        >
+          Create a <span className="font-medium">group</span> and invite people by username to share
+          accounts and split expenses. When someone covers a shared cost, Daybook tracks who owes
+          whom — settle up any time.
+        </WelcomeCard>
+      )}
 
       {groups.length === 0 && pendingInvites.length === 0 ? (
         <EmptyState

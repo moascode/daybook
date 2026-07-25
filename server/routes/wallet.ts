@@ -113,7 +113,7 @@ walletRouter.delete('/accounts/:id', (req, res) => {
   // Don't let that silently erase live household debts or other members' history.
   const outstandingShare = db
     .prepare(
-      `SELECT 1 FROM transaction_shares ts
+      `SELECT 1 FROM transaction_splits ts
        JOIN transactions t ON t.id = ts.transaction_id
        WHERE t.account_id = ? AND ts.settled_at IS NULL AND ts.user_id != t.user_id
        LIMIT 1`,
@@ -421,11 +421,11 @@ function viewCondition(
   }
   if (view === 'shared-with-me') {
     // Transactions created by others where I have a share line
-    return `${alias}.user_id != @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = @userId)`
+    return `${alias}.user_id != @userId AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = @userId)`
   }
   if (view === 'shared-with-others') {
     // My transactions that have been shared with others
-    return `${alias}.user_id = @userId AND EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != @userId)`
+    return `${alias}.user_id = @userId AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != @userId)`
   }
   // All visible: own transactions + transactions on shared accounts
   const visible = visibleAccountIds(db, userId)
@@ -474,7 +474,7 @@ walletRouter.get('/transactions', (req, res) => {
   const rows = db
     .prepare(`
       SELECT transactions.*,
-        CASE WHEN EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = transactions.id) THEN 1 ELSE 0 END AS has_shares
+        CASE WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = transactions.id) THEN 1 ELSE 0 END AS has_splits
       FROM transactions ${where} ORDER BY date DESC, created_at DESC
     `)
     .all(params)
@@ -666,7 +666,7 @@ walletRouter.patch('/transactions/:id', (req, res) => {
       .get(req.params.id) as { amount: number } | undefined
     if (oldTxn && oldTxn.amount !== b.amount) {
       const shareRows = db
-        .prepare('SELECT id, share_amount FROM transaction_shares WHERE transaction_id = ? ORDER BY created_at ASC')
+        .prepare('SELECT id, share_amount FROM transaction_splits WHERE transaction_id = ? ORDER BY created_at ASC')
         .all(req.params.id) as { id: string; share_amount: number }[]
       if (shareRows.length > 0) {
         // B-06: never rewrite a settled/partially-paid split — the recorded
@@ -696,7 +696,7 @@ walletRouter.patch('/transactions/:id', (req, res) => {
         if (scaledShares.some((s) => s.amount <= 0)) {
           return res.status(400).json({ error: 'amount is too small to keep every split positive' })
         }
-        const updShare = db.prepare('UPDATE transaction_shares SET share_amount = ? WHERE id = ?')
+        const updShare = db.prepare('UPDATE transaction_splits SET share_amount = ? WHERE id = ?')
         for (const s of scaledShares) updShare.run(s.amount, s.id)
       }
     }
@@ -720,21 +720,21 @@ walletRouter.delete('/transactions/:id', (req, res) => {
   res.status(204).end()
 })
 
-// ── Transaction shares (splits) ───────────────────────
+// ── Transaction splits ────────────────────────────────
 
 // True if any share on this transaction has been settled or partially paid.
 // Used to protect settled splits from being rewritten (B-04, B-06).
 function hasSettledShare(db: ReturnType<typeof getDb>, transactionId: string): boolean {
   return !!db
     .prepare(
-      `SELECT 1 FROM transaction_shares
+      `SELECT 1 FROM transaction_splits
        WHERE transaction_id = ? AND (settled_at IS NOT NULL OR settled_amount > 0)
        LIMIT 1`,
     )
     .get(transactionId)
 }
 
-walletRouter.get('/transactions/:id/shares', (req, res) => {
+walletRouter.get('/transactions/:id/splits', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
   // Caller must be the owner or have a share line
@@ -742,14 +742,14 @@ walletRouter.get('/transactions/:id/shares', (req, res) => {
     .prepare('SELECT user_id FROM transactions WHERE id = ?')
     .get(req.params.id) as { user_id: string } | undefined
   if (!txn) return res.status(404).json({ error: 'transaction not found' })
-  const hasShare = db.prepare('SELECT 1 FROM transaction_shares WHERE transaction_id = ? AND user_id = ?').get(req.params.id, userId)
+  const hasShare = db.prepare('SELECT 1 FROM transaction_splits WHERE transaction_id = ? AND user_id = ?').get(req.params.id, userId)
   if (txn.user_id !== userId && !hasShare) {
     return res.status(403).json({ error: 'not authorised to view shares for this transaction' })
   }
   const rows = db
     .prepare(
       `SELECT ts.id, ts.transaction_id, ts.user_id, ts.share_amount, ts.note, ts.settled_at, ts.created_at, u.username
-       FROM transaction_shares ts
+       FROM transaction_splits ts
        JOIN users u ON u.id = ts.user_id
        WHERE ts.transaction_id = ?
        ORDER BY ts.share_amount DESC`,
@@ -758,8 +758,8 @@ walletRouter.get('/transactions/:id/shares', (req, res) => {
   res.json(rows)
 })
 
-// Quick single-transaction share — share with one recipient (full amount or split)
-walletRouter.post('/transactions/:id/share', (req, res) => {
+// Quick single-transaction split — split with one recipient (full amount or split)
+walletRouter.post('/transactions/:id/split', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
   const { recipientId, splitMode, shareAmounts } = req.body ?? {}
@@ -825,9 +825,9 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
 
   // 5. Atomically insert share rows
   const result = db.transaction(() => {
-    db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(req.params.id)
+    db.prepare('DELETE FROM transaction_splits WHERE transaction_id = ?').run(req.params.id)
     const insert = db.prepare(
-      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+      `INSERT INTO transaction_splits (id, transaction_id, user_id, share_amount, note, created_at)
        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
        RETURNING *`,
     )
@@ -837,10 +837,10 @@ walletRouter.post('/transactions/:id/share', (req, res) => {
   res.status(201).json(result)
 })
 
-// ── Bulk transaction shares ───────────────────────────
-// POST /transactions/shares — Share multiple transactions at once.
+// ── Bulk transaction splits ───────────────────────────
+// POST /transactions/splits — Split multiple transactions at once.
 // Body: { transactions: Array<{ transactionId: string; shares: Array<{ userId, shareAmount, note? }> }> }
-walletRouter.post('/transactions/shares', (req, res) => {
+walletRouter.post('/transactions/splits', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
 
@@ -934,11 +934,11 @@ walletRouter.post('/transactions/shares', (req, res) => {
   // 9. Atomic DB writes — only INSERT/DELETE inside, no throwing (Issue 2)
   db.transaction(() => {
     const insert = db.prepare(
-      `INSERT INTO transaction_shares (id, transaction_id, user_id, share_amount, note, created_at)
+      `INSERT INTO transaction_splits (id, transaction_id, user_id, share_amount, note, created_at)
        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))`,
     )
     for (const tx of transactions) {
-      db.prepare('DELETE FROM transaction_shares WHERE transaction_id = ?').run(tx.transactionId)
+      db.prepare('DELETE FROM transaction_splits WHERE transaction_id = ?').run(tx.transactionId)
       for (const s of tx.shares) {
         insert.run(tx.transactionId, s.userId, s.shareAmount, s.note ?? '')
       }
@@ -948,8 +948,8 @@ walletRouter.post('/transactions/shares', (req, res) => {
   res.status(201).json({ message: 'transactions shared successfully', transactionIds })
 })
 
-// Batch share status check — returns { transactionId, hasShares } for each ID
-walletRouter.post('/transactions/shares/status', (req, res) => {
+// Batch split status check — returns { transactionId, hasSplits } for each ID
+walletRouter.post('/transactions/splits/status', (req, res) => {
   const db = getDb()
   const userId = req.session.userId!
   const { transactionIds }: { transactionIds: string[] } = req.body ?? {}
@@ -969,13 +969,13 @@ walletRouter.post('/transactions/shares/status', (req, res) => {
   ).all(...transactionIds, userId) as Array<{ id: string }>
   const ownedIds = new Set(ownedRows.map((r) => r.id))
 
-  // B-08: match the transaction list's own EXISTS check — a "Keep as-is" share
+  // B-08: match the transaction list's own EXISTS check — a "Keep as-is" split
   // writes only the recipient's row, so filtering by the owner's user_id here made
-  // the status say hasShares:false while the list badged the row as split. Owner
+  // the status say hasSplits:false while the list badged the row as split. Owner
   // scoping is already enforced by the ownedIds filter below.
   const rows = db.prepare(`
       SELECT DISTINCT transaction_id
-      FROM transaction_shares
+      FROM transaction_splits
       WHERE transaction_id IN (${placeholders})
      `).all(...transactionIds) as Array<{ transaction_id: string }>
   const sharedIds = new Set(rows.map((r) => r.transaction_id))
@@ -984,7 +984,7 @@ walletRouter.post('/transactions/shares/status', (req, res) => {
     .filter((id) => ownedIds.has(id))
     .map((id) => ({
       transactionId: id,
-      hasShares: sharedIds.has(id),
+      hasSplits: sharedIds.has(id),
     }))
 
   res.json(result)
@@ -1019,13 +1019,13 @@ walletRouter.get('/budgets/spending', (req, res) => {
       `SELECT t.category_id AS categoryId,
               SUM(
                 CASE
-                  WHEN EXISTS (SELECT 1 FROM transaction_shares ts WHERE ts.transaction_id = t.id)
+                  WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
                     THEN COALESCE(own.share_amount, 0)
                   ELSE t.amount
                 END
               ) AS spent
        FROM transactions t
-       LEFT JOIN transaction_shares own
+       LEFT JOIN transaction_splits own
          ON own.transaction_id = t.id AND own.user_id = @userId
        WHERE t.user_id = @userId
          AND t.type = 'expense'

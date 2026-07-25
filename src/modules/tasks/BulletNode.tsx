@@ -10,6 +10,7 @@ import {
   GripVertical,
   Check,
   CheckSquare,
+  Square,
   Target,
   CalendarClock,
   BookCopy,
@@ -27,6 +28,9 @@ interface BulletNodeProps {
   task: Task
   depth: number
   hasChildren: boolean
+  selectMode?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
   onUpdate: (id: string, content: string) => void
   onUpdateNote: (id: string, note: string) => void
   onToggleComplete: (id: string) => void
@@ -46,6 +50,9 @@ export function BulletNode({
   task,
   depth,
   hasChildren,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
   onUpdate,
   onUpdateNote,
   onToggleComplete,
@@ -112,22 +119,39 @@ export function BulletNode({
         )}
         style={{ paddingLeft: depth * 22 }}
       >
-        {/* Drag handle — inline at the start of the row so it stays within the hover zone */}
-        <button
-          className={cn(
-            'flex h-7 w-5 shrink-0 items-center justify-center',
-            'text-gray-300 opacity-0 group-hover/node:opacity-100',
-            'transition-opacity cursor-grab active:cursor-grabbing touch-none',
-            'rounded hover:text-gray-500 pointer-events-none group-hover/node:pointer-events-auto',
-          )}
-          aria-label="Drag to reorder"
-          title="Drag to reorder"
-          {...attributes}
-          {...listeners}
-          tabIndex={-1}
-        >
-          <GripVertical className="h-3 w-3" />
-        </button>
+        {/* CD-20: multi-select checkbox — replaces the drag handle in select mode. */}
+        {selectMode ? (
+          <button
+            className={cn(
+              'flex h-7 w-5 shrink-0 items-center justify-center rounded transition-colors',
+              selected ? 'text-brand-500' : 'text-gray-300 hover:text-gray-500',
+            )}
+            onClick={() => onToggleSelect?.(task.id)}
+            role="checkbox"
+            aria-checked={selected}
+            aria-label={selected ? 'Deselect task' : 'Select task'}
+            data-testid="task-select-checkbox"
+          >
+            {selected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+          </button>
+        ) : (
+          /* Drag handle — inline at the start of the row so it stays within the hover zone */
+          <button
+            className={cn(
+              'flex h-7 w-5 shrink-0 items-center justify-center',
+              'text-gray-300 opacity-0 group-hover/node:opacity-100',
+              'transition-opacity cursor-grab active:cursor-grabbing touch-none',
+              'rounded hover:text-gray-500 pointer-events-none group-hover/node:pointer-events-auto',
+            )}
+            aria-label="Drag to reorder"
+            title="Drag to reorder"
+            {...attributes}
+            {...listeners}
+            tabIndex={-1}
+          >
+            <GripVertical className="h-3 w-3" />
+          </button>
+        )}
 
         {/* Collapse chevron — aligned to the bullet column */}
         <button

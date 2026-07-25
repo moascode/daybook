@@ -521,7 +521,20 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
   account (B-16: they are income/expense entries, not `transfer`-type rows)
 - A payer row is written only when the payer participates in the split ("Keep as-is" writes just the recipient's row); group balances only count debtor rows, so both shapes settle correctly
 - Non-members never see shared accounts or splits; visibility is scoped per user and group membership
-- `settled_at` in `transaction_shares` marks when a share is cleared by a settlement
+- `settled_at` in `transaction_splits` marks when a split is cleared by a settlement
+
+> **CD-05⁺ rename (migration `0007_rename_transaction_shares.sql`):** the two
+> tables above were renamed to complete the internal Share→Split vocabulary —
+> `transaction_shares` → **`transaction_splits`** and `settlement_share_lines` →
+> **`settlement_split_lines`** (a lossless `ALTER TABLE … RENAME TO`; column
+> names such as `share_amount`/`share_id` and the `idx_txn_shares_*` indexes are
+> unchanged). All current server code references the new names; the DDL blocks
+> above are shown as originally shipped by 0003/0004/0006. The matching
+> client/API contract also changed: routes `POST /transactions/:id/split`,
+> `GET /transactions/:id/splits`, `POST /transactions/splits`,
+> `POST /transactions/splits/status`, and the transaction response field
+> `hasSplits`. (The separate `account_shares` table — account-level sharing — is
+> unrelated and keeps its name.)
 
 ---
 
@@ -860,6 +873,13 @@ Two patterns, chosen by consequence:
   use `ConfirmDeleteModal` and, if a stable test hook is needed, its optional
   `confirmTestId` prop.
 
+> **Tasks are the deliberate exception (CD-20).** Both single and bulk task
+> deletes use the **undo-toast**, not `ConfirmDeleteModal` — the outliner is
+> keyboard-first and every delete is instantly and fully reversible (the bulk
+> path snapshots each selected subtree and restores it on Undo). Wallet's
+> multi-select uses the confirm modal; Tasks' multi-select intentionally does
+> not.
+
 ---
 
 ## 11. Git Conventions
@@ -959,7 +979,7 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  5c — Wallet UX Improvements — COMPLETE
+Current phase:  Post-5c deferred-items follow-up (adversarial-review backlog)
 Phase status:   Phase 4 (home network backend) shipped v1.0.
                 Phase 5b (household sharing) shipped v1.0.1.
                 Phase 5b extension: transaction quick-share (PR #27) MERGED
@@ -1008,7 +1028,7 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-07-18
+Last session:   2026-07-25
 Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
                       by username with optional role assignment.
@@ -1036,20 +1056,42 @@ Phase 4 summary: - Node.js backend (Express) + SQLite file on home hardware
                   - Capistrano-style releases with versioned artifacts + rollback
                   - File-based migrations (additive only, applied in order)
                   - 22 merged PRs from initial Phase 4 scaffold to Phase 5b completion
-Next task:      Phase 5c is complete — all 5 wave PRs (#29–#33) merged.
-                Only the parked D-items and C9 (deferred DB-side dashboard
-                aggregation) remain in the wallet UX backlog
-                (docs/phase-5c-wallet-ux.md §D), each requiring individual
-                owner sign-off before any work starts (CLAUDE.md §2 Rule
-                3). Phase 5a (AI features) remains deferred. No active
-                work is queued; awaiting owner direction on what's next
-                (Phase 5a, Phase 6 cloud migration, or a new D-item).
+Deferred items (2026-07-25): the three owner-sign-off items from
+                docs/deferred-items-plan.md are now DONE on branch
+                claude/deferred-items-cd-05-u-16-cd-20-* (one PR):
+                • CD-05⁺ — internal Split identifier rename. Migration
+                  0007_rename_transaction_shares.sql renames the tables
+                  transaction_shares→transaction_splits and
+                  settlement_share_lines→settlement_split_lines (lossless
+                  ALTER TABLE … RENAME TO). Routes → /transactions/:id/split,
+                  /:id/splits, /splits, /splits/status; field hasShares→
+                  hasSplits; dialogs ShareDialog→SplitDialog,
+                  BulkShareDialog→BulkSplitDialog (+ testids). account_shares
+                  intentionally untouched.
+                • U-16 — first-run onboarding, option (a): dismissible
+                  WelcomeCard on each empty module (Tasks/Wallet/Sharing),
+                  gated on per-user onboarding_dismissed_* settings loaded at
+                  boot. New spec 47-onboarding.
+                • CD-20 — Tasks bulk-select/bulk-delete parity: "Select" mode
+                  with per-node checkboxes (parent implies subtree) + bulk
+                  delete via undo-toast (snapshot restore). New spec
+                  46-task-bulk-select.
+                Verified: client tsc, typecheck:server, lint all clean;
+                affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
+                46, 47) all pass — 92/92.
+Next task:      Await owner direction. Remaining deferred backlog:
+                docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
+                sign-off needed) plus the parked D-items/C9 in
+                docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).
+                Phase 5a (AI) and Phase 6 (cloud) still deferred.
 
 Blockers:       None. Nothing in progress.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
-                - DB migrations are additive-only; applied in lexicographic order.
+                - DB migrations are additive-only (rename via ALTER TABLE …
+                  RENAME TO is lossless and allowed with owner sign-off);
+                  applied in lexicographic order. Latest: 0007.
                 - e2e tests use fresh DB per context; CI shards tests across jobs.
                 - Pre-existing lint: 38 warnings (react-hooks, test-only shims).
 ```

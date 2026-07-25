@@ -160,7 +160,7 @@ function TransactionRow({
           <span className="truncate text-sm font-medium text-gray-900">
             {transaction.merchant || transaction.description || 'Untitled'}
           </span>
-          {transaction.hasShares && (
+          {transaction.hasSplits && (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
               <Users className="h-2.5 w-2.5" />
               Split

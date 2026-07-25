@@ -61,7 +61,7 @@ settlementsRouter.post('/settlements', (req, res) => {
   // Verify the debtor actually owes the creditor in this group (partial-aware).
   const owedRow = db.prepare(
     `SELECT COALESCE(SUM(ts.share_amount - ts.settled_amount), 0) AS total
-     FROM transaction_shares ts
+     FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
      WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL`
@@ -139,7 +139,7 @@ settlementsRouter.post('/settlements', (req, res) => {
       let remaining = effectiveAmount
       const pendingShares = db.prepare(
         `SELECT ts.id, ts.share_amount, ts.settled_amount
-         FROM transaction_shares ts
+         FROM transaction_splits ts
          JOIN transactions t ON t.id = ts.transaction_id
          JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
          WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
@@ -148,7 +148,7 @@ settlementsRouter.post('/settlements', (req, res) => {
 
       // settled_at is set only once a share is fully cleared (kept for history/back-compat).
       const applyToShare = db.prepare(
-        `UPDATE transaction_shares
+        `UPDATE transaction_splits
          SET settled_amount = @settled,
              settled_at = CASE WHEN @settled >= share_amount THEN datetime('now') ELSE NULL END
          WHERE id = @id`
@@ -177,7 +177,7 @@ settlementsRouter.post('/settlements', (req, res) => {
 
       // Record how much this settlement applied to each share (partial-aware undo).
       const insertShareLine = db.prepare(
-        `INSERT INTO settlement_share_lines (settlement_id, share_id, amount) VALUES (?, ?, ?)`
+        `INSERT INTO settlement_split_lines (settlement_id, share_id, amount) VALUES (?, ?, ?)`
       )
       for (const line of shareLines) {
         insertShareLine.run(newSettlement.id, line.id, line.amount)
@@ -257,10 +257,10 @@ settlementsRouter.delete('/settlements/:id', (req, res) => {
     // B-02: subtract exactly what this settlement applied to each share, and
     // re-open (settled_at = NULL) any share that is no longer fully cleared.
     const lines = db
-      .prepare('SELECT share_id, amount FROM settlement_share_lines WHERE settlement_id = ?')
+      .prepare('SELECT share_id, amount FROM settlement_split_lines WHERE settlement_id = ?')
       .all(req.params.id) as { share_id: string; amount: number }[]
     const reverse = db.prepare(
-      `UPDATE transaction_shares
+      `UPDATE transaction_splits
        SET settled_amount = MAX(0, ROUND(settled_amount - @amount, 2)),
            settled_at = CASE WHEN ROUND(settled_amount - @amount, 2) >= share_amount THEN settled_at ELSE NULL END
        WHERE id = @id`
@@ -279,10 +279,10 @@ settlementsRouter.post('/transaction-shares/:id/settle', (req, res) => {
   const userId = req.session.userId!
   const db = getDb()
   const share = db
-    .prepare('SELECT id FROM transaction_shares WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id FROM transaction_splits WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId)
   if (!share) return res.status(404).json({ error: 'share not found' })
-  db.prepare("UPDATE transaction_shares SET settled_amount = share_amount, settled_at = datetime('now') WHERE id = ?").run(req.params.id)
+  db.prepare("UPDATE transaction_splits SET settled_amount = share_amount, settled_at = datetime('now') WHERE id = ?").run(req.params.id)
   res.json({ ok: true })
 })
 
@@ -291,9 +291,9 @@ settlementsRouter.post('/transaction-shares/:id/unsettle', (req, res) => {
   const userId = req.session.userId!
   const db = getDb()
   const share = db
-    .prepare('SELECT id FROM transaction_shares WHERE id = ? AND user_id = ?')
+    .prepare('SELECT id FROM transaction_splits WHERE id = ? AND user_id = ?')
     .get(req.params.id, userId)
   if (!share) return res.status(404).json({ error: 'share not found' })
-  db.prepare('UPDATE transaction_shares SET settled_amount = 0, settled_at = NULL WHERE id = ?').run(req.params.id)
+  db.prepare('UPDATE transaction_splits SET settled_amount = 0, settled_at = NULL WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
 })

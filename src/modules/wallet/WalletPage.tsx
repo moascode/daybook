@@ -8,13 +8,14 @@ import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { TagInput } from '@/components/ui/TagInput'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { NetWorthBanner } from '@/components/ui/NetWorthBanner'
+import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
-import { BulkShareDialog } from '@/modules/wallet/BulkShareDialog'
-import { ShareDialog } from '@/modules/wallet/ShareDialog'
+import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
+import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -74,10 +75,10 @@ export function WalletPage() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
-  const [bulkShareOpen, setBulkShareOpen] = useState(false)
+  const [bulkSplitOpen, setBulkSplitOpen] = useState(false)
 
-  // Share transaction state
-  const [shareTarget, setShareTarget] = useState<Transaction | null>(null)
+  // Split transaction state
+  const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
@@ -242,8 +243,8 @@ export function WalletPage() {
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth, addToast])
-  function openShareDialog(transaction: Transaction) {
-    setShareTarget(transaction)
+  function openSplitDialog(transaction: Transaction) {
+    setSplitTarget(transaction)
   }
 
   function toggleSelectMode() {
@@ -388,6 +389,20 @@ export function WalletPage() {
           )}
         </div>
       </div>
+
+      {/* U-16: first-run orientation for a wallet with no accounts yet. */}
+      {accounts.length === 0 && (
+        <WelcomeCard
+          settingKey="onboarding_dismissed_wallet"
+          icon={<Wallet className="h-5 w-5" />}
+          title="Track your money"
+          className="mb-4"
+        >
+          Start by creating an <span className="font-medium">account</span> (cash, bank, card,
+          e-wallet…), then record income and expenses against it. The Dashboard charts your cash
+          flow, and CSV import brings in bank statements automatically.
+        </WelcomeCard>
+      )}
 
       {/* Total balance hero */}
       {accounts.length > 0 && (
@@ -593,8 +608,8 @@ export function WalletPage() {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => setBulkShareOpen(true)}
-                  data-testid="bulk-share-btn"
+                  onClick={() => setBulkSplitOpen(true)}
+                  data-testid="bulk-split-btn"
                 >
                   <Users className="h-3.5 w-3.5" />
                   Split {selectedIds.size}
@@ -641,7 +656,7 @@ export function WalletPage() {
             categories={categories}
             onEdit={crud.openEdit}
             onDelete={handleDeleteTransaction}
-            onSplit={hasGroups ? openShareDialog : undefined}
+            onSplit={hasGroups ? openSplitDialog : undefined}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
@@ -660,12 +675,12 @@ export function WalletPage() {
         onSubmit={crud.editingItem ? handleUpdateTransaction : handleAddTransaction}
       />
 
-      <ShareDialog
-        open={!!shareTarget}
-        onOpenChange={(open) => { if (!open) setShareTarget(null) }}
-        transaction={shareTarget}
+      <SplitDialog
+        open={!!splitTarget}
+        onOpenChange={(open) => { if (!open) setSplitTarget(null) }}
+        transaction={splitTarget}
         currentUserId={currentUserId}
-        onSaved={() => { setShareTarget(null); loadTransactions(filtersRef.current) }}
+        onSaved={() => { setSplitTarget(null); loadTransactions(filtersRef.current) }}
       />
 
       <ExportModal
@@ -697,14 +712,14 @@ export function WalletPage() {
         confirmTestId="confirm-bulk-delete"
       />
 
-      <BulkShareDialog
-        open={bulkShareOpen}
-        onOpenChange={setBulkShareOpen}
+      <BulkSplitDialog
+        open={bulkSplitOpen}
+        onOpenChange={setBulkSplitOpen}
         selectedTransactionIds={Array.from(selectedIds)}
         transactions={transactions}
         currentUserId={currentUserId}
         onSave={() => {
-          setBulkShareOpen(false)
+          setBulkSplitOpen(false)
           setSelectedIds(new Set())
           setSelectMode(false)
           loadTransactions(filtersRef.current)

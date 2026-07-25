@@ -10,7 +10,7 @@ import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
 
-interface BulkShareDialogProps {
+interface BulkSplitDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   selectedTransactionIds: string[]
@@ -31,14 +31,14 @@ interface CardState {
   existingShares: TransactionShare[]
 }
 
-export function BulkShareDialog({
+export function BulkSplitDialog({
   open,
   onOpenChange,
   selectedTransactionIds,
   transactions,
   currentUserId,
   onSave,
-}: BulkShareDialogProps) {
+}: BulkSplitDialogProps) {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
   const [cards, setCards] = useState<CardState[]>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
@@ -57,7 +57,7 @@ export function BulkShareDialog({
         Promise.all(
           txns.map((t) =>
             api
-              .get<Record<string, unknown>[]>(`/transactions/${t.id}/shares`)
+              .get<Record<string, unknown>[]>(`/transactions/${t.id}/splits`)
               .then((rows) => rows.map(mapTransactionShare))
               .catch(() => [] as TransactionShare[]),
           ),
@@ -96,7 +96,7 @@ export function BulkShareDialog({
     })
   }
 
-  // Validation mirrors ShareDialog; returns null when the card can be saved.
+  // Validation mirrors SplitDialog; returns null when the card can be saved.
   const cardError = (c: CardState): string | null => {
     if (c.recipientIds.length === 0) return 'Please select a recipient'
     if (c.transaction.amount <= 0) return 'Cannot split a zero-amount transaction'
@@ -142,7 +142,7 @@ export function BulkShareDialog({
         return { transactionId: c.transaction.id, shares }
       })
 
-      await api.post('/transactions/shares', { transactions: payload })
+      await api.post('/transactions/splits', { transactions: payload })
       onSave()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to share transactions')
@@ -178,7 +178,7 @@ export function BulkShareDialog({
               const equalAmounts = splitEqually(amount, participants.length)
 
               return (
-                <div key={c.transaction.id} className="border rounded-lg p-4 space-y-3" data-testid="bulk-share-card">
+                <div key={c.transaction.id} className="border rounded-lg p-4 space-y-3" data-testid="bulk-split-card">
                   <div className="rounded-lg bg-gray-50 px-4 py-3">
                     <p className="font-semibold text-gray-900">{c.transaction.merchant || 'Transaction'}</p>
                     <p className="text-xs text-gray-500">{format(parseISO(c.transaction.date), 'dd MMM yyyy')}</p>
@@ -187,7 +187,7 @@ export function BulkShareDialog({
 
                   {/* §2.2: existing split lines + overwrite warning */}
                   {c.existingShares.length > 0 && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-splits">
                       <p className="text-xs font-medium text-amber-800">Currently split</p>
                       {c.existingShares.map((s) => (
                         <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
@@ -254,7 +254,7 @@ export function BulkShareDialog({
                       {c.mode === 'equal' && (
                         <div className="mt-3 space-y-1">
                           {participants.map((userId, i) => (
-                            <div key={userId} className="flex items-center justify-between text-sm text-gray-700" data-testid="equal-share-row">
+                            <div key={userId} className="flex items-center justify-between text-sm text-gray-700" data-testid="equal-split-row">
                               <span>{participantName(userId)}</span>
                               <span>{formatMYR(equalAmounts[i])}</span>
                             </div>

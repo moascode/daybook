@@ -16,6 +16,9 @@ interface BulletTreeProps {
   depth: number
   focusId: string | null
   sortByDue?: boolean
+  selectMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
   onUpdate: (id: string, content: string) => void
   onUpdateNote: (id: string, note: string) => void
   onToggleComplete: (id: string) => void
@@ -35,6 +38,9 @@ export function BulletTree({
   depth,
   focusId,
   sortByDue = false,
+  selectMode = false,
+  selectedIds,
+  onToggleSelect,
   onUpdate,
   onUpdateNote,
   onToggleComplete,
@@ -98,6 +104,9 @@ export function BulletTree({
               task={task}
               depth={depth}
               hasChildren={checkHasChildren(task.id)}
+              selectMode={selectMode}
+              selected={selectedIds?.has(task.id) ?? false}
+              onToggleSelect={onToggleSelect}
               onUpdate={onUpdate}
               onUpdateNote={onUpdateNote}
               onToggleComplete={onToggleComplete}
@@ -119,6 +128,9 @@ export function BulletTree({
                 depth={depth + 1}
                 focusId={focusId}
                 sortByDue={sortByDue}
+                selectMode={selectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={onToggleSelect}
                 onUpdate={onUpdate}
                 onUpdateNote={onUpdateNote}
                 onToggleComplete={onToggleComplete}

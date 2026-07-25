@@ -47,7 +47,7 @@ interface TransactionRow {
   import_hash: string
   created_at: string
   updated_at: string
-  has_shares?: number
+  has_splits?: number
 }
 
 interface CategoryRow {
@@ -105,7 +105,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     importHash: row.import_hash ?? '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    hasShares: !!row.has_shares,
+    hasSplits: !!row.has_splits,
   }
 }
 

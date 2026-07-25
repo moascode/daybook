@@ -10,7 +10,7 @@ import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
 
-interface ShareDialogProps {
+interface SplitDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   transaction: Transaction | null
@@ -20,7 +20,7 @@ interface ShareDialogProps {
 
 type SplitMode = 'none' | 'equal' | 'custom'
 
-export function ShareDialog({ open, onOpenChange, transaction, currentUserId, onSaved }: ShareDialogProps) {
+export function SplitDialog({ open, onOpenChange, transaction, currentUserId, onSaved }: SplitDialogProps) {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
   const [existingShares, setExistingShares] = useState<TransactionShare[]>([])
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
@@ -41,7 +41,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
       const [memberRows, shareRows] = await Promise.all([
         api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
         api
-          .get<Record<string, unknown>[]>(`/transactions/${transaction.id}/shares`)
+          .get<Record<string, unknown>[]>(`/transactions/${transaction.id}/splits`)
           .then((rows) => rows.map(mapTransactionShare))
           .catch(() => [] as TransactionShare[]),
       ])
@@ -83,7 +83,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
         shareAmounts = [parseFloat(ownerAmt) || 0, parseFloat(recipientAmt) || 0]
        }
 
-      await api.post(`/transactions/${transaction.id}/share`, {
+      await api.post(`/transactions/${transaction.id}/split`, {
         recipientId: selectedRecipient,
         splitMode,
         shareAmounts,
@@ -110,7 +110,7 @@ export function ShareDialog({ open, onOpenChange, transaction, currentUserId, on
 
          {/* §2.2: existing shares + overwrite warning */}
          {existingShares.length > 0 && (
-           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-shares">
+           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-splits">
              <p className="text-xs font-medium text-amber-800">Currently split</p>
              {existingShares.map((s) => (
                <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">

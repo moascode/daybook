@@ -70,7 +70,7 @@ test.describe('43 — Budget spending uses the effective split amount', () => {
     // Alice splits the transaction 50/50 with Bob (100 each)
     const members = await alicePage.request.get('http://localhost:5173/api/groups/members').then((r) => r.json()) as Array<{ user_id: string; username: string }>
     const bobId = members.find((m) => m.username === bobName)!.user_id
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/share`, {
+    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/split`, {
       data: { recipientId: bobId, splitMode: 'equal' },
     })
 
