@@ -22,9 +22,9 @@ owner sign-off. This document plans each of them.
 | U-13 | Settle-Up dialog plain-language help (residual) | UX copy | XS | Low | — |
 | U-10 | Removable active-filter chips | UX feature | M | Low | — |
 | B-15 | Budget spending uses *effective* split amount | Correctness | M | Medium | — |
-| U-16 | First-run onboarding | UX feature | M–L | Low | 🔴 design |
-| CD-20 | Tasks bulk-select / bulk-delete | Feature/scope | M | Low | 🔴 scope |
-| CD-05⁺ | Internal Split identifier rename (routes/field/table) | Contract + schema | M–L | Medium | 🔴 schema |
+| U-16 | First-run onboarding | UX feature | M–L | Low | ✅ done (a) |
+| CD-20 | Tasks bulk-select / bulk-delete | Feature/scope | M | Low | ✅ done (build) |
+| CD-05⁺ | Internal Split identifier rename (routes/field/table) | Contract + schema | M–L | Medium | ✅ done |
 | — | CSV parse unit coverage (parseAmount/parseDate) | Tests | S | Low | — |
 
 Proposed grouping into 5 follow-up waves (F1–F5) + 2 decisions is in §4.
@@ -141,7 +141,17 @@ a runner is added. Given the repo is e2e-only today, add CSV fixtures + a spec.
 
 ## 3. Items needing owner sign-off
 
-### CD-05⁺ — Internal Split identifier rename 🔴 (schema)
+### CD-05⁺ — Internal Split identifier rename ✅ DONE (owner-approved 2026-07-25)
+> **Shipped.** Migration `0007_rename_transaction_shares.sql` renames
+> `transaction_shares`→`transaction_splits` and `settlement_share_lines`→
+> `settlement_split_lines` via lossless `ALTER TABLE … RENAME TO`. Routes renamed
+> to `/transactions/:id/split`, `/transactions/:id/splits`, `/transactions/splits`,
+> `/transactions/splits/status`; response field `hasShares`→`hasSplits`; dialogs
+> `ShareDialog`→`SplitDialog`, `BulkShareDialog`→`BulkSplitDialog` (+ their
+> data-testids). `account_shares` (account-level sharing) intentionally unchanged.
+> Verified: client tsc, typecheck:server, lint clean; affected e2e (27, 35, 36,
+> 39, 41, 42, 43, plus 33/34/40) all pass.
+
 **What's done:** the *user-facing* Share→Split rename shipped in Wave E3 (all UI copy,
 the affordance behaviour). **What's deferred:** the internal identifiers —
 - API route paths: `/transactions/:id/share` → `/split`, `/transactions/shares` →
@@ -171,7 +181,14 @@ types, mappers, `TransactionList.tsx`, `ShareDialog`/`BulkShareDialog`, ~8 e2e s
 It carries real risk for no user benefit; the user-facing rename is already complete.
 Reasonable to leave permanently deferred.
 
-### U-16 — First-run onboarding 🔴 (design)
+### U-16 — First-run onboarding ✅ DONE (option (a), owner-approved 2026-07-25)
+> **Shipped.** Dismissible `WelcomeCard` (`src/components/ui/WelcomeCard.tsx`) at
+> the top of each empty module — Tasks, Wallet, and Settings→Sharing — each gated
+> on a per-user `onboarding_dismissed_<module>` setting loaded once at boot
+> (App.tsx) so there's no flash for returning users. Cards dismiss independently.
+> No schema/seed change (uses the existing key/value `settings` store). Verified:
+> tsc/lint clean; e2e spec 47-onboarding (5/5) passes.
+
 **Finding:** a brand-new account lands on an empty outliner with no orientation across
 Tasks / Wallet / Sharing.
 **Decision needed:** what form should it take? Options:
@@ -186,7 +203,15 @@ lightweight `WelcomeCard`/`OnboardingChecklist` gated on it; wire the "seen" wri
 **Effort:** M (card) – L (checklist/tour) · **Risk:** Low.
 **Blocked on:** owner choosing a/b/c and the copy.
 
-### CD-20 — Tasks bulk-select / bulk-delete 🔴 (scope)
+### CD-20 — Tasks bulk-select / bulk-delete ✅ DONE (build parity, owner-approved 2026-07-25)
+> **Shipped.** A "Select" toggle on `TasksPage` reveals a per-node checkbox
+> (`BulletNode`); selecting a parent implies its whole subtree, and unselecting a
+> node clears its subtree + ancestors so the count is honest about what the
+> cascading delete removes. Bulk delete uses the module's undo-toast (a snapshot
+> array restores every removed subtree) — see the CLAUDE.md §10 note on why Tasks
+> deliberately uses undo rather than `ConfirmDeleteModal`. Verified: tsc/lint
+> clean; e2e spec 46-task-bulk-select (6/6) + 01-tasks regression pass.
+
 **Finding:** Wallet has a multi-select "Select" mode + bulk delete; Tasks has no
 equivalent. The review flagged it as *possibly* intentional.
 **Decision needed:** build parity, or formally record it as out-of-scope?

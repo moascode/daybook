@@ -56,6 +56,15 @@ export default function App() {
         if (saved === 'light' || saved === 'dark' || saved === 'system') {
           setTheme(saved)
         }
+        // U-16: capture which first-run WelcomeCards were already dismissed so
+        // they never flash for a returning user.
+        const dismissed: Record<string, boolean> = {}
+        for (const s of settings) {
+          if (s.key.startsWith('onboarding_dismissed_') && s.value === '1') {
+            dismissed[s.key] = true
+          }
+        }
+        useAppStore.getState().setOnboardingDismissed(dismissed)
         setDbReady(true)
         // Post any recurring rules that have come due since the last visit.
         // Fire-and-forget: a failure here must never block the app. When it

@@ -29,13 +29,13 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await expect(page.getByTestId('select-mode-bar')).toBeVisible()
 
     // Share button must NOT be visible with 0 selected
-    await expect(page.getByTestId('bulk-share-btn')).not.toBeVisible()
+    await expect(page.getByTestId('bulk-split-btn')).not.toBeVisible()
 
     // Select one transaction
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
 
     // Now Share button must appear
-    await expect(page.getByTestId('bulk-share-btn')).toBeVisible()
+    await expect(page.getByTestId('bulk-split-btn')).toBeVisible()
     // Delete button also visible
     await expect(page.getByTestId('bulk-delete-btn')).toBeVisible()
   })
@@ -49,14 +49,14 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
 
-    const shareBtn = page.getByTestId('bulk-share-btn')
+    const shareBtn = page.getByTestId('bulk-split-btn')
     const deleteBtn = page.getByTestId('bulk-delete-btn')
     await expect(shareBtn).toBeVisible()
     await expect(deleteBtn).toBeVisible()
 
     // Share button must NOT be a DOM descendant of Delete button (Issue 7 regression)
     const shareIsInsideDelete = await deleteBtn.evaluate((del) => {
-      const share = document.querySelector('[data-testid="bulk-share-btn"]')
+      const share = document.querySelector('[data-testid="bulk-split-btn"]')
       return share ? del.contains(share) : false
     })
     expect(shareIsInsideDelete).toBe(false)
@@ -70,7 +70,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
-    await page.getByTestId('bulk-share-btn').click()
+    await page.getByTestId('bulk-split-btn').click()
 
     // Dialog opens and shows a title
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 })
@@ -99,7 +99,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
 
     // Select all via the header checkbox
     await page.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
-    await page.getByTestId('bulk-share-btn').click()
+    await page.getByTestId('bulk-split-btn').click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })
@@ -115,7 +115,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
-    await page.getByTestId('bulk-share-btn').click()
+    await page.getByTestId('bulk-split-btn').click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })
@@ -172,11 +172,11 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(alicePage.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
     await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
-    await alicePage.getByTestId('bulk-share-btn').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })
-    const cards = dialog.getByTestId('bulk-share-card')
+    const cards = dialog.getByTestId('bulk-split-card')
     await expect(cards).toHaveCount(2)
 
     const oddCard = cards.filter({ hasText: 'Odd Cents' })
@@ -188,14 +188,14 @@ test.describe('27 — Bulk share with group members', () => {
     await oddCard.getByRole('button', { name: /Split equally/ }).click()
 
     // Odd Cents card: owner absorbs the rounding cent — You 5.01, Bob 5.00
-    const shareRows = oddCard.getByTestId('equal-share-row')
+    const shareRows = oddCard.getByTestId('equal-split-row')
     await expect(shareRows).toHaveCount(2)
     await expect(shareRows.filter({ hasText: 'You' })).toContainText(/RM\s?5\.01/)
     await expect(shareRows.filter({ hasText: bobName })).toContainText(/RM\s?5\.00/)
 
     // Full Pass card is untouched by the other card's mode: still Keep as-is,
     // no equal-split breakdown rendered
-    await expect(fullCard.getByTestId('equal-share-row')).toHaveCount(0)
+    await expect(fullCard.getByTestId('equal-split-row')).toHaveCount(0)
 
     await aliceCtx.close()
     await bobCtx.close()
@@ -212,7 +212,7 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(alicePage.getByText('Badge Refresh')).toBeVisible({ timeout: 10_000 })
     await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
-    await alicePage.getByTestId('bulk-share-btn').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5_000 })

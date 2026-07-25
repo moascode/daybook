@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useTasksStore } from '@/stores/tasks.store'
+import type { DeletedSnapshot } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
@@ -289,6 +290,88 @@ export function useTasks() {
     await loadTasks()
   }, [loadTasks])
 
+  /**
+   * CD-20: delete every selected task at once, with one-shot undo.
+   * Selecting a parent implies its children, so we delete only the *roots* of
+   * the selection (a selected task with no selected ancestor); the DB CASCADE
+   * and the store cleanup then take out each root's whole subtree. A single
+   * snapshot array powers the undo.
+   */
+  const bulkDeleteTasks = useCallback(async (ids: string[]) => {
+    const allTasks = useTasksStore.getState().tasks
+    const idSet = new Set(ids)
+
+    // Roots: selected tasks whose parent isn't also selected.
+    const roots = allTasks.filter(
+      (t) => idSet.has(t.id) && !(t.parentId !== null && idSet.has(t.parentId)),
+    )
+    if (roots.length === 0) return
+
+    const snapshots: DeletedSnapshot[] = []
+    const idsToRemove = new Set<string>()
+    for (const root of roots) {
+      const subtreeIds = collectDescendantIds(root.id, allTasks)
+      for (const rid of subtreeIds) {
+        idsToRemove.add(rid)
+        pendingDeletes.add(rid)
+      }
+      const descendants = allTasks.filter((t) => subtreeIds.has(t.id) && t.id !== root.id)
+      snapshots.push({ task: root, descendants })
+    }
+
+    // Save snapshot for undo (auto-clears after 5 seconds).
+    useTasksStore.getState().setLastBulkDeleted(snapshots)
+    setTimeout(() => {
+      if (useTasksStore.getState().lastBulkDeleted === snapshots) {
+        useTasksStore.getState().setLastBulkDeleted(null)
+      }
+    }, 5000)
+
+    try {
+      // Deleting a root cascades its descendants server-side.
+      for (const root of roots) {
+        await api.delete(`/tasks/${root.id}`)
+      }
+    } catch (err) {
+      for (const rid of idsToRemove) pendingDeletes.delete(rid)
+      useTasksStore.getState().setLastBulkDeleted(null)
+      await reportAndReconcile(err)
+      return
+    }
+
+    const remaining = allTasks.filter((t) => !idsToRemove.has(t.id))
+    useTasksStore.getState().setTasks(remaining)
+  }, [])
+
+  /** Re-insert every task removed by the last bulk delete. */
+  const restoreBulkDeleted = useCallback(async () => {
+    const { lastBulkDeleted } = useTasksStore.getState()
+    if (!lastBulkDeleted) return
+
+    useTasksStore.getState().setLastBulkDeleted(null)
+
+    for (const snapshot of lastBulkDeleted) {
+      const ordered = sortParentsFirst(snapshot.task, snapshot.descendants)
+      for (const t of ordered) {
+        await api.post('/tasks', {
+          id: t.id,
+          parentId: t.parentId,
+          content: t.content,
+          note: t.note,
+          isCompleted: t.isCompleted,
+          isCollapsed: t.isCollapsed,
+          sortOrder: t.sortOrder,
+          dueDate: t.dueDate ?? null,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        })
+        pendingDeletes.delete(t.id)
+      }
+    }
+
+    await loadTasks()
+  }, [loadTasks])
+
   /** Move a task to a new parent and/or sort position (for DnD). */
   const moveTask = useCallback(
     async (id: string, newParentId: string | null, newSortOrder: number) => {
@@ -466,6 +549,8 @@ export function useTasks() {
     updateTask,
     deleteTask,
     restoreDeleted,
+    bulkDeleteTasks,
+    restoreBulkDeleted,
     moveTask,
     indentTask,
     outdentTask,

@@ -111,7 +111,7 @@ groupsRouter.delete('/groups/:id', (req, res) => {
   // B-3: Block deletion if there are unsettled transaction shares within this group
   const unsettledShares = db.prepare(
     `SELECT 1
-     FROM transaction_shares ts
+     FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN group_members gm ON gm.user_id = ts.user_id AND gm.group_id = ?
      WHERE ts.settled_at IS NULL
@@ -175,7 +175,7 @@ groupsRouter.delete('/groups/:id/members/:userId', (req, res) => {
   // B-4: Block removal if this member has outstanding unsettled shares in the group
   const unsettledMemberShares = db.prepare(
     `SELECT 1
-     FROM transaction_shares ts
+     FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
      WHERE ts.user_id = ? AND ts.settled_at IS NULL
@@ -335,7 +335,7 @@ groupsRouter.get('/groups/:id/balances', (req, res) => {
     .prepare(
       `SELECT ts.user_id AS debtor_id, t.user_id AS creditor_id,
               SUM(ts.share_amount - ts.settled_amount) AS total_owed
-       FROM transaction_shares ts
+       FROM transaction_splits ts
        JOIN transactions t ON t.id = ts.transaction_id
        JOIN group_members gm_d ON gm_d.user_id = ts.user_id AND gm_d.group_id = ?
        JOIN group_members gm_c ON gm_c.user_id = t.user_id AND gm_c.group_id = ?

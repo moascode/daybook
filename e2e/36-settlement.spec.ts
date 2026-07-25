@@ -43,7 +43,7 @@ test.describe('36 — Settlement', () => {
     const txn = await txnRes.json()
 
     // Split 50/50 between Alice and Bob via API
-    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
+    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -132,7 +132,7 @@ test.describe('36 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
+    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -207,7 +207,7 @@ test.describe('36 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
+    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -277,7 +277,7 @@ test.describe('36 — Settlement', () => {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/shares', {
+    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,

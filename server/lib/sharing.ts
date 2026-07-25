@@ -56,14 +56,14 @@ export function canWriteAccount(db: DB, userId: string, accountId: string): bool
  */
 export function effectiveAmount(db: DB, userId: string, transactionId: string): number {
   const splitRow = db
-    .prepare('SELECT share_amount FROM transaction_shares WHERE transaction_id = ? AND user_id = ?')
+    .prepare('SELECT share_amount FROM transaction_splits WHERE transaction_id = ? AND user_id = ?')
     .get(transactionId, userId) as { share_amount: number } | undefined
 
   if (splitRow !== undefined) return splitRow.share_amount
 
   // No split rows at all for this transaction → check if any splits exist
   const anyShare = db
-    .prepare('SELECT 1 FROM transaction_shares WHERE transaction_id = ? LIMIT 1')
+    .prepare('SELECT 1 FROM transaction_splits WHERE transaction_id = ? LIMIT 1')
     .get(transactionId)
 
   if (anyShare) return 0 // splits exist but user has no share

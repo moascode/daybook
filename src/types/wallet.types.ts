@@ -31,7 +31,7 @@ export interface Transaction {
   importHash: string
   createdAt: string
   updatedAt: string
-  hasShares?: boolean
+  hasSplits?: boolean
 }
 
 export interface Category {

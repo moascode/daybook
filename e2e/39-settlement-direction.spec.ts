@@ -40,7 +40,7 @@ test.describe('39 — Settlement direction & partial settlement', () => {
     const txn = await (await alice.request.post(`${API}/transactions`, {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })).json()
-    await alice.request.post(`${API}/transactions/shares`, {
+    await alice.request.post(`${API}/transactions/splits`, {
       data: {
         transactions: [{
           transactionId: txn.id,

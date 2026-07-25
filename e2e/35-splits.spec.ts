@@ -159,7 +159,7 @@ test.describe('35 — Transaction splits', () => {
     // Share equally with Bob via the quick-share API
     const members = await alicePage.request.get('http://localhost:5173/api/groups/members').then((r) => r.json()) as Array<{ user_id: string; username: string }>
     const bobId = members.find((m) => m.username === bobName)!.user_id
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/share`, {
+    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/split`, {
       data: { recipientId: bobId, splitMode: 'equal' },
     })
 
@@ -170,7 +170,7 @@ test.describe('35 — Transaction splits', () => {
 
     const dialog = alicePage.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
-    const existing = dialog.getByTestId('existing-shares')
+    const existing = dialog.getByTestId('existing-splits')
     await expect(existing).toBeVisible({ timeout: 5000 })
     // Who-owes-what: both the payer and Bob are listed with their amounts
     await expect(existing.getByText('You')).toBeVisible()
@@ -182,8 +182,9 @@ test.describe('35 — Transaction splits', () => {
   })
 
   // §2.3/§4.5: the legacy multi-line split endpoint (and its divergent
-  // co-writer permission rule) is removed — sharing goes through the
-  // owner-only /share and bulk /shares routes.
+  // co-writer permission rule) is removed — splitting goes through the
+  // owner-only /split and bulk /splits routes. (CD-05⁺: the read route is
+  // now /transactions/:id/splits.)
   test('Legacy POST/DELETE /transactions/:id/shares routes are gone (404)', async ({ browser }) => {
     const ctx = await browser.newContext()
     const page = await ctx.newPage()
@@ -201,8 +202,8 @@ test.describe('35 — Transaction splits', () => {
     expect(post.status()).toBe(404)
     const del = await page.request.delete(`http://localhost:5173/api/transactions/${txn.id}/shares`)
     expect(del.status()).toBe(404)
-    // The read route survives (both dialogs use it to show existing shares)
-    const get = await page.request.get(`http://localhost:5173/api/transactions/${txn.id}/shares`)
+    // The read route survives under its new name (both dialogs use it to show existing splits)
+    const get = await page.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
     expect(get.status()).toBe(200)
 
     await ctx.close()

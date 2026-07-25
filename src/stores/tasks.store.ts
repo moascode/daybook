@@ -11,6 +11,8 @@ interface TasksState {
   rootId: string | null
   hideCompleted: boolean
   lastDeleted: DeletedSnapshot | null
+  // CD-20: snapshot of a bulk (multi-select) delete, for one-shot undo.
+  lastBulkDeleted: DeletedSnapshot[] | null
 
   setTasks: (tasks: Task[]) => void
   setRootId: (id: string | null) => void
@@ -19,6 +21,7 @@ interface TasksState {
   removeTask: (id: string) => void
   addTask: (task: Task) => void
   setLastDeleted: (snapshot: DeletedSnapshot | null) => void
+  setLastBulkDeleted: (snapshots: DeletedSnapshot[] | null) => void
 }
 
 export const useTasksStore = create<TasksState>((set) => ({
@@ -26,11 +29,13 @@ export const useTasksStore = create<TasksState>((set) => ({
   rootId: null,
   hideCompleted: false,
   lastDeleted: null,
+  lastBulkDeleted: null,
 
   setTasks: (tasks) => set({ tasks }),
   setRootId: (id) => set({ rootId: id }),
   setHideCompleted: (hide) => set({ hideCompleted: hide }),
   setLastDeleted: (snapshot) => set({ lastDeleted: snapshot }),
+  setLastBulkDeleted: (snapshots) => set({ lastBulkDeleted: snapshots }),
 
   updateTask: (id, updates) =>
     set((s) => ({

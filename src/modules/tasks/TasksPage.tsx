@@ -11,9 +11,10 @@ import {
 import {
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
-import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare, CalendarClock, BookCopy } from 'lucide-react'
+import { Plus, Eye, EyeOff, ChevronRight, Home, Search, X, CheckSquare, CalendarClock, BookCopy, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { useTasks } from '@/hooks/useTasks'
@@ -92,6 +93,8 @@ export function TasksPage() {
     updateTask,
     deleteTask,
     restoreDeleted,
+    bulkDeleteTasks,
+    restoreBulkDeleted,
     moveTask,
     indentTask,
     outdentTask,
@@ -108,6 +111,10 @@ export function TasksPage() {
   const [focusId, setFocusId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [sortByDue, setSortByDue] = useState(false)
+
+  // CD-20: multi-select / bulk-delete state.
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // Template state
   const [saveTemplateDialogOpen, setSaveTemplateDialogOpen] = useState(false)
@@ -302,6 +309,71 @@ export function TasksPage() {
     [hideCompleted, setHideCompleted],
   )
 
+  // ── Multi-select (CD-20) ────────────────────────────
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((m) => !m)
+    setSelectedIds(new Set())
+  }, [])
+
+  // Selecting a node selects its whole subtree; deselecting a node also clears
+  // its subtree and every ancestor (a parent can't stay "fully selected" once a
+  // descendant is dropped). This keeps the selection honest about what a bulk
+  // delete — which cascades — will actually remove.
+  const handleToggleSelect = useCallback((id: string) => {
+    const allTasks = useTasksStore.getState().tasks
+
+    const subtree = new Set<string>([id])
+    const queue = [id]
+    while (queue.length > 0) {
+      const pid = queue.pop()!
+      for (const t of allTasks) {
+        if (t.parentId === pid && !subtree.has(t.id)) {
+          subtree.add(t.id)
+          queue.push(t.id)
+        }
+      }
+    }
+
+    const ancestors: string[] = []
+    let cur = allTasks.find((t) => t.id === id)
+    while (cur?.parentId) {
+      ancestors.push(cur.parentId)
+      cur = allTasks.find((t) => t.id === cur!.parentId)
+    }
+
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (prev.has(id)) {
+        for (const s of subtree) next.delete(s)
+        for (const a of ancestors) next.delete(a)
+      } else {
+        for (const s of subtree) next.add(s)
+      }
+      return next
+    })
+  }, [])
+
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    const count = ids.length
+    await bulkDeleteTasks(ids)
+    setSelectMode(false)
+    setSelectedIds(new Set())
+    if (undoToastIdRef.current) removeToast(undoToastIdRef.current)
+    undoToastIdRef.current = addToast({
+      message: `${count} task${count === 1 ? '' : 's'} deleted`,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          restoreBulkDeleted()
+          undoToastIdRef.current = null
+        },
+      },
+      duration: 5000,
+    })
+  }, [selectedIds, bulkDeleteTasks, restoreBulkDeleted, addToast, removeToast])
+
   // Load tasks on mount
   useEffect(() => {
     loadTasks().then(() => setLoaded(true))
@@ -402,6 +474,23 @@ export function TasksPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
+      {/* U-16: first-run orientation — only on the empty home outline. */}
+      {rootId === null && isEmpty && !isSearching && (
+        <div className="mb-4">
+          <WelcomeCard
+            settingKey="onboarding_dismissed_tasks"
+            icon={<Sparkles className="h-5 w-5" />}
+            title="Welcome to Daybook 👋"
+          >
+            Daybook keeps your tasks and money in one place. This is the Tasks outliner —
+            press <kbd className="rounded bg-white px-1 text-xs">Enter</kbd> to add an item and{' '}
+            <kbd className="rounded bg-white px-1 text-xs">Tab</kbd> to nest it under the one above.
+            Open <span className="font-medium">Wallet</span> from the sidebar to track your accounts
+            and spending.
+          </WelcomeCard>
+        </div>
+      )}
+
       {/* ── Toolbar ─────────────────────────────────────────── */}
       <div className="mb-3 flex items-center justify-between gap-3">
         {/* Breadcrumb */}
@@ -434,42 +523,77 @@ export function TasksPage() {
 
         {/* Actions */}
         <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            onClick={() => setSortByDue((v) => !v)}
-            title={sortByDue ? 'Revert to default order' : 'Sort by due date'}
-            className={cn(
-              'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-              sortByDue
-                ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
-            )}
-          >
-            <CalendarClock className="h-3.5 w-3.5" />
-            Sort by due date
-          </button>
+          {selectMode ? (
+            <>
+              <span className="px-1 text-xs font-medium text-gray-500">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+                data-testid="task-bulk-delete-btn"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete {selectedIds.size}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setSortByDue((v) => !v)}
+                title={sortByDue ? 'Revert to default order' : 'Sort by due date'}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                  sortByDue
+                    ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+                )}
+              >
+                <CalendarClock className="h-3.5 w-3.5" />
+                Sort by due date
+              </button>
 
-          <button
-            onClick={handleToggleHideCompleted}
-            title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
-          >
-            {hideCompleted ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-            {hideCompleted ? 'Show done' : 'Hide done'}
-          </button>
+              <button
+                onClick={handleToggleHideCompleted}
+                title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+              >
+                {hideCompleted ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                {hideCompleted ? 'Show done' : 'Hide done'}
+              </button>
 
-          <button
-            onClick={handleOpenTemplates}
-            title="Apply a saved task template"
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
-          >
-            <BookCopy className="h-3.5 w-3.5" />
-            Templates
-          </button>
+              <button
+                onClick={handleOpenTemplates}
+                title="Apply a saved task template"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+              >
+                <BookCopy className="h-3.5 w-3.5" />
+                Templates
+              </button>
 
-          <Button size="sm" onClick={handleAddRootTask}>
-            <Plus className="h-3.5 w-3.5" />
-            New task
-          </Button>
+              {!isEmpty && (
+                <button
+                  onClick={toggleSelectMode}
+                  title="Select multiple tasks"
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                  data-testid="task-select-btn"
+                >
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  Select
+                </button>
+              )}
+
+              <Button size="sm" onClick={handleAddRootTask}>
+                <Plus className="h-3.5 w-3.5" />
+                New task
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -581,6 +705,9 @@ export function TasksPage() {
               depth={0}
               focusId={focusId}
               sortByDue={sortByDue}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
               onUpdate={handleUpdate}
               onUpdateNote={handleUpdateNote}
               onToggleComplete={handleToggleComplete}
