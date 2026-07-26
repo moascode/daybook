@@ -21,8 +21,9 @@ export interface ImportRow {
   amount: number
   merchant: string
   description: string
-  type: 'income' | 'expense'
+  type: 'income' | 'expense' | 'transfer'
   categoryId: string | null
+  destinationAccountId: string | null
   importHash: string
   isDuplicate: boolean
   included: boolean
@@ -388,6 +389,7 @@ export async function buildImportRows(
       description,
       type: type as 'income' | 'expense',
       categoryId: null,
+      destinationAccountId: null,
       importHash: hash,
       isDuplicate: false,
       included: true,
