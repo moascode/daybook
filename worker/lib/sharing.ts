@@ -78,16 +78,20 @@ export async function canWriteAccount(
  * ready rather than discovering the problem at 500-row import time.
  */
 export async function writableAccountIds(db: D1Database, userId: string): Promise<Set<string>> {
+  // userId is bound twice rather than reusing `?1`. D1 documents ordered
+  // parameters, but the numbered form is not exercised anywhere else in this
+  // codebase and a silent mismatch here would hand back the wrong account set —
+  // which is an authorisation answer. Two plain binds have no such ambiguity.
   const { results } = await db
     .prepare(
-      `SELECT id FROM accounts WHERE user_id = ?1
+      `SELECT id FROM accounts WHERE user_id = ?
        UNION
        SELECT acs.account_id AS id
        FROM account_shares acs
        JOIN group_members gm ON gm.group_id = acs.group_id
-       WHERE gm.user_id = ?1 AND acs.can_write = 1`,
+       WHERE gm.user_id = ? AND acs.can_write = 1`,
     )
-    .bind(userId)
+    .bind(userId, userId)
     .all<{ id: string }>()
   return new Set(results.map((r) => r.id))
 }

@@ -357,7 +357,8 @@ worker/
     ├── auth.ts                      ← signup/login/logout/me + requireAuth middleware
     ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
-    └── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
+    ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
+    └── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1242,17 +1243,32 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                 Phase 4 (Route port) — IN PROGRESS.
                 • Increment 1 MERGED (PR #69): settings.ts (2 .prepare())
                   + tasks.ts (6).
-                • Increment 2 IN REVIEW: PR feat/workers-routes-groups —
-                  groups.ts (31) + async port of lib/sharing.ts.
-                39 of 156 sites done; settlements (21) and wallet (68)
-                remain.
-                DELIBERATE SPLIT: settlements.ts is NOT in increment 2.
-                It cannot be ported without also doing its Phase 5
-                atomicity work — settlements.ts:104 is the
-                read-then-conditionally-write money path the plan calls
-                "the one that needs care" — so it gets its own PR where
-                that design gets full attention rather than being tacked
-                onto a route port.
+                • Increment 2 MERGED (PR #71): groups.ts (31) + async
+                  port of lib/sharing.ts.
+                • Increment 3 IN REVIEW: PR feat/workers-routes-settlements
+                  — settlements.ts (21) WITH its Phase 5 atomicity work.
+                60 of 156 sites done; only wallet.ts (68) remains.
+                SETTLEMENT CONCURRENCY DESIGN (the plan's "hard" site):
+                POST /settlements hoists every read, computes the whole
+                write set in JS, then issues ONE batch() whose share
+                updates are compare-and-swap guarded on the exact
+                settled_amount that was read
+                (WHERE id=? AND settled_at IS NULL AND settled_amount=?).
+                batch() is atomic but a CAS matching 0 rows is a
+                SUCCESSFUL statement, so meta.changes is inspected
+                afterwards; if any guard lost a race the settlement,
+                ledger legs and split lines are removed by a compensating
+                batch (restoring only shares still holding OUR value) and
+                the caller gets 409. Verified by fault injection.
+                TIMEZONE FIX (worker/lib.ts): the Worker clock is always
+                UTC, so porting todayStr() literally would stamp
+                server-dated rows with YESTERDAY between 00:00-08:00 MYT.
+                todayStr() is now pinned to Asia/Kuala_Lumpur via Intl,
+                preserving B-11's stated intent. businessDateOf() converts
+                a stored UTC datetime('now') for comparison — this also
+                fixes a PRE-EXISTING Mac bug where the same-day undo check
+                compared a UTC date against a local date and silently
+                refused valid undos for the first 8 hours of each day.
                 Two atomicity fixes landed early in increment 2 because
                 the bug was created by the port itself: POST /groups and
                 POST /invites/:id/accept each ran two independent
