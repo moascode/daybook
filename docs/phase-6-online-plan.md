@@ -187,6 +187,34 @@ holding a financial ledger, for as long as the app exists.
 DB is 1.2 MB against 5 GB; two users won't approach 100k req/day. Workers Paid is
 $5/mo if ever needed.
 
+> **No domain required** — unlike A3. You get `<worker>.<your-subdomain>.workers.dev`
+> (or `<project>.pages.dev`) free, with TLS terminated automatically. The
+> asymmetry: a *named tunnel* (A3) routes Cloudflare's edge to **your** origin via
+> a DNS record in a zone you own, so it needs a purchased domain. C1 is hosted
+> **on** Cloudflare, so Cloudflare supplies the hostname. C1 is therefore $0 end
+> to end, with no line item at all.
+>
+> Two caveats on the free hostname: Cloudflare's docs describe `workers.dev` as
+> "intended for personal or hobby projects" (which this is), and `*.workers.dev`
+> is occasionally blocked by corporate DNS filters since the shared domain
+> attracts abuse — irrelevant on home/mobile networks, and fixable later with a
+> custom domain without redeploying.
+
+**Single-origin is preserved.** Workers supports static assets in the same Worker
+as the API, which maps almost 1:1 onto `server/index.ts:77-85`:
+
+```toml
+[assets]
+not_found_handling = "single-page-application"
+```
+
+Matching paths serve the static file directly; everything else falls through to
+the Worker script, and `run_worker_first` pins `/api/*`. That replaces
+`express.static(DIST_DIR)` + the SPA fallback + `/api` routing. The SPA and API
+stay on **one origin** exactly as today — no CORS layer, no `SameSite=None`
+cross-site cookies, no split deploy. The migration is a port, not a
+re-architecture.
+
 **Where it shines:** free-forever cloud with no server to own. Its superpower is
 that **D1 is SQLite** — the migrations and the intricate Phase 5b
 split/settlement SQL port essentially verbatim. No dialect translation, no type
