@@ -31,6 +31,9 @@ playwright-report/
 # Phase 4 server — local SQLite database files (never commit user data)
 server/data/
 
+# Wrangler local state — Miniflare's local D1 SQLite files, caches, build output
+.wrangler/
+
 # infra/daybook runtime files (pidfile, log, generated session secret)
 .daybook/
 
