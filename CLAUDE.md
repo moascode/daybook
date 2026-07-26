@@ -1202,7 +1202,55 @@ Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
                 docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).
-                Phase 5a (AI) and Phase 6 (cloud) still deferred.
+                Phase 5a (AI) still deferred.
+                Phase 6 (online access): PLANNED 2026-07-26 —
+                docs/phase-6-online-plan.md. Owner constraints: 2 active
+                users, target $0/mo, and ANY-DEVICE access required (this
+                last one rules out a private Tailscale tailnet, so all
+                surviving options are publicly reachable and the full
+                blocker list is mandatory under every one).
+                Shortlist of 3, prices verified against vendor pages:
+                • Opt 1 Tailscale Funnel + Caddy basic-auth — $0/mo,
+                  ~8-10h, no app rewrite, stays on the Mac.
+                • Opt 2 CF Pages+Workers+D1 — $0/mo, no domain, no Mac
+                  dependency, BUT ~3-5 WEEKS: measured 156 .prepare()
+                  sites, 2,905 server lines, 51 e2e specs — and D1 has NO
+                  interactive transactions, while the code uses
+                  db.transaction() in 11 places (6 wallet, 3 settlements),
+                  i.e. exactly the money paths. That is a redesign, not a
+                  port, and is the single biggest cost driver.
+                • Opt 3 CF Tunnel + domain — ~$1/mo (~$12/yr, domain is
+                  the only line item), ~8-10h, no app rewrite, and
+                  Cloudflare Access gives per-user email OTP + revocation
+                  and rejects floods at the edge rather than after they
+                  cross the home connection.
+                RECOMMENDED: Opt 3 (Opt 1 is the hard-$0 fallback; same
+                effort, ~$12/yr and a real identity gate is the
+                difference). Opt 2 is the right destination if Mac uptime
+                ever becomes the actual complaint — nothing done now is
+                wasted.
+                DROPPED: Fly.io (~$5-7/mo; Opt 2 gets independence for $0),
+                Render (free tier has no persistent disk), AWS (free tier
+                now credit-based, account CLOSES at 6 months), Azure (free
+                12 months only) — and both big clouds' always-free tiers
+                are serverless with network-attached storage, which SQLite
+                must not use (WAL + NFS/SMB locking = corruption risk).
+                Supabase+Vercel (~$25/mo, largest rewrite; Vercel cannot
+                host the current server at all) — recommend striking from
+                §14.
+                Chief blocker under all paths: the hardcoded
+                `secure: false` session cookie, which MUST ship together
+                with app.set('trust proxy', N) or login silently sets no
+                cookie at all. N=1 for Opt 3, N=2 for Opt 1 (tailscaled +
+                Caddy). Also found: auth.ts:50 returns 409 "username
+                already taken" = user-enumeration oracle, closed by
+                disabling signup.
+                Deps: helmet + express-rate-limit approved by owner (add to
+                §4 when PR1 lands).
+                Sequencing: PR1 hardening + PR2 offsite backups to
+                Cloudflare R2 (10GB free, zero egress; fixes backups living
+                on the same disk as the DB) are both path-independent and
+                unblocked → PR3 access path. PR2 is the highest-value item.
 
 Blockers:       None. Nothing in progress.
 
