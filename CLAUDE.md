@@ -1202,7 +1202,23 @@ Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
                 docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).
-                Phase 5a (AI) and Phase 6 (cloud) still deferred.
+                Phase 5a (AI) still deferred.
+                Phase 6 (online access): ANALYSED 2026-07-26 —
+                docs/phase-6-online-plan.md. Key finding: the §14 Supabase +
+                Vercel plan is disproportionate (full async-Postgres rewrite;
+                Vercel cannot host the current server at all — no persistent
+                disk for SQLite). Three paths costed; A (Cloudflare Tunnel to
+                the existing Mac, ~1h + hardening) recommended, B (Fly.io +
+                volume) documented as the upgrade path. Owner has locked two
+                sub-decisions: Cloudflare Access as the front gate, and
+                helmet + express-rate-limit approved as new deps (add to §4
+                when the PR lands). Hosting path itself NOT yet chosen.
+                Six path-independent blockers identified before any public
+                hostname resolves — chiefly the hardcoded `secure: false`
+                session cookie (needs `trust proxy` in the same change) and
+                the wide-open signup route. Suggested sequencing: PR1
+                hardening + PR2 offsite backups (both unblocked, start
+                anytime) → PR3 hosting (blocked on the path decision).
 
 Blockers:       None. Nothing in progress.
 
