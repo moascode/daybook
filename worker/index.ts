@@ -5,6 +5,7 @@ import { health } from './routes/health.ts'
 import { auth, requireAuth } from './routes/auth.ts'
 import { tasks } from './routes/tasks.ts'
 import { settings } from './routes/settings.ts'
+import { groups } from './routes/groups.ts'
 
 // ─────────────────────────────────────────────────────────────
 // Daybook Worker — the Cloudflare-side replacement for server/index.ts.
@@ -63,6 +64,7 @@ const protectedApi = new Hono<AppEnv>()
 protectedApi.use('*', requireAuth)
 protectedApi.route('/', tasks)
 protectedApi.route('/', settings)
+protectedApi.route('/', groups)
 
 app.route('/api', protectedApi)
 
