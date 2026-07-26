@@ -1,8 +1,8 @@
 # Implementation Plan: CSV Transfer Import + Twin-Linking
 
-> Status: **Approved, not yet implemented.** Owner-approved 2026-07-26.
-> Delivers as a 2-PR sequence (see *Sequencing*). This document is the spec;
-> code lands in follow-up PRs.
+> Status: **Implemented, in review.** Owner-approved 2026-07-26; built the same
+> day as the planned 2-PR sequence — PR #60 (`feat/csv-transfer-import`,
+> Items 1+3) and PR #61 (`feat/transfer-linking`, Items 4+2, stacked on #60).
 
 ## Goal
 
