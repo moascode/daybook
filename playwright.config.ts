@@ -95,7 +95,12 @@ export default defineConfig({
       command:
         'VITE_E2E=1 npm run build && ' +
         'npx wrangler d1 migrations apply daybook --env dev --local && ' +
-        'npx wrangler dev --env dev --port 5173',
+        // --show-interactive-dev-session=false: `wrangler dev` otherwise runs an
+        // interactive session with hotkeys (b/d/l/x) that reads stdin. Playwright's
+        // webServer gives it no stdin, and in CI the process exited ~30s in with an
+        // empty error, taking every remaining test with it (ECONNREFUSED :5173).
+        // Turning the interactive layer off makes it a plain long-running server.
+        'npx wrangler dev --env dev --port 5173 --show-interactive-dev-session false',
       url: 'http://localhost:5173/api/health',
       reuseExistingServer: !process.env.CI,
       // Generous: covers a cold `vite build` as well as wrangler's ~3s start.
