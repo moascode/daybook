@@ -1,219 +1,217 @@
 # Option 2 Implementation Plan — Cloudflare Pages + Workers + D1
 
-> Status: **Proposed. Not started. Needs owner sign-off on [§7 new dependencies](#7-new-dependencies--needs-approval)
-> and the [§3 spike outcomes](#3-phase-0--spikes-settle-these-before-committing) before Phase 1 begins.**
-> Written 2026-07-26. Companion to `docs/phase-6-online-plan.md` (options analysis).
-> Effort figures assume **Claude Code performs the implementation**; owner effort is
-> costed separately and explicitly.
+> **Version 2 — rewritten 2026-07-27 after Phase 0.** Supersedes the pre-spike
+> draft, which estimated from reading code rather than measuring. Every number
+> below is either measured (see `docs/option-2-spike-findings.md`) or derived
+> from a counted property of the codebase.
+>
+> **Status: Phase 0 complete, no blocker found. Awaiting the go/no-go in [§10](#10-the-decision).**
+> Phases 1–7 are not started. Nothing in the repo has been changed for this
+> migration.
 
-## 0. Why this document
+## 0. What this is
 
-`docs/phase-6-online-plan.md` compares three ways to put Daybook online and
-recommends Option 3. The owner is inclined toward **Option 2** — Cloudflare
-Pages + Workers + D1 — because it is the only path that is **$0/month forever,
-needs no domain, and has no dependency on a machine at home staying awake.**
+A step-by-step plan to move Daybook off the Mac and onto Cloudflare Workers + D1,
+at $0/month, with no machine at home to maintain.
 
-This document plans that migration in full. It is deliberately honest about what
-gets worse as well as what gets better.
-
-### One correction to the analysis doc
-
-`phase-6-online-plan.md` §2.2 flags D1's lack of interactive transactions as
-"the single biggest reason Option 2 is weeks rather than days," estimating 3–5
-days of redesign across 11 `db.transaction()` sites.
-
-**Having read all of them, that was pessimistic.** The breakdown is in
-[§5.5](#phase-5--atomicity--the-only-real-design-work). Five of seven relevant
-sites are straight `batch()` conversions, because the existing code already
-hoists validation *outside* the transaction — `wallet.ts:1009` literally carries
-the comment *"Sum validation BEFORE opening db.transaction()"*. Only two need
-design work. The revised estimate is **1–2 sessions, not 3–5 days**.
-
-The rest of the migration is unchanged in scope.
+**Rollback anchor: `v1.0.0`** — tagged 2026-07-27, with branch
+`release/v1.0.0`. That tag is the stable Mac-only local product. Everything below
+happens after it and can be abandoned at any point without touching it.
 
 ---
 
-## 1. Target architecture
+## 1. What Phase 0 established
+
+Four spikes ran against real infrastructure. Full detail in
+`docs/option-2-spike-findings.md`; here is what each one changed about this plan.
+
+| Spike | Result | Effect on this plan |
+|---|---|---|
+| **S1** PBKDF2 vs CPU budget | Hard cliff at **100k–105k iterations** (OWASP: 600k) | Fixes the KDF at **50,000** and makes password strength a **code-enforced precondition** (Phase 3) |
+| **S2** CSV import via `batch()` | **5,000 rows in one batch**, ~10× headroom | Insert path is a non-issue. But surfaced an **N+1 query bug** that must be fixed (Phase 4) |
+| **S4** Playwright + `wrangler dev` | **6/6 in 3 s**, harness *simplifies* | Phase 6 revised **down**; two web servers and a proxy collapse to one command |
+| **S3** heavy read paths | not run — downgraded | Verify opportunistically in Phase 4; S2 showed I/O-interleaved work has headroom |
+
+### Three findings that change the work
+
+**1. Blocker 4.1 disappears.** `docs/phase-6-online-plan.md` §4.1 flags the
+hardcoded `secure: false` cookie plus the `trust proxy` trap as the most likely
+way to break the migration. **On Workers it does not exist** — TLS always
+terminates at the edge and `CF-Connecting-IP` always carries the real client IP.
+The single nastiest item on the blocker list is deleted by the platform.
+
+**2. PR 1 from the analysis doc must be skipped.** It specifies `helmet` and
+`express-rate-limit`, both Express middleware that cannot run on Workers.
+Building it first would be wasted work. Its content is folded into Phases 3–4 in
+Workers-native form ([§5](#5-hardening-mapping)).
+
+**3. The import route has an N+1 bug that is invisible today.**
+`wallet.ts:583-595` calls `canWriteAccount()` and `ownsAllRefs()` **per row**,
+and `ownsAllRefs` → `userOwns` (`lib.ts:86-89`) issues a `SELECT` per call. Under
+`better-sqlite3` these are in-process and free. Under D1 each is a network round
+trip: a 500-row import becomes **1,000–1,500 sequential awaited queries**. Must
+be hoisted before the route works at all.
+
+---
+
+## 2. Target architecture
 
 ```
 Browser
-   │  https://daybook.<subdomain>.workers.dev
+   │  https://daybook.moascode.workers.dev
    ▼
 Cloudflare edge
    │
-   ├── static assets (dist/)         ← served directly, no Worker invocation
+   ├── static assets (dist/)        ← served directly, no Worker invocation
    │   not_found_handling = "single-page-application"
    │
-   └── Worker (Hono)                 ← run_worker_first = ["/api/*"]
-         ├── session middleware (D1-backed, signed cookie)
-         ├── /api/* route modules  (ported 1:1 from server/routes/)
-         └── D1 binding → daybook database
+   └── Worker (Hono)                ← run_worker_first = ["/api/*"]
+         ├── session middleware (D1-backed, HMAC-signed cookie)
+         ├── /api/* routes  (ported from server/routes/)
+         └── D1 binding → daybook (production database)
 ```
 
-**Single origin is preserved.** One Worker serves both the SPA and the API, the
-same property `server/index.ts:77-85` gives today. No CORS, no `SameSite=None`
-cookies, no split deploy.
+```toml
+# wrangler.toml — the shape proven by spike S4
+name = "daybook"
+main = "src/worker/index.ts"
+compatibility_date = "2026-07-01"
 
-**What goes away:** the Mac, launchd, `infra/daybook`, the port-80 forwarder,
-`setup-lan`, the release tarball pipeline, and the SQLite file. Deployment
-becomes `wrangler deploy` from CI.
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
----
+[[d1_databases]]
+binding = "DB"
+database_name = "daybook"
+database_id = "<created in Phase 2>"
+```
 
-## 2. Division of labour
+**Single origin is preserved** — the same property `server/index.ts:77-85` gives
+today. No CORS, no `SameSite=None`, no split deploy. S4 confirmed this works
+including SPA deep links.
 
-### 2.1 What I handle
-
-Everything code-shaped, end to end:
-
-- All porting: Express → Hono, sync → async, bcrypt → Web Crypto, session store
-- `wrangler.toml`, D1 bindings, static-asset config, CI workflow changes
-- Porting all 9 migrations to D1's migration system
-- Writing the data-export/import scripts
-- Re-pointing the 51-spec e2e suite at `wrangler dev` and getting it green
-- All spikes in Phase 0, with written findings
-- Every PR, branch, commit message, and doc update (CLAUDE.md §3/§4/§5/§13)
-
-### 2.2 What only you can do
-
-I cannot create accounts, enter credentials, or authenticate on your behalf.
-These are yours, and each one **blocks** the phase it sits in:
-
-| # | Manual step | Phase | Your time |
-|---|---|---|---|
-| M1 | Create/confirm a Cloudflare account, **enable 2FA** | 0 | 15 min |
-| M2 | `wrangler login` (browser OAuth) on this machine | 1 | 5 min |
-| M3 | Approve the new dependencies in §7 | 0 | 5 min |
-| M4 | Decide Workers **Free vs Paid ($5/mo)** once the M-CPU spike reports | 0 | 10 min |
-| M5 | Review + merge each PR (8 of them) | all | ~2 h total |
-| M6 | Choose new passwords for both accounts post-auth-cutover | 3 | 10 min |
-| M7 | Smoke-test on your own phone + laptop before cutover | 7 | 30 min |
-| M8 | Final cutover approval | 7 | 5 min |
-
-**Total owner time: ~3.5–4 hours**, spread across the project.
-
-> On M2: `wrangler login` runs an OAuth flow in your browser. I can run the
-> command, but you complete the authorisation. Alternatively you create a scoped
-> API token and put it in `.env.local` — I'll take whichever you prefer, but I
-> won't handle the token value beyond referencing the env var.
-
-### 2.3 What we do together
-
-Phase 0's spike results may change the plan. If the CPU spike (S1) fails on the
-free tier, the choice is yours: pay $5/mo, or accept weaker password hashing on
-the strength of long random passwords. I'll present numbers, not a fait accompli.
+**Retired at Phase 7:** the Mac, launchd, `infra/daybook` (884 lines),
+`infra/port-forward.js`, `setup-lan`, the release tarball pipeline, and the
+SQLite file.
 
 ---
 
-## 3. Phase 0 — spikes (settle these before committing)
+## 3. Prerequisites — account state
 
-**Do not start Phase 1 until these four report.** Each one can invalidate or
-reshape the plan, and all are cheap to run. This is the whole point of doing them
-first.
-
-| # | Spike | Question it answers | Kills/changes the plan if… |
-|---|---|---|---|
-| **S1** | **PBKDF2 CPU budget** | How many PBKDF2-HMAC-SHA256 iterations fit in the free tier's **10ms CPU per invocation**? | If even ~100k doesn't fit, auth on the free tier is untenable → Workers Paid ($5/mo) or a documented weaker KDF. **Highest-risk unknown.** |
-| **S2** | **D1 batch limits** | Max statements and total query size per `batch()`. Does a realistic CSV import (a few hundred rows) fit in one batch and one invocation? | If not, CSV import needs chunking + a partial-failure story. Affects `wallet.ts:596`. |
-| **S3** | **Heavy read paths** | Do the Reports/Dashboard aggregates and `GET /transactions/export` complete within CPU limits against a seeded D1? | If not, those endpoints need pagination or precomputation. |
-| **S4** | **e2e harness** | Can Playwright drive `wrangler dev --local` with a resettable D1, replacing `DAYBOOK_TEST=1` + `POST /api/test/reset`? | If the reset story is unworkable, the 51-spec suite needs rethinking — that would be the largest hidden cost in the project. |
-
-**Deliverable:** `docs/option-2-spike-findings.md` with measured numbers and a
-go/no-go recommendation. **Effort: 1 session. Blocks on M1 + M2.**
-
-> If S1 and S4 both come back clean, the rest of this plan is mechanical and
-> low-drama. If either fails, we reconvene before writing migration code.
-
----
-
-## 4. Important: this replaces PR 1, it does not follow it
-
-`phase-6-online-plan.md` §7 specifies **PR 1 — `feat/production-hardening`**
-using `helmet` and `express-rate-limit`. **Both are Express middleware and do not
-run on Workers.** If you commit to Option 2, building PR 1 first is wasted work.
-
-The hardening still happens — it moves into Phases 3 and 4 in Workers-native form:
-
-| Blocker (from the analysis doc §4) | Express plan | Workers equivalent |
+| # | Step | Status |
 |---|---|---|
-| 4.1 secure cookie + `trust proxy` | `app.set('trust proxy', N)` | **Not needed.** Workers always sees real client IP via `CF-Connecting-IP`; TLS is always terminated at the edge. Cookie is simply `Secure`. |
-| 4.2 open signup | `DAYBOOK_ALLOW_SIGNUP` env flag | Same flag, as a Worker env var |
-| 4.3 rate limiting | `express-rate-limit` | Cloudflare **Rate Limiting Rules** at the edge (free tier includes basic rules), or a Durable Object counter |
-| 4.4 password minimum | raise to 12 | same, in the ported auth route |
-| 4.5 security headers | `helmet` | Hono's `secureHeaders()` middleware, or a hand-written header middleware |
-| 4.6 offsite backups | `VACUUM INTO` → R2 | **Cron Trigger** in the Worker → `wrangler d1 export` equivalent → R2 bucket |
+| M1 | Cloudflare account + **2FA enabled** | ✅ done 2026-07-26 |
+| M2 | `wrangler login` (OAuth, stored `~/Library/Preferences/.wrangler/`) | ✅ done |
+| M9 | Register `workers.dev` subdomain → **`moascode`** | ✅ done (not in the v1 plan; found by Phase 0) |
+| M3 | Approve the three dependencies in [§8](#8-dependencies) | ⬜ **blocks Phase 1** |
+| M4 | Workers Free vs Paid | ✅ **answered by S1/S2: Free is sufficient** at 50k iterations |
+| M6 | Choose new passwords for both accounts (24+ chars, password manager) | ⬜ blocks Phase 3 |
+| M7 | Smoke-test on your own phone + laptop | ⬜ blocks Phase 7 |
+| M8 | Final cutover approval | ⬜ blocks Phase 7 |
+| M5 | Review + merge 7 PRs | ⬜ ongoing, ~2 h total |
 
-**Net effect: option 2 makes blocker 4.1 disappear entirely** (the `trust proxy`
-trap that I flagged as the most likely way to break this migration simply doesn't
-exist on Workers), and turns 4.3 into edge configuration rather than application
-code. That's a genuine simplification, and it partly offsets the porting cost.
+**Remaining owner time: ~3 hours.**
 
-**Recommendation: skip PR 1 as written.** Its content is folded into Phases 3–4
-below.
+> The OAuth token wrangler holds is broader than this project needs (it includes
+> `email_sending`, `containers`, `connectivity:admin` — Cloudflare's fixed scope
+> list, not a choice). Swapping to a Workers+D1-scoped API token is a reasonable
+> hardening step at any point; not blocking.
 
 ---
 
-## 5. Phased plan
+## 4. Division of labour
 
-Each phase is one PR, branched from the previous, reviewed and merged before the
-next begins. The Mac keeps serving the current app untouched throughout — there
-is no partial cutover.
+**I handle:** every line of code, `wrangler.toml`, migrations, data export/import
+scripts, the e2e port, CI changes, all PRs and commit messages, and the CLAUDE.md
+updates (§3/§4/§5/§13).
+
+**Only you can:** approve dependencies, choose passwords, smoke-test on your own
+devices, approve cutover, and review/merge. I cannot create accounts, enter
+credentials, or authenticate as you.
+
+---
+
+## 5. Hardening mapping
+
+The public-exposure blockers from `docs/phase-6-online-plan.md` §4, translated:
+
+| Blocker | Express plan | Workers form | Lands in |
+|---|---|---|---|
+| 4.1 secure cookie + `trust proxy` | `app.set('trust proxy', N)` | **N/A — eliminated** | — |
+| 4.2 open signup | `DAYBOOK_ALLOW_SIGNUP` | same flag as a Worker `[vars]` entry | Phase 3 |
+| 4.3 rate limiting | `express-rate-limit` | **Cloudflare Rate Limiting Rules** at the edge | Phase 4 |
+| 4.4 password minimum | raise to 12 | raise to 12 **+ S1 precondition** | Phase 3 |
+| 4.5 security headers | `helmet` | Hono `secureHeaders()` | Phase 3 |
+| 4.6 offsite backups | `VACUUM INTO` → R2 | **Cron Trigger** → D1 export → R2 | Phase 7 |
+
+---
+
+## 6. The phases
+
+Each is one PR, branched from the previous, reviewed and merged before the next.
+**The Mac serves the live app untouched through Phases 1–6.** There is no partial
+cutover and no dual-write.
 
 ### Phase 1 — Scaffold
 
-**PR:** `feat/workers-scaffold`
+**Branch:** `feat/workers-scaffold` · **1 session** · blocks on M3
 
-- `wrangler.toml`: Worker entry, D1 binding, `[assets]` with SPA fallback,
-  `run_worker_first = ["/api/*"]`
-- Hono app skeleton; port `routes/health.ts` (14 lines) as the proof of life
-- Vite build output wired as the assets directory
-- `npm run dev:worker` script; CI job that runs `wrangler deploy --dry-run`
-- **Verification:** deployed Worker serves the SPA, deep links resolve,
-  `GET /api/health` returns 200
+1. Add `hono`, `wrangler`, `@cloudflare/workers-types` (§8).
+2. `wrangler.toml` per §2 — assets, SPA fallback, `run_worker_first`.
+3. `src/worker/index.ts`: Hono app, port `routes/health.ts` (14 lines) as proof of life.
+4. Scripts: `dev:worker`, `build:worker`; CI job running `wrangler deploy --dry-run`.
+5. Update CLAUDE.md §4 stack table.
 
-**My effort: 1 session.** Blocks on M2.
+**Verify:** SPA loads at `daybook.moascode.workers.dev`, a deep link resolves,
+`GET /api/health` returns 200. (S4 proved all three work.)
 
 ### Phase 2 — Data layer
 
-**PR:** `feat/d1-migrations-and-data`
+**Branch:** `feat/d1-migrations-and-data` · **1–2 sessions**
 
-- All 9 migrations ported to `wrangler d1 migrations` (SQL is compatible;
-  `0007`'s `ALTER TABLE … RENAME TO` works as-is). Drop the `journal_mode = WAL`
-  and custom runner from `db.ts` — D1 manages both.
-- Port `lib.ts` `updateRow()` (dynamic SQL builder, 99 lines) and `seed.ts` to async
-- Export/import scripts: SQLite → SQL dump → `wrangler d1 execute --file`
-- **Verification:** schema in D1 matches the Mac byte-for-byte (compare
-  `sqlite_master`); a full data import round-trips with matching row counts per table
+1. Create the production D1 database; record `database_id`.
+2. Port all **9 migrations** to `wrangler d1 migrations`. SQL is compatible —
+   including `0007`'s `ALTER TABLE … RENAME TO`. Drop `journal_mode = WAL` and
+   the custom runner in `db.ts:78-119`; D1 owns both.
+3. Port `lib.ts` `updateRow()` (dynamic SQL builder) and `seed.ts` to async.
+4. Write the export/import script: SQLite → SQL dump → `wrangler d1 execute --file`.
 
-**My effort: 1–2 sessions.**
+**Verify:** `sqlite_master` in D1 matches the Mac; a full import round-trips with
+matching row counts per table.
 
 ### Phase 3 — Auth and sessions
 
-**PR:** `feat/workers-auth`
+**Branch:** `feat/workers-auth` · **1–2 sessions** · blocks on M6
 
-- bcrypt → **PBKDF2-HMAC-SHA256 via Web Crypto**, iteration count set by S1
-- `session-store.ts` (89 lines) → D1-backed sessions with an HMAC-signed cookie
-  (`hono/cookie` signed helpers). Keeps today's semantics: server-side session
-  rows, real logout, real revocation. **Not** JWTs — logout must stay instant.
-- Session regeneration on login preserved (`auth.ts:26-32` — fixation defence)
-- Blockers 4.2 (`DAYBOOK_ALLOW_SIGNUP`), 4.4 (min length 12), 4.5 (secure headers)
-- **The 409 user-enumeration oracle at `auth.ts:50` is closed** by the signup flag
-- **Verification:** signup → login → session persists → logout invalidates; specs
-  covering auth pass
+1. **PBKDF2-HMAC-SHA256 at 50,000 iterations** via Web Crypto — half of S1's
+   measured 100k ceiling, leaving budget for D1 calls and serialisation.
+2. **Write the S1 precondition into the code**, not just the docs: a comment at
+   the hashing call stating that 50k is only sound because both accounts use
+   24+ character random passwords, plus `MIN_PASSWORD` raised to 12.
+3. Port `session-store.ts` (89 lines) → D1-backed sessions with an HMAC-signed
+   cookie via `hono/cookie`. **Server-side session rows, not JWTs** — logout and
+   revocation must stay instant, as they are today.
+4. Preserve session regeneration on login (`auth.ts:26-32`, fixation defence).
+5. `DAYBOOK_ALLOW_SIGNUP` flag (4.2) — this also closes the **409
+   user-enumeration oracle** at `auth.ts:50`.
+6. Hono `secureHeaders()` (4.5). CSP needs `style-src 'unsafe-inline'` for
+   Recharts — verify against Dashboard and Reports.
 
-> **M6 lands here.** Existing hashes are bcrypt and cannot be verified by PBKDF2,
-> so both accounts need new passwords. With two users this is a feature, not a
-> migration problem — use a password manager and generate 24+ characters. That
-> also makes S1's iteration count largely academic: a random 24-char password is
-> not brute-forced at any iteration count.
+**Verify:** signup → login → session persists across reload → logout invalidates.
+Auth specs pass.
 
-**My effort: 1–2 sessions.** Blocks on S1, M6.
+> **M6 lands here.** bcrypt hashes cannot be verified by PBKDF2, so both accounts
+> need new passwords. With two users that is a two-minute task — and it is what
+> makes the 50k iteration count defensible in the first place.
 
 ### Phase 4 — Route port
 
-**PR:** `feat/workers-routes` (may split into two — wallet is half the codebase)
+**Branch:** `feat/workers-routes` (likely split in two — wallet is half the code)
+· **3–4 sessions**
 
-Ported in ascending order of risk, so the pattern is proven on small files first:
+Ported in ascending order of risk so the pattern is proven on small files first:
 
 | File | Lines | `.prepare()` sites |
 |---|---|---|
@@ -223,165 +221,168 @@ Ported in ascending order of risk, so the pattern is proven on small files first
 | `groups.ts` | 382 | 31 |
 | `wallet.ts` | **1,461** | **68** |
 
-156 `.prepare()` sites total, converted `.get()/.all()/.run()` →
-`.first()/.all()/.run()` with `await`. Mechanical but pervasive — this is the
-bulk of the raw work and the least interesting part of it.
+1. **156 `.prepare()` sites** converted to `await` + `.first()/.all()/.run()`.
+   Mechanical but pervasive.
+2. **Fix the N+1 in the import route** (`wallet.ts:583-595`): replace the per-row
+   `canWriteAccount` / `ownsAllRefs` calls with **one** query for writable
+   account IDs and **one** for owned category IDs, checked against a `Set`. The
+   codebase already uses this exact pattern at `wallet.ts:1061-1065`, so it is
+   idiomatic here rather than novel.
+3. **Audit every remaining `.prepare()` inside a loop** for the same pattern. The
+   Phase 0 sweep found most other loops already build a single batched query
+   (e.g. `wallet.ts:556` chunks hash lookups 500 at a time), so this is expected
+   to be contained — but it must be checked, not assumed.
+4. Configure **Cloudflare Rate Limiting Rules** on `/api/auth/*` (4.3).
+5. **Opportunistic S3:** measure Reports/Dashboard aggregates and
+   `GET /transactions/export` against real data as those routes land.
 
-Blocker 4.3 (rate limiting) configured as edge rules here.
+### Phase 5 — Atomicity
 
-**My effort: 3–4 sessions.**
+**Branch:** `feat/d1-atomicity` · **1–2 sessions**
 
-### Phase 5 — Atomicity — the only real design work
-
-**PR:** `feat/d1-atomicity`
-
-The 11 `db.transaction()` sites, classified by reading each one. Two are
-irrelevant (`db.ts` migrations, `seed.ts` — both handled in Phase 2). The
+D1 has **no interactive transactions** — `batch()` is atomic but cannot branch on
+an intermediate read. All 11 `db.transaction()` sites were read and classified;
+two are irrelevant (`db.ts` migrations, `seed.ts`, both handled in Phase 2). The
 remaining seven:
 
 | Site | What it does | Strategy | Difficulty |
 |---|---|---|---|
-| `wallet.ts:596` | CSV batch insert (N rows) | `batch()` | **easy** (chunk per S2) |
-| `wallet.ts:796` | link-transfer merge | `batch()` — validation already hoisted | **easy** |
-| `wallet.ts:922` | replace splits (DELETE + INSERT loop) | `batch()` | **easy** |
-| `wallet.ts:1030` | bulk splits | `batch()` — **sum validation already outside** (`:1009`) | **easy** |
-| `settlements.ts:247` | undo settlement (DELETE by known IDs) | `batch()` | **easy** |
-| `wallet.ts:1313` | recurring-rule advancement loop | JS computes all writes from a pre-read set, then one `batch()` — **must confirm no intra-loop reads** | **medium** |
-| `settlements.ts:104` | create settlement: reads usernames + outstanding shares, then books two ledger transactions and marks shares settled | Hoist reads; guard with conditional `UPDATE … WHERE settled_at IS NULL` and check `meta.changes` for lost races (optimistic concurrency) | **hard — the one that needs care** |
+| `wallet.ts:596` | CSV batch insert | `batch()` | easy — **S2 proved 5,000 rows work** |
+| `wallet.ts:796` | link-transfer merge | `batch()` — validation already hoisted | easy |
+| `wallet.ts:922` | replace splits (DELETE + INSERT) | `batch()` | easy |
+| `wallet.ts:1030` | bulk splits | `batch()` — sum validation already outside (`:1009`) | easy |
+| `settlements.ts:247` | undo settlement (DELETE by known IDs) | `batch()` | easy |
+| `wallet.ts:1313` | recurring-rule advancement | JS computes all writes from a pre-read set → one `batch()`; **confirm no intra-loop reads** | medium |
+| `settlements.ts:104` | create settlement: reads usernames + outstanding shares, books two ledger transactions, marks shares settled | Hoist reads; guard with `UPDATE … WHERE settled_at IS NULL` and check `meta.changes` for lost races | **hard — the one needing care** |
 
-Only `settlements.ts:104` involves a genuine read-then-conditionally-write that
-must not race. With two users the practical collision probability is negligible,
-but *negligible is not zero and this is money* — so it gets an explicit guard and
-a regression spec rather than a shrug.
-
-**Any TOCTOU window we accept gets documented in the code**, not silently
-tolerated.
-
-**My effort: 1–2 sessions.**
+Only `settlements.ts:104` is a genuine read-then-conditionally-write. With two
+users a collision is vanishingly unlikely — **but this is money**, so it gets an
+explicit optimistic-concurrency guard and a regression spec, not a shrug. Any
+TOCTOU window we accept is documented in the code.
 
 ### Phase 6 — e2e suite green
 
-**PR:** `test/workers-e2e-harness`
+**Branch:** `test/workers-e2e-harness` · **1–2 sessions** *(revised down — S4)*
 
-- Playwright re-pointed at `wrangler dev --local` (Miniflare, local D1)
-- `POST /api/test/reset` ported; `DAYBOOK_TEST=1` gating preserved
-- All **51 specs** run and pass
-- CI updated: replace the tarball/release job with `wrangler deploy`
+S4 proved this is easier than feared:
 
-This is the phase that proves Phase 5b's isolation guarantees survived the move.
-Expect iteration — the specs are the safety net and they will find things.
+1. Replace the **two** `webServer` entries (tsx on :3099, Vite on :5173) and the
+   `DAYBOOK_API_TARGET` proxy with **one** `wrangler dev` command. Assets and API
+   already share an origin.
+2. Drop startup timeouts from 30 s — measured cold start is ~3 s.
+3. Port `POST /api/test/reset` to `batch()`, gated on a `[vars]` flag rather than
+   `process.env`.
+4. Run all **51 specs**.
 
-**My effort: 2–3 sessions.**
+**The isolation model ports unchanged.** `e2e/helpers.ts` isolates by signing up
+a fresh user per page, not by resetting the database — that needs only `INSERT`
+and per-user `WHERE`, both of which D1 provides. S4 verified this end to end.
+
+**Caveat:** e2e will run against built assets, so the loop needs `npm run build`
+first and loses Vite HMR. Whether *development* keeps Vite with a proxy or moves
+fully to `wrangler dev` is an open design question to settle here.
+
+**This phase is the gate.** If the 51 specs cannot be made green, we do not cut
+over.
 
 ### Phase 7 — Cutover
 
-**PR:** `chore/workers-cutover`
+**Branch:** `chore/workers-cutover` · **1 session** · blocks on M7, M8
 
-- Final data export from the Mac → import to production D1 (app briefly read-only)
-- Both users log in with new passwords, verify their own data (**M7**)
-- Cron Trigger + R2 backups live (blocker 4.6)
-- Mac service stopped, **DB retained untouched** as the rollback artifact
-- CLAUDE.md §3/§4/§5/§13 rewritten for the new architecture
-- `infra/daybook`, `port-forward.js`, launchd tooling deleted or archived
-
-**My effort: 1 session.** Blocks on M7, M8.
-
----
-
-## 6. Effort summary
-
-| Phase | My sessions | Your time | Blocks on |
-|---|---|---|---|
-| 0 Spikes | 1 | 30 min | M1, M2, M3 |
-| 1 Scaffold | 1 | 15 min | M2 |
-| 2 Data layer | 1–2 | 15 min | — |
-| 3 Auth | 1–2 | 25 min | S1, M6 |
-| 4 Routes | 3–4 | 30 min | — |
-| 5 Atomicity | 1–2 | 20 min | — |
-| 6 e2e | 2–3 | 20 min | S4 |
-| 7 Cutover | 1 | 45 min | M7, M8 |
-| **Total** | **11–16 sessions** | **~3.5–4 h** | |
-
-**Calendar time is set by your review cadence, not by my throughput.** Eight PRs
-reviewed at one per evening is roughly two weeks; at one per weekend, two months.
-Phases 1–6 are all reversible — nothing touches production until Phase 7.
+1. Final export from the Mac → import to production D1 (app briefly read-only).
+2. Both users log in with new passwords and verify their own data (**M7**).
+3. Cron Trigger → D1 export → **R2 offsite backups** (4.6). R2 free tier is 10 GB
+   with zero egress; the database is 1.2 MB.
+4. Stop the launchd service. **Keep the SQLite file untouched** as the rollback
+   artifact.
+5. Rewrite CLAUDE.md §3/§4/§5/§13 for the new architecture.
+6. Archive `infra/daybook`, `port-forward.js`, and the launchd tooling.
 
 ---
 
-## 7. New dependencies — needs approval
+## 7. Effort
 
-CLAUDE.md Rule 2 requires sign-off before any package is added.
-
-**Add:**
-
-| Package | Type | Purpose |
+| Phase | Sessions | Your time |
 |---|---|---|
-| `hono` | dep | Workers-native router; replaces `express` |
-| `wrangler` | dev | Cloudflare CLI — build, dev server, D1 migrations, deploy |
-| `@cloudflare/workers-types` | dev | Runtime type definitions |
+| 0 Spikes | ✅ done | ✅ done |
+| 1 Scaffold | 1 | 15 min |
+| 2 Data layer | 1–2 | 15 min |
+| 3 Auth | 1–2 | 25 min |
+| 4 Routes (incl. N+1 fix) | 3–4 | 30 min |
+| 5 Atomicity | 1–2 | 20 min |
+| 6 e2e | 1–2 | 20 min |
+| 7 Cutover | 1 | 45 min |
+| **Total** | **9–14 sessions** | **~3 h** |
+
+Revised down from the v1 plan's 11–16: S4 cut Phase 6, and reading the
+transaction sites cut Phase 5 from the original 3–5 days. The N+1 fix added back
+about a session.
+
+**Calendar time is set by your review cadence, not my throughput.** Seven PRs at
+one per evening is roughly a week and a half; at one per weekend, two months.
+
+---
+
+## 8. Dependencies
+
+CLAUDE.md Rule 2 requires sign-off (**M3**).
+
+**Add:** `hono` (dep — Workers router), `wrangler` (dev — CLI/deploy/migrations),
+`@cloudflare/workers-types` (dev — types).
 
 **Remove at Phase 7:** `express`, `express-session`, `better-sqlite3`, `bcrypt`,
-`@types/express`, `@types/express-session`, `@types/better-sqlite3`,
-`@types/bcrypt`, `tsx`.
+`tsx`, and their `@types/*`.
 
-**No new dependency for password hashing** — PBKDF2 comes from the Workers
-runtime's Web Crypto.
-
-CLAUDE.md §4's stack table is updated in Phase 1 and again in Phase 7.
+**No dependency for password hashing** — PBKDF2 comes from the Workers runtime.
 
 ---
 
-## 8. Rollback and safety
+## 9. Rollback and safety
 
-- **The Mac runs untouched through Phases 0–6.** No dual-write, no partial
-  cutover, no split-brain.
-- **The SQLite file is never deleted.** After Phase 7 it is the rollback artifact;
-  restarting the launchd service restores the old world in minutes.
-- **Every phase is behind a PR** you review before it merges.
-- **Phase 6 is the gate.** If the 51 specs cannot be made green, we do not cut
-  over — and we will have spent effort but lost nothing.
+- **`v1.0.0` is the anchor.** Tagged, released, and branch-preserved as
+  `release/v1.0.0`. It is the stable Mac-only product and is unaffected by
+  everything above.
+- **The Mac runs untouched through Phases 1–6.** No dual-write, no split-brain.
+- **The SQLite file is never deleted.** Post-cutover it is the rollback artifact;
+  restarting launchd restores the old world in minutes.
+- **Phase 6 is the gate.** Failing there costs effort and loses nothing.
 - The only irreversible moment is Phase 7's final export, and only for
   transactions written after it. With two users and a scheduled cutover, that
   window is minutes.
 
 ---
 
-## 9. What we accept by choosing this
+## 10. The decision
 
-Stated plainly so it isn't a surprise later:
+**Phase 0 found no technical blocker.** The app fits the free tier. What remains
+is a judgement call that measurement cannot settle.
 
-1. **Cloudflare holds the database and its encryption keys.** D1 is AES-256
-   encrypted at rest, but Cloudflare-managed — they can technically read it, and
-   so can anyone who compromises your Cloudflare account. **2FA on that account
-   (M1) is the real perimeter**, not the encryption. Today the data sits on
-   hardware you physically control.
-2. **Field-level encryption is not available to us.** The app filters and
-   aggregates in SQL over `amount`, `date`, `merchant`, and `category_id` —
-   encrypting those columns would break Dashboard, Reports, filters and budgets.
-3. **A hard dependency on one vendor.** SQLite-compatible SQL means the data can
-   be exported and moved, but the runtime, auth, sessions, and deploy pipeline all
-   become Cloudflare-shaped. Leaving later is another migration.
-4. **`*.workers.dev` is occasionally blocked by corporate DNS filters.**
-   Irrelevant on home/mobile networks; fixable later with a domain.
-5. **A 10ms CPU ceiling on the free tier**, which we design against rather than
-   discover in production — hence S1–S3.
-6. **`infra/daybook` and the release pipeline are retired.** ~884 lines of working,
-   tested tooling deleted. That's the right call if we commit, but it is a real loss.
+**For.** $0/month forever, no domain, no machine to maintain, no OS patching, no
+launchd, no port forwarding. Blocker 4.1 eliminated. A *simpler* test harness
+than today's. D1 being SQLite means the schema and most query text survive.
 
-### What we gain
+**Against.** The always-on Windows 11 machine reaches the same place via Options
+1 or 3 for **$0–1/month with no rewrite at all**. This costs 9–14 sessions and
+ships a KDF at 1/12 of the recommended strength. Option 2's distinctive
+advantage — independence from home hardware — was worth a great deal before that
+machine existed and much less now.
 
-Always-on, $0/month, no domain, no machine at home to maintain, no OS patching,
-no launchd, no port forwarding, blocker 4.1 eliminated entirely, and edge-level
-rate limiting instead of application code.
+### Accepted if we proceed
 
----
+1. **Cloudflare holds the database and its keys.** D1 is AES-256 encrypted at
+   rest, Cloudflare-managed. Whoever holds the Cloudflare account holds the
+   ledger — **2FA is the real perimeter**, not the encryption.
+2. **Field-level encryption is unavailable.** The app filters and aggregates in
+   SQL over `amount`, `date`, `merchant`, `category_id`; encrypting them breaks
+   Dashboard, Reports, filters and budgets.
+3. **A KDF at 50k iterations**, sound only while both passwords stay long and random.
+4. **Vendor shape.** The data exports cleanly (it is SQLite), but runtime, auth,
+   sessions and deploy all become Cloudflare-specific. Leaving later is another
+   migration.
+5. **`*.workers.dev` is occasionally blocked by corporate DNS filters.**
+   Irrelevant at home; fixable later with a domain.
+6. **~884 lines of working, tested deploy tooling retired.**
 
-## 10. Recommended first step
-
-Approve §7's three dependencies (**M3**), enable 2FA on Cloudflare (**M1**), and
-run `wrangler login` (**M2**). I'll then execute Phase 0 and come back with
-measured numbers and a go/no-go.
-
-**Phase 0 costs one session and is the cheapest possible way to find out whether
-this plan survives contact with the platform.** If S1 or S4 fails, we will have
-learned it for one session's work instead of six.
+**Next step if yes:** approve §8 (M3) and I start Phase 1.
+**Next step if no:** `docs/phase-6-online-plan.md` §3 has Options 1 and 3 costed
+and ready, both about a day's work on the Windows box.
