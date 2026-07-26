@@ -348,16 +348,33 @@ worker/
 ├── tsconfig.json                    ← Worker typecheck config (@cloudflare/workers-types)
 ├── lib.ts                           ← async port of server/lib.ts (+ ownedIdSet for the S2 N+1 fix)
 ├── seed.ts                          ← async port of server/seed.ts (db.transaction → batch)
+├── crypto.ts                        ← PBKDF2 via Web Crypto; self-describing hash format
+├── session.ts                       ← D1-backed sessions + HMAC-signed cookie (not JWTs)
 ├── migrations/                      ← D1 migrations, ported from server/migrations/ (see its README)
 └── routes/
-    └── health.ts                    ← GET /api/health (Phase 1 proof of life)
+    ├── health.ts                    ← GET /api/health (Phase 1 proof of life)
+    └── auth.ts                      ← signup/login/logout/me + requireAuth middleware
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
 ├── export-to-d1.mjs                 ← SQLite → SQL files for `wrangler d1 execute --file` (--users allowlist)
 ├── verify-import.mjs                ← per-table row counts, D1 vs the export manifest
-└── analyse-users.mjs                ← read-only census: real accounts vs e2e residue
+├── analyse-users.mjs                ← read-only census: real accounts vs e2e residue
+└── set-password.mjs                 ← M6: prompts (echo off) → PBKDF2 hash → UPDATE SQL
 ```
+> **Auth on Workers (Phase 3).** `SESSION_SECRET` is a **secret**, not a var —
+> `wrangler secret put SESSION_SECRET` (e.g. piped from `openssl rand -base64 32`
+> so the value is never displayed). `session.ts` throws if it is missing rather
+> than falling back to a default, so a misconfigured deploy returns 500 instead
+> of issuing forgeable sessions. `[env.dev]` in wrangler.toml supplies a dev
+> secret plus `DAYBOOK_ALLOW_SIGNUP=true` for the e2e suite; **production keeps
+> signup off**, which also makes the 409 user-enumeration oracle unreachable.
+>
+> **The app has no change-password endpoint** (it never did). `scripts/set-password.mjs`
+> is the only way to set a password on D1 — needed at cutover because migrated
+> bcrypt hashes cannot be verified by PBKDF2 (different algorithms, by design).
+> It reads the password from a hidden prompt and emits `UPDATE` SQL; the password
+> is never an argv value and never written to disk.
 > **D1 gotchas found the hard way in Phase 2** — all three are silent-wrong or
 > confusing-error traps, not documented limits:
 > - **No named parameters.** better-sqlite3 binds `@key` from an object; D1's
@@ -1193,7 +1210,32 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                 human. Owner decided (2026-07-27) to migrate ONLY the real
                 users; `--users kakon,tumpa` cuts the export from 5,828 rows
                 to 174. The e2e residue is NOT to be carried to D1.
-                Next: Phase 3 (auth + sessions) — blocked on M4 and M6.
+                Phase 3 (Auth + sessions) — IMPLEMENTED, IN REVIEW
+                (2026-07-27). PR feat/workers-auth: PBKDF2-HMAC-SHA256 via
+                Web Crypto at 50,000 iterations (S1's safe operating point),
+                D1-backed sessions with an HMAC-signed cookie (NOT JWTs —
+                logout must stay instant), session regeneration on login,
+                DAYBOOK_ALLOW_SIGNUP gate, MIN_PASSWORD 12, Hono
+                secureHeaders. NOT DEPLOYED — production still runs the
+                Phase 1 shell, so none of this auth code is live yet.
+                Hash format is `pbkdf2$<iters>$<salt>$<hash>` — self-
+                describing, so raising the iteration count later (e.g. on
+                Workers Paid) is a one-line change with transparent rehash
+                on next login, no reset and no migration.
+                Verified against `wrangler dev`: 13-step auth flow (401 →
+                signup → me → logout → 401), uniform 401 for both bad
+                password and unknown user, case-insensitive usernames, 15
+                categories + 3 settings seeded per user, a NEW sid minted
+                per login, cookie HttpOnly+Secure+SameSite=Lax, all 4
+                security headers present, signup 403 under the production
+                config, and a 500 (not a forgeable session) when
+                SESSION_SECRET is absent.
+                Owner decisions recorded 2026-07-27: M4 = Workers Free;
+                M6 = start with "Welcome@daybook28", rotate later to a 24+
+                char generated password. The KDF/entropy coupling was
+                raised and the owner accepted it knowingly — the residual
+                risk is the window before rotation, on a public URL.
+                Next: Phase 4 (route port, 156 .prepare() sites).
 
                 ── Previous phase ──
                 CSV transfer linking — MERGED (PRs #60, #61).
@@ -1316,23 +1358,23 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      Review/merge PR feat/d1-migrations-and-data (Phase 2), then
-                Phase 3 (auth + sessions): PBKDF2 via Web Crypto, D1-backed
-                session store with an HMAC-signed cookie, session
-                regeneration on login, DAYBOOK_ALLOW_SIGNUP, min length 12,
-                secure headers.
-                ⚠️ Phase 3 is BLOCKED on an unresolved owner decision:
-                M4 was answered "Workers Free" (→ ~50k PBKDF2 iterations,
-                1/12 of OWASP's 600k), and M6 was answered with the password
-                "Welcome@daybook28" for BOTH accounts. Those two answers are
-                mutually incompatible: docs/option-2-spike-findings.md §S1
-                states the 50k figure is acceptable ONLY under 24+ char
-                password-manager passwords, and that a human-memorable
-                password makes it "a genuine weakness". A dictionary word +
-                symbol + 2-digit year is a top-tier cracking pattern, and the
-                deployment is publicly reachable. RAISED with the owner
-                2026-07-27; do not implement the KDF until resolved by
-                either (a) generated passwords, or (b) Workers Paid.
+Next task:      Review/merge PR feat/workers-auth (Phase 3), then Phase 4 —
+                port the route modules in ascending risk order
+                (settings 21 lines → tasks 94 → settlements 299 → groups
+                382 → wallet 1,461; 156 .prepare() sites total). Convert
+                .get()/.all()/.run() → .first()/.all()/.run() with await,
+                read the user id from c.get('userId'), and audit EVERY
+                .prepare() inside a loop — use ownedIdSet() from
+                worker/lib.ts rather than per-row userOwns() (spike S2).
+                Phase 5 (atomicity) then handles the 7 db.transaction()
+                sites; only settlements.ts:104 needs real design work.
+                Outstanding for the owner, none blocking Phase 4:
+                • `wrangler secret put SESSION_SECRET` before any deploy
+                  that serves auth — without it login 500s by design.
+                • Rotate both passwords to 24+ char generated values
+                  (scripts/set-password.mjs). Until then the 50k iteration
+                  count is carrying more weight than S1 assumed.
+                • Purge the 273 e2e_* accounts from the Mac's production DB.
                 Deferred backlog (unchanged, lower priority):
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
