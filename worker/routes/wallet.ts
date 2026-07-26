@@ -1200,7 +1200,10 @@ wallet.post('/transactions/:id/split', async (c) => {
   }
 
   // 4. Share amounts per mode.
-  let shares: Array<{ userId: string; shareAmount: number; note: string }> = []
+  // No initialiser: every branch below assigns, and eslint's no-useless-assignment
+  // flags a dead `= []` that TypeScript's control-flow analysis already proves
+  // unnecessary.
+  let shares: Array<{ userId: string; shareAmount: number; note: string }>
 
   if (splitMode === 'none') {
     // Recipient owes 100% of the amount — no payer row (see CLAUDE.md §6).
