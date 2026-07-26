@@ -1175,7 +1175,11 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  Phase 6 — Cloudflare Workers + D1 migration
+Current phase:  Phase 6/7 — Cloudflare Workers + D1 migration.
+                *** SEE docs/GO-LIVE.md — app is deployed with real data at
+                https://daybook.moascode.workers.dev but NOBODY CAN LOG IN
+                until the owner runs scripts/set-password.mjs for kakon and
+                tumpa. bcrypt hashes cannot be verified by PBKDF2. ***
                 (docs/option-2-workers-d1-plan.md). Owner chose Option 2 on
                 2026-07-27 over the spike doc's ambivalent §6.
 Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
@@ -1545,9 +1549,13 @@ Next task:      Review/merge PR feat/workers-auth (Phase 3), then Phase 4 —
                 on the same disk as the DB) are both path-independent and
                 unblocked → PR3 access path. PR2 is the highest-value item.
 
-Blockers:       None for Phase 2. Phase 3 blocks on owner decisions M4
-                (Free vs Paid) and M6 (new passwords); first public deploy
-                blocks on owner approval.
+Blockers:       M6 (set both passwords) — OWNER ONLY, blocks all use of the
+                deployed app. See docs/GO-LIVE.md.
+                Phase 6 (e2e suite against wrangler dev) NOT RUN — the plan
+                calls it the pre-cutover gate. Routes were hand-verified
+                (220+ assertions) but the 51 specs still run against Express.
+                Rate limiting (blocker 4.3) not configured; URL is public.
+                Mac still running and untouched — it is the rollback.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
