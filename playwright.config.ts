@@ -87,7 +87,15 @@ export default defineConfig({
       // built bundle. They are gated on it (src/lib/utils.ts TEST_HOOKS_ENABLED)
       // because a production build has import.meta.env.DEV === false, which the
       // old Vite-dev-server harness never exercised.
-      command: 'VITE_E2E=1 npm run build && npx wrangler dev --env dev --port 5173',
+      // The migration apply is not optional: a fresh checkout (every CI run)
+      // has no .wrangler/state, so the local D1 exists with no tables and every
+      // test dies on "no such table: users". Applying here makes the harness
+      // self-bootstrapping instead of depending on someone having run it.
+      // It is idempotent — wrangler skips migrations already recorded.
+      command:
+        'VITE_E2E=1 npm run build && ' +
+        'npx wrangler d1 migrations apply daybook --env dev --local && ' +
+        'npx wrangler dev --env dev --port 5173',
       url: 'http://localhost:5173/api/health',
       reuseExistingServer: !process.env.CI,
       // Generous: covers a cold `vite build` as well as wrangler's ~3s start.
