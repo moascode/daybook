@@ -2,7 +2,9 @@ import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
 import type { AppEnv } from './types.ts'
 import { health } from './routes/health.ts'
-import { auth } from './routes/auth.ts'
+import { auth, requireAuth } from './routes/auth.ts'
+import { tasks } from './routes/tasks.ts'
+import { settings } from './routes/settings.ts'
 
 // ─────────────────────────────────────────────────────────────
 // Daybook Worker — the Cloudflare-side replacement for server/index.ts.
@@ -44,6 +46,25 @@ app.use(
 // Public routes (no auth required).
 app.route('/api', health)
 app.route('/api', auth)
+
+// Everything below requires an authenticated session.
+//
+// The Express app relies on registration order for this — `app.use('/api',
+// requireAuth)` sits between the public and protected routers
+// (server/index.ts:66) and guards only what is mounted after it. Hono composes
+// matched handlers in registration order too, so the same trick would work, but
+// it fails silently and invisibly: mounting a new router one line too high
+// leaves it unauthenticated with nothing to show for it.
+//
+// A dedicated sub-app makes the guarantee structural instead of positional —
+// requireAuth applies to everything routed through `protectedApi` regardless of
+// where the mount lands. Phase 4's remaining routers attach here.
+const protectedApi = new Hono<AppEnv>()
+protectedApi.use('*', requireAuth)
+protectedApi.route('/', tasks)
+protectedApi.route('/', settings)
+
+app.route('/api', protectedApi)
 
 // Any /api path that matched no route. Non-API paths never reach the Worker.
 app.notFound((c) => c.json({ error: 'not found' }, 404))

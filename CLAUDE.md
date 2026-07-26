@@ -353,7 +353,9 @@ worker/
 ├── migrations/                      ← D1 migrations, ported from server/migrations/ (see its README)
 └── routes/
     ├── health.ts                    ← GET /api/health (Phase 1 proof of life)
-    └── auth.ts                      ← signup/login/logout/me + requireAuth middleware
+    ├── auth.ts                      ← signup/login/logout/me + requireAuth middleware
+    ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
+    └── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1235,7 +1237,28 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                 char generated password. The KDF/entropy coupling was
                 raised and the owner accepted it knowingly — the residual
                 risk is the window before rotation, on a public URL.
-                Next: Phase 4 (route port, 156 .prepare() sites).
+                Phase 4 (Route port) — IN PROGRESS. First increment
+                IMPLEMENTED, IN REVIEW (2026-07-27): PR
+                feat/workers-routes-settings-tasks ports settings.ts (2
+                .prepare()) and tasks.ts (6), establishing the pattern on
+                the smallest files as the plan prescribes. 8 of 156 sites
+                done; settlements (21), groups (31), wallet (68) remain.
+                Protected routes hang off a dedicated `protectedApi`
+                sub-app with requireAuth applied to '*', rather than
+                relying on registration order the way server/index.ts:66
+                does — mounting a router one line too high would otherwise
+                leave it unauthenticated silently.
+                Verified against `wrangler dev`: 15-step CRUD pass
+                (unauth 401, seeded settings, upsert, task create/patch/
+                delete, FK cascade to children, 404 on unknown id,
+                sort_order ordering, templates) PLUS a 6-step cross-user
+                isolation check — a second user sees [], gets 404 on
+                PATCH of another's task, and cannot delete it; per-user
+                settings stay separate.
+                Note: DELETE returns 204 even when it matches 0 rows
+                (user_id scoping means another user's delete is a no-op).
+                Identical to the Express behaviour — preserved, not a
+                regression.
 
                 ── Previous phase ──
                 CSV transfer linking — MERGED (PRs #60, #61).
