@@ -4,11 +4,13 @@ import { DatePicker } from '@/components/ui/DatePicker'
 import { Badge } from '@/components/ui/Badge'
 import { cn, formatMYR } from '@/lib/utils'
 import type { ImportRow } from '@/lib/csv'
-import type { Category } from '@/types/wallet.types'
+import type { Account, Category } from '@/types/wallet.types'
 
 interface CsvReviewTableProps {
   rows: ImportRow[]
   categories: Category[]
+  /** Accounts eligible as a transfer destination (writable), excluding the import target. */
+  destinationAccounts: Account[]
   onRowChange: (index: number, updates: Partial<ImportRow>) => void
   onToggleInclude: (index: number) => void
 }
@@ -16,6 +18,7 @@ interface CsvReviewTableProps {
 export function CsvReviewTable({
   rows,
   categories,
+  destinationAccounts,
   onRowChange,
   onToggleInclude,
 }: CsvReviewTableProps) {
@@ -31,6 +34,12 @@ export function CsvReviewTable({
   const typeOptions = [
     { value: 'expense', label: 'Expense' },
     { value: 'income', label: 'Income' },
+    { value: 'transfer', label: 'Transfer' },
+  ]
+
+  const destinationOptions = [
+    { value: '', label: 'To account…' },
+    ...destinationAccounts.map((a) => ({ value: a.id, label: a.name })),
   ]
 
   if (rows.length === 0) {
@@ -124,35 +133,57 @@ export function CsvReviewTable({
                   options={typeOptions}
                   value={row.type}
                   onChange={(e) => {
+                    const type = e.target.value as ImportRow['type']
+                    if (type === 'transfer') {
+                      // Transfers are uncategorised; the destination is chosen next.
+                      onRowChange(index, { type, categoryId: null })
+                      return
+                    }
                     // Drop a now-invalid category when the direction flips, so an
                     // income category can't linger on an expense row.
-                    const type = e.target.value as 'income' | 'expense'
                     const stillValid = categoryOptionsFor(type).some(
                       (o) => o.value === (row.categoryId ?? ''),
                     )
                     onRowChange(index, {
                       type,
                       categoryId: stillValid ? row.categoryId : null,
+                      destinationAccountId: null,
                     })
                   }}
                   className="text-xs"
                   disabled={!row.included}
+                  aria-label={`Type for row ${index + 1}`}
                 />
               </td>
 
-              {/* Category */}
+              {/* Category — or destination account for transfer rows */}
               <td className="px-3 py-2">
-                <Select
-                  options={categoryOptionsFor(row.type)}
-                  value={row.categoryId ?? ''}
-                  onChange={(e) =>
-                    onRowChange(index, {
-                      categoryId: e.target.value || null,
-                    })
-                  }
-                  className="text-xs"
-                  disabled={!row.included}
-                />
+                {row.type === 'transfer' ? (
+                  <Select
+                    options={destinationOptions}
+                    value={row.destinationAccountId ?? ''}
+                    onChange={(e) =>
+                      onRowChange(index, {
+                        destinationAccountId: e.target.value || null,
+                      })
+                    }
+                    className="text-xs"
+                    disabled={!row.included}
+                    aria-label={`Destination account for row ${index + 1}`}
+                  />
+                ) : (
+                  <Select
+                    options={categoryOptionsFor(row.type)}
+                    value={row.categoryId ?? ''}
+                    onChange={(e) =>
+                      onRowChange(index, {
+                        categoryId: e.target.value || null,
+                      })
+                    }
+                    className="text-xs"
+                    disabled={!row.included}
+                  />
+                )}
               </td>
 
               {/* Status */}

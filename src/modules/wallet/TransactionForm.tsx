@@ -203,6 +203,14 @@ export function TransactionForm({
               </button>
             ))}
           </div>
+          {/* Imported rows between own accounts are often really one transfer —
+              point at the fix without changing any behaviour. */}
+          {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
+            <p className="text-xs text-gray-400" data-testid="transfer-hint">
+              Moved money between your own accounts? Switch Type to Transfer to
+              keep it out of income and expense totals.
+            </p>
+          )}
         </div>
 
         {/* Date + Amount row */}

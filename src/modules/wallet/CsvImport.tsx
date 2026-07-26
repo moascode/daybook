@@ -119,9 +119,27 @@ export function CsvImport() {
 
   const handleImport = useCallback(async () => {
     if (!selectedAccountId) return
-    setImporting(true)
 
     const toImport = importRows.filter((r) => r.included)
+
+    // A transfer row must point at a destination distinct from the import
+    // account (mirrors the server's transactionInputError checks).
+    const badTransfer = importRows.findIndex(
+      (r) =>
+        r.included &&
+        r.type === 'transfer' &&
+        (!r.destinationAccountId || r.destinationAccountId === selectedAccountId),
+    )
+    if (badTransfer !== -1) {
+      addToast({
+        message: `Row ${badTransfer + 1}: a transfer needs a destination account different from the import account.`,
+        duration: 4000,
+      })
+      return
+    }
+
+    setImporting(true)
+
     const inputs: TransactionInput[] = toImport.map((r) => ({
       accountId: selectedAccountId,
       date: r.date,
@@ -130,6 +148,7 @@ export function CsvImport() {
       amount: r.amount,
       type: r.type,
       categoryId: r.categoryId,
+      destinationAccountId: r.type === 'transfer' ? r.destinationAccountId : null,
       tags: [],
       importHash: r.importHash,
     }))
@@ -349,6 +368,7 @@ export function CsvImport() {
           <CsvReviewTable
             rows={importRows}
             categories={categories}
+            destinationAccounts={importableAccounts.filter((a) => a.id !== selectedAccountId)}
             onRowChange={updateRow}
             onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
           />
