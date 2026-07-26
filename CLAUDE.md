@@ -346,7 +346,8 @@ worker/
 ├── index.ts                         ← Hono app: /api logging, route mounts, 404 + error handler
 ├── types.ts                         ← Env bindings (DB: D1Database, ASSETS: Fetcher) + AppEnv
 ├── tsconfig.json                    ← Worker typecheck config (@cloudflare/workers-types)
-├── lib.ts                           ← async port of server/lib.ts (+ ownedIdSet for the S2 N+1 fix)
+├── lib.ts                           ← async port of server/lib.ts (+ ownedIdSet, newId)
+├── lib/sharing.ts                   ← async port of server/lib/sharing.ts (+ writableAccountIds)
 ├── seed.ts                          ← async port of server/seed.ts (db.transaction → batch)
 ├── crypto.ts                        ← PBKDF2 via Web Crypto; self-describing hash format
 ├── session.ts                       ← D1-backed sessions + HMAC-signed cookie (not JWTs)
@@ -355,7 +356,8 @@ worker/
     ├── health.ts                    ← GET /api/health (Phase 1 proof of life)
     ├── auth.ts                      ← signup/login/logout/me + requireAuth middleware
     ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
-    └── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
+    ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
+    └── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1237,12 +1239,37 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                 char generated password. The KDF/entropy coupling was
                 raised and the owner accepted it knowingly — the residual
                 risk is the window before rotation, on a public URL.
-                Phase 4 (Route port) — IN PROGRESS. First increment
-                IMPLEMENTED, IN REVIEW (2026-07-27): PR
-                feat/workers-routes-settings-tasks ports settings.ts (2
-                .prepare()) and tasks.ts (6), establishing the pattern on
-                the smallest files as the plan prescribes. 8 of 156 sites
-                done; settlements (21), groups (31), wallet (68) remain.
+                Phase 4 (Route port) — IN PROGRESS.
+                • Increment 1 MERGED (PR #69): settings.ts (2 .prepare())
+                  + tasks.ts (6).
+                • Increment 2 IN REVIEW: PR feat/workers-routes-groups —
+                  groups.ts (31) + async port of lib/sharing.ts.
+                39 of 156 sites done; settlements (21) and wallet (68)
+                remain.
+                DELIBERATE SPLIT: settlements.ts is NOT in increment 2.
+                It cannot be ported without also doing its Phase 5
+                atomicity work — settlements.ts:104 is the
+                read-then-conditionally-write money path the plan calls
+                "the one that needs care" — so it gets its own PR where
+                that design gets full attention rather than being tacked
+                onto a route port.
+                Two atomicity fixes landed early in increment 2 because
+                the bug was created by the port itself: POST /groups and
+                POST /invites/:id/accept each ran two independent
+                statements server-side; a failure between them left a
+                group with no owner (unreachable AND undeletable, since
+                every guard is isGroupOwner) or an accepted invite with
+                no membership (user stranded, invite gone from inbox).
+                Both are now batch(). worker/lib.ts newId() exists
+                because batch() cannot feed one statement's RETURNING
+                into the next.
+                Verified: 26-step groups suite against `wrangler dev` —
+                CRUD, owner-vs-member permissions, full invite lifecycle
+                (send/self/dup/unknown/outsider/accept), last-owner
+                guard, balances, co-member visibility, and that the
+                literal /groups/members route is not captured by
+                /groups/:id. Outsiders get 404 (not 403) so group
+                existence is not leaked.
                 Protected routes hang off a dedicated `protectedApi`
                 sub-app with requireAuth applied to '*', rather than
                 relying on registration order the way server/index.ts:66

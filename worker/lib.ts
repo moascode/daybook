@@ -66,6 +66,21 @@ export async function updateRow<T = Record<string, unknown>>(
 }
 
 /**
+ * A row id in the same shape the schema's column default produces
+ * (`lower(hex(randomblob(16)))` — 32 lowercase hex characters).
+ *
+ * Needed wherever a batch inserts a parent and a child together: `batch()` runs
+ * statements independently, so a child cannot read the parent's `RETURNING id`.
+ * Generating the id up front lets both statements be prepared before either
+ * runs, which is what makes the pair atomic.
+ */
+export function newId(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+/**
  * Local calendar date (YYYY-MM-DD), matching the client's todayISO() — NOT UTC.
  * Settlements and other server-dated rows use this so they land on the user's
  * "today" rather than drifting a day in +8 timezones (B-11).
