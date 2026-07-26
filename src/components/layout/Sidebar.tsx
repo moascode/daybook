@@ -17,7 +17,7 @@ import {
   Upload,
   Users,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { useHouseholdStore } from '@/stores/household.store'
 import { api } from '@/lib/api'
@@ -199,7 +199,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         </div>
 
         {/* Dev-only UAT link */}
-        {import.meta.env.DEV && (
+        {TEST_HOOKS_ENABLED && (
           <NavLink to="/uat" end onClick={onClose} className={topLinkClass}>
             <FlaskConical className="h-4 w-4 flex-shrink-0" />
             UAT Tests

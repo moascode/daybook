@@ -1551,9 +1551,15 @@ Next task:      Review/merge PR feat/workers-auth (Phase 3), then Phase 4 —
 
 Blockers:       M6 (set both passwords) — OWNER ONLY, blocks all use of the
                 deployed app. See docs/GO-LIVE.md.
-                Phase 6 (e2e suite against wrangler dev) NOT RUN — the plan
-                calls it the pre-cutover gate. Routes were hand-verified
-                (220+ assertions) but the 51 specs still run against Express.
+                Phase 6 COMPLETE — 455/455 specs green against the Worker.
+                Harness now ONE webServer (`wrangler dev --env dev` on 5173),
+                replacing tsx+Vite+DAYBOOK_API_TARGET proxy. Two things this
+                surfaced: (a) the suite runs a PRODUCTION build, so hooks
+                gated on import.meta.env.DEV vanished — they are now gated on
+                TEST_HOOKS_ENABLED (src/lib/utils.ts), true when DEV or
+                VITE_E2E=1, which only the Playwright build sets; (b) spec 37
+                had the same pre-existing UTC+ month-bound bug already fixed
+                in spec 03 — test bug, not app bug.
                 Rate limiting (blocker 4.3) not configured; URL is public.
                 Mac still running and untouched — it is the rollback.
 

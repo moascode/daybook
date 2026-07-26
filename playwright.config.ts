@@ -60,31 +60,51 @@ export default defineConfig({
       },
     },
   ],
+  // ── One server, not two ───────────────────────────────
+  //
+  // This replaced a two-server setup: `tsx server/index.ts` on :3099 for the API
+  // plus Vite on :5173, wired together by a DAYBOOK_API_TARGET proxy so the dev
+  // server forwarded /api to the isolated test instance.
+  //
+  // Under Workers none of that plumbing exists — `wrangler dev` serves the SPA
+  // and the API from one origin, which is the property the whole migration is
+  // built on. So the harness collapses to a single command and no proxy
+  // (spike S4, docs/option-2-spike-findings.md).
+  //
+  // Two consequences worth knowing:
+  //   • It serves BUILT assets from dist/, not Vite — hence the `npm run build`
+  //     prefix, and no HMR in the test loop. Arguably better: the suite now
+  //     tests what actually ships.
+  //   • Port 5173 is kept deliberately so `baseURL` and every spec stay
+  //     unchanged. Nothing about the tests knows the backend moved.
+  //
+  // Isolation is unchanged: e2e/helpers.ts signs up a fresh user per page and
+  // relies on per-user scoping, which is database-agnostic. `--env dev` supplies
+  // DAYBOOK_TEST=1 and DAYBOOK_ALLOW_SIGNUP=true.
   webServer: [
     {
-      // Phase 4 API server, isolated test DB, with the test-only reset route on.
-      // Runs on a dedicated port (not the default 3001) so it never collides
-      // with the always-on local/LAN server — letting e2e run on the same Mac
-      // while the launchd service keeps serving.
-      command: 'npx tsx server/index.ts',
-      url: 'http://localhost:3099/api/health',
+      // VITE_E2E=1 keeps the window.__test* hooks and the UAT Tests nav in the
+      // built bundle. They are gated on it (src/lib/utils.ts TEST_HOOKS_ENABLED)
+      // because a production build has import.meta.env.DEV === false, which the
+      // old Vite-dev-server harness never exercised.
+      // The migration apply is not optional: a fresh checkout (every CI run)
+      // has no .wrangler/state, so the local D1 exists with no tables and every
+      // test dies on "no such table: users". Applying here makes the harness
+      // self-bootstrapping instead of depending on someone having run it.
+      // It is idempotent — wrangler skips migrations already recorded.
+      command:
+        'VITE_E2E=1 npm run build && ' +
+        'npx wrangler d1 migrations apply daybook --env dev --local && ' +
+        // --show-interactive-dev-session=false: `wrangler dev` otherwise runs an
+        // interactive session with hotkeys (b/d/l/x) that reads stdin. Playwright's
+        // webServer gives it no stdin, and in CI the process exited ~30s in with an
+        // empty error, taking every remaining test with it (ECONNREFUSED :5173).
+        // Turning the interactive layer off makes it a plain long-running server.
+        'npx wrangler dev --env dev --port 5173 --show-interactive-dev-session false',
+      url: 'http://localhost:5173/api/health',
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-      env: {
-        PORT: '3099',
-        DAYBOOK_TEST: '1',
-        DAYBOOK_DB_PATH: 'server/data/e2e.db',
-      },
-      stdout: 'ignore',
-      stderr: 'pipe',
-    },
-    {
-      // Point the dev server's /api proxy at the isolated test API above.
-      command: 'npm run dev',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-      env: { DAYBOOK_API_TARGET: 'http://localhost:3099' },
+      // Generous: covers a cold `vite build` as well as wrangler's ~3s start.
+      timeout: 120_000,
       stdout: 'ignore',
       stderr: 'pipe',
     },

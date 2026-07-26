@@ -21,7 +21,7 @@ import { useTasks } from '@/hooks/useTasks'
 import { useTasksStore } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { BulletTree } from './BulletTree'
-import { cn } from '@/lib/utils'
+import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
 
 declare global {
@@ -381,7 +381,7 @@ export function TasksPage() {
 
   // Expose task operations for E2E testing
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (TEST_HOOKS_ENABLED) {
       window.__testIndentTask = (id: string) => indentTask(id)
       window.__testOutdentTask = (id: string) => outdentTask(id)
       window.__testGetTasks = () => useTasksStore.getState().tasks

@@ -72,7 +72,7 @@ migration (existing logins re-hash themselves).
 | 3 PBKDF2 auth + sessions | ✅ merged (#68) |
 | 4 Route port — all 156 sites | ✅ merged (#69, #71, #72, #73, #74, #75) |
 | 5 Atomicity | ✅ done inside phases 4 and #72 |
-| 6 e2e suite on `wrangler dev` | ❌ **not done** |
+| 6 e2e suite on `wrangler dev` | ✅ **455/455 green against the Worker** |
 | 7 Cutover | 🟡 data imported; passwords + Mac shutdown outstanding |
 
 - **Production D1 holds 174 rows** — your 2 real accounts and their data.
@@ -84,17 +84,11 @@ migration (existing logins re-hash themselves).
 
 ## What is NOT done — read before relying on this
 
-1. **Phase 6 never ran.** The plan calls the 51-spec e2e suite *the gate* before
-   cutover: "if the specs cannot be made green, we do not cut over." They still
-   run against the Express server (and pass), not against the Worker. Every
-   ported route was hand-exercised instead — 220+ assertions across six suites,
-   including cross-user isolation, atomicity and a fault-injected settlement
-   rollback — but that is not the same as the real suite.
-2. **Rate limiting (blocker 4.3) is not configured.** It was to be Cloudflare
+1. **Rate limiting (blocker 4.3) is not configured.** It was to be Cloudflare
    edge rules. The URL is public.
-3. **Your data now lives on Cloudflare**, per `docs/option-2-workers-d1-plan.md`
+2. **Your data now lives on Cloudflare**, per `docs/option-2-workers-d1-plan.md`
    §9.1. 2FA on that Cloudflare account is the real perimeter.
-4. **If you used the Mac app after this import**, the two databases have
+3. **If you used the Mac app after this import**, the two databases have
    diverged. Re-run the import before trusting the cloud copy:
    ```bash
    node scripts/export-to-d1.mjs --users kakon,tumpa --out /tmp/dbx
@@ -110,5 +104,5 @@ migration (existing logins re-hash themselves).
    household group and its split/settlement history.
 3. **Keep the Mac running** until you're satisfied. It costs nothing and it is
    the rollback.
-4. Then decide whether to run Phase 6 before or after you start using the cloud
-   copy day to day.
+4. The Mac can be retired whenever you're ready — that is the only remaining
+   step of Phase 7, and it is deliberately left to you.

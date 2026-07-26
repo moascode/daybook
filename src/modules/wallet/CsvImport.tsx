@@ -9,6 +9,7 @@ import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
+import { TEST_HOOKS_ENABLED } from '@/lib/utils'
 
 type ImportStep = 'upload' | 'mapping' | 'review' | 'done'
 
@@ -58,7 +59,7 @@ export function CsvImport() {
 
   // Expose file handler for E2E testing (Playwright can't reliably trigger React onChange on hidden file inputs)
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (TEST_HOOKS_ENABLED) {
       window.__testCsvFileSelect = (file: File) => handleFileSelect(file)
       return () => { delete window.__testCsvFileSelect }
     }
