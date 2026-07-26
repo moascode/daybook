@@ -1204,21 +1204,41 @@ Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
                 docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).
                 Phase 5a (AI) still deferred.
                 Phase 6 (online access): ANALYSED 2026-07-26 —
-                docs/phase-6-online-plan.md. Key finding: the §14 Supabase +
-                Vercel plan is disproportionate (full async-Postgres rewrite;
-                Vercel cannot host the current server at all — no persistent
-                disk for SQLite). Three paths costed; A (Cloudflare Tunnel to
-                the existing Mac, ~1h + hardening) recommended, B (Fly.io +
-                volume) documented as the upgrade path. Owner has locked two
-                sub-decisions: Cloudflare Access as the front gate, and
-                helmet + express-rate-limit approved as new deps (add to §4
-                when the PR lands). Hosting path itself NOT yet chosen.
-                Six path-independent blockers identified before any public
-                hostname resolves — chiefly the hardcoded `secure: false`
-                session cookie (needs `trust proxy` in the same change) and
-                the wide-open signup route. Suggested sequencing: PR1
-                hardening + PR2 offsite backups (both unblocked, start
-                anytime) → PR3 hosting (blocked on the path decision).
+                docs/phase-6-online-plan.md. Owner constraints: 2 active
+                users, target $0/mo. Seven paths costed against vendor
+                pricing (verified 2026-07-26).
+                RECOMMENDED: Tailscale private tailnet on the existing Mac —
+                $0 forever (free plan covers 6 users), ~1h, real Let's
+                Encrypt TLS via `tailscale serve`, and NO public attack
+                surface, which cuts the hardening work roughly in half.
+                Cloud upgrade path if Mac uptime ever becomes the complaint:
+                Cloudflare Pages+Workers+D1 ($0 forever; D1 IS SQLite so the
+                migrations and Phase 5b split/settlement SQL survive intact
+                — but Express→Hono, sync→async, and bcrypt→Web Crypto make
+                it a multi-week rewrite). Fly.io (~$5-7/mo) is the
+                zero-rewrite alternative — runs the current codebase as-is.
+                RULED OUT: Supabase+Vercel (~$25/mo, full Postgres+RLS
+                rewrite; Vercel cannot host the current server at all — no
+                persistent disk for SQLite) — recommend striking from §14.
+                AWS (free tier is now credit-based; account CLOSES at 6
+                months) and Azure (free only 12 months) — and both clouds'
+                always-free tiers are serverless with network-attached
+                storage, which SQLite must not use (WAL + NFS/SMB locking =
+                corruption risk).
+                Six blockers documented; under the recommended tailnet path
+                two of them (open signup, no rate limiting) stop being
+                gating. Chief blocker either way: the hardcoded
+                `secure: false` session cookie, which MUST ship together
+                with `app.set('trust proxy', 1)` or login silently sets no
+                cookie at all.
+                Deps: helmet + express-rate-limit approved by owner (add to
+                §4 when PR1 lands). The earlier "Cloudflare Access" decision
+                is SUPERSEDED — it needs a purchased domain (~$1/mo) and is
+                unnecessary without a public front door.
+                Sequencing: PR1 hardening + PR2 offsite backups to
+                Cloudflare R2 (10GB free, zero egress; fixes backups living
+                on the same disk as the DB) are both path-independent and
+                unblocked → PR3 access path. PR2 is the highest-value item.
 
 Blockers:       None. Nothing in progress.
 
