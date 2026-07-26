@@ -16,6 +16,7 @@ import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
+import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -42,6 +43,7 @@ export function WalletPage() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    linkTransfer,
     exportTransactions,
     getAccountBalances,
     addCategory,
@@ -79,6 +81,9 @@ export function WalletPage() {
 
   // Split transaction state
   const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
+
+  // Link-as-transfer picker state
+  const [linkTarget, setLinkTarget] = useState<Transaction | null>(null)
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
@@ -228,6 +233,20 @@ export function WalletPage() {
       duration: 5000,
     })
   }, [deleteTransaction, addTransaction, loadTransactions, loadNetWorth, addToast, removeToast])
+
+  const handleLinkTransfer = useCallback(async (twinId: string) => {
+    if (!linkTarget) return
+    try {
+      await linkTransfer(linkTarget.id, twinId)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not link the transactions — please try again.'), duration: 4000 })
+      return // keep the picker open so the user can pick another candidate
+    }
+    setLinkTarget(null)
+    addToast({ message: 'Linked as one transfer', duration: 4000 })
+    await loadTransactions(filtersRef.current)
+    await loadNetWorth()
+  }, [linkTarget, linkTransfer, loadTransactions, loadNetWorth, addToast])
 
   const handleBulkDelete = useCallback(async () => {
     try {
@@ -673,6 +692,19 @@ export function WalletPage() {
         defaultAccountId={filters.accountId}
         availableTags={tags}
         onSubmit={crud.editingItem ? handleUpdateTransaction : handleAddTransaction}
+        onLinkTransfer={
+          crud.editingItem && !crud.editingItem.hasSplits
+            ? () => { setLinkTarget(crud.editingItem); crud.closeForm(false) }
+            : undefined
+        }
+      />
+
+      <LinkTransferDialog
+        open={!!linkTarget}
+        onOpenChange={(open) => { if (!open) setLinkTarget(null) }}
+        transaction={linkTarget}
+        accounts={accounts}
+        onLink={handleLinkTransfer}
       />
 
       <SplitDialog

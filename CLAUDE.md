@@ -587,6 +587,31 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 > `hasSplits`. (The separate `account_shares` table — account-level sharing — is
 > unrelated and keeps its name.)
 
+### CSV transfer linking additions (migration `0008_absorbed_import_hashes.sql`, PR #61)
+
+Supports "Link as transfer" (docs/csv-transfer-linking-plan.md): merging two
+imported rows into one transfer deletes the money-in row, so its `import_hash`
+is preserved here to keep duplicate detection working across statement
+re-imports. Deleting the merged transfer cascades the hash away, letting a
+re-import bring both legs back.
+
+```sql
+CREATE TABLE IF NOT EXISTS absorbed_import_hashes (
+  user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  hash           TEXT NOT NULL,
+  transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, hash)
+);
+CREATE INDEX IF NOT EXISTS idx_absorbed_hashes_txn ON absorbed_import_hashes(transaction_id);
+```
+
+- `POST /transactions/check-duplicates` matches hashes in **either** the
+  `transactions` table or this side table.
+- `POST /transactions/:id/link-transfer` `{twinId}` merges an expense and its
+  matching income on another account into one transfer (write access on both
+  accounts; opposite directions; amounts equal within 1 cent; no splits or
+  settlement links; fee/FX legs rejected in v1).
+
 ---
 
 ## 7. TypeScript Types
@@ -1053,8 +1078,25 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  Post-5c deferred-items follow-up (adversarial-review backlog)
-Phase status:   Phase 4 (home network backend) shipped v1.0.
+Current phase:  CSV transfer import + twin-linking (docs/csv-transfer-linking-plan.md)
+Phase status:   CSV transfer linking — IMPLEMENTED, IN REVIEW (2026-07-26).
+                Built as the planned 2-PR sequence:
+                • PR #60 feat/csv-transfer-import (Items 1+3): review-step
+                  rows can import as Transfer→destination account; edit-form
+                  hint on imported rows. New spec 49; also fixed
+                  TZ-dependent month-bound assertions in spec 03 (failed on
+                  UTC+ machines, pre-existing).
+                • PR #61 feat/transfer-linking (Items 4+2, STACKED on #60 —
+                  merge #60 first): migration 0008 absorbed_import_hashes,
+                  check-duplicates matches absorbed hashes, POST
+                  /transactions/:id/link-transfer merge endpoint,
+                  LinkTransferDialog picker (±5 days, ranked by date
+                  proximity), help-guide "Credit Cards & Transfers" section.
+                  New specs 50 + 51.
+                Verified per PR: tsc, typecheck:server, lint clean; affected
+                e2e (02, 03, 04, 42, 48, 49, 50, 51) — 114/114.
+Phase status
+(history):      Phase 4 (home network backend) shipped v1.0.
                 Phase 5b (household sharing) shipped v1.0.1.
                 Phase 5b extension: transaction quick-share (PR #27) MERGED
                 2026-07-05 — one-click single-recipient share alongside the
@@ -1102,8 +1144,10 @@ Phase status:   Phase 4 (home network backend) shipped v1.0.
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-07-25
-Last completed: - Phase 5b fully implemented and merged (PR #18 + follow-ups):
+Last session:   2026-07-26
+Last completed: - CSV transfer import + twin-linking implemented (PRs #60 + #61,
+                  awaiting owner merge — #61 is stacked on #60).
+                - Phase 5b fully implemented and merged (PR #18 + follow-ups):
                     • Household groups: users can create groups and invite members
                       by username with optional role assignment.
                     • Shared accounts: accounts visible to group members with
@@ -1153,7 +1197,8 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      Await owner direction. Remaining deferred backlog:
+Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
+                Then await owner direction. Remaining deferred backlog:
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
                 docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).

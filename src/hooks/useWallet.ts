@@ -392,6 +392,18 @@ export function useWallet() {
     useWalletStore.getState().removeTransaction(id)
   }, [])
 
+  // Merge two rows (one expense + one matching income on another account) into
+  // a single transfer. The server decides which row survives; both originals
+  // are dropped from the store and the merged transfer added back.
+  const linkTransfer = useCallback(async (id: string, twinId: string): Promise<Transaction> => {
+    const row = await api.post<TransactionRow>(`/transactions/${id}/link-transfer`, { twinId })
+    const merged = mapTransaction(row)
+    const s = useWalletStore.getState()
+    s.setTransactions(s.transactions.filter((t) => t.id !== id && t.id !== twinId))
+    s.addTransaction(merged)
+    return merged
+  }, [])
+
   // ── Batch import ────────────────────────────────
 
   const importTransactions = useCallback(async (
@@ -634,6 +646,7 @@ export function useWallet() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    linkTransfer,
 
     // Batch
     importTransactions,
