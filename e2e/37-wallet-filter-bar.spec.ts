@@ -53,7 +53,11 @@ test('"Custom…" reveals From/To pre-filled with the current range', async () =
   await expect(page.getByTestId('filter-custom-range')).toHaveClass(/bg-brand/)
   // Custom does not change the range — the editors show this month's bounds
   const now = new Date()
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+  // toISOString() renders UTC, so in a UTC+ timezone local midnight on the 1st
+  // formats as the PREVIOUS day — the assertion then expects 2026-06-30 while
+  // the app correctly shows 2026-07-01. Same pre-existing bug that was fixed in
+  // e2e/03-wallet-transactions.spec.ts (localISO); the app is not involved.
+  const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   await expect(page.getByLabel('From')).toHaveValue(firstDay)
   // Picking a preset closes the editors again
   await page.getByTestId('filter-this-month').click()

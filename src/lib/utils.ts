@@ -93,3 +93,18 @@ export function todayISO(): string {
 export function nowISO(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19)
 }
+
+/**
+ * True when the build should expose e2e test hooks (window.__test* helpers and
+ * the UAT Tests nav entry).
+ *
+ * Previously these were gated on `import.meta.env.DEV` alone, which worked while
+ * the e2e suite ran against the Vite dev server. Under Workers the suite runs
+ * against a production build served by `wrangler dev` — DEV is false there, so
+ * every hook disappeared and nine specs failed.
+ *
+ * VITE_E2E is set only by the Playwright build step, so real production bundles
+ * still contain none of this.
+ */
+export const TEST_HOOKS_ENABLED =
+  import.meta.env.DEV || import.meta.env.VITE_E2E === '1'

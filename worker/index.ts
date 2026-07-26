@@ -8,6 +8,7 @@ import { settings } from './routes/settings.ts'
 import { groups } from './routes/groups.ts'
 import { settlements } from './routes/settlements.ts'
 import { wallet } from './routes/wallet.ts'
+import { test } from './routes/test.ts'
 
 // ─────────────────────────────────────────────────────────────
 // Daybook Worker — the Cloudflare-side replacement for server/index.ts.
@@ -49,6 +50,20 @@ app.use(
 // Public routes (no auth required).
 app.route('/api', health)
 app.route('/api', auth)
+
+// Test-only routes, mounted before the auth guard because /test/reset must run
+// without a session.
+//
+// The Express server decides whether to mount these at boot
+// (server/index.ts:61). A Worker has no bindings at module scope, so the gate
+// has to be per-request: the routes are always registered, and this middleware
+// makes them indistinguishable from non-existent unless DAYBOOK_TEST is set —
+// which only wrangler.toml's [env.dev] does, never production.
+app.use('/api/test/*', async (c, next) => {
+  if (c.env.DAYBOOK_TEST !== '1') return c.json({ error: 'not found' }, 404)
+  await next()
+})
+app.route('/api', test)
 
 // Everything below requires an authenticated session.
 //
