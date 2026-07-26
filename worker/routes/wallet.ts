@@ -1,8 +1,17 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { normalizeBind, ownedIdSet, ownsAllRefs, todayStr, updateRow, updateRowStmt } from '../lib.ts'
+import {
+  normalizeBind,
+  ownedIdSet,
+  ownsAllRefs,
+  splitEqually,
+  todayStr,
+  updateRow,
+  updateRowStmt,
+} from '../lib.ts'
 import {
   canWriteAccount,
+  coGroupUserIds,
   isGroupMember,
   visibleAccountIds,
   writableAccountIds,
@@ -977,6 +986,438 @@ async function hasSettledShare(db: D1Database, transactionId: string): Promise<b
     .first()
   return !!row
 }
+
+
+// ── Link as transfer ──────────────────────────────────
+// Item 2 of docs/csv-transfer-linking-plan.md: merge two existing rows — the
+// two legs of one inter-account movement, typically imported from two bank
+// statements — into a single transfer. The money-out (expense) row survives and
+// becomes the transfer; the money-in (income) row is deleted after its
+// import_hash is preserved in absorbed_import_hashes so re-imports still dedup.
+// v1 deliberately rejects unequal amounts (fee/FX legs) rather than guessing how
+// to book the difference.
+
+interface LinkRow {
+  id: string
+  user_id: string
+  account_id: string
+  type: string
+  amount: number
+  import_hash: string
+}
+
+wallet.post('/transactions/:id/link-transfer', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const b = await body(c)
+  const twinId = String(b.twinId ?? '')
+
+  if (!twinId) return c.json({ error: 'twinId is required' }, 400)
+  if (twinId === id) return c.json({ error: 'cannot link a transaction to itself' }, 400)
+
+  // Both legs in one query rather than two sequential reads.
+  const { results: rows } = await c.env.DB.prepare(
+    'SELECT id, user_id, account_id, type, amount, import_hash FROM transactions WHERE id IN (?, ?)',
+  )
+    .bind(id, twinId)
+    .all<LinkRow>()
+
+  const first = rows.find((r) => r.id === id)
+  const second = rows.find((r) => r.id === twinId)
+  if (!first || !second) return c.json({ error: 'transaction not found' }, 404)
+
+  // The merge rewrites one account's ledger and deletes a row from the other,
+  // so the caller needs write permission on BOTH accounts.
+  for (const r of [first, second]) {
+    if (!(await canWriteAccount(c.env.DB, userId, r.account_id))) {
+      return c.json({ error: 'no write permission on both accounts' }, 403)
+    }
+  }
+
+  if (first.type === 'transfer' || second.type === 'transfer') {
+    return c.json({ error: 'one of the transactions is already a transfer' }, 400)
+  }
+  if (first.account_id === second.account_id) {
+    return c.json(
+      { error: 'both transactions are on the same account — a transfer needs two accounts' },
+      400,
+    )
+  }
+  if (first.type === second.type) {
+    return c.json(
+      { error: 'the two legs must be one money-out (expense) and one money-in (income)' },
+      400,
+    )
+  }
+  if (Math.abs(first.amount - second.amount) > 0.01) {
+    return c.json(
+      { error: 'amounts differ — only equal-amount legs can be linked as one transfer' },
+      400,
+    )
+  }
+
+  const hasSplits = await c.env.DB.prepare(
+    'SELECT 1 AS ok FROM transaction_splits WHERE transaction_id IN (?, ?) LIMIT 1',
+  )
+    .bind(first.id, second.id)
+    .first()
+  if (hasSplits) {
+    return c.json({ error: 'a split transaction cannot be linked as a transfer' }, 409)
+  }
+
+  const inSettlement = await c.env.DB.prepare(
+    'SELECT 1 AS ok FROM settlements WHERE from_transaction_id IN (?, ?) OR to_transaction_id IN (?, ?) LIMIT 1',
+  )
+    .bind(first.id, second.id, first.id, second.id)
+    .first()
+  if (inSettlement) {
+    return c.json({ error: 'a settlement transaction cannot be linked as a transfer' }, 409)
+  }
+
+  const moneyOut = first.type === 'expense' ? first : second
+  const moneyIn = first.type === 'expense' ? second : first
+
+  // All validation is above, so the writes are a straight batch() conversion of
+  // the server's db.transaction(). They must stay atomic: converting the
+  // surviving leg without deleting the absorbed one double-counts the movement,
+  // and deleting without preserving the hash lets a statement re-import
+  // resurrect the leg the merge just removed.
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare(
+        `UPDATE transactions
+            SET type = 'transfer', destination_account_id = ?,
+                category_id = NULL, tag = '[]', updated_at = datetime('now')
+          WHERE id = ?`,
+      )
+      .bind(moneyIn.account_id, moneyOut.id),
+    // Remember the absorbed leg's hash under ITS owner — that is the user whose
+    // re-import of the statement must still see it as a duplicate.
+    ...(moneyIn.import_hash
+      ? [
+          c.env.DB
+            .prepare(
+              'INSERT OR REPLACE INTO absorbed_import_hashes (user_id, hash, transaction_id) VALUES (?, ?, ?)',
+            )
+            .bind(moneyIn.user_id, moneyIn.import_hash, moneyOut.id),
+        ]
+      : []),
+    c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(moneyIn.id),
+  ])
+
+  const row = await c.env.DB.prepare(
+    'SELECT transactions.*, 0 AS has_splits FROM transactions WHERE id = ?',
+  )
+    .bind(moneyOut.id)
+    .first()
+  return c.json(row)
+})
+
+// ── Transaction splits ────────────────────────────────
+
+wallet.get('/transactions/:id/splits', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const txn = await c.env.DB.prepare('SELECT user_id FROM transactions WHERE id = ?')
+    .bind(id)
+    .first<{ user_id: string }>()
+  if (!txn) return c.json({ error: 'transaction not found' }, 404)
+
+  // Caller must be the owner or hold a share line.
+  if (txn.user_id !== userId) {
+    const mine = await c.env.DB.prepare(
+      'SELECT 1 AS ok FROM transaction_splits WHERE transaction_id = ? AND user_id = ?',
+    )
+      .bind(id, userId)
+      .first()
+    if (!mine) {
+      return c.json({ error: 'not authorised to view shares for this transaction' }, 403)
+    }
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT ts.id, ts.transaction_id, ts.user_id, ts.share_amount, ts.note, ts.settled_at,
+            ts.created_at, u.username
+     FROM transaction_splits ts
+     JOIN users u ON u.id = ts.user_id
+     WHERE ts.transaction_id = ?
+     ORDER BY ts.share_amount DESC`,
+  )
+    .bind(id)
+    .all()
+  return c.json(results)
+})
+
+/** INSERT for one split row. */
+const splitInsert = (db: D1Database, txnId: string, userId: string, amount: number, note: string) =>
+  db
+    .prepare(
+      `INSERT INTO transaction_splits (id, transaction_id, user_id, share_amount, note, created_at)
+       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
+       RETURNING *`,
+    )
+    .bind(txnId, userId, amount, note)
+
+// Quick single-transaction split — split with one recipient (full amount or split).
+wallet.post('/transactions/:id/split', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const b = await body(c)
+  const recipientId = b.recipientId
+  const splitMode = b.splitMode
+  const shareAmounts = b.shareAmounts
+
+  // 1. Transaction exists and the caller owns it.
+  const txn = await c.env.DB.prepare('SELECT id, user_id, amount FROM transactions WHERE id = ?')
+    .bind(id)
+    .first<{ id: string; user_id: string; amount: number }>()
+  if (!txn) return c.json({ error: 'transaction not found' }, 404)
+  if (txn.user_id !== userId) {
+    return c.json({ error: 'only the transaction owner can share' }, 403)
+  }
+
+  // B-04: re-splitting replaces every share row, which would erase settlement
+  // history and resurrect an already-paid debt. Block it while any share on this
+  // transaction has been settled or partially paid.
+  if (await hasSettledShare(c.env.DB, id)) {
+    return c.json(
+      { error: 'this split has been (partly) settled; undo the settlement before changing it' },
+      409,
+    )
+  }
+
+  // 2. Recipient must be a co-group member.
+  const allowed = new Set(await coGroupUserIds(c.env.DB, txn.user_id))
+  if (!allowed.has(String(recipientId))) {
+    return c.json({ error: 'recipient is not a group co-member' }, 400)
+  }
+
+  // 3. splitMode.
+  const validModes = ['none', 'equal', 'custom']
+  if (typeof splitMode !== 'string' || !validModes.includes(splitMode)) {
+    return c.json({ error: 'splitMode must be "none", "equal", or "custom"' }, 400)
+  }
+
+  // 4. Share amounts per mode.
+  let shares: Array<{ userId: string; shareAmount: number; note: string }> = []
+
+  if (splitMode === 'none') {
+    // Recipient owes 100% of the amount — no payer row (see CLAUDE.md §6).
+    shares = [{ userId: String(recipientId), shareAmount: txn.amount, note: '' }]
+  } else if (splitMode === 'equal') {
+    const [ownerShare, recipientShare] = splitEqually(txn.amount, 2)
+    shares = [
+      { userId, shareAmount: ownerShare, note: '' },
+      { userId: String(recipientId), shareAmount: recipientShare, note: '' },
+    ]
+  } else {
+    if (!Array.isArray(shareAmounts) || shareAmounts.length !== 2) {
+      return c.json({ error: 'shareAmounts must be array of 2 amounts' }, 400)
+    }
+    for (const amt of shareAmounts) {
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return c.json({ error: 'each share amount must be a positive finite number' }, 400)
+      }
+    }
+    const sum = shareAmounts.reduce((acc: number, a: number) => acc + a, 0)
+    if (Math.abs(sum - txn.amount) > 0.015) {
+      return c.json({ error: `amounts must sum to ${txn.amount}; got ${sum}` }, 400)
+    }
+    shares = [
+      { userId, shareAmount: shareAmounts[0], note: '' },
+      { userId: String(recipientId), shareAmount: shareAmounts[1], note: '' },
+    ]
+  }
+
+  // 5. Replace the share set atomically. The DELETE and the INSERTs must commit
+  // together — a transaction left with its old shares deleted and the new ones
+  // missing looks unsplit while the ledger still says otherwise.
+  const results = await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM transaction_splits WHERE transaction_id = ?').bind(id),
+    ...shares.map((s) => splitInsert(c.env.DB, id, s.userId, s.shareAmount, s.note)),
+  ])
+
+  return c.json(results.slice(1).flatMap((r) => r.results), 201)
+})
+
+// ── Bulk transaction splits ───────────────────────────
+// POST /transactions/splits — split multiple transactions at once.
+// Body: { transactions: Array<{ transactionId, shares: Array<{ userId, shareAmount, note? }> }> }
+wallet.post('/transactions/splits', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+
+  type ShareEntry = { userId: string; shareAmount: number; note?: string }
+  type TxnPayload = { transactionId: string; shares: ShareEntry[] }
+  const transactions = b.transactions as TxnPayload[] | undefined
+
+  // 1. Top-level shape check.
+  if (!Array.isArray(transactions) || transactions.length === 0) {
+    return c.json({ error: 'transactions array is required and must be non-empty' }, 400)
+  }
+  // 2. Unbounded IN clause guard.
+  if (transactions.length > 500) {
+    return c.json({ error: 'cannot share more than 500 transactions at once' }, 400)
+  }
+  // 3. Per-element structural validation.
+  for (const tx of transactions) {
+    if (typeof tx.transactionId !== 'string' || tx.transactionId.length === 0) {
+      return c.json({ error: 'each transactionId must be a non-empty string' }, 400)
+    }
+    if (!Array.isArray(tx.shares) || tx.shares.length === 0) {
+      return c.json({ error: `shares array is required for transaction ${tx.transactionId}` }, 400)
+    }
+  }
+  // 4. Share amount positivity.
+  for (const tx of transactions) {
+    for (const s of tx.shares) {
+      const amt = Number(s.shareAmount)
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return c.json({ error: 'each share amount must be a positive number' }, 400)
+      }
+    }
+  }
+
+  // 5. Fetch all transactions in one query.
+  const transactionIds = transactions.map((tx) => tx.transactionId)
+  const placeholders = transactionIds.map(() => '?').join(',')
+  const { results: txnRows } = await c.env.DB.prepare(
+    `SELECT id, user_id, amount, account_id FROM transactions WHERE id IN (${placeholders})`,
+  )
+    .bind(...transactionIds)
+    .all<{ id: string; user_id: string; amount: number; account_id: string }>()
+  const txnMap = new Map(txnRows.map((t) => [t.id, t]))
+
+  if (txnMap.size !== transactionIds.length) {
+    return c.json({ error: 'one or more transactions not found' }, 400)
+  }
+
+  // 6. Owner-only auth check — only the transaction owner may set bulk splits.
+  for (const tx of transactions) {
+    if (txnMap.get(tx.transactionId)!.user_id !== userId) {
+      return c.json({ error: `only the owner can share transaction ${tx.transactionId}` }, 403)
+    }
+  }
+
+  // 7. Co-group membership (S-3).
+  //
+  // The server calls coGroupUserIds() once **per transaction** inside this loop.
+  // Step 6 has just proved every transaction is owned by the caller, so the set
+  // is identical every time — one query instead of N, which on D1 is N network
+  // round trips for a 500-transaction bulk share.
+  const allowed = new Set(await coGroupUserIds(c.env.DB, userId))
+  for (const tx of transactions) {
+    for (const s of tx.shares) {
+      if (!allowed.has(String(s.userId))) {
+        return c.json(
+          {
+            error: `user ${s.userId} is not a group co-member with transaction ${tx.transactionId}'s owner`,
+          },
+          400,
+        )
+      }
+    }
+  }
+
+  // 8. Sum validation BEFORE any write.
+  for (const tx of transactions) {
+    const txn = txnMap.get(tx.transactionId)!
+    const sum = tx.shares.reduce((acc, s) => acc + Number(s.shareAmount), 0)
+    if (Math.abs(sum - txn.amount) > 0.015) {
+      return c.json(
+        {
+          error: `share amounts for transaction ${tx.transactionId} must sum to ${txn.amount}; got ${sum}`,
+        },
+        400,
+      )
+    }
+  }
+
+  // 8b. B-04: refuse to replace shares that have been (partly) settled.
+  // The server calls hasSettledShare() per transaction — again one query each.
+  // One set-based query answers it for the whole batch.
+  const { results: settledRows } = await c.env.DB.prepare(
+    `SELECT DISTINCT transaction_id FROM transaction_splits
+      WHERE transaction_id IN (${placeholders})
+        AND (settled_at IS NOT NULL OR settled_amount > 0)`,
+  )
+    .bind(...transactionIds)
+    .all<{ transaction_id: string }>()
+  const settled = new Set(settledRows.map((r) => r.transaction_id))
+  for (const tx of transactions) {
+    if (settled.has(tx.transactionId)) {
+      return c.json(
+        {
+          error: `transaction ${tx.transactionId} has a settled split; undo the settlement before re-sharing`,
+        },
+        409,
+      )
+    }
+  }
+
+  // 9. One atomic batch: every DELETE and INSERT commits together, as
+  // db.transaction() did. A partial apply would leave some transactions
+  // re-split and others stripped of their shares.
+  const writes = []
+  for (const tx of transactions) {
+    writes.push(
+      c.env.DB.prepare('DELETE FROM transaction_splits WHERE transaction_id = ?').bind(
+        tx.transactionId,
+      ),
+    )
+    for (const s of tx.shares) {
+      writes.push(
+        splitInsert(c.env.DB, tx.transactionId, String(s.userId), Number(s.shareAmount), s.note ?? ''),
+      )
+    }
+  }
+  await c.env.DB.batch(writes)
+
+  return c.json({ message: 'transactions shared successfully', transactionIds }, 201)
+})
+
+// Batch split status check — returns { transactionId, hasSplits } for each ID.
+wallet.post('/transactions/splits/status', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const transactionIds = b.transactionIds as string[] | undefined
+
+  if (!Array.isArray(transactionIds) || transactionIds.length === 0) return c.json([])
+  if (transactionIds.length > 500) {
+    return c.json({ error: 'cannot check more than 500 transactions at once' }, 400)
+  }
+
+  const placeholders = transactionIds.map(() => '?').join(',')
+
+  // Only return split status for transactions the caller owns.
+  //
+  // B-08: the second query deliberately does NOT filter by user_id — a
+  // "Keep as-is" split writes only the recipient's row, so scoping by the
+  // owner made the status report hasSplits:false while the transaction list
+  // badged the same row as split. Owner scoping is enforced by ownedIds below.
+  const [owned, shared] = await c.env.DB.batch<{ id: string } | { transaction_id: string }>([
+    c.env.DB
+      .prepare(`SELECT id FROM transactions WHERE id IN (${placeholders}) AND user_id = ?`)
+      .bind(...transactionIds, userId),
+    c.env.DB
+      .prepare(
+        `SELECT DISTINCT transaction_id FROM transaction_splits WHERE transaction_id IN (${placeholders})`,
+      )
+      .bind(...transactionIds),
+  ])
+
+  const ownedIds = new Set((owned.results as { id: string }[]).map((r) => r.id))
+  const sharedIds = new Set(
+    (shared.results as { transaction_id: string }[]).map((r) => r.transaction_id),
+  )
+
+  return c.json(
+    transactionIds
+      .filter((id) => ownedIds.has(id))
+      .map((id) => ({ transactionId: id, hasSplits: sharedIds.has(id) })),
+  )
+})
 
 // ── Budgets ──────────────────────────────────────────
 
