@@ -11,14 +11,23 @@
 |---|---|---|
 | **S1** | Does PBKDF2 fit the free CPU budget? | ⚠️ **Constrained** — hard cliff at ~100k iterations vs OWASP's 600k |
 | **S2** | Does a realistic CSV import fit? | ✅ **Passes** — 5,000 rows in one batch, ~10× real-world headroom |
-| S3 | Heavy read paths | not run |
-| S4 | e2e harness | not run |
+| **S4** | Can Playwright drive `wrangler dev` + D1? | ✅ **Passes** — 6/6 in 3 s, and the harness gets *simpler* |
+| S3 | Heavy read paths | not run — **downgraded to low risk** by S2 |
 
-**S1 was worse than the plan assumed; S2 was better.** The free tier caps
-PBKDF2-HMAC-SHA256 at a deterministic ceiling between **100,000 and 105,000
-iterations** with nothing left over for the rest of a login — against OWASP's
-recommended 600,000. But the import path, which S1 made me expect to fail,
-handled 5,000 rows in a single `batch()` with room to spare.
+**Phase 0 found no blocker. Option 2 is technically viable on the free tier.**
+
+- **S1 was worse than the plan assumed.** The free tier caps PBKDF2-HMAC-SHA256
+  at a deterministic ceiling between **100,000 and 105,000 iterations**, with
+  nothing left over for the rest of a login — against OWASP's recommended
+  600,000. Neutralised, but only by an assumption about password strength that
+  the code must then enforce.
+- **S2 was better.** The import path handled 5,000 rows in a single `batch()`
+  with roughly 10× real-world headroom.
+- **S4 was better still.** The e2e harness — the largest single line in the
+  effort estimate and the one I flagged as the real unknown — not only works but
+  **replaces two web servers and a proxy with one command.** The existing suite
+  isolates by fresh-user-per-test rather than DB reset, which turns out to be
+  database-agnostic.
 
 **The most consequential finding is not a limit at all.** S2 surfaced an N+1
 query pattern in the import route that is free under `better-sqlite3` and
@@ -26,8 +35,8 @@ expensive under D1 — 2–3 network round trips *per row*. It is a contained,
 well-understood fix, but it is real work not currently in the plan's estimate.
 See [S2's caveat](#-the-real-problem-s2-uncovered--and-did-not-test).
 
-Neither result kills Option 2. Together they change its economics — see
-[§5](#5-strategic-implication).
+Nothing here kills Option 2. What remains is not a feasibility question but a
+judgement call — see [§5](#5-strategic-implication) and [§6](#6-recommendation).
 
 ---
 
@@ -204,15 +213,76 @@ a contained fix, not a systemic rewrite. But every `.prepare()` inside a loop
 needs review during the port, and that review is not captured in the §5 effort
 estimate of `docs/option-2-workers-d1-plan.md`.
 
-## S3 — Heavy read paths · **NOT RUN**
+## S3 — Heavy read paths · **NOT RUN** (downgraded to low risk)
 
-Reports/Dashboard aggregates and `GET /transactions/export`. Same concern: the
-SQL executes in D1, but serialising large result sets is Worker CPU.
+Reports/Dashboard aggregates and `GET /transactions/export`. S2 demonstrated
+that I/O-interleaved requests have ample headroom, and these aggregates execute
+*inside* D1 rather than in the Worker — the Worker only serialises the result.
+Worth confirming during Phase 4 rather than blocking the decision on it.
 
-## S4 — e2e harness · **NOT RUN**
+## S4 — Playwright against `wrangler dev` · **PASSES — better than today's setup**
 
-Can Playwright drive `wrangler dev --local` with a resettable D1, replacing
-`DAYBOOK_TEST=1` + `POST /api/test/reset`?
+### The key discovery is in the existing harness
+
+`e2e/helpers.ts` isolates tests by **signing up a fresh user per page** and
+relying on per-user scoping — *not* by resetting the database. `POST
+/api/test/reset` exists but its own comment describes it as available "for a
+clean baseline between runs if needed."
+
+**That model is database-agnostic.** It needs a working `INSERT` and per-user
+`WHERE` clauses, both of which D1 provides. The 51 specs do not depend on
+anything SQLite-specific about isolation, which was the risk this spike existed
+to find.
+
+### Method
+
+A Worker mirroring the parts of the server the harness actually touches —
+`/api/health` (the readiness probe), `/api/auth/signup` (with PBKDF2 at S1's
+measured 50k), `/api/test/reset` (via `batch()`, gated on a `[vars]` flag), plus
+a stand-in SPA served through `[assets]`. Driven by a real Playwright config
+whose only `webServer` is `npx wrangler dev`.
+
+### Result
+
+**6/6 passed in 2.7 s — 3 s wall clock including `wrangler dev` cold start.**
+
+| Assertion | Result |
+|---|---|
+| `wrangler dev` works as a Playwright `webServer` | ✅ |
+| Static assets serve from the Worker origin | ✅ |
+| SPA fallback resolves a deep link (`/wallet/accounts`) | ✅ |
+| API + assets on one origin — no CORS, no proxy | ✅ |
+| Fresh-user-per-test isolation against D1 | ✅ |
+| `UNIQUE` constraint on username holds (409) | ✅ |
+| `test/reset` wipes state and is var-gated | ✅ |
+
+Per-request latency in local D1 was **1–10 ms**, comparable to the Express
+server today.
+
+### The harness gets simpler, not harder
+
+Today's `playwright.config.ts` runs **two** web servers — `tsx server/index.ts`
+on :3099 and Vite on :5173 — plus `DAYBOOK_API_TARGET` proxy plumbing so the
+dev server forwards `/api` to the isolated test API.
+
+Under Workers that collapses to **one** `webServer` and no proxy at all, because
+assets and API already share an origin. The 30-second startup timeouts can come
+down too: cold start measured ~3 s.
+
+Local D1 is a real SQLite file at
+`.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite`, so deleting it is a
+second, blunter reset mechanism if one is ever wanted.
+
+### Caveats
+
+1. **Six trivial specs are not 51 heavy ones.** The harness is proven; end-to-end
+   throughput across the full suite is not. Given comparable per-request latency,
+   no reason to expect trouble — but it is an extrapolation.
+2. **e2e would run against built assets, not Vite.** `wrangler dev` serves
+   `dist/`, so the suite needs `npm run build` first and loses HMR in the test
+   loop. Arguably an improvement — it tests what actually ships — but it adds
+   build time. Whether *development* keeps Vite (with a proxy) or moves fully to
+   `wrangler dev` is an open design question, not a blocker.
 
 ---
 
@@ -264,14 +334,31 @@ to reach a place those options already reach. Its distinctive advantage —
 independence from home hardware — was worth a great deal before that machine
 existed and is worth much less now.
 
-**Suggested next step: run S4 before S3.** S3 (heavy reads) is now low-risk —
-S2 demonstrated that I/O-interleaved work has ample headroom, and the Reports
-aggregates execute inside D1 rather than in the Worker. **S4 is the real
-remaining unknown**, and it is the largest single line in the effort estimate:
-if Playwright cannot drive `wrangler dev --local` with a resettable D1, the
-51-spec suite becomes the most expensive part of the migration by a wide margin,
-and that suite is the only evidence that Phase 5b's isolation guarantees survived
-the port.
+### Effort revision after Phase 0
 
-If S4 comes back clean, Option 2 is fully de-risked and the decision is purely
-about whether the rewrite is worth it.
+Two adjustments to `docs/option-2-workers-d1-plan.md` §6, roughly cancelling out:
+
+| Change | Direction |
+|---|---|
+| **Phase 6 (e2e) 2–3 → 1–2 sessions.** S4 showed the harness collapses to one `webServer`, the isolation model ports unchanged, and cold start is ~3 s. | **down** |
+| **Phase 4/5 + ~1 session** for the N+1 audit and the import-route hoist S2 uncovered. | **up** |
+| **Phase 5 (atomicity) 1–2 sessions** — already revised down from the plan's original 3–5 days after reading all 11 `db.transaction()` sites. | unchanged |
+
+**Revised total: 11–16 sessions**, unchanged in aggregate but better understood.
+
+### The decision
+
+**Phase 0 has done its job: there is no technical reason not to proceed.** The
+remaining question is one only the owner can answer.
+
+**For:** $0/month forever, no domain, no machine to maintain, no OS patching, and
+a *simpler* test harness than today's. The app fits.
+
+**Against:** the always-on Windows box means Options 1 and 3 reach the same place
+for $0–1/month with **no rewrite at all**. Option 2 costs 11–16 sessions plus a
+KDF at 1/12 of the recommended strength, and its distinctive advantage —
+independence from home hardware — was worth far more before that machine
+existed.
+
+Phase 0 cost one session and answered the feasibility question honestly. That
+was the right call regardless of which way the decision now goes.
