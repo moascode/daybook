@@ -1,7 +1,12 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { normalizeBind, ownsAllRefs, todayStr, updateRow } from '../lib.ts'
-import { isGroupMember, visibleAccountIds } from '../lib/sharing.ts'
+import { normalizeBind, ownedIdSet, ownsAllRefs, todayStr, updateRow, updateRowStmt } from '../lib.ts'
+import {
+  canWriteAccount,
+  isGroupMember,
+  visibleAccountIds,
+  writableAccountIds,
+} from '../lib/sharing.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
 // (1,461 lines, 68 .prepare() sites), it lands in increments:
@@ -457,6 +462,520 @@ function insertTransactionStmt(
       Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
       b.importHash ?? '',
     )
+}
+
+
+// ── Transactions ─────────────────────────────────────
+
+const TRANSACTION_COLS: Record<string, string> = {
+  accountId: 'account_id',
+  destinationAccountId: 'destination_account_id',
+  date: 'date',
+  merchant: 'merchant',
+  description: 'description',
+  amount: 'amount',
+  type: 'type',
+  categoryId: 'category_id',
+  tag: 'tag',
+}
+
+// C2: transaction payload validation. `partial` (PATCH) only checks fields
+// present in the body; `existing` supplies the row's current values so the
+// cross-field transfer rule still holds after a partial update.
+const TXN_TYPES = new Set(['income', 'expense', 'transfer'])
+
+function transactionInputError(
+  b: Record<string, unknown>,
+  opts: {
+    partial?: boolean
+    existing?: { type: string; account_id: string; destination_account_id: string | null }
+  } = {},
+): string | null {
+  const partial = opts.partial ?? false
+  const has = (k: string) => k in b && b[k] !== undefined
+
+  if (!partial || has('type')) {
+    if (typeof b.type !== 'string' || !TXN_TYPES.has(b.type)) {
+      return 'type must be income, expense, or transfer'
+    }
+  }
+  if (!partial || has('amount')) {
+    const amt =
+      typeof b.amount === 'number' || typeof b.amount === 'string' ? Number(b.amount) : NaN
+    if (!Number.isFinite(amt) || amt <= 0) return 'amount must be a positive number'
+  }
+  if (!partial || has('date')) {
+    if (
+      typeof b.date !== 'string' ||
+      !ISO_DATE_RE.test(b.date) ||
+      Number.isNaN(Date.parse(b.date))
+    ) {
+      return 'date must be an ISO date (YYYY-MM-DD)'
+    }
+  }
+  if (!partial || has('accountId')) {
+    if (typeof b.accountId !== 'string' || b.accountId.length === 0) {
+      return 'accountId is required'
+    }
+  }
+
+  // Transfers need a destination distinct from the source account.
+  const type = has('type') ? b.type : opts.existing?.type
+  const accountId = has('accountId') ? b.accountId : opts.existing?.account_id
+  const dest = has('destinationAccountId')
+    ? b.destinationAccountId
+    : opts.existing?.destination_account_id
+  if (type === 'transfer') {
+    if (typeof dest !== 'string' || dest.length === 0) {
+      return 'transfer requires a destinationAccountId'
+    }
+    if (dest === accountId) {
+      return 'transfer destination must differ from the source account'
+    }
+  }
+  return null
+}
+
+/**
+ * view scoping ('mine' | 'shared-with-me' | 'shared-with-others' | 'all'),
+ * shared by GET /transactions and GET /transactions/export so the exported rows
+ * always match the on-screen selection (§1.2).
+ *
+ * The server built a named-parameter object here. D1 is positional, so this
+ * **pushes its binds onto `binds` in exactly the order its placeholders appear
+ * in the returned SQL** — and every caller must keep appending conditions and
+ * binds in lockstep after it. Getting that order wrong silently filters by the
+ * wrong value rather than erroring, which is why the filter builders below
+ * always push the two together.
+ */
+async function viewCondition(
+  db: D1Database,
+  userId: string,
+  view: string,
+  alias: string,
+  binds: unknown[],
+): Promise<string> {
+  if (view === 'mine') {
+    binds.push(userId)
+    return `${alias}.user_id = ?`
+  }
+  if (view === 'shared-with-me') {
+    // Transactions created by others where I have a split line.
+    binds.push(userId, userId)
+    return `${alias}.user_id != ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ?)`
+  }
+  if (view === 'shared-with-others') {
+    // My transactions that have been shared with others.
+    binds.push(userId, userId)
+    return `${alias}.user_id = ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != ?)`
+  }
+  // All visible: own transactions + transactions on shared accounts.
+  const visible = await visibleAccountIds(db, userId)
+  if (visible.length === 0) {
+    binds.push(userId)
+    return `${alias}.user_id = ?`
+  }
+  const placeholders = visible.map(() => '?').join(', ')
+  binds.push(userId, ...visible, ...visible)
+  return `(${alias}.user_id = ? OR ${alias}.account_id IN (${placeholders}) OR ${alias}.destination_account_id IN (${placeholders}))`
+}
+
+/** Tag values from a repeatable `tags` query param. */
+function tagsFrom(c: { req: { queries: (k: string) => string[] | undefined } }): string[] {
+  return (c.req.queries('tags') ?? []).filter((t) => typeof t === 'string' && t.length > 0)
+}
+
+/**
+ * Shared filter builder for the list and export routes. Appends to `conditions`
+ * and `binds` together so their order can never drift apart.
+ */
+function applyFilters(
+  c: { req: { query: (k: string) => string | undefined; queries: (k: string) => string[] | undefined } },
+  alias: string,
+  conditions: string[],
+  binds: unknown[],
+): void {
+  const col = (name: string) => (alias ? `${alias}.${name}` : name)
+
+  const dateFrom = str(c.req.query('dateFrom'))
+  if (dateFrom) { conditions.push(`${col('date')} >= ?`); binds.push(dateFrom) }
+
+  const dateTo = str(c.req.query('dateTo'))
+  if (dateTo) { conditions.push(`${col('date')} <= ?`); binds.push(dateTo) }
+
+  const type = str(c.req.query('type'))
+  if (type && type !== 'all') { conditions.push(`${col('type')} = ?`); binds.push(type) }
+
+  const categoryId = str(c.req.query('categoryId'))
+  if (categoryId) { conditions.push(`${col('category_id')} = ?`); binds.push(categoryId) }
+
+  const accountId = str(c.req.query('accountId'))
+  if (accountId) {
+    conditions.push(`(${col('account_id')} = ? OR ${col('destination_account_id')} = ?)`)
+    binds.push(accountId, accountId)
+  }
+
+  // B1: free-text search on merchant/description.
+  const q = str(c.req.query('q'))
+  if (q) {
+    conditions.push(`(${col('merchant')} LIKE ? OR ${col('description')} LIKE ?)`)
+    binds.push(`%${q}%`, `%${q}%`)
+  }
+
+  // Multiple tags use OR logic: a transaction matching ANY selected tag is
+  // returned. The CASE guard keeps json_each away from invalid/empty JSON —
+  // rows with tag='' or a non-array value would otherwise raise a SQLite
+  // runtime error (the reason migrations 0002/0003 exist).
+  const tags = tagsFrom(c)
+  if (tags.length > 0) {
+    const tagCol = col('tag')
+    const safeTag = `CASE WHEN json_valid(${tagCol}) AND json_type(${tagCol})='array' THEN ${tagCol} ELSE '[]' END`
+    const clauses = tags.map(() => `EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value = ?)`)
+    conditions.push(`(${clauses.join(' OR ')})`)
+    binds.push(...tags)
+  }
+}
+
+wallet.get('/transactions', async (c) => {
+  const userId = c.get('userId')
+  const view = str(c.req.query('view')) ?? 'all'
+
+  const binds: unknown[] = []
+  const conditions: string[] = [
+    await viewCondition(c.env.DB, userId, view, 'transactions', binds),
+  ]
+  applyFilters(c, 'transactions', conditions, binds)
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+  const { results } = await c.env.DB.prepare(
+    `SELECT transactions.*,
+       CASE WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = transactions.id)
+            THEN 1 ELSE 0 END AS has_splits
+     FROM transactions ${where} ORDER BY date DESC, created_at DESC`,
+  )
+    .bind(...binds)
+    .all()
+
+  return c.json(results)
+})
+
+// Joined rows for export. Accepts the same filter params as GET /transactions
+// so the export respects the user's active filters.
+wallet.get('/transactions/export', async (c) => {
+  const userId = c.get('userId')
+  // §1.2: same view scoping as GET /transactions — the list view ("all") also
+  // shows other members' transactions on shared-in accounts, so a hard
+  // user_id-only scope silently dropped selected rows from the export.
+  const view = str(c.req.query('view')) ?? 'all'
+
+  const binds: unknown[] = []
+  const conditions: string[] = [await viewCondition(c.env.DB, userId, view, 't', binds)]
+  applyFilters(c, 't', conditions, binds)
+
+  // If the caller passes specific IDs, restrict to those (comma-separated).
+  const ids = str(c.req.query('ids'))
+  if (ids) {
+    const idList = ids.split(',').filter(Boolean)
+    if (idList.length > 0) {
+      conditions.push(`t.id IN (${idList.map(() => '?').join(', ')})`)
+      binds.push(...idList)
+    }
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT t.date, t.merchant, t.description, t.amount, t.type,
+            c.name AS category_name, a.name AS account_name, t.tag
+     FROM transactions t
+     LEFT JOIN categories c ON c.id = t.category_id
+     LEFT JOIN accounts a ON a.id = t.account_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY t.date DESC, t.created_at DESC`,
+  )
+    .bind(...binds)
+    .all()
+
+  return c.json(results)
+})
+
+// Returns the subset of the given hashes that already exist for this user.
+// Batched to stay well under SQLite's bound-parameter limit on large imports.
+// A hash counts as a duplicate if it is on a live transaction OR was absorbed
+// into a merged transfer (absorbed_import_hashes) — otherwise re-importing a
+// statement would re-create the leg that link-as-transfer deleted.
+wallet.post('/transactions/check-duplicates', async (c) => {
+  const b = await body(c)
+  const hashes: string[] = Array.isArray(b.hashes) ? b.hashes : []
+  if (hashes.length === 0) return c.json([])
+
+  const userId = c.get('userId')
+  const found = new Set<string>()
+  const BATCH = 500
+
+  // The chunks are independent, so they go out as one batch() rather than
+  // sequential awaits — N/500 round trips become one.
+  const stmts = []
+  for (let i = 0; i < hashes.length; i += BATCH) {
+    const chunk = hashes.slice(i, i + BATCH)
+    const placeholders = chunk.map(() => '?').join(', ')
+    stmts.push(
+      c.env.DB
+        .prepare(
+          `SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})
+           UNION
+           SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${placeholders})`,
+        )
+        .bind(userId, ...chunk, userId, ...chunk),
+    )
+  }
+
+  const results = await c.env.DB.batch<{ hash: string }>(stmts)
+  for (const r of results) for (const row of r.results) found.add(row.hash)
+
+  return c.json([...found])
+})
+
+// Bulk insert (CSV import). Returns the created rows.
+wallet.post('/transactions/import', async (c) => {
+  const parsed = await c.req.json().catch(() => [])
+  const items: Record<string, unknown>[] = Array.isArray(parsed) ? parsed : []
+  const userId = c.get('userId')
+
+  for (let i = 0; i < items.length; i++) {
+    const err = transactionInputError(items[i])
+    if (err) return c.json({ error: `row ${i + 1}: ${err}` }, 400)
+  }
+
+  // ── The S2 N+1 fix ──────────────────────────────────
+  //
+  // The server checks canWriteAccount() and ownsAllRefs() **per row**
+  // (server/routes/wallet.ts:583-595). Each is 1-2 queries, so a 500-row import
+  // issues 1,000-1,500 of them. In-process under better-sqlite3 that is free;
+  // on D1 every one is a network round trip, and the import would time out long
+  // before it finished. See docs/option-2-spike-findings.md §S2.
+  //
+  // Both permission sets are bounded by the user's own accounts and categories,
+  // not by the import size — so they are read ONCE and checked in memory.
+  const [writable, ownedCategories] = await Promise.all([
+    writableAccountIds(c.env.DB, userId),
+    ownedIdSet(c.env.DB, 'categories', userId),
+  ])
+
+  // Match manual add (POST /transactions): importing into a writable shared-in
+  // account is allowed, not just own accounts. Category must still be owned and
+  // any transfer destination must be writable (B-07) — per-user scoping is
+  // preserved exactly; only the number of queries changes.
+  for (let i = 0; i < items.length; i++) {
+    const b = items[i]
+    const accountId = String(b.accountId ?? '')
+    if (!accountId || !writable.has(accountId)) {
+      return c.json({ error: `row ${i + 1}: no write permission on this account` }, 403)
+    }
+    if (b.categoryId != null && !ownedCategories.has(String(b.categoryId))) {
+      return c.json({ error: `row ${i + 1}: invalid category reference` }, 400)
+    }
+    if (b.destinationAccountId && !writable.has(String(b.destinationAccountId))) {
+      return c.json({ error: `row ${i + 1}: no write permission on the destination account` }, 400)
+    }
+  }
+
+  if (items.length === 0) return c.json([], 201)
+
+  // S2 measured 5,000 rows in a single batch with ~10x headroom, and a real
+  // statement is 50-500 rows — so one batch is enough.
+  const results = await c.env.DB.batch(
+    items.map((b) => insertTransactionStmt(c.env.DB, b, userId)),
+  )
+  return c.json(results.flatMap((r) => r.results), 201)
+})
+
+wallet.post('/transactions', async (c) => {
+  const b = await body(c)
+  const userId = c.get('userId')
+
+  const inputErr = transactionInputError(b)
+  if (inputErr) return c.json({ error: inputErr }, 400)
+
+  // Allow writing to shared accounts with can_write permission.
+  const accountId = String(b.accountId ?? '')
+  if (accountId && !(await canWriteAccount(c.env.DB, userId, accountId))) {
+    return c.json({ error: 'no write permission on this account' }, 403)
+  }
+  if (!(await ownsAllRefs(c.env.DB, userId, [['categories', b.categoryId]]))) {
+    return c.json({ error: 'invalid category reference' }, 400)
+  }
+  // B-07: a transfer moves money INTO the destination, so it needs write
+  // permission there — a read-only shared-in account must not be a target.
+  if (
+    b.destinationAccountId &&
+    !(await canWriteAccount(c.env.DB, userId, String(b.destinationAccountId)))
+  ) {
+    return c.json({ error: 'no write permission on the destination account' }, 400)
+  }
+
+  // When posting to a shared account, the transaction user_id is the caller.
+  const row = await insertTransactionStmt(c.env.DB, b, userId).first()
+  return c.json(row, 201)
+})
+
+wallet.patch('/transactions/:id', async (c) => {
+  const b = await body(c)
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  // Caller must own the transaction or have write permission on its account.
+  const existing = await c.env.DB.prepare(
+    'SELECT user_id, account_id, type, destination_account_id, amount FROM transactions WHERE id = ?',
+  )
+    .bind(id)
+    .first<{
+      user_id: string
+      account_id: string
+      type: string
+      destination_account_id: string | null
+      amount: number
+    }>()
+  if (!existing) return c.json({ error: 'transaction not found' }, 404)
+
+  const canEdit =
+    existing.user_id === userId || (await canWriteAccount(c.env.DB, userId, existing.account_id))
+  if (!canEdit) return c.json({ error: 'no permission to edit this transaction' }, 403)
+
+  const inputErr = transactionInputError(b, { partial: true, existing })
+  if (inputErr) return c.json({ error: inputErr }, 400)
+
+  // B-03: a moved transaction must land on an account the caller can write —
+  // otherwise a member could re-point their transaction at anyone's account
+  // (draining that balance), since the edit check only covered the OLD account.
+  if ('accountId' in b && String(b.accountId) !== existing.account_id) {
+    if (!(await canWriteAccount(c.env.DB, userId, String(b.accountId)))) {
+      return c.json({ error: 'no write permission on the destination account' }, 403)
+    }
+  }
+  if (
+    'destinationAccountId' in b &&
+    b.destinationAccountId &&
+    String(b.destinationAccountId) !== (existing.destination_account_id ?? '')
+  ) {
+    if (!(await canWriteAccount(c.env.DB, userId, String(b.destinationAccountId)))) {
+      return c.json({ error: 'no write permission on the destination account' }, 400)
+    }
+  }
+
+  const refs: Array<[string, unknown]> = []
+  if ('categoryId' in b) refs.push(['categories', b.categoryId])
+  if (!(await ownsAllRefs(c.env.DB, userId, refs))) {
+    return c.json({ error: 'invalid category reference' }, 400)
+  }
+
+  // If the amount changed and splits exist, rescale the shares proportionally.
+  // The rescale statements are collected rather than executed, so they commit in
+  // the SAME batch as the transaction update below — the server relied on
+  // db.transaction() for that, and a split set that no longer sums to the
+  // transaction amount is a corrupt ledger.
+  const extraWrites: D1PreparedStatement[] = []
+
+  if ('amount' in b && b.amount !== undefined && existing.amount !== b.amount) {
+    const { results: shareRows } = await c.env.DB.prepare(
+      'SELECT id, share_amount FROM transaction_splits WHERE transaction_id = ? ORDER BY created_at ASC',
+    )
+      .bind(id)
+      .all<{ id: string; share_amount: number }>()
+
+    if (shareRows.length > 0) {
+      // B-06: never rewrite a settled/partially-paid split — the recorded
+      // settlement would no longer match the share it cleared.
+      if (await hasSettledShare(c.env.DB, id)) {
+        return c.json(
+          {
+            error:
+              'cannot change the amount of a transaction with settled splits; undo the settlement first',
+          },
+          409,
+        )
+      }
+      const newAmount = Number(b.amount)
+      // B-06: reject an amount too small to keep every split positive.
+      if (newAmount < shareRows.length * 0.01) {
+        return c.json({ error: 'amount is too small to keep every split positive' }, 400)
+      }
+
+      let allocated = 0
+      const scaled: Array<{ id: string; amount: number }> = []
+      for (let i = 0; i < shareRows.length; i++) {
+        const row = shareRows[i]
+        if (i === shareRows.length - 1) {
+          scaled.push({ id: row.id, amount: Math.round((newAmount - allocated) * 100) / 100 })
+        } else {
+          const v = Math.max(
+            0.01,
+            Math.round((row.share_amount / existing.amount) * newAmount * 100) / 100,
+          )
+          scaled.push({ id: row.id, amount: v })
+          allocated += v
+        }
+      }
+      // If rounding/clamping pushed the remainder non-positive, reject rather
+      // than write a zero/negative share.
+      if (scaled.some((s) => s.amount <= 0)) {
+        return c.json({ error: 'amount is too small to keep every split positive' }, 400)
+      }
+      for (const s of scaled) {
+        extraWrites.push(
+          c.env.DB
+            .prepare('UPDATE transaction_splits SET share_amount = ? WHERE id = ?')
+            .bind(s.amount, s.id),
+        )
+      }
+    }
+  }
+
+  // updateRow is scoped by the ORIGINAL owner's user_id, so a co-member editing
+  // a shared-account transaction updates the right row without taking ownership.
+  if (extraWrites.length === 0) {
+    const row = await updateRow(c.env.DB, 'transactions', id, existing.user_id, TRANSACTION_COLS, b)
+    if (!row) return c.json({ error: 'transaction not found' }, 404)
+    return c.json(row)
+  }
+
+  const upd = updateRowStmt(c.env.DB, 'transactions', id, existing.user_id, TRANSACTION_COLS, b)
+  await c.env.DB.batch([...extraWrites, upd])
+  const row = await c.env.DB.prepare('SELECT * FROM transactions WHERE id = ? AND user_id = ?')
+    .bind(id, existing.user_id)
+    .first()
+  if (!row) return c.json({ error: 'transaction not found' }, 404)
+  return c.json(row)
+})
+
+wallet.delete('/transactions/:id', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const existing = await c.env.DB.prepare(
+    'SELECT user_id, account_id FROM transactions WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ user_id: string; account_id: string }>()
+  if (!existing) return c.body(null, 204)
+
+  const canDel =
+    existing.user_id === userId || (await canWriteAccount(c.env.DB, userId, existing.account_id))
+  if (!canDel) return c.json({ error: 'no permission to delete this transaction' }, 403)
+
+  await c.env.DB.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run()
+  return c.body(null, 204)
+})
+
+/** True when any split on this transaction is settled or partially paid. */
+async function hasSettledShare(db: D1Database, transactionId: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT 1 AS ok FROM transaction_splits
+       WHERE transaction_id = ? AND (settled_at IS NOT NULL OR settled_amount > 0)
+       LIMIT 1`,
+    )
+    .bind(transactionId)
+    .first()
+  return !!row
 }
 
 // ── Budgets ──────────────────────────────────────────
