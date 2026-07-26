@@ -1,17 +1,32 @@
 # Option 2 — Phase 0 Spike Findings
 
-> Status: **S1 complete. S2–S4 not yet run.** Measured 2026-07-26/27 against a
-> throwaway Worker deployed to `daybook-spike-s1.moascode.workers.dev`, since
-> deleted (verified 404). Companion to `docs/option-2-workers-d1-plan.md` §3.
+> Status: **S1 and S2 complete. S3–S4 not yet run.** Measured 2026-07-26/27
+> against throwaway Workers and a real D1 database on the owner's account, all
+> since deleted (verified 404 / empty `d1 list`). Companion to
+> `docs/option-2-workers-d1-plan.md` §3.
 
 ## Summary
 
-**S1 answered its question, and the answer is worse than the plan assumed.**
-The free tier's CPU budget caps PBKDF2-HMAC-SHA256 at a hard, deterministic
-ceiling between **100,000 and 105,000 iterations** — with no headroom left for
-the rest of a login request. OWASP's current recommendation is 600,000.
+| Spike | Question | Verdict |
+|---|---|---|
+| **S1** | Does PBKDF2 fit the free CPU budget? | ⚠️ **Constrained** — hard cliff at ~100k iterations vs OWASP's 600k |
+| **S2** | Does a realistic CSV import fit? | ✅ **Passes** — 5,000 rows in one batch, ~10× real-world headroom |
+| S3 | Heavy read paths | not run |
+| S4 | e2e harness | not run |
 
-This does not kill Option 2, but it changes its economics. See
+**S1 was worse than the plan assumed; S2 was better.** The free tier caps
+PBKDF2-HMAC-SHA256 at a deterministic ceiling between **100,000 and 105,000
+iterations** with nothing left over for the rest of a login — against OWASP's
+recommended 600,000. But the import path, which S1 made me expect to fail,
+handled 5,000 rows in a single `batch()` with room to spare.
+
+**The most consequential finding is not a limit at all.** S2 surfaced an N+1
+query pattern in the import route that is free under `better-sqlite3` and
+expensive under D1 — 2–3 network round trips *per row*. It is a contained,
+well-understood fix, but it is real work not currently in the plan's estimate.
+See [S2's caveat](#-the-real-problem-s2-uncovered--and-did-not-test).
+
+Neither result kills Option 2. Together they change its economics — see
 [§5](#5-strategic-implication).
 
 ---
@@ -106,14 +121,88 @@ documented, enforced precondition in the code, not a hope.**
 
 ---
 
-## S2 — D1 batch limits · **NOT RUN**
+## S2 — CSV import through D1 `batch()` · **PASSES, with a caveat**
 
-**Priority raised to critical by S1's result.** If PBKDF2 alone nearly exhausts
-the budget, CSV import is a bigger threat than auth: parsing a multi-MB payload
-and constructing hundreds of D1 statements is real, unavoidable CPU inside a
-single invocation, and `wallet.ts:596` currently does it in one transaction.
+### Method
 
-Run this before any further commitment to Option 2.
+A Worker mirroring `POST /api/transactions/import` (`wallet.ts:572-599`): parse a
+JSON array body, validate every row, build one prepared statement per row, insert
+them all through a single `env.DB.batch()`, and return the created rows
+(`RETURNING *`, as the real route does). Backed by a real D1 database in APAC,
+seeded with a mirror of the production `transactions` schema.
+
+Payloads were realistic Malaysian statement rows (merchant, description, amount,
+tags, SHA-256 import hash) from 50 to 5,000 rows — 14 KB to 1.3 MB.
+
+### Result
+
+| Rows | Payload | Result |
+|---|---|---|
+| 200 | 54 KB | ✅ 5/5 |
+| 500 | 136 KB | ✅ 5/5 |
+| 1,000 | 272 KB | ✅ 5/5 |
+| 2,000 | 546 KB | ✅ 5/5 |
+| **5,000** | **1.3 MB** | ✅ **5/5** (~1.4 s) |
+
+**51,850 rows verified present in D1 afterwards** — the batches genuinely
+executed, no silent no-op.
+
+**A realistic bank statement is 50–500 rows. 5,000 in a single batch and a single
+invocation leaves roughly 10× headroom.** The insert path is not a constraint.
+
+### Notes
+
+1. **One transient failure.** The first 500-row attempt returned `error code:
+   1104`, and was not reproducible — 5/5 on re-run, while 5,000 rows succeeded in
+   the same sweep. A platform-side blip, not a limit. Worth knowing the platform
+   occasionally 500s, so the import path needs a retry story regardless.
+2. **Free-tier write quota is real.** This spike consumed ~52,000 of D1's
+   **100,000 writes/day**. Not a concern for two users at normal volume, but a
+   heavy import session could plausibly approach it.
+3. **Why this passed when S1 failed is not fully explained.** Parsing 1.3 MB of
+   JSON and building 5,000 statements is not obviously cheaper than 105,000
+   PBKDF2 iterations. The likeliest explanation is that CPU accounting treats an
+   I/O-interleaved request differently from a single synchronous burn — but I did
+   not establish that, and this writeup should not pretend otherwise. The
+   empirical result stands on its own.
+
+### ⚠️ The real problem S2 uncovered — and did not test
+
+The spike modelled the *insert*. The production route does something worse
+**before** it inserts (`wallet.ts:583-595`):
+
+```js
+for (let i = 0; i < items.length; i++) {
+  if (!canWriteAccount(db, userId, accountId))            // → DB query
+  if (!ownsAllRefs(db, userId, [['categories', ...]]))    // → DB query
+  if (b.destinationAccountId && !canWriteAccount(...))    // → DB query
+}
+```
+
+`ownsAllRefs` → `userOwns` (`lib.ts:86-89`) runs
+`SELECT 1 FROM <table> WHERE id = ? AND user_id = ?` **per call**. So the route
+issues **2–3 database queries per row.**
+
+Under `better-sqlite3` these are in-process and effectively free — which is why
+the code is written this way and why it has never been a problem. **Under D1 each
+one is a network round trip.** A 500-row import becomes **1,000–1,500 sequential
+awaited queries**; a 5,000-row import, 10,000–15,000.
+
+**This must be hoisted before the import route can work on D1**: one query for
+all writable account IDs, one for owned category IDs, then check in memory
+against a `Set`. That is a bounded, well-understood refactor — and the codebase
+already uses exactly this pattern elsewhere (`wallet.ts:1061-1065`), so it is
+consistent with the existing style rather than a foreign idiom.
+
+### The generalisable lesson
+
+**The synchronous driver made N+1 queries free; D1 makes them expensive.** An
+audit of loops across the route files found the import route to be the clear
+offender — most other loops already build a single batched query with
+placeholders (e.g. `wallet.ts:556` chunks hash lookups 500 at a time). So this is
+a contained fix, not a systemic rewrite. But every `.prepare()` inside a loop
+needs review during the port, and that review is not captured in the §5 effort
+estimate of `docs/option-2-workers-d1-plan.md`.
 
 ## S3 — Heavy read paths · **NOT RUN**
 
@@ -160,10 +249,29 @@ back clean.**
 
 ## 6. Recommendation
 
-**Run S2 before deciding anything.** It is the cheapest remaining way to find out
-whether this app fits the free tier at all, and S1 has made it the likeliest
-failure point. If CSV import cannot complete within budget, Option 2 is finished
-on the free tier and the M4 question answers itself.
+**Option 2 is technically viable on the free tier.** Two of the four spikes are
+done and neither found a blocker. What remains is a judgement call, not a
+feasibility question:
 
-If S2 and S3 pass, the decision is a genuine judgement call between a 12×-weaker
-KDF at $0 and no rewrite at all on hardware already owned.
+**The case for continuing.** The app fits. Imports work with 10× headroom. The
+KDF constraint is real but neutralised by two users with password-manager
+passwords. It is $0/month, forever, always-on, with no machine to maintain.
+
+**The case against.** The always-on Windows box makes Options 1 and 3 achievable
+for $0–1/month with **no rewrite at all**. Option 2 costs 11–16 sessions plus the
+N+1 refactor S2 uncovered, and ships a KDF at 1/12 of the recommended strength,
+to reach a place those options already reach. Its distinctive advantage —
+independence from home hardware — was worth a great deal before that machine
+existed and is worth much less now.
+
+**Suggested next step: run S4 before S3.** S3 (heavy reads) is now low-risk —
+S2 demonstrated that I/O-interleaved work has ample headroom, and the Reports
+aggregates execute inside D1 rather than in the Worker. **S4 is the real
+remaining unknown**, and it is the largest single line in the effort estimate:
+if Playwright cannot drive `wrangler dev --local` with a resettable D1, the
+51-spec suite becomes the most expensive part of the migration by a wide margin,
+and that suite is the only evidence that Phase 5b's isolation guarantees survived
+the port.
+
+If S4 comes back clean, Option 2 is fully de-risked and the decision is purely
+about whether the rewrite is worth it.
