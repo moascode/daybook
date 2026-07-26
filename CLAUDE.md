@@ -359,8 +359,9 @@ worker/
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
     ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
     ├── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
-    └── wallet.ts                    ← Part A only so far: /accounts, /accounts/:id/shares,
-                                        /categories, /tags (auth). Parts B/C pending.
+    └── wallet.ts                    ← Parts A+C: /accounts, /accounts/:id/shares,
+                                        /categories, /tags, /budgets, /recurring-*,
+                                        /goals (auth). Part B (transactions) pending.
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1249,15 +1250,31 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                   port of lib/sharing.ts.
                 • Increment 3 MERGED (PR #72): settlements.ts (21) WITH
                   its Phase 5 atomicity work.
-                • Increment 4 IN REVIEW: PR
-                  feat/workers-routes-wallet-accounts — wallet.ts PART A
+                • Increment 4 MERGED (PR #73): wallet.ts PART A
                   (accounts, balances, account shares, categories, tags).
+                • Increment 5 IN REVIEW: PR
+                  feat/workers-routes-wallet-budgets — wallet.ts PART C
+                  (budgets, recurring transactions, goals). The recurring
+                  processor is the plan's "medium" atomicity site
+                  (wallet.ts:1313) and converts safely to ONE batch()
+                  because its loop performs NO reads — every write derives
+                  from the rule row already in hand plus advanceDate(),
+                  which is pure. /recurring-transactions/:id/post also
+                  batches insert+advance: doing one without the other
+                  yields a duplicate or a skipped occurrence.
                 wallet.ts is split three ways by concern, not line count:
                   A accounts/shares/categories/tags — NO db.transaction()
                   B transactions — list/export/import/CRUD/link-transfer/
                     splits; 4 db.transaction() sites AND the S2 import N+1
                   C budgets/recurring/goals — 1 db.transaction()
-                ~80 of 156 sites done.
+                ~105 of 156 sites done; only wallet.ts Part B remains.
+                KNOWN PRE-EXISTING BUG (not introduced by the port, NOT
+                fixed here): ISO date validation accepts impossible
+                calendar dates. `Date.parse('2026-04-31')` does not return
+                NaN — V8 rolls the day over — so Feb 30 / Apr 31 pass both
+                transactionInputError (server wallet.ts:356) and
+                isoDateError (:1206). Flagged for a separate fix in BOTH
+                backends; only an out-of-range MONTH is currently caught.
                 Part A note: GET /accounts/:id/balance ran FOUR separate
                 sum queries via a named-@id helper; now one query with
                 four conditional sums (same arithmetic, 1 round trip

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { normalizeBind, updateRow } from '../lib.ts'
+import { normalizeBind, ownsAllRefs, todayStr, updateRow } from '../lib.ts'
 import { isGroupMember, visibleAccountIds } from '../lib/sharing.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
@@ -411,4 +411,491 @@ wallet.get('/tags', async (c) => {
     .bind(c.get('userId'))
     .all<{ tag: string }>()
   return c.json(results.map((r) => r.tag))
+})
+
+// ── Shared transaction helpers ───────────────────────
+// insertTransaction is used by the recurring-rule routes below and by the
+// transaction routes in Part B.
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** Non-empty string from a query param, else undefined. */
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.length > 0 ? v : undefined
+
+/**
+ * Build the INSERT for a transaction. Returns a prepared statement rather than
+ * executing it, so callers can either run it directly or fold it into a
+ * batch() — the recurring processor below needs the latter.
+ */
+function insertTransactionStmt(
+  db: D1Database,
+  b: Record<string, unknown>,
+  userId: string,
+) {
+  return db
+    .prepare(
+      `INSERT INTO transactions
+         (id, user_id, account_id, destination_account_id, date, merchant, description,
+          amount, type, category_id, tag, import_hash, created_at, updated_at)
+       VALUES
+         (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+       RETURNING *`,
+    )
+    // userId, accountId, destinationAccountId, date, merchant, description,
+    // amount, type, categoryId, tag, importHash
+    .bind(
+      userId,
+      b.accountId,
+      b.destinationAccountId ?? null,
+      b.date,
+      b.merchant ?? '',
+      b.description ?? '',
+      normalizeBind(b.amount),
+      b.type,
+      b.categoryId ?? null,
+      Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
+      b.importHash ?? '',
+    )
+}
+
+// ── Budgets ──────────────────────────────────────────
+
+wallet.get('/budgets', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM budgets WHERE user_id = ? ORDER BY created_at ASC',
+  )
+    .bind(c.get('userId'))
+    .all()
+  return c.json(results)
+})
+
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
+
+// B-15 residual: budgets must count only the caller's EFFECTIVE spend — when a
+// transaction they own has been split, their own `share_amount` (0 if they have
+// no share row), not the full transaction amount. Computed as one set-based
+// aggregate (mirroring lib/sharing.ts effectiveAmount()) rather than a per-row
+// loop over a month of transactions — which matters far more on D1, where a
+// per-row loop is a per-row network round trip.
+wallet.get('/budgets/spending', async (c) => {
+  const userId = c.get('userId')
+  const month = str(c.req.query('month')) ?? todayStr().slice(0, 7)
+  if (!MONTH_RE.test(month)) {
+    return c.json({ error: 'month must be in YYYY-MM format' }, 400)
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT t.category_id AS categoryId,
+            SUM(
+              CASE
+                WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
+                  THEN COALESCE(own.share_amount, 0)
+                ELSE t.amount
+              END
+            ) AS spent
+     FROM transactions t
+     LEFT JOIN transaction_splits own
+       ON own.transaction_id = t.id AND own.user_id = ?
+     WHERE t.user_id = ?
+       AND t.type = 'expense'
+       AND t.category_id IS NOT NULL
+       AND t.date LIKE ?
+     GROUP BY t.category_id`,
+  )
+    // The server bound @userId twice by name; positionally that is two binds.
+    .bind(userId, userId, `${month}-%`)
+    .all()
+
+  return c.json(results)
+})
+
+// C2: shared minimal check for budget limits and goal targets.
+function positiveAmountError(v: unknown, field: string): string | null {
+  const amt = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN
+  if (!Number.isFinite(amt) || amt <= 0) return `${field} must be a positive number`
+  return null
+}
+
+wallet.post('/budgets', async (c) => {
+  const b = await body(c)
+  const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
+  if (amtErr) return c.json({ error: amtErr }, 400)
+
+  if (!(await ownsAllRefs(c.env.DB, c.get('userId'), [['categories', b.categoryId]]))) {
+    return c.json({ error: 'invalid category reference' }, 400)
+  }
+
+  const row = await c.env.DB.prepare(
+    `INSERT INTO budgets (id, user_id, category_id, limit_amount, created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, datetime('now'), datetime('now'))
+     RETURNING *`,
+  )
+    .bind(c.get('userId'), b.categoryId, normalizeBind(b.limitAmount))
+    .first()
+  return c.json(row, 201)
+})
+
+wallet.patch('/budgets/:id', async (c) => {
+  const b = await body(c)
+  if ('limitAmount' in b) {
+    const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
+    if (amtErr) return c.json({ error: amtErr }, 400)
+  }
+  const row = await updateRow(c.env.DB, 'budgets', c.req.param('id'), c.get('userId'), {
+    limitAmount: 'limit_amount',
+  }, b)
+  if (!row) return c.json({ error: 'budget not found' }, 404)
+  return c.json(row)
+})
+
+wallet.delete('/budgets/:id', async (c) => {
+  await c.env.DB.prepare('DELETE FROM budgets WHERE id = ? AND user_id = ?')
+    .bind(c.req.param('id'), c.get('userId'))
+    .run()
+  return c.body(null, 204)
+})
+
+// ── Recurring transactions ───────────────────────────
+
+const RECURRING_COLS: Record<string, string> = {
+  accountId: 'account_id',
+  amount: 'amount',
+  merchant: 'merchant',
+  type: 'type',
+  categoryId: 'category_id',
+  frequency: 'frequency',
+  nextDueDate: 'next_due_date',
+}
+
+wallet.get('/recurring-transactions', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM recurring_transactions WHERE user_id = ? ORDER BY next_due_date ASC',
+  )
+    .bind(c.get('userId'))
+    .all()
+  return c.json(results)
+})
+
+// Recurring rules only post income or expense (never transfers — a transfer
+// needs a destination account these rules don't carry) and repeat monthly or
+// weekly. Guard both so a malformed rule can't post corrupt transactions.
+const RECURRING_TYPES = new Set(['income', 'expense'])
+const RECURRING_FREQS = new Set(['monthly', 'weekly'])
+
+// §1.3: a rule with a bad amount or due date would auto-post corrupt
+// transactions on every boot via /recurring-transactions/process, so both are
+// validated like transactions (C2) — not left to the client-side form guard.
+function isoDateError(v: unknown, field: string): string | null {
+  if (typeof v !== 'string' || !ISO_DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
+    return `${field} must be an ISO date (YYYY-MM-DD)`
+  }
+  return null
+}
+
+// B-20: a next-due-date far in the past would catch-up-post a burst of
+// back-dated transactions (capped at 120) on the next boot — almost always a
+// fat-finger. Reject anything more than a year before today.
+function farPastDueError(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const oneYearAgo = new Date()
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  if (v < oneYearAgo.toISOString().slice(0, 10)) {
+    return 'next due date is too far in the past (more than a year ago)'
+  }
+  return null
+}
+
+wallet.post('/recurring-transactions', async (c) => {
+  const b = await body(c)
+  if (
+    !(await ownsAllRefs(c.env.DB, c.get('userId'), [
+      ['accounts', b.accountId],
+      ['categories', b.categoryId],
+    ]))
+  ) {
+    return c.json({ error: 'invalid account or category reference' }, 400)
+  }
+  if (b.type != null && !RECURRING_TYPES.has(String(b.type))) {
+    return c.json({ error: 'recurring type must be income or expense' }, 400)
+  }
+  if (!RECURRING_FREQS.has(String(b.frequency))) {
+    return c.json({ error: 'recurring frequency must be monthly or weekly' }, 400)
+  }
+  const amtErr = positiveAmountError(b.amount, 'amount')
+  if (amtErr) return c.json({ error: amtErr }, 400)
+  const dateErr = isoDateError(b.nextDueDate, 'nextDueDate') ?? farPastDueError(b.nextDueDate)
+  if (dateErr) return c.json({ error: dateErr }, 400)
+
+  const row = await c.env.DB.prepare(
+    `INSERT INTO recurring_transactions
+       (id, user_id, account_id, amount, merchant, type, category_id, frequency, next_due_date,
+        created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+     RETURNING *`,
+  )
+    // userId, accountId, amount, merchant, type, categoryId, frequency, nextDueDate
+    .bind(
+      c.get('userId'),
+      b.accountId,
+      normalizeBind(b.amount),
+      b.merchant ?? '',
+      b.type ?? 'expense',
+      b.categoryId ?? null,
+      b.frequency,
+      b.nextDueDate,
+    )
+    .first()
+  return c.json(row, 201)
+})
+
+// Advance an ISO date (YYYY-MM-DD) by one recurrence period. Monthly clamps to
+// the last valid day of the target month (e.g. 31 Jan → 28/29 Feb).
+//
+// Pure UTC arithmetic on the date components, so it is unaffected by the
+// runtime's timezone — it ports unchanged.
+function advanceDate(dateStr: string, frequency: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (frequency === 'weekly') {
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() + 7)
+    return dt.toISOString().slice(0, 10)
+  }
+  let ny = y
+  let nm = m + 1
+  if (nm > 12) {
+    nm = 1
+    ny += 1
+  }
+  const lastDayThis = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const lastDayNext = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  // B-10: keep an end-of-month rule anchored to month-end (31 Jan → 28/29 Feb →
+  // 31 Mar → 30 Apr …) instead of drifting to the 28th forever after the first
+  // short month. A mid-month day just clamps to the next month's length.
+  const nd = d >= lastDayThis ? lastDayNext : Math.min(d, lastDayNext)
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+}
+
+interface RecurringRecord {
+  id: string
+  account_id: string
+  amount: number
+  merchant: string
+  type: string
+  category_id: string | null
+  frequency: string
+  next_due_date: string
+}
+
+// Process every rule that is due on/before today, posting a real transaction for
+// each missed occurrence (catch-up) and advancing next_due_date past today.
+//
+// This is the plan's "medium" atomicity site (§5.5, wallet.ts:1313). It is safe
+// to convert to a single batch() precisely because the loop performs **no reads**
+// — every posted transaction is computed from the rule row already in hand and
+// from advanceDate(), which is pure. So the whole write set can be built up
+// front and committed at once, exactly as db.transaction() did.
+wallet.post('/recurring-transactions/process', async (c) => {
+  const userId = c.get('userId')
+  const today = todayStr()
+
+  const { results: due } = await c.env.DB.prepare(
+    'SELECT * FROM recurring_transactions WHERE user_id = ? AND next_due_date <= ?',
+  )
+    .bind(userId, today)
+    .all<RecurringRecord>()
+
+  const writes = []
+  let posted = 0
+
+  for (const rule of due) {
+    let next = rule.next_due_date
+    let guard = 0
+    while (next <= today && guard < 120) {
+      writes.push(
+        insertTransactionStmt(
+          c.env.DB,
+          {
+            accountId: rule.account_id,
+            date: next,
+            merchant: rule.merchant,
+            description: '',
+            amount: rule.amount,
+            type: rule.type,
+            categoryId: rule.category_id,
+          },
+          userId,
+        ),
+      )
+      next = advanceDate(next, rule.frequency)
+      posted++
+      guard++
+    }
+    writes.push(
+      c.env.DB
+        .prepare(
+          `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+           WHERE id = ? AND user_id = ?`,
+        )
+        .bind(next, rule.id, userId),
+    )
+  }
+
+  if (writes.length > 0) await c.env.DB.batch(writes)
+  return c.json({ posted })
+})
+
+// Post a single rule immediately (dated today) and push its schedule forward one
+// period. Used by the "Post now" action.
+wallet.post('/recurring-transactions/:id/post', async (c) => {
+  const userId = c.get('userId')
+  const rule = await c.env.DB.prepare(
+    'SELECT * FROM recurring_transactions WHERE id = ? AND user_id = ?',
+  )
+    .bind(c.req.param('id'), userId)
+    .first<RecurringRecord>()
+  if (!rule) return c.json({ error: 'recurring transaction not found' }, 404)
+
+  const today = todayStr()
+  // Only advance the schedule when the rule was actually due. Posting an early,
+  // ad-hoc occurrence must not consume (skip) the upcoming scheduled one.
+  const next =
+    rule.next_due_date <= today ? advanceDate(rule.next_due_date, rule.frequency) : rule.next_due_date
+
+  // Posting the transaction without advancing the schedule (or vice versa)
+  // leaves a duplicate or a skipped occurrence, so the pair is batched.
+  await c.env.DB.batch([
+    insertTransactionStmt(
+      c.env.DB,
+      {
+        accountId: rule.account_id,
+        date: today,
+        merchant: rule.merchant,
+        description: '',
+        amount: rule.amount,
+        type: rule.type,
+        categoryId: rule.category_id,
+      },
+      userId,
+    ),
+    c.env.DB
+      .prepare(
+        `UPDATE recurring_transactions SET next_due_date = ?, updated_at = datetime('now')
+         WHERE id = ? AND user_id = ?`,
+      )
+      .bind(next, rule.id, userId),
+  ])
+
+  const row = await c.env.DB.prepare(
+    'SELECT * FROM recurring_transactions WHERE id = ? AND user_id = ?',
+  )
+    .bind(rule.id, userId)
+    .first()
+  return c.json(row)
+})
+
+wallet.patch('/recurring-transactions/:id', async (c) => {
+  const b = await body(c)
+  if ('type' in b && !RECURRING_TYPES.has(String(b.type))) {
+    return c.json({ error: 'recurring type must be income or expense' }, 400)
+  }
+  if ('frequency' in b && !RECURRING_FREQS.has(String(b.frequency))) {
+    return c.json({ error: 'recurring frequency must be monthly or weekly' }, 400)
+  }
+  if ('amount' in b) {
+    const amtErr = positiveAmountError(b.amount, 'amount')
+    if (amtErr) return c.json({ error: amtErr }, 400)
+  }
+  if ('nextDueDate' in b) {
+    const dateErr = isoDateError(b.nextDueDate, 'nextDueDate') ?? farPastDueError(b.nextDueDate)
+    if (dateErr) return c.json({ error: dateErr }, 400)
+  }
+
+  const refs: Array<[string, unknown]> = []
+  if ('accountId' in b) refs.push(['accounts', b.accountId])
+  if ('categoryId' in b) refs.push(['categories', b.categoryId])
+  if (!(await ownsAllRefs(c.env.DB, c.get('userId'), refs))) {
+    return c.json({ error: 'invalid account or category reference' }, 400)
+  }
+
+  const row = await updateRow(
+    c.env.DB,
+    'recurring_transactions',
+    c.req.param('id'),
+    c.get('userId'),
+    RECURRING_COLS,
+    b,
+  )
+  if (!row) return c.json({ error: 'recurring transaction not found' }, 404)
+  return c.json(row)
+})
+
+wallet.delete('/recurring-transactions/:id', async (c) => {
+  await c.env.DB.prepare('DELETE FROM recurring_transactions WHERE id = ? AND user_id = ?')
+    .bind(c.req.param('id'), c.get('userId'))
+    .run()
+  return c.body(null, 204)
+})
+
+// ── Goals ────────────────────────────────────────────
+
+const GOAL_COLS: Record<string, string> = {
+  name: 'name',
+  targetAmount: 'target_amount',
+  accountId: 'account_id',
+}
+
+wallet.get('/goals', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM goals WHERE user_id = ? ORDER BY created_at ASC',
+  )
+    .bind(c.get('userId'))
+    .all()
+  return c.json(results)
+})
+
+wallet.post('/goals', async (c) => {
+  const b = await body(c)
+  if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
+    return c.json({ error: 'name is required' }, 400)
+  }
+  const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
+  if (amtErr) return c.json({ error: amtErr }, 400)
+  if (!(await ownsAllRefs(c.env.DB, c.get('userId'), [['accounts', b.accountId]]))) {
+    return c.json({ error: 'invalid account reference' }, 400)
+  }
+
+  const row = await c.env.DB.prepare(
+    `INSERT INTO goals (id, user_id, name, target_amount, account_id, created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'), datetime('now'))
+     RETURNING *`,
+  )
+    .bind(c.get('userId'), b.name, normalizeBind(b.targetAmount), b.accountId)
+    .first()
+  return c.json(row, 201)
+})
+
+wallet.patch('/goals/:id', async (c) => {
+  const b = await body(c)
+  if ('targetAmount' in b) {
+    const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
+    if (amtErr) return c.json({ error: amtErr }, 400)
+  }
+  if (
+    'accountId' in b &&
+    !(await ownsAllRefs(c.env.DB, c.get('userId'), [['accounts', b.accountId]]))
+  ) {
+    return c.json({ error: 'invalid account reference' }, 400)
+  }
+
+  const row = await updateRow(c.env.DB, 'goals', c.req.param('id'), c.get('userId'), GOAL_COLS, b)
+  if (!row) return c.json({ error: 'goal not found' }, 404)
+  return c.json(row)
+})
+
+wallet.delete('/goals/:id', async (c) => {
+  await c.env.DB.prepare('DELETE FROM goals WHERE id = ? AND user_id = ?')
+    .bind(c.req.param('id'), c.get('userId'))
+    .run()
+  return c.body(null, 204)
 })
