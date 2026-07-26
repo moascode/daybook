@@ -32,6 +32,36 @@ database_name = "daybook"
 database_id = "fdc50631-c4f2-4420-bde0-7451ad4c7e39"
 migrations_dir = "worker/migrations"
 
+# ── Vars ─────────────────────────────────────────────────────
+# Non-secret configuration. SESSION_SECRET is deliberately NOT here — it is a
+# secret, set once with `wrangler secret put SESSION_SECRET`, and session.ts
+# throws rather than falling back to a default if it is missing.
+[vars]
+# Blocker 4.2: signup is closed in production. Both users are already
+# provisioned, so an open endpoint is pure attack surface on a public URL.
+# `wrangler dev` and the e2e suite override this to "true" (see [env.dev]).
+DAYBOOK_ALLOW_SIGNUP = "false"
+
+# Local dev / e2e. `wrangler dev` picks this up with `--env dev`; the e2e suite
+# needs signup because it creates a fresh user per test (e2e/helpers.ts).
+[env.dev]
+[env.dev.vars]
+DAYBOOK_ALLOW_SIGNUP = "true"
+DAYBOOK_TEST = "1"
+SESSION_SECRET = "daybook-dev-secret-change-me"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "daybook"
+database_id = "fdc50631-c4f2-4420-bde0-7451ad4c7e39"
+migrations_dir = "worker/migrations"
+
+[env.dev.assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
 # Observability: keep logs available for the cutover period without a paid plan.
 [observability]
 enabled = true

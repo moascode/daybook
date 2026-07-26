@@ -47,8 +47,10 @@ jobs:
       # Validates wrangler.toml, the D1/assets bindings and that the Worker
       # bundles — without touching the Cloudflare account. Needs dist/, so it
       # must run after the build step. No credentials required.
+      # `--env=""` targets the top-level (production) environment explicitly.
+      # Without it wrangler warns, since wrangler.toml also defines [env.dev].
       - name: Validate Worker build (dry run)
-        run: npx wrangler deploy --dry-run
+        run: npx wrangler deploy --dry-run --env=""
 
       # Both backends exist until the Phase 7 cutover, so their migrations must
       # stay in step. This applies worker/migrations to a throwaway local

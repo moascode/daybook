@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
+import { secureHeaders } from 'hono/secure-headers'
 import type { AppEnv } from './types.ts'
 import { health } from './routes/health.ts'
+import { auth } from './routes/auth.ts'
 
 // ─────────────────────────────────────────────────────────────
 // Daybook Worker — the Cloudflare-side replacement for server/index.ts.
@@ -26,8 +28,22 @@ app.use('/api/*', async (c, next) => {
   console.log(`${c.req.method} ${new URL(c.req.url).pathname} ${c.res.status} ${Date.now() - started}ms`)
 })
 
+// Blocker 4.5: the Workers-native replacement for helmet, which is Express
+// middleware and cannot run here. Applied to every response including static
+// assets, so the SPA gets them too.
+app.use(
+  '*',
+  secureHeaders({
+    strictTransportSecurity: 'max-age=31536000; includeSubDomains',
+    xFrameOptions: 'DENY',
+    xContentTypeOptions: 'nosniff',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+  }),
+)
+
 // Public routes (no auth required).
 app.route('/api', health)
+app.route('/api', auth)
 
 // Any /api path that matched no route. Non-API paths never reach the Worker.
 app.notFound((c) => c.json({ error: 'not found' }, 404))
