@@ -35,11 +35,20 @@ jobs:
       - name: Typecheck (server)
         run: npm run typecheck:server
 
+      - name: Typecheck (worker)
+        run: npm run typecheck:worker
+
       - name: Lint
         run: npm run lint
 
       - name: Build frontend
         run: npm run build
+
+      # Validates wrangler.toml, the D1/assets bindings and that the Worker
+      # bundles — without touching the Cloudflare account. Needs dist/, so it
+      # must run after the build step. No credentials required.
+      - name: Validate Worker build (dry run)
+        run: npx wrangler deploy --dry-run
 
   e2e:
     name: E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})

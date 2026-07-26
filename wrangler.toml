@@ -1,0 +1,37 @@
+# Daybook on Cloudflare Workers + D1.
+# See docs/option-2-workers-d1-plan.md (Phase 1 — Scaffold).
+
+name = "daybook"
+main = "worker/index.ts"
+# Must not exceed the bundled workerd runtime's date (currently 1.20260722.1) —
+# a future date is a hard startup error in `wrangler dev`.
+compatibility_date = "2026-07-22"
+
+# ── Static SPA ───────────────────────────────────────────────
+# The Vite build output is served straight from Cloudflare's asset pipeline —
+# no Worker invocation, so it costs nothing against the request or CPU budget.
+# `not_found_handling = "single-page-application"` returns index.html for deep
+# links (/wallet/accounts, /tasks/…), replacing the Express SPA fallback at
+# server/index.ts:81-84.
+#
+# `run_worker_first` sends only /api/* to the Worker. Everything else is an
+# asset lookup. API and assets share one origin, exactly as they do today —
+# no CORS, no SameSite=None cookies, no split deploy.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# ── D1 ───────────────────────────────────────────────────────
+# Replaces the better-sqlite3 file at DAYBOOK_HOME/shared/data/daybook.db.
+# Schema is applied via `wrangler d1 migrations` in Phase 2.
+[[d1_databases]]
+binding = "DB"
+database_name = "daybook"
+database_id = "fdc50631-c4f2-4420-bde0-7451ad4c7e39"
+migrations_dir = "worker/migrations"
+
+# Observability: keep logs available for the cutover period without a paid plan.
+[observability]
+enabled = true

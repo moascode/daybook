@@ -173,7 +173,31 @@ function before any public deploy.
 > browser calls over `/api`. `bcrypt` and `express-session` land in the auth
 > stage. See `docs/phase-4-plan.md`.
 
+#### Backend (Phase 6 — Cloudflare Workers + D1) — **in progress**
+| Package | Version | Purpose |
+|---|---|---|
+| `hono` | ^4.12 | Workers-native router; replaces `express` in the Worker |
+| `wrangler` | ^4.114 | Cloudflare CLI — build, local dev, D1 migrations, deploy (dev) |
+| `@cloudflare/workers-types` | ^5 | Workers runtime type definitions (dev) |
+
+> Approved per `docs/option-2-workers-d1-plan.md` §7 and installed in Phase 1.
+> **Both backends coexist during the migration** — `server/` (Express + SQLite)
+> keeps serving production untouched until Phase 7's cutover, and `worker/` is
+> built alongside it. Nothing is removed before Phase 7.
+>
+> No new dependency for password hashing: PBKDF2 comes from the Workers runtime's
+> Web Crypto. Phase 7 removes `express`, `express-session`, `better-sqlite3`,
+> `bcrypt`, `tsx` and their `@types/*`.
+>
+> **`compatibility_date` in `wrangler.toml` must not exceed the bundled
+> `workerd` version's date** (check `node_modules/workerd/package.json`) — a
+> future date is a hard `wrangler dev` startup failure, not a warning.
+
 #### Cloud (Phase 6 only — do not install before Phase 6)
+> ⛔ **Superseded.** Phase 6 is being built on Cloudflare Workers + D1 (the table
+> above), not Supabase + Vercel. See `docs/phase-6-online-plan.md` for the options
+> analysis. Do not install these.
+
 | Package | Version | Purpose |
 |---|---|---|
 | `@supabase/supabase-js` | ^2.43 | Supabase client |
@@ -314,6 +338,29 @@ server/
 > **DB location in production:** `DAYBOOK_HOME/shared/data/daybook.db` (set via
 > `DAYBOOK_HOME` env var). Dev fallback: `server/data/daybook.db`. e2e tests:
 > `DAYBOOK_DB_PATH=server/data/e2e.db`.
+
+### Phase 6 Worker (`worker/`) — in progress, coexists with `server/`
+```
+wrangler.toml                        ← Worker entry, D1 binding, [assets] SPA config
+worker/
+├── index.ts                         ← Hono app: /api logging, route mounts, 404 + error handler
+├── types.ts                         ← Env bindings (DB: D1Database, ASSETS: Fetcher) + AppEnv
+├── tsconfig.json                    ← Worker typecheck config (@cloudflare/workers-types)
+├── migrations/                      ← D1 migrations (Phase 2 — ported from server/migrations/)
+└── routes/
+    └── health.ts                    ← GET /api/health (Phase 1 proof of life)
+```
+> Route modules are ported from `server/routes/` one phase at a time — auth in
+> Phase 3, the rest in Phase 4. `server/` stays authoritative and untouched until
+> the Phase 7 cutover, so both trees are live in the repo meanwhile.
+>
+> Static assets are served by Cloudflare's asset pipeline without invoking the
+> Worker; `run_worker_first = ["/api/*"]` means only API paths run code. Single
+> origin is preserved, exactly as `server/index.ts:77-85` does today.
+>
+> Scripts: `npm run dev:worker` (build + `wrangler dev`), `npm run typecheck:worker`,
+> `npm run deploy:worker`. `wrangler dev` serves built `dist/`, not Vite — rebuild
+> to see client changes.
 
 ### Production deployment layout (`~/daybook/` by default)
 ```
@@ -1078,8 +1125,33 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  CSV transfer import + twin-linking (docs/csv-transfer-linking-plan.md)
-Phase status:   CSV transfer linking — IMPLEMENTED, IN REVIEW (2026-07-26).
+Current phase:  Phase 6 — Cloudflare Workers + D1 migration
+                (docs/option-2-workers-d1-plan.md). Owner chose Option 2 on
+                2026-07-27 over the spike doc's ambivalent §6.
+Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
+                found; S3 downgraded to low risk. See
+                docs/option-2-spike-findings.md.
+                Phase 1 (Scaffold) — IMPLEMENTED, IN REVIEW (2026-07-27).
+                PR feat/workers-scaffold: wrangler.toml (D1 + [assets] SPA
+                fallback + run_worker_first=/api/*), Hono app in worker/ with
+                request logging + {error} 404/500 handlers mirroring
+                server/index.ts, health route ported, worker tsconfig, CI
+                typecheck:worker + `wrangler deploy --dry-run` gate.
+                D1 database `daybook` created in APAC (id fdc50631-…) — empty;
+                schema lands in Phase 2.
+                Verified locally against `wrangler dev`: /api/health 200
+                {db:true}, SPA root 200, deep link /wallet/accounts falls back
+                to index.html, unmatched /api/* returns {"error":"not found"}
+                404, and the built SPA boots in-browser and reaches the Worker
+                on one origin. Client tsc + typecheck:worker clean.
+                NOT deployed — no public Worker exists yet; awaiting owner
+                approval before the first `wrangler deploy`.
+                Next: Phase 2 (D1 migrations + data layer).
+
+                ── Previous phase ──
+                CSV transfer linking — MERGED (PRs #60, #61).
+Phase status
+(CSV):          CSV transfer linking — IMPLEMENTED, IN REVIEW (2026-07-26).
                 Built as the planned 2-PR sequence:
                 • PR #60 feat/csv-transfer-import (Items 1+3): review-step
                   rows can import as Transfer→destination account; edit-form
@@ -1197,8 +1269,21 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
-                Then await owner direction. Remaining deferred backlog:
+Next task:      Review/merge PR feat/workers-scaffold (Phase 1), then Phase 2
+                — port the 9 server/migrations/*.sql to `wrangler d1
+                migrations` under worker/migrations/, port lib.ts updateRow()
+                and seed.ts to async, write the SQLite→D1 export/import
+                scripts. Phase 2 blocks on nothing.
+                Owner decisions still outstanding for later phases:
+                • M4 — Workers Free vs Paid. S1 measured a hard cliff at
+                  ~100k PBKDF2 iterations on Free vs OWASP's 600k. Staying
+                  Free means shipping ~50k, which is only safe if BOTH
+                  accounts use 24+ char password-manager passwords. Needed
+                  before Phase 3.
+                • M6 — new passwords for both accounts (bcrypt hashes can't
+                  be verified by PBKDF2). Needed at Phase 3.
+                • Approval before the first public `wrangler deploy`.
+                Deferred backlog (unchanged, lower priority):
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
                 docs/phase-5c-wallet-ux.md §D (each needs owner sign-off).
@@ -1252,7 +1337,9 @@ Next task:      Owner review/merge of PR #60 then PR #61 (stacked).
                 on the same disk as the DB) are both path-independent and
                 unblocked → PR3 access path. PR2 is the highest-value item.
 
-Blockers:       None. Nothing in progress.
+Blockers:       None for Phase 2. Phase 3 blocks on owner decisions M4
+                (Free vs Paid) and M6 (new passwords); first public deploy
+                blocks on owner approval.
 
 Notes:          - Session secret persists at DAYBOOK_HOME/shared/session-secret.
                 - Releases versioned via infra/daybook deploy [tag].
