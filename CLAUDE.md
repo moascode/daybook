@@ -358,7 +358,9 @@ worker/
     ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
     ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
-    └── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
+    ├── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
+    └── wallet.ts                    ← Part A only so far: /accounts, /accounts/:id/shares,
+                                        /categories, /tags (auth). Parts B/C pending.
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1245,9 +1247,23 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                   + tasks.ts (6).
                 • Increment 2 MERGED (PR #71): groups.ts (31) + async
                   port of lib/sharing.ts.
-                • Increment 3 IN REVIEW: PR feat/workers-routes-settlements
-                  — settlements.ts (21) WITH its Phase 5 atomicity work.
-                60 of 156 sites done; only wallet.ts (68) remains.
+                • Increment 3 MERGED (PR #72): settlements.ts (21) WITH
+                  its Phase 5 atomicity work.
+                • Increment 4 IN REVIEW: PR
+                  feat/workers-routes-wallet-accounts — wallet.ts PART A
+                  (accounts, balances, account shares, categories, tags).
+                wallet.ts is split three ways by concern, not line count:
+                  A accounts/shares/categories/tags — NO db.transaction()
+                  B transactions — list/export/import/CRUD/link-transfer/
+                    splits; 4 db.transaction() sites AND the S2 import N+1
+                  C budgets/recurring/goals — 1 db.transaction()
+                ~80 of 156 sites done.
+                Part A note: GET /accounts/:id/balance ran FOUR separate
+                sum queries via a named-@id helper; now one query with
+                four conditional sums (same arithmetic, 1 round trip
+                instead of 4). Verified equal to the batched
+                /accounts/balances route, which is the reason that
+                equivalence is asserted explicitly in the test.
                 SETTLEMENT CONCURRENCY DESIGN (the plan's "hard" site):
                 POST /settlements hoists every read, computes the whole
                 write set in JS, then issues ONE batch() whose share
