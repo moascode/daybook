@@ -6,6 +6,7 @@ import { auth, requireAuth } from './routes/auth.ts'
 import { tasks } from './routes/tasks.ts'
 import { settings } from './routes/settings.ts'
 import { groups } from './routes/groups.ts'
+import { settlements } from './routes/settlements.ts'
 
 // ─────────────────────────────────────────────────────────────
 // Daybook Worker — the Cloudflare-side replacement for server/index.ts.
@@ -65,6 +66,7 @@ protectedApi.use('*', requireAuth)
 protectedApi.route('/', tasks)
 protectedApi.route('/', settings)
 protectedApi.route('/', groups)
+protectedApi.route('/', settlements)
 
 app.route('/api', protectedApi)
 

@@ -81,23 +81,49 @@ export function newId(): string {
 }
 
 /**
- * Local calendar date (YYYY-MM-DD), matching the client's todayISO() — NOT UTC.
+ * The app's business timezone.
+ *
+ * On the Mac, server/lib.ts todayStr() used the host's local clock, which is
+ * Malaysian time — that is what B-11 means by "the user's today". A Worker's
+ * clock is **always UTC**, so porting that code literally would silently shift
+ * the date boundary by 8 hours: between 00:00 and 08:00 MYT every server-dated
+ * row would be stamped with yesterday. Pinning the zone preserves the original
+ * intent instead of inheriting the edge's timezone by accident.
+ */
+const TZ = 'Asia/Kuala_Lumpur'
+
+/** en-CA formats as YYYY-MM-DD, which is the shape the schema stores. */
+const dateFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+/**
+ * Today's calendar date (YYYY-MM-DD) in the business timezone — NOT UTC.
  * Settlements and other server-dated rows use this so they land on the user's
  * "today" rather than drifting a day in +8 timezones (B-11).
- *
- * ⚠️ On Workers this is **UTC**, not the owner's local time: the edge runtime's
- * timezone is always UTC, so getFullYear()/getMonth()/getDate() no longer read
- * as Malaysian local time the way they do on the Mac. For MYT (UTC+8) that
- * shifts the boundary — between 00:00 and 08:00 local, this returns yesterday.
- * Phase 4 must decide whether to pin an explicit offset; tracked so it is a
- * decision rather than a silent regression.
  */
 export function todayStr(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  return dateFmt.format(new Date())
+}
+
+/**
+ * Convert a SQLite `datetime('now')` value (always UTC, 'YYYY-MM-DD HH:MM:SS')
+ * to a calendar date in the business timezone.
+ *
+ * Needed to compare a stored timestamp against todayStr(). Slicing the first 10
+ * characters of the raw value compares a UTC date against an MYT date, which
+ * disagree for the first 8 hours of every MYT day.
+ */
+export function businessDateOf(sqlUtcDatetime: string): string {
+  // SQLite emits a space separator and no zone; make it explicit UTC so the
+  // engine does not parse it as local time.
+  const iso = `${sqlUtcDatetime.replace(' ', 'T')}Z`
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return sqlUtcDatetime.slice(0, 10)
+  return dateFmt.format(parsed)
 }
 
 /** D1 binds numbers/strings/null/ArrayBuffer — coerce the rest. */
