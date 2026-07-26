@@ -12,6 +12,12 @@ test.describe.configure({ mode: 'serial' })
 
 let page: Page
 
+/** Format a Date as YYYY-MM-DD in LOCAL time — toISOString() shifts the day
+ *  back in UTC+ timezones, which is not how the app computes month bounds. */
+function localISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /** The occasional filters (Type/Account/Category/Tags) live in the collapsible
  *  Filters section of the §6.4 bar — open it if it isn't already. */
 async function ensureFiltersOpen() {
@@ -370,8 +376,8 @@ test('date range "This month" is applied and shown as active', async () => {
   // Custom… reveals From/To without changing the range — values are the month bounds
   await page.getByTestId('filter-custom-range').click()
   const now = new Date()
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+  const firstDay = localISO(new Date(now.getFullYear(), now.getMonth(), 1))
+  const lastDay = localISO(new Date(now.getFullYear(), now.getMonth() + 1, 0))
   await expect(page.getByLabel('From')).toHaveValue(firstDay)
   await expect(page.getByLabel('To')).toHaveValue(lastDay)
 })
@@ -382,8 +388,8 @@ test('date range "Last month" sets the previous month bounds', async () => {
 
   await page.getByTestId('filter-custom-range').click()
   const now = new Date()
-  const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10)
-  const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10)
+  const firstDay = localISO(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  const lastDay = localISO(new Date(now.getFullYear(), now.getMonth(), 0))
   await expect(page.getByLabel('From')).toHaveValue(firstDay)
   await expect(page.getByLabel('To')).toHaveValue(lastDay)
 })
