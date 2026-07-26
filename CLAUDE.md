@@ -359,9 +359,10 @@ worker/
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
     ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
     ├── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
-    └── wallet.ts                    ← Parts A+C: /accounts, /accounts/:id/shares,
-                                        /categories, /tags, /budgets, /recurring-*,
-                                        /goals (auth). Part B (transactions) pending.
+    └── wallet.ts                    ← COMPLETE: /accounts, /accounts/:id/shares,
+                                        /categories, /tags, /transactions (list,
+                                        export, import, CRUD, link-transfer,
+                                        splits), /budgets, /recurring-*, /goals
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -1267,7 +1268,23 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                   B transactions — list/export/import/CRUD/link-transfer/
                     splits; 4 db.transaction() sites AND the S2 import N+1
                   C budgets/recurring/goals — 1 db.transaction()
-                ~105 of 156 sites done; only wallet.ts Part B remains.
+                • Increment 6: wallet.ts PART B (transactions) — list,
+                  export, check-duplicates, import, CRUD, link-transfer,
+                  splits, bulk splits, splits/status.
+                PHASE 4 COMPLETE — all 156 .prepare() sites ported.
+                PHASE 5 COMPLETE with it: every db.transaction() site is
+                converted. CSV import, link-transfer, replace-splits, bulk
+                splits and recurring-process are batch(); settlements:104
+                got compare-and-swap + compensating rollback (PR #72).
+                THREE N+1 PATTERNS FIXED (S2 found the first; the other
+                two were found by reading the loops during the port):
+                  1. import: canWriteAccount/ownsAllRefs per row →
+                     writableAccountIds()/ownedIdSet() read once. 300 rows
+                     now import in ONE batch.
+                  2. bulk splits: coGroupUserIds() per transaction → once
+                     (owner-only check already proved the set is identical).
+                  3. bulk splits: hasSettledShare() per transaction → one
+                     set-based query for the whole batch.
                 KNOWN PRE-EXISTING BUG (not introduced by the port, NOT
                 fixed here): ISO date validation accepts impossible
                 calendar dates. `Date.parse('2026-04-31')` does not return

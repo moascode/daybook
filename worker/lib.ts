@@ -30,6 +30,32 @@ export async function updateRow<T = Record<string, unknown>>(
   body: Record<string, unknown>,
   opts: { touchUpdatedAt?: boolean } = {},
 ): Promise<T | undefined> {
+  const row = await updateRowStmt(db, table, id, userId, columnMap, body, opts).first<T>()
+  return row ?? undefined
+}
+
+/**
+ * The prepared statement behind updateRow(), for callers that must commit the
+ * update **together with** other writes.
+ *
+ * `batch()` is the only atomic unit D1 offers, and it takes statements rather
+ * than promises — so anything that has to land in the same transaction as an
+ * update has to be able to get at the statement instead of an executed result.
+ * PATCH /transactions needs exactly this: rescaled split rows and the amount
+ * change must commit together, or the splits stop summing to the transaction.
+ *
+ * When no column in `columnMap` is present in `body` this is a plain SELECT, so
+ * the "nothing to update" case still returns the current row.
+ */
+export function updateRowStmt(
+  db: D1Database,
+  table: string,
+  id: string,
+  userId: string,
+  columnMap: Record<string, string>,
+  body: Record<string, unknown>,
+  opts: { touchUpdatedAt?: boolean } = {},
+): D1PreparedStatement {
   const sets: string[] = []
   // Bind order must match the order placeholders appear in the final SQL:
   // every SET value first, then the two WHERE values.
@@ -51,18 +77,12 @@ export async function updateRow<T = Record<string, unknown>>(
   }
 
   if (sets.length === 0) {
-    const row = await db
-      .prepare(`SELECT * FROM ${table} ${where}`)
-      .bind(id, userId)
-      .first<T>()
-    return row ?? undefined
+    return db.prepare(`SELECT * FROM ${table} ${where}`).bind(id, userId)
   }
 
-  const row = await db
+  return db
     .prepare(`UPDATE ${table} SET ${sets.join(', ')} ${where} RETURNING *`)
     .bind(...values, id, userId)
-    .first<T>()
-  return row ?? undefined
 }
 
 /**
