@@ -543,6 +543,9 @@ walletRouter.get('/transactions/export', (req, res) => {
 
 // Returns the subset of the given hashes that already exist for this user.
 // Batched to stay well under SQLite's bound-parameter limit on large imports.
+// A hash counts as a duplicate if it is on a live transaction OR was absorbed
+// into a merged transfer (absorbed_import_hashes) — otherwise re-importing a
+// statement would re-create the leg that link-as-transfer deleted.
 walletRouter.post('/transactions/check-duplicates', (req, res) => {
   const hashes: string[] = Array.isArray(req.body?.hashes) ? req.body.hashes : []
   if (hashes.length === 0) return res.json([])
@@ -554,9 +557,13 @@ walletRouter.post('/transactions/check-duplicates', (req, res) => {
     const batch = hashes.slice(i, i + BATCH)
     const placeholders = batch.map(() => '?').join(', ')
     const rows = db
-      .prepare(`SELECT DISTINCT import_hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})`)
-      .all(userId, ...batch) as { import_hash: string }[]
-    for (const r of rows) found.add(r.import_hash)
+      .prepare(
+        `SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})
+         UNION
+         SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${placeholders})`,
+      )
+      .all(userId, ...batch, userId, ...batch) as { hash: string }[]
+    for (const r of rows) found.add(r.hash)
   }
   res.json([...found])
 })
@@ -718,6 +725,94 @@ walletRouter.delete('/transactions/:id', (req, res) => {
   if (!canDel) return res.status(403).json({ error: 'no permission to delete this transaction' })
   db.prepare('DELETE FROM transactions WHERE id = ?').run(req.params.id)
   res.status(204).end()
+})
+
+// ── Link as transfer ──────────────────────────────────
+// Item 2 of docs/csv-transfer-linking-plan.md: merge two existing rows — the
+// two legs of one inter-account movement, typically imported from two bank
+// statements — into a single transfer. The money-out (expense) row survives
+// and becomes the transfer; the money-in (income) row is deleted after its
+// import_hash is preserved in absorbed_import_hashes so re-imports still
+// dedup. v1 deliberately rejects unequal amounts (fee/FX legs) rather than
+// guessing how to book the difference.
+walletRouter.post('/transactions/:id/link-transfer', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
+  const twinId = String(req.body?.twinId ?? '')
+  if (!twinId) return res.status(400).json({ error: 'twinId is required' })
+  if (twinId === req.params.id) {
+    return res.status(400).json({ error: 'cannot link a transaction to itself' })
+  }
+
+  type LinkRow = {
+    id: string; user_id: string; account_id: string
+    type: string; amount: number; import_hash: string
+  }
+  const load = db.prepare(
+    'SELECT id, user_id, account_id, type, amount, import_hash FROM transactions WHERE id = ?',
+  )
+  const first = load.get(req.params.id) as LinkRow | undefined
+  const second = load.get(twinId) as LinkRow | undefined
+  if (!first || !second) return res.status(404).json({ error: 'transaction not found' })
+
+  // The merge rewrites one account's ledger and deletes a row from the other,
+  // so the caller needs write permission on BOTH accounts.
+  for (const r of [first, second]) {
+    if (!canWriteAccount(db, userId, r.account_id)) {
+      return res.status(403).json({ error: 'no write permission on both accounts' })
+    }
+  }
+
+  if (first.type === 'transfer' || second.type === 'transfer') {
+    return res.status(400).json({ error: 'one of the transactions is already a transfer' })
+  }
+  if (first.account_id === second.account_id) {
+    return res.status(400).json({ error: 'both transactions are on the same account — a transfer needs two accounts' })
+  }
+  if (first.type === second.type) {
+    return res.status(400).json({ error: 'the two legs must be one money-out (expense) and one money-in (income)' })
+  }
+  if (Math.abs(first.amount - second.amount) > 0.01) {
+    return res.status(400).json({ error: 'amounts differ — only equal-amount legs can be linked as one transfer' })
+  }
+  const hasSplits = db
+    .prepare('SELECT 1 FROM transaction_splits WHERE transaction_id IN (?, ?) LIMIT 1')
+    .get(first.id, second.id)
+  if (hasSplits) {
+    return res.status(409).json({ error: 'a split transaction cannot be linked as a transfer' })
+  }
+  const inSettlement = db
+    .prepare(
+      'SELECT 1 FROM settlements WHERE from_transaction_id IN (?, ?) OR to_transaction_id IN (?, ?) LIMIT 1',
+    )
+    .get(first.id, second.id, first.id, second.id)
+  if (inSettlement) {
+    return res.status(409).json({ error: 'a settlement transaction cannot be linked as a transfer' })
+  }
+
+  const moneyOut = first.type === 'expense' ? first : second
+  const moneyIn = first.type === 'expense' ? second : first
+
+  const row = db.transaction(() => {
+    db.prepare(
+      `UPDATE transactions
+       SET type = 'transfer', destination_account_id = @destId,
+           category_id = NULL, tag = '[]', updated_at = datetime('now')
+       WHERE id = @id`,
+    ).run({ destId: moneyIn.account_id, id: moneyOut.id })
+    // Remember the absorbed leg's hash under ITS owner — that is the user whose
+    // re-import of the statement must still see it as a duplicate.
+    if (moneyIn.import_hash) {
+      db.prepare(
+        'INSERT OR REPLACE INTO absorbed_import_hashes (user_id, hash, transaction_id) VALUES (?, ?, ?)',
+      ).run(moneyIn.user_id, moneyIn.import_hash, moneyOut.id)
+    }
+    db.prepare('DELETE FROM transactions WHERE id = ?').run(moneyIn.id)
+    return db
+      .prepare('SELECT transactions.*, 0 AS has_splits FROM transactions WHERE id = ?')
+      .get(moneyOut.id)
+  })()
+  res.json(row)
 })
 
 // ── Transaction splits ────────────────────────────────

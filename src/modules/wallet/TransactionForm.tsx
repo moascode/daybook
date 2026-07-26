@@ -17,6 +17,8 @@ interface TransactionFormProps {
   defaultAccountId?: string | null
   availableTags?: string[]
   onSubmit: (data: TransactionFormData) => void | Promise<void>
+  /** Edit mode only: opens the link-as-transfer picker for this transaction. */
+  onLinkTransfer?: () => void
 }
 
 export interface TransactionFormData {
@@ -66,6 +68,7 @@ export function TransactionForm({
   defaultAccountId,
   availableTags,
   onSubmit,
+  onLinkTransfer,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
     getInitialState(transaction, defaultAccountId, accounts)
@@ -207,9 +210,21 @@ export function TransactionForm({
               point at the fix without changing any behaviour. */}
           {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
             <p className="text-xs text-gray-400" data-testid="transfer-hint">
-              Moved money between your own accounts? Switch Type to Transfer to
-              keep it out of income and expense totals.
+              Moved money between your own accounts? Switch Type to Transfer
+              {onLinkTransfer
+                ? ', or use "Link as transfer" to pair it with the other side.'
+                : ' to keep it out of income and expense totals.'}
             </p>
+          )}
+          {isEdit && form.type !== 'transfer' && onLinkTransfer && (
+            <button
+              type="button"
+              onClick={onLinkTransfer}
+              data-testid="link-transfer-open"
+              className="self-start text-xs font-medium text-brand-600 hover:underline"
+            >
+              Link as transfer…
+            </button>
           )}
         </div>
 
