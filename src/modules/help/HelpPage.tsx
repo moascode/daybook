@@ -11,6 +11,7 @@ import {
   Keyboard,
   Rocket,
   ArrowRight,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -150,6 +151,40 @@ const SECTIONS: Section[] = [
           same statement won&apos;t create doubles.
         </P>
         <DeepLink to="/wallet/import" label="Open CSV Import" />
+      </div>
+    ),
+  },
+  {
+    id: 'transfers',
+    title: 'Credit Cards & Transfers',
+    icon: <ArrowRightLeft className="h-4 w-4" />,
+    body: (
+      <div className="space-y-3">
+        <P>
+          A payment between your own accounts — e.g. paying a credit card from your bank — is{' '}
+          <strong>one transfer</strong>, not an expense plus an income. Record the card{' '}
+          <em>purchases</em> as expenses on the card account; record the <em>payment</em> as a
+          transfer from the bank to the card. Transfers are excluded from income and expense
+          totals, so nothing is double-counted.
+        </P>
+        <UL>
+          <li>
+            <strong>Import as transfer</strong> — in the CSV review step, set a row&apos;s Type to{' '}
+            <em>Transfer</em> and pick the destination account. The row imports as a single
+            transfer instead of an expense or income.
+          </li>
+          <li>
+            <strong>Link as transfer</strong> — already imported both sides? Edit either row and
+            use <em>Link as transfer</em>: Daybook finds the matching opposite leg (same amount,
+            another account, within a few days) and merges the two rows into one transfer.
+            Re-importing either statement later still detects the merged rows as duplicates.
+          </li>
+        </UL>
+        <P>
+          If the two legs differ in amount (a fee or FX spread), they can&apos;t be linked as a
+          single transfer — record them separately instead.
+        </P>
+        <DeepLink to="/wallet" label="Open Wallet" />
       </div>
     ),
   },

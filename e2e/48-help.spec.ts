@@ -23,6 +23,7 @@ test.describe('Help & Guide', () => {
       'Tasks',
       'Accounts & Transactions',
       'CSV Import',
+      'Credit Cards & Transfers',
       'Planning & Analysis',
       'Sharing (Households)',
       'Settings',
