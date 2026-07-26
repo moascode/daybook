@@ -346,10 +346,34 @@ worker/
 ├── index.ts                         ← Hono app: /api logging, route mounts, 404 + error handler
 ├── types.ts                         ← Env bindings (DB: D1Database, ASSETS: Fetcher) + AppEnv
 ├── tsconfig.json                    ← Worker typecheck config (@cloudflare/workers-types)
-├── migrations/                      ← D1 migrations (Phase 2 — ported from server/migrations/)
+├── lib.ts                           ← async port of server/lib.ts (+ ownedIdSet for the S2 N+1 fix)
+├── seed.ts                          ← async port of server/seed.ts (db.transaction → batch)
+├── migrations/                      ← D1 migrations, ported from server/migrations/ (see its README)
 └── routes/
     └── health.ts                    ← GET /api/health (Phase 1 proof of life)
+
+scripts/
+├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
+├── export-to-d1.mjs                 ← SQLite → SQL files for `wrangler d1 execute --file` (--users allowlist)
+├── verify-import.mjs                ← per-table row counts, D1 vs the export manifest
+└── analyse-users.mjs                ← read-only census: real accounts vs e2e residue
 ```
+> **D1 gotchas found the hard way in Phase 2** — all three are silent-wrong or
+> confusing-error traps, not documented limits:
+> - **No named parameters.** better-sqlite3 binds `@key` from an object; D1's
+>   `.bind()` is positional only. This is why `worker/lib.ts` `updateRow()` builds
+>   an ordered argument list rather than a params object.
+> - **D1 strips SQL comments** from the DDL stored in `sqlite_master`; SQLite keeps
+>   them. Any schema comparison must strip comments or every commented table
+>   reports as drift.
+> - **Low `SQLITE_MAX_COMPOUND_SELECT`.** An 18-term `UNION ALL` is rejected with
+>   "too many terms in compound SELECT". Use scalar subqueries to project many
+>   aggregates in one query.
+>
+> The export/analysis scripts open the source database **read-only and snapshot it
+> with `VACUUM INTO`** before reading, so they cannot disturb a running server or
+> produce a torn read from an active WAL. Never point them at the live file any
+> other way.
 > Route modules are ported from `server/routes/` one phase at a time — auth in
 > Phase 3, the rest in Phase 4. `server/` stays authoritative and untouched until
 > the Phase 7 cutover, so both trees are live in the repo meanwhile.
@@ -1144,9 +1168,32 @@ Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
                 to index.html, unmatched /api/* returns {"error":"not found"}
                 404, and the built SPA boots in-browser and reaches the Worker
                 on one origin. Client tsc + typecheck:worker clean.
-                NOT deployed — no public Worker exists yet; awaiting owner
-                approval before the first `wrangler deploy`.
-                Next: Phase 2 (D1 migrations + data layer).
+                DEPLOYED 2026-07-27 (owner-approved) to
+                https://daybook.moascode.workers.dev — verified live: health
+                200 {db:true}, SPA root, deep-link fallback, {error} 404.
+                ⚠️ That URL is PUBLIC. It is currently an empty shell (no auth
+                routes, no data) and must not receive real data until the
+                Phase 3/4 hardening lands.
+                Phase 2 (Data layer) — IMPLEMENTED, IN REVIEW (2026-07-27).
+                PR feat/d1-migrations-and-data: all 9 migrations ported to
+                worker/migrations/ and applied to BOTH local and remote D1;
+                worker/lib.ts + worker/seed.ts ported to async; four scripts
+                (schema-diff, export-to-d1, verify-import, analyse-users).
+                Migrations are RENUMBERED — server/ has two files numbered
+                0003 and wrangler rejects duplicates; relative order is
+                preserved and the mapping is in worker/migrations/README.md.
+                Verified: schema-diff clean vs local AND remote D1 (27
+                objects); full round trip of real data into a clean local D1
+                — 174 rows across 18 tables, row counts match and
+                `PRAGMA foreign_key_check` empty; all 4 typechecks + lint
+                clean; e2e smoke 53/53. CI now gates on schema parity.
+                ⚠️ FINDING: the production DB holds 277 users — 273 are
+                `e2e_*` accounts created 2026-05-31 when the e2e suite was
+                run against production. Only kakon/tumpa/user-a/user-b are
+                human. Owner decided (2026-07-27) to migrate ONLY the real
+                users; `--users kakon,tumpa` cuts the export from 5,828 rows
+                to 174. The e2e residue is NOT to be carried to D1.
+                Next: Phase 3 (auth + sessions) — blocked on M4 and M6.
 
                 ── Previous phase ──
                 CSV transfer linking — MERGED (PRs #60, #61).
@@ -1269,20 +1316,23 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      Review/merge PR feat/workers-scaffold (Phase 1), then Phase 2
-                — port the 9 server/migrations/*.sql to `wrangler d1
-                migrations` under worker/migrations/, port lib.ts updateRow()
-                and seed.ts to async, write the SQLite→D1 export/import
-                scripts. Phase 2 blocks on nothing.
-                Owner decisions still outstanding for later phases:
-                • M4 — Workers Free vs Paid. S1 measured a hard cliff at
-                  ~100k PBKDF2 iterations on Free vs OWASP's 600k. Staying
-                  Free means shipping ~50k, which is only safe if BOTH
-                  accounts use 24+ char password-manager passwords. Needed
-                  before Phase 3.
-                • M6 — new passwords for both accounts (bcrypt hashes can't
-                  be verified by PBKDF2). Needed at Phase 3.
-                • Approval before the first public `wrangler deploy`.
+Next task:      Review/merge PR feat/d1-migrations-and-data (Phase 2), then
+                Phase 3 (auth + sessions): PBKDF2 via Web Crypto, D1-backed
+                session store with an HMAC-signed cookie, session
+                regeneration on login, DAYBOOK_ALLOW_SIGNUP, min length 12,
+                secure headers.
+                ⚠️ Phase 3 is BLOCKED on an unresolved owner decision:
+                M4 was answered "Workers Free" (→ ~50k PBKDF2 iterations,
+                1/12 of OWASP's 600k), and M6 was answered with the password
+                "Welcome@daybook28" for BOTH accounts. Those two answers are
+                mutually incompatible: docs/option-2-spike-findings.md §S1
+                states the 50k figure is acceptable ONLY under 24+ char
+                password-manager passwords, and that a human-memorable
+                password makes it "a genuine weakness". A dictionary word +
+                symbol + 2-digit year is a top-tier cracking pattern, and the
+                deployment is publicly reachable. RAISED with the owner
+                2026-07-27; do not implement the KDF until resolved by
+                either (a) generated passwords, or (b) Workers Paid.
                 Deferred backlog (unchanged, lower priority):
                 docs/deferred-items-plan.md ready-to-build waves F1–F3 (no
                 sign-off needed) plus the parked D-items/C9 in
