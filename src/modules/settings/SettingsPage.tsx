@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Palette, Globe, LogOut, User } from 'lucide-react'
+import { Palette, Globe, LogOut, User, KeyRound } from 'lucide-react'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/utils'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
+import { Input } from '@/components/ui/Input'
 
 export function SettingsPage() {
   const { theme, setTheme } = useAppStore()
@@ -21,6 +22,44 @@ export function SettingsPage() {
   }
 
   const [loading, setLoading] = useState(true)
+
+  // Change password
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwError, setPwError] = useState<string | null>(null)
+
+  const MIN_PASSWORD = 12
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setPwError(null)
+
+    // Checked client-side too so the mismatch case never leaves the browser —
+    // the server has no way to tell "confirm" apart from a typo in "new".
+    if (newPassword !== confirmPassword) {
+      setPwError('The new passwords do not match.')
+      return
+    }
+    if (newPassword.length < MIN_PASSWORD) {
+      setPwError(`New password must be at least ${MIN_PASSWORD} characters.`)
+      return
+    }
+
+    setPwSaving(true)
+    try {
+      await api.post('/auth/change-password', { currentPassword, newPassword })
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      addToast({ message: 'Password changed. Other devices have been signed out.' })
+    } catch (err: unknown) {
+      setPwError(errorMessage(err, 'Could not change your password — please try again.'))
+    } finally {
+      setPwSaving(false)
+    }
+  }
 
   useEffect(() => {
     api
@@ -75,6 +114,55 @@ export function SettingsPage() {
               Sign out
             </Button>
           </div>
+        </section>
+
+        {/* Change password */}
+        <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-gray-400" />
+            <h3 className="text-sm font-semibold text-gray-900">Change password</h3>
+          </div>
+          <form className="space-y-3" onSubmit={handleChangePassword}>
+            <Input
+              label="Current password"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              data-testid="current-password"
+              required
+            />
+            <Input
+              label="New password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              data-testid="new-password"
+              required
+            />
+            <Input
+              label="Confirm new password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              data-testid="confirm-password"
+              required
+            />
+            <p className="text-xs text-gray-500">
+              At least {MIN_PASSWORD} characters. A long, randomly generated password is
+              strongly recommended. Changing it signs out your other devices.
+            </p>
+            {pwError && (
+              <p className="text-xs text-red-600" data-testid="password-error">
+                {pwError}
+              </p>
+            )}
+            <Button type="submit" disabled={pwSaving} data-testid="change-password-submit">
+              {pwSaving ? 'Changing…' : 'Change password'}
+            </Button>
+          </form>
         </section>
 
         {/* Preferences section */}

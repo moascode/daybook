@@ -379,8 +379,11 @@ scripts/
 > secret plus `DAYBOOK_ALLOW_SIGNUP=true` for the e2e suite; **production keeps
 > signup off**, which also makes the 409 user-enumeration oracle unreachable.
 >
-> **The app has no change-password endpoint** (it never did). `scripts/set-password.mjs`
-> is the only way to set a password on D1 — needed at cutover because migrated
+> **Change password**: `POST /api/auth/change-password` (Settings → Change
+> password) requires the current password, enforces MIN_PASSWORD, and DELETES
+> every session for that user before issuing a fresh one — so a stolen cookie
+> dies with the password change. `scripts/set-password.mjs` remains only for the
+> bootstrap case: setting the FIRST password on a new backend — needed at cutover because migrated
 > bcrypt hashes cannot be verified by PBKDF2 (different algorithms, by design).
 > It reads the password from a hidden prompt and emits `UPDATE` SQL; the password
 > is never an argv value and never written to disk.

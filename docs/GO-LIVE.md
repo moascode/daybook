@@ -44,6 +44,15 @@ npx wrangler d1 execute daybook --remote --file /tmp/pw.sql && rm /tmp/pw.sql
 
 Repeat for `tumpa`. Then log in at the URL above.
 
+### After the first login you can change it in the app
+
+Settings → **Change password** now exists (it did not before). It asks for your
+current password, requires 12+ characters, and **signs out every other device** —
+which is the point of changing a password after a suspected compromise.
+
+`set-password.mjs` remains for the bootstrap case only: the very first password
+on a new backend, when there is no working credential to authenticate the change.
+
 ### About the password itself
 
 You said you'd start with `Welcome@daybook28` and rotate to a generated one
