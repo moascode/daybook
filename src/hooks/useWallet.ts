@@ -48,6 +48,8 @@ interface TransactionRow {
   created_at: string
   updated_at: string
   has_splits?: number
+  effective_amount?: number
+  is_reimbursement?: number
 }
 
 interface CategoryRow {
@@ -106,7 +108,20 @@ function mapTransaction(row: TransactionRow): Transaction {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     hasSplits: !!row.has_splits,
+    // Writes (POST/PATCH) echo the row back without the computed column, so fall
+    // back to the ledger amount rather than 0 — a 0 here would blank the totals
+    // until the next list refetch.
+    effectiveAmount: row.effective_amount ?? row.amount,
+    isReimbursement: !!row.is_reimbursement,
   }
+}
+
+/**
+ * Income/expense contribution of a transaction for the viewer.
+ * Reimbursement legs contribute nothing: they move balances only (§3).
+ */
+export function countableAmount(t: Transaction): number {
+  return t.isReimbursement ? 0 : t.effectiveAmount
 }
 
 function mapCategory(row: CategoryRow): Category {

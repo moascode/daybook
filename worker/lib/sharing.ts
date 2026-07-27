@@ -97,9 +97,43 @@ export async function writableAccountIds(db: D1Database, userId: string): Promis
 }
 
 /**
+ * SQL fragment projecting the amount a transaction actually costs the viewer
+ * (docs/split-settlement-plan.md §3). Takes ONE bind — the viewer's user id —
+ * whose placeholder appears wherever this fragment is interpolated, so callers
+ * must bind it in that position.
+ *
+ *   owner:     amount − everything other people have actually settled on it
+ *   non-owner: 0
+ *
+ * The owner's figure drops only as money comes back, which is the owner's rule:
+ * the full amount sits on the payer until it is settled (decision §9.1), not
+ * from the moment of the split.
+ *
+ * Non-owners get 0 rather than their share_amount on purpose. Their expense is
+ * the settlement entry they book when they pay, not a slice of someone else's
+ * row — counting both would put the same money in the household total twice.
+ *
+ * ⚠️ This is deliberately NOT effectiveAmount() below. That helper returns the
+ * FULL amount for a transaction the caller neither owns nor has a split on,
+ * which was harmless while `all` excluded such rows and became a real
+ * mis-attribution the moment W1 widened it. Do not swap one for the other.
+ */
+export const EFFECTIVE_AMOUNT_SQL = (alias: string) => `
+  CASE WHEN ${alias}.user_id = ?
+       THEN ${alias}.amount - COALESCE((
+              SELECT SUM(ts.settled_amount) FROM transaction_splits ts
+              WHERE ts.transaction_id = ${alias}.id AND ts.user_id != ${alias}.user_id
+            ), 0)
+       ELSE 0 END`
+
+/**
  * For a given transaction, the amount attributable to this user.
  * No split rows → the full transaction amount. Split rows exist → this user's
  * share_amount, or 0 if they are not a participant.
+ *
+ * ⚠️ Used only by the group-balance path, which depends on this exact shape.
+ * For "what did this transaction cost me", use EFFECTIVE_AMOUNT_SQL above —
+ * see the warning there.
  */
 export async function effectiveAmount(
   db: D1Database,

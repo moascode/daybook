@@ -12,6 +12,7 @@ import {
 import {
   canWriteAccount,
   coGroupUserIds,
+  EFFECTIVE_AMOUNT_SQL,
   isGroupMember,
   visibleAccountIds,
   writableAccountIds,
@@ -669,13 +670,17 @@ wallet.get('/transactions', async (c) => {
   applyFilters(c, 'transactions', conditions, binds)
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+  // effective_amount is bound BEFORE the WHERE binds because its placeholder
+  // appears first in the statement. Getting this order wrong silently attributes
+  // one user's amounts to another rather than erroring.
   const { results } = await c.env.DB.prepare(
     `SELECT transactions.*,
        CASE WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = transactions.id)
-            THEN 1 ELSE 0 END AS has_splits
+            THEN 1 ELSE 0 END AS has_splits,
+       ${EFFECTIVE_AMOUNT_SQL('transactions')} AS effective_amount
      FROM transactions ${where} ORDER BY date DESC, created_at DESC`,
   )
-    .bind(...binds)
+    .bind(userId, ...binds)
     .all()
 
   return c.json(results)
@@ -704,8 +709,10 @@ wallet.get('/transactions/export', async (c) => {
     }
   }
 
+  // effective_amount's bind leads, matching its placeholder position (§5.3).
   const { results } = await c.env.DB.prepare(
     `SELECT t.date, t.merchant, t.description, t.amount, t.type,
+            ${EFFECTIVE_AMOUNT_SQL('t')} AS effective_amount, t.is_reimbursement,
             c.name AS category_name, a.name AS account_name, t.tag
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
@@ -713,7 +720,7 @@ wallet.get('/transactions/export', async (c) => {
      WHERE ${conditions.join(' AND ')}
      ORDER BY t.date DESC, t.created_at DESC`,
   )
-    .bind(...binds)
+    .bind(userId, ...binds)
     .all()
 
   return c.json(results)
