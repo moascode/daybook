@@ -578,15 +578,28 @@ async function viewCondition(
     binds.push(userId, userId)
     return `${alias}.user_id = ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != ?)`
   }
-  // All visible: own transactions + transactions on shared accounts.
+  // All visible: own transactions + transactions on shared accounts + anything
+  // split with me.
+  //
+  // §5.1: the split branch is new. "All" previously covered own rows and rows on
+  // accounts shared into a group, which sounds complete but is not — a split
+  // grants no account-level visibility. With account_shares empty (the live
+  // state) those two sets are disjoint from the recipient's splits, so "All"
+  // showed a recipient nothing at any date range while "Shared with me" showed
+  // the rows. The pills read as nested and were not.
+  //
+  // W3 will narrow this to non-rejected splits once transaction_splits.status
+  // exists; until then every split row counts, which is the same thing.
   const visible = await visibleAccountIds(db, userId)
+  const splitClause = `EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ?)`
   if (visible.length === 0) {
-    binds.push(userId)
-    return `${alias}.user_id = ?`
+    binds.push(userId, userId)
+    return `(${alias}.user_id = ? OR ${splitClause})`
   }
   const placeholders = visible.map(() => '?').join(', ')
-  binds.push(userId, ...visible, ...visible)
-  return `(${alias}.user_id = ? OR ${alias}.account_id IN (${placeholders}) OR ${alias}.destination_account_id IN (${placeholders}))`
+  // Bind order tracks placeholder order: own, account_id, destination, split.
+  binds.push(userId, ...visible, ...visible, userId)
+  return `(${alias}.user_id = ? OR ${alias}.account_id IN (${placeholders}) OR ${alias}.destination_account_id IN (${placeholders}) OR ${splitClause})`
 }
 
 /** Tag values from a repeatable `tags` query param. */

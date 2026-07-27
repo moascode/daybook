@@ -380,10 +380,11 @@ export function WalletPage() {
     return chips
   }, [filters, accounts, categories, setFilters])
 
-  // An empty list is ambiguous: no data, or data outside the active date range?
-  // The range is the filter most likely to be responsible, because it is the one
-  // that is on by default. Name it (and offer the escape) only when it is
-  // actually narrowing — null under "All time" leaves the generic message.
+  // An empty list is ambiguous: no data, or data hidden by a narrowing filter?
+  // Two filters are on by default or arrive via deep link and are therefore the
+  // usual culprits — the date range and the sharing view. Name whichever are
+  // actually narrowing and offer the matching escape; naming only the date range
+  // actively misleads when the view is what is hiding the rows.
   const dateRangeLabel = useMemo(() => {
     const preset = dateRangePreset({ dateFrom: filters.dateFrom, dateTo: filters.dateTo })
     if (preset === 'all-time') return null
@@ -391,6 +392,13 @@ export function WalletPage() {
     if (preset === 'last-month') return 'last month'
     return `${filters.dateFrom || '…'} to ${filters.dateTo || '…'}`
   }, [filters.dateFrom, filters.dateTo])
+
+  const viewLabel = useMemo(() => {
+    if (filters.view === 'all') return null
+    if (filters.view === 'shared-with-me') return 'Shared with me'
+    if (filters.view === 'shared-with-others') return 'Shared with others'
+    return 'Mine'
+  }, [filters.view])
 
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
@@ -688,19 +696,40 @@ export function WalletPage() {
           />
         ) : transactions.length === 0 ? (
           <div className="py-16 text-center text-sm text-gray-400" data-testid="transactions-empty">
-            {dateRangeLabel ? (
+            {dateRangeLabel || viewLabel ? (
               <>
                 <p>
-                  No transactions in <span className="font-medium text-gray-500">{dateRangeLabel}</span>.
+                  No transactions
+                  {viewLabel && (
+                    <> under <span className="font-medium text-gray-500">{viewLabel}</span></>
+                  )}
+                  {dateRangeLabel && (
+                    <> in <span className="font-medium text-gray-500">{dateRangeLabel}</span></>
+                  )}
+                  .
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setFilters({ dateFrom: '', dateTo: '' })}
-                  data-testid="empty-show-all-time"
-                  className="mt-2 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:underline"
-                >
-                  Search all time instead
-                </button>
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-1">
+                  {dateRangeLabel && (
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ dateFrom: '', dateTo: '' })}
+                      data-testid="empty-show-all-time"
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:underline"
+                    >
+                      Search all time instead
+                    </button>
+                  )}
+                  {viewLabel && (
+                    <button
+                      type="button"
+                      onClick={() => setFilters({ view: 'all' })}
+                      data-testid="empty-show-all-views"
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:underline"
+                    >
+                      Show all transactions
+                    </button>
+                  )}
+                </div>
               </>
             ) : (
               'No transactions match your current filters.'
