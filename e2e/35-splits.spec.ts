@@ -208,4 +208,69 @@ test.describe('35 — Transaction splits', () => {
 
     await ctx.close()
   })
+
+  // Regression: a split older than the current month was invisible to the
+  // recipient. Balances are all-time, but Transactions defaults to this month,
+  // and the Shared page's drill-in link did not widen the range — so the
+  // recipient saw "you owe RM x" and then an empty list. Every other test in
+  // this file dates its transaction today, which is why none of them caught it.
+  test('A split from a prior month is visible to the recipient', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_oldsplit_${ts}`
+    const bobName = `bob_oldsplit_${ts}`
+    const API = 'http://localhost:5173/api'
+
+    await alicePage.request.post(`${API}/auth/signup`, { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post(`${API}/auth/signup`, { data: { username: bobName, password: 'test-password' } })
+    const bob = await bobPage.request.get(`${API}/auth/me`).then((r) => r.json()) as { user: { id: string } }
+
+    const group = await alicePage.request.post(`${API}/groups`, { data: { name: 'OldSplitGroup' } })
+      .then((r) => r.json()) as { id: string }
+    await alicePage.request.post(`${API}/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get(`${API}/invites`).then((r) => r.json()) as { id: string }[]
+    await bobPage.request.post(`${API}/invites/${invites[0].id}/accept`)
+
+    const acct = await alicePage.request.post(`${API}/accounts`, {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+
+    // Two months back, built from local date parts (never toISOString on a
+    // Date carrying a time — that shifts the day on UTC+ machines, the bug
+    // already fixed in specs 03 and 37).
+    const now = new Date()
+    const prior = new Date(now.getFullYear(), now.getMonth() - 2, 15)
+    const priorDate = `${prior.getFullYear()}-${String(prior.getMonth() + 1).padStart(2, '0')}-15`
+
+    const txn = await alicePage.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: priorDate, merchant: 'OldGroceries', amount: 120, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+    const split = await alicePage.request.post(`${API}/transactions/${txn.id}/split`, {
+      data: { recipientId: bob.user.id, splitMode: 'none' },
+    })
+    expect(split.status()).toBe(201)
+
+    // Bob follows the Shared page's drill-in link — the exact reported path.
+    await bobPage.goto('/wallet/shared')
+    await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // The balance is all-time, so it shows regardless of the transaction's date
+    // — it showing while the list below was empty is what made the bug confusing.
+    await expect(bobPage.getByTestId('shared-headline')).toContainText('120.00', { timeout: 10_000 })
+    await bobPage.getByRole('link', { name: /View split transactions/ }).click()
+    await expect(bobPage.getByText('OldGroceries')).toBeVisible({ timeout: 10_000 })
+
+    // And the escape hatch when the range is still narrowed: the empty state
+    // names the range and offers to widen it, rather than implying no data.
+    await bobPage.goto('/wallet?view=shared-with-me')
+    await expect(bobPage.getByTestId('transactions-empty')).toBeVisible({ timeout: 10_000 })
+    await expect(bobPage.getByTestId('transactions-empty')).toContainText('this month')
+    await bobPage.getByTestId('empty-show-all-time').click()
+    await expect(bobPage.getByText('OldGroceries')).toBeVisible({ timeout: 10_000 })
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
 })

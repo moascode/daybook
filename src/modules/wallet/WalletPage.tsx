@@ -134,6 +134,12 @@ export function WalletPage() {
     if (viewParam === 'all' || viewParam === 'mine' || viewParam === 'shared-with-me' || viewParam === 'shared-with-others') {
       setFilters({ view: viewParam })
     }
+    // ?range=all widens to all time. A caller that links to a specific set of
+    // rows cannot know which month they fall in, and the default current-month
+    // range would silently hide them.
+    if (searchParams.get('range') === 'all') {
+      setFilters({ dateFrom: '', dateTo: '' })
+    }
   }, [searchParams, setFilters])
 
   useEffect(() => {
@@ -373,6 +379,18 @@ export function WalletPage() {
     }
     return chips
   }, [filters, accounts, categories, setFilters])
+
+  // An empty list is ambiguous: no data, or data outside the active date range?
+  // The range is the filter most likely to be responsible, because it is the one
+  // that is on by default. Name it (and offer the escape) only when it is
+  // actually narrowing — null under "All time" leaves the generic message.
+  const dateRangeLabel = useMemo(() => {
+    const preset = dateRangePreset({ dateFrom: filters.dateFrom, dateTo: filters.dateTo })
+    if (preset === 'all-time') return null
+    if (preset === 'this-month') return 'this month'
+    if (preset === 'last-month') return 'last month'
+    return `${filters.dateFrom || '…'} to ${filters.dateTo || '…'}`
+  }, [filters.dateFrom, filters.dateTo])
 
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
@@ -653,7 +671,11 @@ export function WalletPage() {
 
       {/* Transaction list */}
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-        {transactions.length === 0 && accounts.length === 0 ? (
+        {/* "Create an account first" is onboarding advice, and it is only true
+            for a user who has nothing at all. A group member with no account of
+            their own still has other people's splits to read, so for them the
+            date-range hint below is the useful message. */}
+        {transactions.length === 0 && accounts.length === 0 && !hasGroups ? (
           <EmptyState
             icon={<Wallet className="h-10 w-10" />}
             title="No transactions yet"
@@ -665,8 +687,24 @@ export function WalletPage() {
             }
           />
         ) : transactions.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-400">
-            No transactions match your current filters.
+          <div className="py-16 text-center text-sm text-gray-400" data-testid="transactions-empty">
+            {dateRangeLabel ? (
+              <>
+                <p>
+                  No transactions in <span className="font-medium text-gray-500">{dateRangeLabel}</span>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setFilters({ dateFrom: '', dateTo: '' })}
+                  data-testid="empty-show-all-time"
+                  className="mt-2 rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:underline"
+                >
+                  Search all time instead
+                </button>
+              </>
+            ) : (
+              'No transactions match your current filters.'
+            )}
           </div>
         ) : (
           <TransactionList
