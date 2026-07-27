@@ -57,6 +57,15 @@ To confirm it took, this should show `pbkdf2` rather than `$2b$10$`:
 npx wrangler d1 execute daybook --remote --command "SELECT username, substr(password_hash,1,7) AS algo FROM users"
 ```
 
+### After the first login you can change it in the app
+
+Settings → **Change password** now exists (it did not before). It asks for your
+current password, requires 12+ characters, and **signs out every other device** —
+which is the point of changing a password after a suspected compromise.
+
+`set-password.mjs` remains for the bootstrap case only: the very first password
+on a new backend, when there is no working credential to authenticate the change.
+
 ### About the password itself
 
 You said you'd start with `Welcome@daybook28` and rotate to a generated one

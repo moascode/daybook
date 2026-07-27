@@ -138,6 +138,61 @@ auth.get('/auth/me', async (c) => {
   return c.json({ user })
 })
 
+// POST /api/auth/change-password — authenticated password change.
+//
+// Requires the current password even though the caller already holds a valid
+// session: a session cookie proves "this browser was logged in at some point",
+// not "the person at the keyboard knows the password". Without the re-check, an
+// unattended machine or a stolen cookie is enough to lock the real owner out.
+auth.post('/auth/change-password', async (c) => {
+  const userId = await readSession(c)
+  if (!userId) return c.json({ error: 'not authenticated' }, 401)
+
+  const body = await c.req.json().catch(() => ({}) as Record<string, unknown>)
+  const currentPassword = String(body?.currentPassword ?? '')
+  const newPassword = String(body?.newPassword ?? '')
+
+  if (!currentPassword || !newPassword) {
+    return c.json({ error: 'currentPassword and newPassword are required' }, 400)
+  }
+  if (newPassword.length < MIN_PASSWORD || newPassword.length > MAX_PASSWORD) {
+    return c.json({ error: `password must be ${MIN_PASSWORD}-${MAX_PASSWORD} characters` }, 400)
+  }
+  if (newPassword === currentPassword) {
+    return c.json({ error: 'the new password must be different from the current one' }, 400)
+  }
+
+  const user = await c.env.DB.prepare('SELECT id, username, password_hash FROM users WHERE id = ?')
+    .bind(userId)
+    .first<UserRow>()
+  if (!user) return c.json({ error: 'not authenticated' }, 401)
+
+  if (!(await verifyPassword(currentPassword, user.password_hash))) {
+    return c.json({ error: 'current password is incorrect' }, 403)
+  }
+
+  const hash = await hashPassword(newPassword)
+
+  // Changing a password must invalidate every OTHER session. That is the whole
+  // point of changing it after a suspected compromise — otherwise the attacker's
+  // existing cookie keeps working and the change accomplishes nothing.
+  //
+  // Sessions are stored as JSON, so they are matched on the extracted userId.
+  // The caller's own session goes too; createSession() below immediately issues
+  // a fresh one, so they stay logged in on this device only.
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+      .bind(hash, userId),
+    c.env.DB
+      .prepare("DELETE FROM sessions WHERE json_extract(sess, '$.userId') = ?")
+      .bind(userId),
+  ])
+
+  await createSession(c, userId)
+  return c.json({ ok: true })
+})
+
 /**
  * Guard for every non-auth API route. Stores the user id on the context so
  * downstream handlers read it with `c.get('userId')` instead of re-querying —
