@@ -33,12 +33,19 @@ const SALT_BYTES = 16
 const MIN_PASSWORD = 12 // matches MIN_PASSWORD in worker/routes/auth.ts
 
 const args = process.argv.slice(2)
+const useStdin = args.includes('--stdin')
 const outIdx = args.indexOf('--out')
 const outFile = outIdx === -1 ? undefined : args[outIdx + 1]
 const username = args.filter((a, i) => i !== outIdx && i !== outIdx + 1)[0]?.trim().toLowerCase()
 
-if (!username || (outIdx !== -1 && !outFile)) {
-  console.error('usage: node scripts/set-password.mjs <username> --out <file.sql>')
+if (!username || !useStdin || (outIdx !== -1 && !outFile)) {
+  console.error('usage: <password source> | node scripts/set-password.mjs <username> --stdin --out <file.sql>')
+  console.error('')
+  console.error('  --stdin reads the password from stdin instead of prompting. Use it with')
+  console.error('  the shell\'s own hidden read, which keeps the value out of history:')
+  console.error('')
+  console.error('    read -rs PW && printf %s \"$PW\" | \\')
+  console.error('      node scripts/set-password.mjs kakon --stdin --out /tmp/pw.sql && unset PW')
   console.error('')
   console.error('  --out writes the file ONLY on success. Prefer it over `> file.sql`:')
   console.error('  shell redirection creates an empty file before this script runs, so a')
@@ -47,77 +54,32 @@ if (!username || (outIdx !== -1 && !outFile)) {
   process.exit(1)
 }
 
-/**
- * Prompt on stderr with the input hidden, so stdout stays a clean SQL stream.
- *
- * Uses raw mode rather than readline. An earlier version passed
- * `output: process.stderr` to readline and then reassigned `rl.output.write` to
- * suppress echo — but `rl.output` IS `process.stderr`, so that replaced
- * stderr's own writer with a function that called `process.stderr.write`,
- * recursing into itself. It blew the stack on the first character AND broke the
- * stream the crash would have been reported on, so the script died silently and
- * produced an empty file.
- *
- * Raw mode does not echo, which is the property we actually want, without
- * monkey-patching a global stream.
- */
-function promptHidden(question) {
+/** Read stdin to end, stripping exactly one trailing newline if present. */
+function readStdin() {
   return new Promise((resolve, reject) => {
-    const stdin = process.stdin
-
-    if (!stdin.isTTY) {
-      reject(new Error('no TTY available — run this in an interactive terminal'))
-      return
-    }
-
-    process.stderr.write(question)
-    stdin.setRawMode(true)
-    stdin.resume()
-    stdin.setEncoding('utf8')
-
-    let buf = ''
-    const done = (fn, arg) => {
-      stdin.setRawMode(false)
-      stdin.pause()
-      stdin.removeListener('data', onData)
-      process.stderr.write('\n')
-      fn(arg)
-    }
-
-    function onData(chunk) {
-      for (const ch of chunk) {
-        if (ch === '\r' || ch === '\n') return done(resolve, buf)
-        if (ch === '\u0003') {
-          // Ctrl-C: leave the terminal usable before exiting.
-          stdin.setRawMode(false)
-          process.stderr.write('\n')
-          process.exit(130)
-        }
-        if (ch === '\u0004') return done(resolve, buf) // Ctrl-D
-        if (ch === '\u007f' || ch === '\b') {
-          buf = buf.slice(0, -1)
-          continue
-        }
-        // Ignore other control characters (arrow keys arrive as escape sequences).
-        if (ch >= ' ') buf += ch
-      }
-    }
-
-    stdin.on('data', onData)
+    let data = ''
+    process.stdin.setEncoding('utf8')
+    process.stdin.on('data', (c) => { data += c })
+    process.stdin.on('end', () => resolve(data.replace(/\r?\n$/, '')))
+    process.stdin.on('error', reject)
   })
 }
 
-let password, confirm
-try {
-  password = await promptHidden(`New password for "${username}": `)
-  confirm = await promptHidden('Confirm: ')
-} catch (err) {
-  console.error(`✘ ${err.message}`)
-  process.exit(1)
-}
-
-if (password !== confirm) {
-  console.error('✘ passwords do not match — nothing written')
+// Stdin only.
+//
+// This script used to prompt interactively with the terminal in raw mode to
+// hide typing. That code caused two separate production failures: first it
+// recursed into itself and died silently, then — after being rewritten — it
+// stored a hash that did not match what the operator had typed, so a correct
+// password was rejected at login. Terminal input handling is fiddly and, in a
+// script run once per account, essentially untestable.
+//
+// `read -rs` in the shell already hides input, keeps it out of history, and is
+// code nobody has to maintain. Deleting the prompt removes the whole class of
+// bug rather than patching it a third time.
+const password = await readStdin()
+if (!password) {
+  console.error('✘ no password on stdin')
   process.exit(1)
 }
 if (password.length < MIN_PASSWORD) {

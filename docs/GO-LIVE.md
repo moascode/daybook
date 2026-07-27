@@ -31,14 +31,13 @@ run the commands below.
 Run from the repo root. Do it for **each** account (`kakon`, `tumpa`):
 
 ```bash
-node scripts/set-password.mjs kakon --out /tmp/pw.sql
+read -rs PW && printf %s "$PW" | \
+  node scripts/set-password.mjs kakon --stdin --out /tmp/pw.sql && unset PW
 ```
 
-It prompts twice (input hidden) and writes the file **only on success** — use
-`--out`, not `> /tmp/pw.sql`. Shell redirection creates the file before the
-script runs, so any failure leaves a 0-byte file, and wrangler executes that
-quite happily as *"0 queries / 0 rows written"* — which looks like success while
-changing nothing.
+`read -rs` hides your typing and keeps the value out of shell history. The
+script writes the file **only on success**, so a failure leaves no file rather
+than an empty one that wrangler would run as a successful no-op.
 
 Then apply it:
 
@@ -51,11 +50,14 @@ user and the password was NOT set.
 
 Repeat for `tumpa`. Then log in at the URL above.
 
-To confirm it took, this should show `pbkdf2` rather than `$2b$10$`:
+To confirm it took, this shows whether the stored hash actually matches the
+password you set — which a `pbkdf2$` prefix alone does **not** prove:
 
 ```bash
-npx wrangler d1 execute daybook --remote --command "SELECT username, substr(password_hash,1,7) AS algo FROM users"
+read -rs PW && printf %s "$PW" | node scripts/check-password.mjs kakon --stdin && unset PW
 ```
+
+Your password never leaves your machine; only the comparison result is printed.
 
 ### After the first login you can change it in the app
 
