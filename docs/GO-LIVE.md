@@ -31,18 +31,31 @@ run the commands below.
 Run from the repo root. Do it for **each** account (`kakon`, `tumpa`):
 
 ```bash
-node scripts/set-password.mjs kakon > /tmp/pw.sql
+node scripts/set-password.mjs kakon --out /tmp/pw.sql
 ```
 
-It prompts twice (input hidden) and writes one `UPDATE` statement. Check the file
-looks like a single `UPDATE users SET password_hash = 'pbkdf2$50000$…' WHERE
-username = 'kakon';`, then:
+It prompts twice (input hidden) and writes the file **only on success** — use
+`--out`, not `> /tmp/pw.sql`. Shell redirection creates the file before the
+script runs, so any failure leaves a 0-byte file, and wrangler executes that
+quite happily as *"0 queries / 0 rows written"* — which looks like success while
+changing nothing.
+
+Then apply it:
 
 ```bash
 npx wrangler d1 execute daybook --remote --file /tmp/pw.sql && rm /tmp/pw.sql
 ```
 
+**Check the output says `1 row written`.** `0 rows written` means it matched no
+user and the password was NOT set.
+
 Repeat for `tumpa`. Then log in at the URL above.
+
+To confirm it took, this should show `pbkdf2` rather than `$2b$10$`:
+
+```bash
+npx wrangler d1 execute daybook --remote --command "SELECT username, substr(password_hash,1,7) AS algo FROM users"
+```
 
 ### About the password itself
 
