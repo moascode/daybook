@@ -24,7 +24,7 @@
 // implementation, so the hashes are interchangeable.
 
 import { webcrypto as crypto } from 'node:crypto'
-import { createInterface } from 'node:readline'
+import { writeFileSync } from 'node:fs'
 
 // Keep in sync with PBKDF2_ITERATIONS in worker/crypto.ts.
 const PBKDF2_ITERATIONS = 50_000
@@ -32,36 +32,89 @@ const KEY_LEN_BITS = 256
 const SALT_BYTES = 16
 const MIN_PASSWORD = 12 // matches MIN_PASSWORD in worker/routes/auth.ts
 
-const username = process.argv[2]?.trim().toLowerCase()
-if (!username) {
-  console.error('usage: node scripts/set-password.mjs <username>')
+const args = process.argv.slice(2)
+const outIdx = args.indexOf('--out')
+const outFile = outIdx === -1 ? undefined : args[outIdx + 1]
+const username = args.filter((a, i) => i !== outIdx && i !== outIdx + 1)[0]?.trim().toLowerCase()
+
+if (!username || (outIdx !== -1 && !outFile)) {
+  console.error('usage: node scripts/set-password.mjs <username> --out <file.sql>')
+  console.error('')
+  console.error('  --out writes the file ONLY on success. Prefer it over `> file.sql`:')
+  console.error('  shell redirection creates an empty file before this script runs, so a')
+  console.error('  failure leaves a 0-byte file that wrangler will happily execute as')
+  console.error('  "0 queries" — looking like success while changing nothing.')
   process.exit(1)
 }
 
-/** Prompt on stderr with echo off, so stdout stays a clean SQL stream. */
+/**
+ * Prompt on stderr with the input hidden, so stdout stays a clean SQL stream.
+ *
+ * Uses raw mode rather than readline. An earlier version passed
+ * `output: process.stderr` to readline and then reassigned `rl.output.write` to
+ * suppress echo — but `rl.output` IS `process.stderr`, so that replaced
+ * stderr's own writer with a function that called `process.stderr.write`,
+ * recursing into itself. It blew the stack on the first character AND broke the
+ * stream the crash would have been reported on, so the script died silently and
+ * produced an empty file.
+ *
+ * Raw mode does not echo, which is the property we actually want, without
+ * monkey-patching a global stream.
+ */
 function promptHidden(question) {
   return new Promise((resolve, reject) => {
-    const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true })
-    // Suppress echo: replace the output writer while the answer is typed.
-    const onWrite = (chunk, encoding, callback) => {
-      if (!rl.__answering) process.stderr.write(chunk, encoding)
-      if (callback) callback()
+    const stdin = process.stdin
+
+    if (!stdin.isTTY) {
+      reject(new Error('no TTY available — run this in an interactive terminal'))
+      return
     }
-    rl.output.write = onWrite
+
     process.stderr.write(question)
-    rl.__answering = true
-    rl.question('', (answer) => {
-      rl.__answering = false
+    stdin.setRawMode(true)
+    stdin.resume()
+    stdin.setEncoding('utf8')
+
+    let buf = ''
+    const done = (fn, arg) => {
+      stdin.setRawMode(false)
+      stdin.pause()
+      stdin.removeListener('data', onData)
       process.stderr.write('\n')
-      rl.close()
-      resolve(answer)
-    })
-    rl.on('error', reject)
+      fn(arg)
+    }
+
+    function onData(chunk) {
+      for (const ch of chunk) {
+        if (ch === '\r' || ch === '\n') return done(resolve, buf)
+        if (ch === '\u0003') {
+          // Ctrl-C: leave the terminal usable before exiting.
+          stdin.setRawMode(false)
+          process.stderr.write('\n')
+          process.exit(130)
+        }
+        if (ch === '\u0004') return done(resolve, buf) // Ctrl-D
+        if (ch === '\u007f' || ch === '\b') {
+          buf = buf.slice(0, -1)
+          continue
+        }
+        // Ignore other control characters (arrow keys arrive as escape sequences).
+        if (ch >= ' ') buf += ch
+      }
+    }
+
+    stdin.on('data', onData)
   })
 }
 
-const password = await promptHidden(`New password for "${username}": `)
-const confirm = await promptHidden('Confirm: ')
+let password, confirm
+try {
+  password = await promptHidden(`New password for "${username}": `)
+  confirm = await promptHidden('Confirm: ')
+} catch (err) {
+  console.error(`✘ ${err.message}`)
+  process.exit(1)
+}
 
 if (password !== confirm) {
   console.error('✘ passwords do not match — nothing written')
@@ -102,7 +155,15 @@ const hash = `pbkdf2$${PBKDF2_ITERATIONS}$${b64(salt)}$${b64(new Uint8Array(bits
 
 // The hash contains only base64 and '$' — no quoting hazard — but the username
 // is escaped anyway rather than relying on that.
-console.log(
-  `UPDATE users SET password_hash = '${hash}' WHERE username = '${username.replace(/'/g, "''")}';`,
-)
-console.error(`✔ SQL written to stdout for user "${username}" (verify it matches 1 row)`)
+const sql = `UPDATE users SET password_hash = '${hash}' WHERE username = '${username.replace(/'/g, "''")}';\n`
+
+if (outFile) {
+  writeFileSync(outFile, sql, { mode: 0o600 })
+  console.error(`✔ wrote ${outFile} (${sql.length} bytes) for user "${username}"`)
+  console.error(`  apply with: npx wrangler d1 execute daybook --remote --file ${outFile}`)
+  console.error(`  expect "1 row written" — "0 rows written" means it matched no user.`)
+  console.error(`  then: rm ${outFile}`)
+} else {
+  process.stdout.write(sql)
+  console.error(`✔ SQL written to stdout for user "${username}"`)
+}
