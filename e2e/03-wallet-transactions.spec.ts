@@ -248,7 +248,10 @@ test('filter by date range: future From date yields no results', async () => {
   // From/To live behind the Custom… segment of the date-range control
   await page.getByTestId('filter-custom-range').click()
   await page.getByLabel('From').fill('2030-01-01')
-  await expect(page.getByText(/No transactions match/)).toBeVisible()
+  // The empty state names the active range and offers to widen it, rather than
+  // the generic "no match" that left the date filter as an unstated cause.
+  await expect(page.getByTestId('transactions-empty')).toContainText('2030-01-01')
+  await expect(page.getByTestId('empty-show-all-time')).toBeVisible()
 })
 
 test('clear date filter restores transactions', async () => {

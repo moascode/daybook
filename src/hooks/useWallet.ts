@@ -249,6 +249,15 @@ interface TransactionFilters {
   q?: string // B1: free-text search on merchant/description
 }
 
+// Guards the shared transaction list against out-of-order responses. Two loads
+// overlap routinely — mounting /wallet issues one with the default filters, and
+// any effect that adjusts the filters in the same commit (a ?view= / ?range=
+// deep link, a restored account filter) immediately issues a second. If the
+// first resolves last it overwrites the list with results for filters that are
+// no longer active. This is module-scoped because the list it protects is: the
+// counter has to be shared by every component holding the hook.
+let transactionsRequestSeq = 0
+
 // ── Hook ────────────────────────────────────────────
 
 export function useWallet() {
@@ -301,6 +310,7 @@ export function useWallet() {
   }, [])
 
   const loadTransactions = useCallback(async (filters?: TransactionFilters) => {
+    const seq = ++transactionsRequestSeq
     const qs = new URLSearchParams()
     if (filters?.dateFrom) qs.set('dateFrom', filters.dateFrom)
     if (filters?.dateTo) qs.set('dateTo', filters.dateTo)
@@ -317,6 +327,10 @@ export function useWallet() {
     const query = qs.toString()
     const rows = await api.get<TransactionRow[]>(`/transactions${query ? `?${query}` : ''}`)
     const transactions = rows.map((row) => mapTransaction(row))
+    // Superseded by a later load — return the rows the caller asked for (the
+    // Dashboard and Reports pages keep their own copy) but leave the shared
+    // list to the newer request. See transactionsRequestSeq above.
+    if (seq !== transactionsRequestSeq) return transactions
     useWalletStore.getState().setTransactions(transactions)
     return transactions
   }, [])

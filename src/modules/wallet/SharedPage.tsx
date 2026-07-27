@@ -133,8 +133,12 @@ export function SharedPage() {
           <h2 className="text-base font-semibold text-gray-900">Shared</h2>
           <p className="mt-0.5 text-xs text-gray-500">Balances and settlements across your groups</p>
         </div>
+        {/* range=all is not optional decoration: the balances above are
+            all-time, but Transactions defaults to the current month. Without it
+            a split from an earlier month lands on an empty list, which reads as
+            "sharing is broken" rather than "a date filter is active". */}
         <Link
-          to="/wallet?view=shared-with-me"
+          to="/wallet?view=shared-with-me&range=all"
           className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
         >
           View split transactions
