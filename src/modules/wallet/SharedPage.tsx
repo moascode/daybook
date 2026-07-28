@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
 import { ClaimsToReview } from './ClaimsToReview'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
+import { BalanceBreakdown } from './BalanceBreakdown'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
@@ -227,16 +228,19 @@ export function SharedPage() {
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Owed to you</h4>
                 {owedToMe.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-positive-200 bg-positive-50 px-4 py-3 mb-2">
-                    <div>
-                      <span className="font-medium text-gray-900">{b.fromUsername}</span>
-                      <span className="text-sm text-gray-500 ml-2">owes you</span>
-                      <span className="ml-2 font-semibold text-positive-700">{formatMYR(b.amount)}</span>
+                  <div key={`${b.fromUserId}-${b.toUserId}`} className="rounded-lg border border-positive-200 bg-positive-50 px-4 py-3 mb-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-medium text-gray-900">{b.fromUsername}</span>
+                        <span className="text-sm text-gray-500 ml-2">owes you</span>
+                        <span className="ml-2 font-semibold text-positive-700">{formatMYR(b.amount)}</span>
+                      </div>
+                      <Button size="sm" variant="secondary" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
+                        <Check className="h-3.5 w-3.5 mr-1" />
+                        Mark Received
+                      </Button>
                     </div>
-                    <Button size="sm" variant="secondary" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
-                      <Check className="h-3.5 w-3.5 mr-1" />
-                      Mark Received
-                    </Button>
+                    <BalanceBreakdown counterpartyId={b.fromUserId} iAmCreditor />
                   </div>
                 ))}
               </div>
@@ -245,16 +249,19 @@ export function SharedPage() {
               <div>
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">You owe</h4>
                 {myDebts.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-2">
-                    <div>
-                      <span className="text-sm text-gray-500">You owe</span>
-                      <span className="font-medium text-gray-900 ml-2">{b.toUsername}</span>
-                      <span className="ml-2 font-semibold text-red-700">{formatMYR(b.amount)}</span>
+                  <div key={`${b.fromUserId}-${b.toUserId}`} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-sm text-gray-500">You owe</span>
+                        <span className="font-medium text-gray-900 ml-2">{b.toUsername}</span>
+                        <span className="ml-2 font-semibold text-red-700">{formatMYR(b.amount)}</span>
+                      </div>
+                      <Button size="sm" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
+                        <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
+                        Settle Up
+                      </Button>
                     </div>
-                    <Button size="sm" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
-                      <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
-                      Settle Up
-                    </Button>
+                    <BalanceBreakdown counterpartyId={b.toUserId} iAmCreditor={false} />
                   </div>
                 ))}
               </div>

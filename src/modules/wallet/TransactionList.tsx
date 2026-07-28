@@ -85,6 +85,13 @@ function TransactionRow({
   const readOnly = !!(account?.isShared && account.canWrite !== 1)
   const interactive = selectMode || !readOnly
 
+  // Only when the two genuinely differ, and never on transfers (excluded from
+  // income/expense totals anyway, so "your share" would be meaningless). A
+  // half-cent tolerance keeps rounding noise from adding a line to every row.
+  const showsShare =
+    transaction.type !== 'transfer' &&
+    Math.abs(transaction.effectiveAmount - transaction.amount) > 0.005
+
   const amountColor =
     transaction.type === 'income'
       ? 'text-positive-600'
@@ -200,9 +207,17 @@ function TransactionRow({
         </div>
       </div>
 
-      {/* Amount */}
-      <span className={cn('flex-shrink-0 text-sm font-semibold', amountColor)}>
+      {/* Amount — ledger figure, with what it actually cost you underneath when
+          the two differ. The ledger amount is never hidden: it is what left the
+          account, and reconciling against a statement needs it. The second line
+          is what the summary, dashboard and budgets are counting (§3). */}
+      <span className={cn('flex-shrink-0 text-right text-sm font-semibold', amountColor)}>
         {amountPrefix}{formatMYR(transaction.amount)}
+        {showsShare && (
+          <span className="block text-[11px] font-normal text-gray-400" data-testid="effective-amount">
+            your share {formatMYR(transaction.effectiveAmount)}
+          </span>
+        )}
       </span>
 
       {/* Row actions — hidden in select mode and on read-only shared rows */}

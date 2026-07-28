@@ -1184,7 +1184,13 @@ wallet.get('/transactions/:id/splits', async (c) => {
 wallet.get('/transactions/splits/mine', async (c) => {
   const userId = c.get('userId')
   const status = str(c.req.query('status'))
-  const conditions = ['ts.user_id = ?']
+  // role=creditor flips the question from "what do I owe" to "what is owed to
+  // me" — the same rows read from the other side, which is what the Shared
+  // page needs to show the transactions behind each balance.
+  const asCreditor = str(c.req.query('role')) === 'creditor'
+  const conditions = asCreditor
+    ? ['t.user_id = ?', 'ts.user_id != t.user_id']
+    : ['ts.user_id = ?']
   const binds: unknown[] = [userId]
   if (status) {
     conditions.push('ts.status = ?')
@@ -1192,15 +1198,24 @@ wallet.get('/transactions/splits/mine', async (c) => {
   } else {
     conditions.push("ts.status != 'rejected'")
   }
+  // Optional date narrowing on the underlying transaction (owner asked for it
+  // on the review queue). Absent by default — a claim is outstanding until it
+  // is resolved, whatever month it came from.
+  const dateFrom = str(c.req.query('dateFrom'))
+  if (dateFrom) { conditions.push('t.date >= ?'); binds.push(dateFrom) }
+  const dateTo = str(c.req.query('dateTo'))
+  if (dateTo) { conditions.push('t.date <= ?'); binds.push(dateTo) }
 
   const { results } = await c.env.DB.prepare(
     `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.note,
             ts.status, ts.rejected_reason, ts.rejected_at, ts.settled_at, ts.created_at,
             t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
-            t.category_id, u.username AS owner_username, t.user_id AS owner_id
+            t.category_id, u.username AS owner_username, t.user_id AS owner_id,
+            du.username AS debtor_username, ts.user_id AS debtor_id
      FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN users u ON u.id = t.user_id
+     JOIN users du ON du.id = ts.user_id
      WHERE ${conditions.join(' AND ')}
      ORDER BY t.date DESC, ts.created_at DESC`,
   )
