@@ -92,8 +92,13 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(alicePage, { name: 'Shared Card' })
 
-    await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' }).hover()
-    await alicePage.getByRole('button', { name: 'Edit account' }).click()
+    // Wait for the card before reaching for its actions. Without this the hover
+    // and the unscoped "Edit account" lookup race the list re-render, which made
+    // this test time out roughly 1 run in 6 — on main as well as on branches.
+    const sharedCard = alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' })
+    await expect(sharedCard).toBeVisible({ timeout: 15_000 })
+    await sharedCard.hover()
+    await sharedCard.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
     // The dialog fills this select from GET /api/groups after it opens. Calling
     // selectOption before that resolves waits for an option that does not exist

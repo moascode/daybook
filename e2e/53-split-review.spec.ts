@@ -54,7 +54,7 @@ function priorMonthDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`
 }
 
-test.describe('52 — Split review (W1: visibility)', () => {
+test.describe('53 — Split review (W1: visibility)', () => {
   // The core of §5.1. Before this, `all` covered own rows and rows on shared-in
   // accounts only — disjoint from the recipient's splits whenever no account has
   // been shared, which is the live state. The recipient's default view was empty
@@ -149,7 +149,7 @@ test.describe('52 — Split review (W1: visibility)', () => {
 // after a settlement the payer's expense must FALL by the settled amount, the
 // payee's payment must COUNT as their expense, both balances must be right, and
 // the household total must equal the real spend — before and after settlement.
-test.describe('52 — Split review (W2: money semantics)', () => {
+test.describe('53 — Split review (W2: money semantics)', () => {
   test('the §3 four-number table holds before and after settlement', async ({ browser }) => {
     // RM100 expense on the payer's card, split so the recipient owes RM50.
     const f = await splitFixture(browser, 'fournum', priorMonthDate(), 100)
@@ -278,7 +278,7 @@ test.describe('52 — Split review (W2: money semantics)', () => {
 //
 // Rejection is the recipient's review step: no money moves, the claim stops
 // existing, and the payer's expense goes back to the full amount.
-test.describe('52 — Split review (W3: reject)', () => {
+test.describe('53 — Split review (W3: reject)', () => {
   test('rejecting returns the full expense to the payer and clears the claim', async ({ browser }) => {
     const f = await splitFixture(browser, 'reject', priorMonthDate(), 100)
     await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
