@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
+import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
 import { useHouseholdStore } from '@/stores/household.store'
 import { api } from '@/lib/api'
 import { mapInvite } from '@/lib/household.mappers'
@@ -82,8 +83,11 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
   const location = useLocation()
   const isWalletRoute = location.pathname.startsWith('/wallet')
   const setPendingInvites = useHouseholdStore((s) => s.setPendingInvites)
+  const setPendingClaimCount = useHouseholdStore((s) => s.setPendingClaimCount)
 
-  // Poll for pending invites so the badge stays up-to-date
+  // Poll for pending invites and unresolved split claims so both badges stay
+  // up-to-date. The claim badge is the fix for the failure that started this
+  // work: a recipient had 15 splits against her and nothing told her.
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -91,11 +95,15 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         const raw = await api.get<Record<string, unknown>[]>('/invites')
         if (!cancelled) setPendingInvites(raw.map(mapInvite))
       } catch { /* ignore */ }
+      try {
+        const claims = await api.get<unknown[]>('/transactions/splits/mine?status=pending')
+        if (!cancelled) setPendingClaimCount(claims.length)
+      } catch { /* ignore */ }
     }
     load()
     const timer = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [setPendingInvites])
+  }, [setPendingInvites, setPendingClaimCount])
   // null = follow the route (auto-expand on /wallet/*); true/false = manual override.
   const [walletOverride, setWalletOverride] = useState<boolean | null>(null)
   // Clear a manual override once the user leaves /wallet so a later visit
@@ -190,6 +198,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
                     >
                       <item.icon className="h-3.5 w-3.5 flex-shrink-0" />
                       {item.label}
+                      {item.to === '/wallet/shared' && <PendingClaimsBadge />}
                     </NavLink>
                   ))}
                 </div>

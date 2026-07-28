@@ -273,3 +273,143 @@ test.describe('52 — Split review (W2: money semantics)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── W3: reject flow (docs/split-settlement-plan.md §5.2) ───────────────
+//
+// Rejection is the recipient's review step: no money moves, the claim stops
+// existing, and the payer's expense goes back to the full amount.
+test.describe('52 — Split review (W3: reject)', () => {
+  test('rejecting returns the full expense to the payer and clears the claim', async ({ browser }) => {
+    const f = await splitFixture(browser, 'reject', priorMonthDate(), 100)
+    await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'equal' },
+    })
+
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { id: string; share_amount: number }[]
+    expect(claims).toHaveLength(1)
+    expect(claims[0].share_amount).toBe(50)
+
+    const rejected = await f.recip.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, {
+      data: { reason: 'this one was yours alone' },
+    })
+    expect(rejected.ok()).toBeTruthy()
+
+    // The payer carries the whole amount again…
+    const payerRows = await f.payer.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { id: string; effective_amount: number; has_splits: number }[]
+    const row = payerRows.find((t) => t.id === f.txn.id)
+    expect(row?.effective_amount).toBe(100)
+    // …and the row is no longer badged as split.
+    expect(row?.has_splits).toBe(0)
+
+    // The claim is gone from every recipient-facing view.
+    expect(await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json())).toHaveLength(0)
+    expect(await f.recip.request.get(`${API}/transactions?view=shared-with-me`)
+      .then((r) => r.json())).toHaveLength(0)
+    expect(await f.recip.request.get(`${API}/transactions`)
+      .then((r) => r.json())).toHaveLength(0)
+
+    // The reason is kept — it is the payer's only explanation of what happened.
+    const splits = await f.payer.request.get(`${API}/transactions/${f.txn.id}/splits`)
+      .then((r) => r.json()) as { status: string; rejected_reason: string; rejected_at: string | null }[]
+    const rej = splits.find((s) => s.status === 'rejected')
+    expect(rej?.rejected_reason).toBe('this one was yours alone')
+    expect(rej?.rejected_at).toBeTruthy()
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  test('the payer can re-split after a rejection', async ({ browser }) => {
+    const f = await splitFixture(browser, 'resplit', priorMonthDate(), 100)
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { id: string }[]
+    await f.recip.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, { data: {} })
+
+    // Re-split at a corrected figure — the loop the state machine promises.
+    const resplit = await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'custom', shareAmounts: [75, 25] },
+    })
+    expect(resplit.status()).toBe(201)
+
+    const fresh = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { share_amount: number; status: string }[]
+    expect(fresh).toHaveLength(1)
+    expect(fresh[0].share_amount).toBe(25)
+    expect(fresh[0].status).toBe('pending')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // Rejection belongs to the recipient alone — the payer must not be able to
+  // clear a claim on their behalf, and a stranger must not see it exists.
+  test('only the recipient can reject their own claim', async ({ browser }) => {
+    const f = await splitFixture(browser, 'rejectauth', priorMonthDate(), 100)
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { id: string }[]
+
+    const byPayer = await f.payer.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, { data: {} })
+    expect(byPayer.status()).toBe(404) // 404, not 403 — ids must not be probeable
+
+    const stranger = await browser.newContext()
+    const sp = await stranger.newPage()
+    await sp.request.post(`${API}/auth/signup`, { data: { username: `str_${Date.now()}`, password: 'test-password' } })
+    expect((await sp.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, { data: {} })).status()).toBe(404)
+    await stranger.close()
+
+    // Still standing.
+    expect(await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json())).toHaveLength(1)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // Rejecting a claim that has already been paid would erase a real debt.
+  test('a settled claim cannot be rejected', async ({ browser }) => {
+    const f = await splitFixture(browser, 'rejectsettled', priorMonthDate(), 100)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
+      data: { groupId: f.group.id, canWrite: 1 },
+    })
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { id: string }[]
+    await f.recip.request.post(`${API}/settlements`, {
+      data: { groupId: f.group.id, toUserId: payerId, amount: 100, fromAccountId: recipAcct.id, toAccountId: f.acct.id },
+    })
+
+    const res = await f.recip.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, { data: {} })
+    expect(res.status()).toBe(409)
+    expect((await res.json()).error).toContain('settled')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The badge is what tells the recipient a claim exists at all — the missing
+  // piece behind the original report.
+  test('the Shared nav badge counts claims and clears on rejection', async ({ browser }) => {
+    const f = await splitFixture(browser, 'badge', priorMonthDate(), 100)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('pending-claims-badge')).toHaveText('1', { timeout: 15_000 })
+
+    await expect(f.recip.getByTestId('claims-to-review')).toBeVisible()
+    await f.recip.getByTestId('claim-reject').click()
+    await f.recip.getByTestId('claim-reject-confirm').click()
+
+    await expect(f.recip.getByTestId('claims-to-review')).toHaveCount(0, { timeout: 10_000 })
+    await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})

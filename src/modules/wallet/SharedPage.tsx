@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
+import { ClaimsToReview } from './ClaimsToReview'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
@@ -156,6 +157,8 @@ export function SharedPage() {
           <p className="text-lg font-bold text-red-700">{formatMYR(totalIOwe)}</p>
         </div>
       </div>
+
+      <ClaimsToReview onChanged={loadAll} />
 
       {allBalances.length === 0 && (
         <p className="text-sm text-gray-500 py-2 text-center">
