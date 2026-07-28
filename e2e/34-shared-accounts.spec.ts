@@ -92,9 +92,10 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(alicePage, { name: 'Shared Card' })
 
-    // Wait for the card before reaching for its actions. Without this the hover
-    // and the unscoped "Edit account" lookup race the list re-render, which made
-    // this test time out roughly 1 run in 6 — on main as well as on branches.
+    // Wait for the card, and scope its actions to it. Not the cause of this
+    // test's old intermittent timeout — that was the unawaited group <select>
+    // below — but an unscoped "Edit account" would still match the wrong card
+    // the moment a second account exists here.
     const sharedCard = alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' })
     await expect(sharedCard).toBeVisible({ timeout: 15_000 })
     await sharedCard.hover()
