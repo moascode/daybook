@@ -1178,11 +1178,44 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-Current phase:  Phase 6/7 — Cloudflare Workers + D1 migration.
-                *** SEE docs/GO-LIVE.md — app is deployed with real data at
-                https://daybook.moascode.workers.dev but NOBODY CAN LOG IN
-                until the owner runs scripts/set-password.mjs for kakon and
-                tumpa. bcrypt hashes cannot be verified by PBKDF2. ***
+Current phase:  LIVE on Cloudflare Workers + D1.
+                https://daybook.moascode.workers.dev — deployed 2026-07-28,
+                version b9934eed, D1 migration 0010 applied. Production
+                holds 2 real users (kakon, tumpa), 15 outstanding split
+                claims totalling RM776.65.
+
+                *** SPLIT → SETTLEMENT REVIEW FLOW SHIPPED (W1-W6) ***
+                docs/split-settlement-plan.md, all six waves merged.
+                W1 "All" includes transactions split with you; filter-aware
+                   empty state.
+                W2 Money semantics: the payer carries the full amount until
+                   a split is settled, then their expense drops by the
+                   settled amount. The creditor's incoming leg is
+                   balance-only; the debtor's payment is a normal expense.
+                   The asymmetry is load-bearing — see §3 of the plan.
+                W3 The recipient can reject a claim, with a reason. Shared
+                   page gains a review queue; the nav gains a count badge.
+                W4 Two-step settlement: the debtor records a payment, the
+                   creditor confirms receipt into an account THEY choose.
+                   This removed the dead end where the creditor's leg could
+                   only be booked if they had shared a writable account in
+                   advance — nobody ever had, so half of every settlement
+                   was silently dropped.
+                W5 A balance opens into the transactions behind it, both
+                   directions, starting at All time.
+                W6 Tagging deploys: full suite -> apply D1 migrations ->
+                   deploy Worker -> smoke test -> publish release. The Mac
+                   tarball is no longer built (Mac retired as a deployment
+                   target); server/ stays only as the schema reference that
+                   scripts/schema-diff.mjs gates CI against.
+
+                *** BLOCKED: no CLOUDFLARE_API_TOKEN repo secret. ***
+                Until the owner adds one (Workers Scripts: Edit + D1: Edit),
+                a version tag will fail release.yml at the migration step.
+                The 2026-07-28 deploy was therefore run by hand from an
+                OAuth-authenticated machine. Tagging afterwards is safe and
+                idempotent — migrations no-op, the deploy re-uploads the
+                same code, and the release notes get published.
                 (docs/option-2-workers-d1-plan.md). Owner chose Option 2 on
                 2026-07-27 over the spike doc's ambivalent §6.
 Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
@@ -1428,7 +1461,7 @@ Phase status
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-07-26
+Last session:   2026-07-28/29
 Last completed: - CSV transfer import + twin-linking implemented (PRs #60 + #61,
                   awaiting owner merge — #61 is stacked on #60).
                 - Phase 5b fully implemented and merged (PR #18 + follow-ups):
@@ -1552,8 +1585,10 @@ Next task:      Review/merge PR feat/workers-auth (Phase 3), then Phase 4 —
                 on the same disk as the DB) are both path-independent and
                 unblocked → PR3 access path. PR2 is the highest-value item.
 
-Blockers:       M6 (set both passwords) — OWNER ONLY, blocks all use of the
-                deployed app. See docs/GO-LIVE.md.
+Blockers:       CLOUDFLARE_API_TOKEN repo secret — OWNER ONLY. Blocks
+                release.yml (tag-triggered deploy), nothing else. Production
+                is live and serving.
+                (Resolved: M6 passwords — PRs #79/#80.)
                 Phase 6 COMPLETE — 455/455 specs green against the Worker.
                 Harness now ONE webServer (`wrangler dev --env dev` on 5173),
                 replacing tsx+Vite+DAYBOOK_API_TARGET proxy. Two things this
