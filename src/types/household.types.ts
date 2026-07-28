@@ -67,4 +67,9 @@ export interface Settlement {
   toTransactionId: string | null
   originalTransactionId: string | null
   settledAt: string
+  // 'awaiting_confirmation' until the creditor says the money arrived, then
+  // 'confirmed'. 'rejected' if they say it never did. Rows that predate the
+  // handshake default to 'confirmed' (migration 0010).
+  status: 'awaiting_confirmation' | 'confirmed' | 'rejected'
+  rejectedReason: string
 }

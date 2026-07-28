@@ -89,15 +89,19 @@ test.describe('43 — Budget spending uses the effective split amount', () => {
     const bobAcct = await bobPage.request.post(`${API}/accounts`, {
       data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
-    // Alice shares her account so the creditor leg can be booked. W4 removes this
-    // requirement by having the creditor book their own leg on confirmation.
-    await alicePage.request.post(`${API}/accounts/${acct.id}/shares`, {
-      data: { groupId: group.id, canWrite: 1 },
-    })
+    // Two-step since W4: Bob records the payment out of his own account, Alice
+    // confirms it into hers. Neither needs the other's account shared.
     const settle = await bobPage.request.post(`${API}/settlements`, {
-      data: { groupId: group.id, toUserId: aliceId, amount: 100, fromAccountId: bobAcct.id, toAccountId: acct.id },
+      data: { groupId: group.id, toUserId: aliceId, amount: 100, fromAccountId: bobAcct.id },
     })
     expect(settle.ok()).toBeTruthy()
+    const settlementId = (await settle.json()).id as string
+    // Alice's budget must not move on the claim alone — only on her confirmation.
+    await expect((await budgetRow()).getByText(/RM\s?200\.00/)).toBeVisible({ timeout: 5000 })
+    const confirm = await alicePage.request.post(`${API}/settlements/${settlementId}/confirm`, {
+      data: { accountId: acct.id },
+    })
+    expect(confirm.ok()).toBeTruthy()
 
     const afterSettle = await budgetRow()
     await expect(afterSettle.getByText(/RM\s?100\.00/)).toBeVisible({ timeout: 5000 })

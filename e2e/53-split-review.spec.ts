@@ -54,6 +54,31 @@ function priorMonthDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-15`
 }
 
+
+/**
+ * Debtor records the payment, creditor confirms it. Since W4 this is the only
+ * way a debt actually clears — and neither side needs the other's account.
+ */
+async function settleAndConfirm(
+  f: Awaited<ReturnType<typeof splitFixture>>,
+  amount: number,
+  debtorAccountId: string,
+  creditorAccountId: string,
+) {
+  const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+    .then((m: { user: { id: string } }) => m.user.id)
+  const settle = await f.recip.request.post(`${API}/settlements`, {
+    data: { groupId: f.group.id, toUserId: payerId, amount, fromAccountId: debtorAccountId },
+  })
+  expect(settle.ok()).toBeTruthy()
+  const id = (await settle.json()).id as string
+  const confirm = await f.payer.request.post(`${API}/settlements/${id}/confirm`, {
+    data: { accountId: creditorAccountId },
+  })
+  expect(confirm.ok()).toBeTruthy()
+  return id
+}
+
 test.describe('53 — Split review (W1: visibility)', () => {
   // The core of §5.1. Before this, `all` covered own rows and rows on shared-in
   // accounts only — disjoint from the recipient's splits whenever no account has
@@ -183,25 +208,10 @@ test.describe('53 — Split review (W2: money semantics)', () => {
       data: { name: 'Recip Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
 
-    // W2 only changes the money maths, not who picks the accounts — so booking
-    // the creditor's leg still requires them to have shared a writable account,
-    // which is the ergonomic dead end W4 removes (the creditor will book their
-    // own leg on confirmation). Sharing here keeps this test about §3.
-    const shared = await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
-      data: { groupId: f.group.id, canWrite: 1 },
-    })
-    expect(shared.ok()).toBeTruthy()
 
-    // ── Settle RM50 ──
-    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
-      .then((m: { user: { id: string } }) => m.user.id)
-    const settle = await f.recip.request.post(`${API}/settlements`, {
-      data: {
-        groupId: f.group.id, toUserId: payerId, amount: 50,
-        fromAccountId: recipAcct.id, toAccountId: f.acct.id,
-      },
-    })
-    expect(settle.ok()).toBeTruthy()
+
+    // ── Settle RM50, through the W4 handshake ──
+    await settleAndConfirm(f, 50, recipAcct.id, f.acct.id)
 
     // ── After settlement: the four numbers ──
     // Payer's expense falls by exactly the settled amount…
@@ -225,18 +235,7 @@ test.describe('53 — Split review (W2: money semantics)', () => {
     const recipAcct = await f.recip.request.post(`${API}/accounts`, {
       data: { name: 'R Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
-    // See the note in the four-number test: W4 removes this requirement.
-    await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
-      data: { groupId: f.group.id, canWrite: 1 },
-    })
-    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
-      .then((m: { user: { id: string } }) => m.user.id)
-    await f.recip.request.post(`${API}/settlements`, {
-      data: {
-        groupId: f.group.id, toUserId: payerId, amount: 100,
-        fromAccountId: recipAcct.id, toAccountId: f.acct.id,
-      },
-    })
+    await settleAndConfirm(f, 100, recipAcct.id, f.acct.id)
 
     const rows = await f.payer.request.get(`${API}/transactions`).then((r) => r.json()) as
       { type: string; is_balance_only: number; effective_amount: number }[]
@@ -374,16 +373,9 @@ test.describe('53 — Split review (W3: reject)', () => {
     const recipAcct = await f.recip.request.post(`${API}/accounts`, {
       data: { name: 'R Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
-    await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
-      data: { groupId: f.group.id, canWrite: 1 },
-    })
-    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
-      .then((m: { user: { id: string } }) => m.user.id)
     const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
       .then((r) => r.json()) as { id: string }[]
-    await f.recip.request.post(`${API}/settlements`, {
-      data: { groupId: f.group.id, toUserId: payerId, amount: 100, fromAccountId: recipAcct.id, toAccountId: f.acct.id },
-    })
+    await settleAndConfirm(f, 100, recipAcct.id, f.acct.id)
 
     const res = await f.recip.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, { data: {} })
     expect(res.status()).toBe(409)
@@ -408,6 +400,158 @@ test.describe('53 — Split review (W3: reject)', () => {
 
     await expect(f.recip.getByTestId('claims-to-review')).toHaveCount(0, { timeout: 10_000 })
     await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})
+
+// ── W4: two-step settlement (docs/split-settlement-plan.md §2, §5.2) ────
+//
+// The debtor's payment is a claim; the creditor confirms it and books their own
+// leg into their own account. Neither party moves the other's books, and — the
+// whole point — no account sharing is required for either side to be recorded.
+test.describe('53 — Split review (W4: two-step settlement)', () => {
+  const expenseOf = async (page: import('@playwright/test').Page) => {
+    const rows = await page.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { type: string; effective_amount: number; is_balance_only: number }[]
+    return Math.round(rows
+      .filter((t) => t.type === 'expense' && !t.is_balance_only)
+      .reduce((s, t) => s + t.effective_amount, 0) * 100) / 100
+  }
+  const balanceOf = async (page: import('@playwright/test').Page, acct: string) =>
+    page.request.get(`${API}/accounts/${acct}/balance`).then((r) => r.json())
+      .then((b: { balance: number }) => Math.round(b.balance * 100) / 100)
+
+  test('the four numbers come out right with NO account sharing', async ({ browser }) => {
+    const f = await splitFixture(browser, 'twostep', priorMonthDate(), 100)
+    await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'equal' },
+    })
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'Recip Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+
+    // The debtor records the payment. No toAccountId, and crucially no
+    // account_shares anywhere — the old flow could not book the creditor's leg
+    // at all in this situation, which is exactly the live production state.
+    const settle = await f.recip.request.post(`${API}/settlements`, {
+      data: { groupId: f.group.id, toUserId: payerId, amount: 50, fromAccountId: recipAcct.id },
+    })
+    expect(settle.ok()).toBeTruthy()
+    const settlementId = (await settle.json()).id as string
+
+    // Awaiting confirmation: her cash is gone, his books have not moved, and the
+    // debt is still outstanding.
+    expect(await expenseOf(f.recip)).toBe(50)
+    expect(await balanceOf(f.recip, recipAcct.id)).toBe(-50)
+    expect(await expenseOf(f.payer)).toBe(100)
+    const balancesMid = await f.recip.request.get(`${API}/groups/${f.group.id}/balances`)
+      .then((r) => r.json()) as { amount: number }[]
+    expect(balancesMid.length).toBe(1)
+
+    // He confirms, into an account he picks himself.
+    const confirm = await f.payer.request.post(`${API}/settlements/${settlementId}/confirm`, {
+      data: { accountId: f.acct.id },
+    })
+    expect(confirm.ok()).toBeTruthy()
+
+    // The §3 table — now reachable without either of them sharing an account.
+    expect(await expenseOf(f.payer)).toBe(50)
+    expect(await expenseOf(f.recip)).toBe(50)
+    expect(await balanceOf(f.payer, f.acct.id)).toBe(-50)
+    expect(await balanceOf(f.recip, recipAcct.id)).toBe(-50)
+    expect(await f.recip.request.get(`${API}/groups/${f.group.id}/balances`)
+      .then((r) => r.json())).toHaveLength(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  test('the debtor cannot clear the debt alone', async ({ browser }) => {
+    const f = await splitFixture(browser, 'noselfclear', priorMonthDate(), 100)
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const id = await f.recip.request.post(`${API}/settlements`, {
+      data: { groupId: f.group.id, toUserId: payerId, amount: 100, fromAccountId: recipAcct.id },
+    }).then((r) => r.json()).then((x: { id: string }) => x.id)
+
+    // Only the creditor may confirm — the debtor gets 404, not 403, so a
+    // settlement id cannot be probed for existence.
+    expect((await f.recip.request.post(`${API}/settlements/${id}/confirm`, {
+      data: { accountId: recipAcct.id },
+    })).status()).toBe(404)
+    // And the payer's expense is untouched until he acts.
+    expect(await expenseOf(f.payer)).toBe(100)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  test('the creditor can reject a payment that never arrived', async ({ browser }) => {
+    const f = await splitFixture(browser, 'rejectpay', priorMonthDate(), 100)
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const id = await f.recip.request.post(`${API}/settlements`, {
+      data: { groupId: f.group.id, toUserId: payerId, amount: 100, fromAccountId: recipAcct.id },
+    }).then((r) => r.json()).then((x: { id: string }) => x.id)
+
+    const rej = await f.payer.request.post(`${API}/settlements/${id}/reject`, {
+      data: { reason: 'nothing arrived' },
+    })
+    expect(rej.ok()).toBeTruthy()
+
+    // Debt outstanding again, the debtor's payment entry withdrawn.
+    expect(await expenseOf(f.recip)).toBe(0)
+    expect(await balanceOf(f.recip, recipAcct.id)).toBe(0)
+    expect(await expenseOf(f.payer)).toBe(100)
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as unknown[]
+    expect(claims).toHaveLength(1)
+
+    // Confirming after rejection is not a second bite.
+    expect((await f.payer.request.post(`${API}/settlements/${id}/confirm`, {
+      data: { accountId: f.acct.id },
+    })).status()).toBe(409)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // §9.7: so the debtor's food budget sees food.
+  test('the payment inherits the original category', async ({ browser }) => {
+    const f = await splitFixture(browser, 'cat', priorMonthDate(), 100)
+    const cats = await f.payer.request.get(`${API}/categories`).then((r) => r.json()) as
+      { id: string; name: string }[]
+    const food = cats.find((c) => c.name === 'Food & Drink')!
+    await f.payer.request.patch(`${API}/transactions/${f.txn.id}`, { data: { categoryId: food.id } })
+
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    await f.recip.request.post(`${API}/settlements`, {
+      data: { groupId: f.group.id, toUserId: payerId, amount: 100, fromAccountId: recipAcct.id },
+    })
+
+    const rows = await f.recip.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { merchant: string; category_id: string | null }[]
+    const leg = rows.find((t) => t.merchant === 'Settlement')
+    // The recipient's category ids are their own seeded set, so compare by name.
+    const recipCats = await f.recip.request.get(`${API}/categories`).then((r) => r.json()) as
+      { id: string; name: string }[]
+    expect(leg).toBeTruthy()
+    expect(leg?.category_id).toBeTruthy()
+    expect(recipCats.concat(cats).find((c) => c.id === leg?.category_id)?.name).toBe('Food & Drink')
 
     await f.payerCtx.close()
     await f.recipCtx.close()

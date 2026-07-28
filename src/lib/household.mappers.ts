@@ -54,6 +54,8 @@ export function mapSettlement(r: Raw): Settlement {
     toTransactionId: r.to_transaction_id ? String(r.to_transaction_id) : null,
     originalTransactionId: r.original_transaction_id ? String(r.original_transaction_id) : null,
     settledAt: String(r.settled_at),
+    status: (String(r.status ?? 'confirmed') as Settlement['status']),
+    rejectedReason: String(r.rejected_reason ?? ''),
   }
 }
 

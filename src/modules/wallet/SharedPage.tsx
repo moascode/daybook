@@ -6,6 +6,7 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
 import { ClaimsToReview } from './ClaimsToReview'
+import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
@@ -34,6 +35,7 @@ export function SharedPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [settleTarget, setSettleTarget] = useState<{ groupId: string; balance: GroupBalance } | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<Settlement | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
 
@@ -87,6 +89,13 @@ export function SharedPage() {
     .filter((b) => b.fromUserId === currentUserId)
     .reduce((s, b) => s + b.amount, 0)
   const anyHistory = Object.values(historyByGroup).some((h) => h.length > 0)
+
+  // Payments claimed by someone else and waiting on me. These are money in my
+  // direction that has not landed in my books yet, so they belong at the top —
+  // not buried in the settlement history below.
+  const awaitingMyConfirmation = Object.values(historyByGroup)
+    .flat()
+    .filter((h) => h.status === 'awaiting_confirmation' && h.toUserId === currentUserId)
 
   if (!currentUserId) return null
 
@@ -157,6 +166,36 @@ export function SharedPage() {
           <p className="text-lg font-bold text-red-700">{formatMYR(totalIOwe)}</p>
         </div>
       </div>
+
+      {awaitingMyConfirmation.length > 0 && (
+        <div className="rounded-xl border border-gray-200 bg-white" data-testid="awaiting-confirmation">
+          <div className="border-b border-gray-100 px-5 py-3">
+            <h3 className="text-sm font-semibold text-gray-900">
+              Payments to confirm
+              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                {awaitingMyConfirmation.length}
+              </span>
+            </h3>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Someone says they have paid you. Confirming books it into your account and clears the balance.
+            </p>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {awaitingMyConfirmation.map((sx) => (
+              <li key={sx.id} className="flex items-center gap-3 px-5 py-3" data-testid="awaiting-row">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-gray-900">{sx.fromUsername} paid you</p>
+                  {sx.note && <p className="mt-0.5 truncate text-xs text-gray-500">{sx.note}</p>}
+                </div>
+                <span className="text-sm font-semibold text-positive-700">{formatMYR(sx.amount)}</span>
+                <Button size="sm" onClick={() => setConfirmTarget(sx)} data-testid="open-confirm">
+                  Review
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <ClaimsToReview onChanged={loadAll} />
 
@@ -272,6 +311,13 @@ export function SharedPage() {
         accounts={accounts}
         onClose={() => setSettleTarget(null)}
         onSettled={() => { setSettleTarget(null); loadAll() }}
+      />
+
+      <ConfirmReceiptDialog
+        settlement={confirmTarget}
+        accounts={accounts}
+        onClose={() => setConfirmTarget(null)}
+        onDone={() => { setConfirmTarget(null); loadAll() }}
       />
     </div>
   )
