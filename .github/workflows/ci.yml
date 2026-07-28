@@ -90,12 +90,19 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # Both steps shell out to apt, which can block indefinitely behind the
+      # runner's own unattended-upgrades holding the dpkg lock. Six shards means
+      # six chances per run instead of three, and a stuck job otherwise sits
+      # until the 15-minute job timeout with nothing saying why. Bounded so it
+      # fails fast and names itself.
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 6
         run: npx playwright install --with-deps chromium
 
       - name: Install Playwright system deps (cached hit)
         if: steps.pw-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 6
         run: npx playwright install-deps chromium
 
       - name: Run Playwright tests (shard ${{ matrix.shard }}/6)
