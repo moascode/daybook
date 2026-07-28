@@ -91,10 +91,17 @@ jobs:
           echo "$health" | grep -q '"db":true'
           echo "› SPA root"
           curl -fsS -o /dev/null -w '%{http_code}\n' "$BASE/" | grep -q '^200$'
-          echo "› unmatched /api/* is a JSON 404"
+          # An unmatched /api path must return a JSON error, never the SPA's
+          # index.html — that is the invariant worth protecting. The exact code
+          # is 401 rather than 404 because requireAuth guards the whole /api
+          # surface and rejects an unauthenticated caller before routing can
+          # decide the path does not exist. Asserting 404 here would have failed
+          # this pipeline on its first real run.
+          echo "› unmatched /api/* is a JSON error, not the SPA"
           code=$(curl -sS -o /tmp/body -w '%{http_code}' "$BASE/api/definitely-not-a-route")
-          [ "$code" = "404" ]
+          case "$code" in 401|403|404) ;; *) echo "unexpected status $code" >&2; exit 1 ;; esac
           grep -q '"error"' /tmp/body
+          ! grep -qi '<!doctype html' /tmp/body
           echo "✓ smoke passed"
 
       # Wrangler keeps the previous version server-side; roll straight back to it
