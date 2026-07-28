@@ -1,12 +1,26 @@
 name: Release
 
-# Cuts a release when a semver tag is pushed (e.g. v1.2.0).
+# Cuts a release and deploys it when a semver tag is pushed (e.g. v1.2.0).
 #
 #   git tag v1.2.0 && git push origin v1.2.0
 #
-# Builds the frontend, typechecks, runs the e2e suite, packages a deployable
-# artifact, and publishes a GitHub Release with the tarball + checksum attached.
-# The Mac deploy tool (`infra/daybook deploy`) then pulls that artifact.
+# Gates on the full test suite, applies pending D1 migrations, deploys the
+# Worker, smoke-tests the live deployment, and publishes a GitHub Release.
+#
+# ── Ordering is the whole point ──────────────────────────────────────────────
+# Migrations run BEFORE the deploy, and a failure there stops the job. Deployed
+# code that queries a column the database does not have yet is a total outage,
+# not a degraded feature — this exact hazard sat live for a day while W2/W3 were
+# on main and migration 0010 was unapplied.
+#
+# ── What this no longer does ─────────────────────────────────────────────────
+# It used to package the Express server + built frontend into a tarball for the
+# Mac deploy tool (`infra/daybook deploy`). The Mac is retired as a deployment
+# target (owner decision, 2026-07-29), and the server/ tree has not received
+# feature work since the Workers cutover, so shipping it produced a release that
+# silently lagged several waves behind. server/ stays in the repo because
+# scripts/schema-diff.mjs gates CI on D1 matching server/migrations — it is a
+# schema reference now, not a deployable.
 on:
   push:
     tags:
@@ -21,13 +35,13 @@ concurrency:
 
 jobs:
   release:
-    name: Build & Publish Release
+    name: Test, Migrate, Deploy
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # full history so package-release.sh can `git describe`
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -37,28 +51,62 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck (server)
-        run: npm run typecheck:server
+      - name: Typecheck (client + worker)
+        run: |
+          npm run build
+          npm run typecheck:worker
 
-      - name: Build frontend
-        run: npm run build
+      - name: Lint
+        run: npm run lint
 
-      # Gate the release on the e2e suite — never ship a red build.
+      # Gate the release on the e2e suite — never deploy a red build.
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
+        timeout-minutes: 6
+        run: npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        run: npm run test:e2e
+        run: npx playwright test
 
-      - name: Derive version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Package release artifact
-        id: package
+      # ── Everything below touches production ──────────────────────────────
+      - name: Apply D1 migrations (remote)
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: bash scripts/package-release.sh
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler d1 migrations apply daybook --remote
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --env=""
+
+      # Prove the thing that just went live actually serves traffic. A deploy
+      # that returns 500 on every request still "succeeds" as a deploy.
+      - name: Smoke-test the deployment
+        id: smoke
+        run: |
+          set -euo pipefail
+          BASE=https://daybook.moascode.workers.dev
+          echo "› health"
+          health=$(curl -fsS --retry 5 --retry-delay 3 --retry-all-errors "$BASE/api/health")
+          echo "$health"
+          echo "$health" | grep -q '"db":true'
+          echo "› SPA root"
+          curl -fsS -o /dev/null -w '%{http_code}\n' "$BASE/" | grep -q '^200$'
+          echo "› unmatched /api/* is a JSON 404"
+          code=$(curl -sS -o /tmp/body -w '%{http_code}' "$BASE/api/definitely-not-a-route")
+          [ "$code" = "404" ]
+          grep -q '"error"' /tmp/body
+          echo "✓ smoke passed"
+
+      # Wrangler keeps the previous version server-side; roll straight back to it
+      # rather than leaving a broken deployment up while someone reads the logs.
+      - name: Roll back on failed smoke test
+        if: failure() && steps.smoke.outcome == 'failure'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "✗ smoke test failed — rolling back" >&2
+          npx wrangler rollback --message "automated rollback: smoke test failed for ${{ github.ref_name }}" --env="" || \
+            echo "rollback failed; the previous version must be restored manually" >&2
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -66,6 +114,8 @@ jobs:
           name: Daybook ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: |
-            dist-release/daybook-${{ steps.version.outputs.version }}.tar.gz
-            dist-release/daybook-${{ steps.version.outputs.version }}.tar.gz.sha256
+          body: |
+            Deployed to https://daybook.moascode.workers.dev
+
+            D1 migrations were applied before the Worker was deployed, and the
+            deployment was smoke-tested (health, SPA root, JSON 404).
