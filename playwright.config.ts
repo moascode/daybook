@@ -103,7 +103,14 @@ export default defineConfig({
         // webServer gives it no stdin, and in CI the process exited ~30s in with an
         // empty error, taking every remaining test with it (ECONNREFUSED :5173).
         // Turning the interactive layer off makes it a plain long-running server.
-        'npx wrangler dev --env dev --port 5173 --show-interactive-dev-session false',
+        // --var DAYBOOK_QUIET_LOGS:1 silences the Worker's per-request log line for
+        // this harness only. Every console.log is forwarded through wrangler's
+        // InspectorProxyWorker, and a full suite emitted 15,480 of them with no
+        // devtools attached; workerd died writing to that pipe
+        // ("Broken pipe", kj/async-io-unix.c++:186), taking the rest of the shard
+        // with it. Production and `npm run dev:worker` keep their request logs.
+        'npx wrangler dev --env dev --port 5173 --show-interactive-dev-session false ' +
+        '--var DAYBOOK_QUIET_LOGS:1',
       url: 'http://localhost:5173/api/health',
       reuseExistingServer: !process.env.CI,
       // Generous: covers a cold `vite build` as well as wrangler's ~3s start.
