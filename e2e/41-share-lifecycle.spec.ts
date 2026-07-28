@@ -54,6 +54,12 @@ test.describe('41 — Settled-share lifecycle', () => {
       data: { groupId: s.groupId, toUserId: s.aliceId, amount: 100, fromAccountId: s.bobAcct.id },
     })
     expect(r.status()).toBe(201)
+    // W4: a debtor's payment is a claim. The split is not settled — and the
+    // settled-split guards below do not bite — until Alice confirms receipt.
+    const confirm = await s.alice.request.post(`${API}/settlements/${(await r.json()).id}/confirm`, {
+      data: { accountId: s.aliceAcct.id },
+    })
+    expect(confirm.ok()).toBeTruthy()
   }
 
   test('B-04: cannot re-split a transaction after it has been settled', async ({ browser }) => {

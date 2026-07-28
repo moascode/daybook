@@ -81,15 +81,34 @@ test.describe('36 — Settlement', () => {
     await settleDialog.locator('select').selectOption(bobAcct.name)
     await settleDialog.getByRole('button', { name: 'Record Settlement' }).click()
 
-    // Balance should now show 0 (no outstanding balances)
-    await expect(
-      bobPage.getByText('All settled up').or(bobPage.getByText('No outstanding balances'))
-    ).toBeVisible({ timeout: 5000 })
+    // W4: recording the payment is a claim, not a clearance. Bob's money has
+    // left, but the debt stands until Alice says it arrived — otherwise he could
+    // zero her books on his own say-so.
+    await expect(bobPage.getByRole('heading', { name: 'You owe' })).toBeVisible({ timeout: 5000 })
 
-    // Bob's Cash should show an expense
+    // Bob's Cash shows the expense immediately — his cash really did go.
     await bobPage.goto('/wallet')
     await expect(bobPage.locator('main')).toBeVisible()
     await expect(bobPage.getByText('Settlement', { exact: true })).toBeVisible()
+
+    // Alice confirms receipt, into an account she chooses herself.
+    await alicePage.goto('/wallet/shared')
+    await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(alicePage.getByTestId('awaiting-confirmation')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByTestId('open-confirm').click()
+    const confirmDialog = alicePage.getByRole('dialog')
+    await expect(confirmDialog.locator('option', { hasText: aliceAcct.name })).toHaveCount(1, { timeout: 10_000 })
+    await confirmDialog.locator('select').selectOption(aliceAcct.name)
+    await alicePage.getByTestId('confirm-receipt').click()
+
+    // Now the debt clears, for both of them.
+    await expect(
+      alicePage.getByText('All settled up').or(alicePage.getByText('No outstanding balances'))
+    ).toBeVisible({ timeout: 10_000 })
+    await bobPage.goto('/wallet/shared')
+    await expect(
+      bobPage.getByText('All settled up').or(bobPage.getByText('No outstanding balances'))
+    ).toBeVisible({ timeout: 10_000 })
 
     await aliceCtx.close()
     await bobCtx.close()
@@ -155,7 +174,9 @@ test.describe('36 — Settlement', () => {
     await settleDialog.locator('select').first().selectOption(bobAcct.name)
     await settleDialog.getByRole('button', { name: 'Record Settlement' }).click()
 
-    await expect(bobPage.getByText('No outstanding balances').or(bobPage.getByText('All settled up'))).toBeVisible({ timeout: 5000 })
+    // W4: the claim leaves the balance standing until Alice confirms — so Bob's
+    // undo here withdraws an unconfirmed payment, which is the common case.
+    await expect(bobPage.getByRole('heading', { name: 'You owe' })).toBeVisible({ timeout: 5000 })
 
     // Bob clicks Undo on the settlement row — now requires confirmation modal
     await expect(bobPage.getByText('Recent settlements')).toBeVisible({ timeout: 5000 })
@@ -229,8 +250,15 @@ test.describe('36 — Settlement', () => {
         fromAccountId: bobAcct.id,
       },
     })
-    // Server caps at RM100 (U-13) — either 200 or 201 status, balance must be 0
+    // Server caps at RM100 (U-13) — either 200 or 201 status
     expect([200, 201, 400]).toContain(settleRes.status())
+
+    // W4: the cap is applied when the claim is recorded; the balance clears once
+    // Alice confirms it, into an account she picks herself.
+    const settleBody = await settleRes.json()
+    await alicePage.request.post(`http://localhost:5173/api/settlements/${settleBody.id}/confirm`, {
+      data: { accountId: aliceAcct.id },
+    })
 
     const balancesRes = await bobPage.request.get(`http://localhost:5173/api/groups/${group.id}/balances`)
     const balances = await balancesRes.json()

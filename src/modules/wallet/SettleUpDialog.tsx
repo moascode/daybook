@@ -28,7 +28,7 @@ interface SettleUpDialogProps {
  * account is chosen).
  */
 export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onClose, onSettled }: SettleUpDialogProps) {
-  const [form, setForm] = useState({ myAccountId: '', theirAccountId: '', amount: '', note: '' })
+  const [form, setForm] = useState({ myAccountId: '', amount: '', note: '' })
   const [settling, setSettling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -37,7 +37,7 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
     if (balance) {
       setError(null) // eslint-disable-line react-hooks/set-state-in-effect
       setNotice(null)
-      setForm({ myAccountId: '', theirAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
+      setForm({ myAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
     }
   }, [balance])
 
@@ -45,9 +45,12 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
   const iAmCreditor = !!balance && balance.toUserId === currentUserId
   const counterpartyUsername = balance ? (iAmCreditor ? balance.fromUsername : balance.toUsername) : ''
 
-  // Only my own accounts on my side; the counterparty's shared-in accounts on theirs.
+  // Only my own accounts. The counterparty's selector is gone: when I am the
+  // debtor they book their own leg on confirmation, and when I am the creditor
+  // I am recording receipt, which needs only my side. That selector was filtered
+  // to accounts the other person had shared into the group — which nobody had —
+  // so it silently dropped the other half of every settlement.
   const myAccounts = accounts.filter((a) => !a.isShared)
-  const theirAccounts = accounts.filter((a) => a.isShared && a.sharedByUsername === counterpartyUsername)
 
   const handleSettle = async () => {
     if (!balance) return
@@ -57,15 +60,16 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
       // The debtor-side leg is an expense on fromAccountId; the creditor-side leg
       // is an income on toAccountId. Map "my"/"their" account onto those roles by
       // direction, and tell the server who the debtor is (B-01).
-      const fromAccountId = iAmCreditor ? form.theirAccountId : form.myAccountId
-      const toAccountId = iAmCreditor ? form.myAccountId : form.theirAccountId
+      // My account fills whichever role I am in; the other side is left for the
+      // other person.
       const res = await api.post<{ id: string; message?: string }>('/settlements', {
         groupId,
         ...(iAmCreditor ? { fromUserId: balance.fromUserId } : { toUserId: balance.toUserId }),
         amount: Number(form.amount),
         note: form.note,
-        fromAccountId: fromAccountId || undefined,
-        toAccountId: toAccountId || undefined,
+        ...(iAmCreditor
+          ? { toAccountId: form.myAccountId }
+          : { fromAccountId: form.myAccountId }),
       })
       // B-18: surface a capped-amount notice; the settlement is already recorded.
       if (res?.message) {
@@ -112,33 +116,12 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
           value={form.myAccountId}
           onChange={(e) => setForm((f) => ({ ...f, myAccountId: e.target.value }))}
         />
-        <div>
-          {theirAccounts.length === 0 ? (
-            <>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                {counterpartyUsername}&rsquo;s account (optional)
-              </label>
-              <p className="text-xs text-gray-400">
-                No shared accounts from {counterpartyUsername}. Only your side will be recorded.
-              </p>
-            </>
-          ) : (
-            <Select
-              label={`${counterpartyUsername}’s account (optional)`}
-              id="settle-their-account"
-              options={[
-                { value: '', label: '— leave blank (records your side only) —' },
-                ...theirAccounts.map((a) => ({ value: a.id, label: a.name })),
-              ]}
-              value={form.theirAccountId}
-              onChange={(e) => setForm((f) => ({ ...f, theirAccountId: e.target.value }))}
-            />
-          )}
-        </div>
-        {/* U-13: clarify that this books a real ledger transfer, and nudges
-            toward filling in the counterparty's account when one is shared. */}
-        <p className="text-xs text-gray-400">
-          This books a real transfer in your ledger; add their account too if they&rsquo;ve shared one with you.
+        {/* Says what happens next. Recording a payment does not clear the debt
+            on its own — the other person has to say it arrived. */}
+        <p className="text-xs text-gray-400" data-testid="settle-explainer">
+          {iAmCreditor
+            ? `This records that ${counterpartyUsername} paid you, and books the money into your account.`
+            : `This books the payment out of your account. ${counterpartyUsername} confirms it arrived before the balance clears.`}
         </p>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Note (optional)</label>

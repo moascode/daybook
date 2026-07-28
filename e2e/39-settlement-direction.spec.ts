@@ -8,6 +8,22 @@ test.describe.configure({ mode: 'serial' })
  * Wave A1 — settlement direction (B-01) and true partial settlement (B-02).
  * These paths had zero coverage, which is exactly where the bugs lived.
  */
+
+/** Since W4 a debtor's payment is a claim; the creditor confirms it. */
+async function claimAndConfirm(
+  s: { bob: import('@playwright/test').Page; alice: import('@playwright/test').Page
+       groupId: string; aliceId: string; bobAcct: { id: string }; aliceAcct: { id: string } },
+  amount: number,
+) {
+  const res = await s.bob.request.post(`${API}/settlements`, {
+    data: { groupId: s.groupId, toUserId: s.aliceId, amount, fromAccountId: s.bobAcct.id },
+  })
+  if (res.status() !== 201) return res
+  const id = (await res.json()).id as string
+  await s.alice.request.post(`${API}/settlements/${id}/confirm`, { data: { accountId: s.aliceAcct.id } })
+  return res
+}
+
 test.describe('39 — Settlement direction & partial settlement', () => {
   // Sets up Alice + Bob in a group with a RM200 dinner split 100/100 (Bob owes
   // Alice RM100). Returns the request contexts, user ids, group id, and accounts.
@@ -93,17 +109,20 @@ test.describe('39 — Settlement direction & partial settlement', () => {
   test('B-02: a partial payment leaves the remainder outstanding', async ({ browser }) => {
     const s = await setup(browser, 'part')
 
-    // Bob owes RM100, pays RM40.
-    const r1 = await s.bob.request.post(`${API}/settlements`, {
+    // Bob owes RM100, pays RM40. The claim alone does not move the balance —
+    // only Alice confirming receipt does (W4).
+    const claim = await s.bob.request.post(`${API}/settlements`, {
       data: { groupId: s.groupId, toUserId: s.aliceId, amount: 40, fromAccountId: s.bobAcct.id },
     })
-    expect(r1.status()).toBe(201)
+    expect(claim.status()).toBe(201)
+    expect(await balanceAmount(s.bob, s.groupId)).toBe(100)
+    await s.alice.request.post(`${API}/settlements/${(await claim.json()).id}/confirm`, {
+      data: { accountId: s.aliceAcct.id },
+    })
     expect(await balanceAmount(s.bob, s.groupId)).toBe(60)
 
     // Pays the remaining RM60 → fully settled.
-    const r2 = await s.bob.request.post(`${API}/settlements`, {
-      data: { groupId: s.groupId, toUserId: s.aliceId, amount: 60, fromAccountId: s.bobAcct.id },
-    })
+    const r2 = await claimAndConfirm(s, 60)
     expect(r2.status()).toBe(201)
     expect(await balanceAmount(s.bob, s.groupId)).toBe(0)
 
@@ -120,9 +139,7 @@ test.describe('39 — Settlement direction & partial settlement', () => {
   test('B-02: undoing a partial settlement restores exactly the paid amount', async ({ browser }) => {
     const s = await setup(browser, 'undo')
 
-    await s.bob.request.post(`${API}/settlements`, {
-      data: { groupId: s.groupId, toUserId: s.aliceId, amount: 40, fromAccountId: s.bobAcct.id },
-    })
+    await claimAndConfirm(s, 40)
     expect(await balanceAmount(s.bob, s.groupId)).toBe(60)
 
     const history = await (await s.bob.request.get(`${API}/settlements?groupId=${s.groupId}`)).json()
@@ -145,6 +162,11 @@ test.describe('39 — Settlement direction & partial settlement', () => {
     expect(res.status()).toBe(201)
     const body = await res.json()
     expect(body.message).toContain('100')
+    // The cap applies at claim time; the balance clears on Alice's confirmation.
+    expect(await balanceAmount(s.bob, s.groupId)).toBe(100)
+    await s.alice.request.post(`${API}/settlements/${body.id}/confirm`, {
+      data: { accountId: s.aliceAcct.id },
+    })
     expect(await balanceAmount(s.bob, s.groupId)).toBe(0)
 
     await s.aliceCtx.close()

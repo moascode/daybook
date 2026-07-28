@@ -21,6 +21,7 @@ import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
 import { useHouseholdStore } from '@/stores/household.store'
+import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { mapInvite } from '@/lib/household.mappers'
 
@@ -96,8 +97,18 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         if (!cancelled) setPendingInvites(raw.map(mapInvite))
       } catch { /* ignore */ }
       try {
-        const claims = await api.get<unknown[]>('/transactions/splits/mine?status=pending')
-        if (!cancelled) setPendingClaimCount(claims.length)
+        // Both halves of "something is waiting for me": splits I have not
+        // resolved, and payments claimed against me that I have not confirmed.
+        // One badge, because the user's question is the same either way.
+        const [claims, settlements] = await Promise.all([
+          api.get<unknown[]>('/transactions/splits/mine?status=pending'),
+          api.get<{ status?: string; to_user?: string }[]>('/settlements'),
+        ])
+        const me = useAppStore.getState().user?.id
+        const toConfirm = settlements.filter(
+          (x) => x.status === 'awaiting_confirmation' && x.to_user === me,
+        ).length
+        if (!cancelled) setPendingClaimCount(claims.length + toConfirm)
       } catch { /* ignore */ }
     }
     load()
