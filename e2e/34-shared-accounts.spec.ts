@@ -92,8 +92,14 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(alicePage, { name: 'Shared Card' })
 
-    await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' }).hover()
-    await alicePage.getByRole('button', { name: 'Edit account' }).click()
+    // Wait for the card, and scope its actions to it. Not the cause of this
+    // test's old intermittent timeout — that was the unawaited group <select>
+    // below — but an unscoped "Edit account" would still match the wrong card
+    // the moment a second account exists here.
+    const sharedCard = alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' })
+    await expect(sharedCard).toBeVisible({ timeout: 15_000 })
+    await sharedCard.hover()
+    await sharedCard.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
     // The dialog fills this select from GET /api/groups after it opens. Calling
     // selectOption before that resolves waits for an option that does not exist

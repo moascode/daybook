@@ -572,12 +572,12 @@ async function viewCondition(
   if (view === 'shared-with-me') {
     // Transactions created by others where I have a split line.
     binds.push(userId, userId)
-    return `${alias}.user_id != ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ?)`
+    return `${alias}.user_id != ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ? AND ts.status != 'rejected')`
   }
   if (view === 'shared-with-others') {
     // My transactions that have been shared with others.
     binds.push(userId, userId)
-    return `${alias}.user_id = ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != ?)`
+    return `${alias}.user_id = ? AND EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id != ? AND ts.status != 'rejected')`
   }
   // All visible: own transactions + transactions on shared accounts + anything
   // split with me.
@@ -592,7 +592,9 @@ async function viewCondition(
   // W3 will narrow this to non-rejected splits once transaction_splits.status
   // exists; until then every split row counts, which is the same thing.
   const visible = await visibleAccountIds(db, userId)
-  const splitClause = `EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ?)`
+  // W3: a rejected claim stops existing for the recipient — that is the point of
+  // rejecting. It also stops badging the payer's row as split (has_splits below).
+  const splitClause = `EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = ${alias}.id AND ts.user_id = ? AND ts.status != 'rejected')`
   if (visible.length === 0) {
     binds.push(userId, userId)
     return `(${alias}.user_id = ? OR ${splitClause})`
@@ -675,8 +677,12 @@ wallet.get('/transactions', async (c) => {
   // one user's amounts to another rather than erroring.
   const { results } = await c.env.DB.prepare(
     `SELECT transactions.*,
-       CASE WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = transactions.id)
-            THEN 1 ELSE 0 END AS has_splits,
+       CASE WHEN EXISTS (
+              SELECT 1 FROM transaction_splits ts
+              WHERE ts.transaction_id = transactions.id
+                AND ts.status != 'rejected'
+                AND ts.user_id != transactions.user_id
+            ) THEN 1 ELSE 0 END AS has_splits,
        ${EFFECTIVE_AMOUNT_SQL('transactions')} AS effective_amount
      FROM transactions ${where} ORDER BY date DESC, created_at DESC`,
   )
@@ -1158,7 +1164,7 @@ wallet.get('/transactions/:id/splits', async (c) => {
 
   const { results } = await c.env.DB.prepare(
     `SELECT ts.id, ts.transaction_id, ts.user_id, ts.share_amount, ts.note, ts.settled_at,
-            ts.created_at, u.username
+            ts.created_at, ts.status, ts.rejected_reason, ts.rejected_at, u.username
      FROM transaction_splits ts
      JOIN users u ON u.id = ts.user_id
      WHERE ts.transaction_id = ?
@@ -1167,6 +1173,98 @@ wallet.get('/transactions/:id/splits', async (c) => {
     .bind(id)
     .all()
   return c.json(results)
+})
+
+// GET /transactions/splits/mine — every claim standing against the caller, with
+// enough of the underlying transaction to judge it (§6 review queue).
+//
+// Deliberately not date-filtered: a claim is outstanding until resolved, and the
+// original report in this whole workstream was a recipient who could not find
+// splits because the transaction list defaulted to the current month.
+wallet.get('/transactions/splits/mine', async (c) => {
+  const userId = c.get('userId')
+  const status = str(c.req.query('status'))
+  const conditions = ['ts.user_id = ?']
+  const binds: unknown[] = [userId]
+  if (status) {
+    conditions.push('ts.status = ?')
+    binds.push(status)
+  } else {
+    conditions.push("ts.status != 'rejected'")
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.note,
+            ts.status, ts.rejected_reason, ts.rejected_at, ts.settled_at, ts.created_at,
+            t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
+            t.category_id, u.username AS owner_username, t.user_id AS owner_id
+     FROM transaction_splits ts
+     JOIN transactions t ON t.id = ts.transaction_id
+     JOIN users u ON u.id = t.user_id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY t.date DESC, ts.created_at DESC`,
+  )
+    .bind(...binds)
+    .all()
+  return c.json(results)
+})
+
+// POST /transactions/splits/:id/reject — the recipient declines a claim (§5.2).
+//
+// Rejection is the review step. It is the recipient's only lever, so it belongs
+// to them alone: the payer cannot reject on their behalf, and rejecting is not
+// the same as settling — no money moves, the claim simply stops existing. The
+// payer's effective expense returns to the full amount because the split no
+// longer counts anywhere, and they are free to re-split with a corrected figure.
+wallet.post('/transactions/splits/:id/reject', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const b = await body(c)
+  const reason = typeof b.reason === 'string' ? b.reason.slice(0, 500) : ''
+
+  const split = await c.env.DB.prepare(
+    'SELECT id, user_id, status, settled_amount FROM transaction_splits WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; status: string; settled_amount: number }>()
+  // 404 rather than 403 for someone else's split — the same non-disclosure rule
+  // the group routes use, so an id cannot be probed for existence.
+  if (!split || split.user_id !== userId) {
+    return c.json({ error: 'split not found' }, 404)
+  }
+
+  if (split.status === 'rejected') {
+    return c.json({ error: 'this split has already been rejected' }, 409)
+  }
+  // Money has already changed hands against this claim, in whole or in part.
+  // Rejecting now would erase a debt that was really paid, so the settlement has
+  // to be undone first — the same guard B-04 puts on re-splitting.
+  if (split.status === 'settled' || split.settled_amount > 0.005) {
+    return c.json(
+      { error: 'this split has been (partly) settled; undo the settlement before rejecting it' },
+      409,
+    )
+  }
+  if (split.status === 'awaiting_confirmation') {
+    return c.json(
+      { error: 'a payment is awaiting confirmation on this split; resolve that first' },
+      409,
+    )
+  }
+
+  const row = await c.env.DB.prepare(
+    `UPDATE transaction_splits
+     SET status = 'rejected', rejected_reason = ?, rejected_at = datetime('now')
+     WHERE id = ? AND status = 'pending'
+     RETURNING *`,
+  )
+    .bind(reason, id)
+    .first()
+  // The guard above and this WHERE can disagree only if another request moved
+  // the row in between; report that rather than a misleading success.
+  if (!row) return c.json({ error: 'split is no longer pending' }, 409)
+
+  return c.json(row)
 })
 
 /** INSERT for one split row. */
@@ -1425,9 +1523,16 @@ wallet.post('/transactions/splits/status', async (c) => {
       .bind(...transactionIds, userId),
     c.env.DB
       .prepare(
-        `SELECT DISTINCT transaction_id FROM transaction_splits WHERE transaction_id IN (${placeholders})`,
+        // Must match the list query's has_splits exactly, or a row is badged in
+        // one place and not the other — the drift this route's comment warns of.
+        // Two conditions: rejected claims do not count, and neither does the
+        // owner's own row. An equal split leaves the owner a row of their own;
+        // once the only other participant rejects, the transaction is shared
+        // with nobody and must stop claiming otherwise.
+        `SELECT DISTINCT transaction_id FROM transaction_splits
+         WHERE transaction_id IN (${placeholders}) AND status != 'rejected' AND user_id != ?`,
       )
-      .bind(...transactionIds),
+      .bind(...transactionIds, userId),
   ])
 
   const ownedIds = new Set((owned.results as { id: string }[]).map((r) => r.id))
