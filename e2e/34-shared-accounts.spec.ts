@@ -60,6 +60,10 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Family Visa' }).hover()
     await alicePage.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
+    // The dialog fills this select from GET /api/groups after it opens. Calling
+    // selectOption before that resolves waits for an option that does not exist
+    // yet and burns the whole test timeout, with no failing action to point at.
+    await expect(shareSelect.locator('option', { hasText: 'Family' })).toHaveCount(1, { timeout: 10_000 })
     await shareSelect.selectOption({ label: 'Family' })
     await alicePage.getByRole('dialog').getByRole('button', { name: 'Share' }).click()
     await alicePage.getByRole('dialog').getByRole('button', { name: /Save Changes/ }).click()
@@ -91,6 +95,10 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' }).hover()
     await alicePage.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
+    // The dialog fills this select from GET /api/groups after it opens. Calling
+    // selectOption before that resolves waits for an option that does not exist
+    // yet and burns the whole test timeout, with no failing action to point at.
+    await expect(shareSelect.locator('option', { hasText: 'Family' })).toHaveCount(1, { timeout: 10_000 })
     await shareSelect.selectOption({ label: 'Family' })
     await alicePage.getByRole('dialog').getByRole('button', { name: 'Share' }).click()
     await alicePage.getByRole('dialog').getByRole('button', { name: /Save Changes/ }).click()
@@ -141,6 +149,10 @@ test.describe('34 — Shared accounts', () => {
     await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'RO Card' }).hover()
     await alicePage.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
+    // The dialog fills this select from GET /api/groups after it opens. Calling
+    // selectOption before that resolves waits for an option that does not exist
+    // yet and burns the whole test timeout, with no failing action to point at.
+    await expect(shareSelect.locator('option', { hasText: 'Family' })).toHaveCount(1, { timeout: 10_000 })
     await shareSelect.selectOption({ label: 'Family' })
     await alicePage.getByRole('dialog').getByRole('button', { name: 'Share' }).click()
     await alicePage.getByRole('dialog').getByRole('button', { name: /Save Changes/ }).click()
