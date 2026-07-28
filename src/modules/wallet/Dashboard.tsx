@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useWallet } from '@/hooks/useWallet'
+import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { formatMYR, formatAxisMYR, monthRange, POSITIVE_MONEY_COLOR } from '@/lib/utils'
@@ -91,8 +91,8 @@ export function Dashboard() {
     let income = 0
     let expense = 0
     for (const t of transactions) {
-      if (t.type === 'income') income += t.amount
-      else if (t.type === 'expense') expense += t.amount
+      if (t.type === 'income') income += countableAmount(t)
+      else if (t.type === 'expense') expense += countableAmount(t)
     }
     return { income, expense, net: income - expense }
   }, [transactions])

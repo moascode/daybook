@@ -1,19 +1,27 @@
 /**
- * B-15 residual (Wave F3): budget "spent" must use the caller's EFFECTIVE
- * share of a transaction — their own share_amount when they've split it,
- * not the full transaction amount.
+ * Budget "spent" tracks the caller's EFFECTIVE amount — the ledger amount less
+ * whatever others have actually settled on it.
  *
- * Scenario: Alice creates a RM200 Food & Drink expense and a budget on that
- * category. Spent should show ~200. She then splits the transaction 50/50
- * with Bob. Spent should drop to ~100 (her own share), never the full 200.
+ * ⚠️ BEHAVIOUR CHANGED 2026-07-28 (docs/split-settlement-plan.md, owner decision
+ * §9.1). This file previously asserted that splitting an expense *immediately*
+ * dropped budget spend to the caller's own share — accrual accounting. The owner
+ * reversed that: "it's all in the payer's expense until it is settled; when they
+ * settle, the expense is lower based on the settled amount." Splitting alone now
+ * changes nothing; only money coming back does.
+ *
+ * The scenario below is the same one, extended through settlement so both halves
+ * of the rule are covered rather than just the new one:
+ *   RM200 expense  →  split 50/50  →  still 200  →  Bob settles 100  →  100.
  */
 
 import { test, expect } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
+const API = 'http://localhost:5173/api'
+
 test.describe('43 — Budget spending uses the effective split amount', () => {
-  test('splitting an expense drops budget spend to the caller\'s own share', async ({ browser }) => {
+  test('budget spend falls when a split is settled, not when it is created', async ({ browser }) => {
     const aliceCtx = await browser.newContext()
     const bobCtx = await browser.newContext()
     const alicePage = await aliceCtx.newPage()
@@ -22,65 +30,78 @@ test.describe('43 — Budget spending uses the effective split amount', () => {
     const aliceName = `alice_budget_eff_${ts}`
     const bobName = `bob_budget_eff_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post(`${API}/auth/signup`, { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post(`${API}/auth/signup`, { data: { username: bobName, password: 'test-password' } })
+    const aliceId = await alicePage.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
 
     // Alice + Bob in a group together
-    const group = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'BudgetEffGroup' } }).then((r) => r.json()) as { id: string }
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    const group = await alicePage.request.post(`${API}/groups`, { data: { name: 'BudgetEffGroup' } }).then((r) => r.json()) as { id: string }
+    await alicePage.request.post(`${API}/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get(`${API}/invites`).then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`${API}/invites/${invites[0].id}/accept`)
 
-    // Alice creates an account
-    const acct = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acct = await alicePage.request.post(`${API}/accounts`, {
       data: { name: 'Alice Budget Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
 
-    // Find the seeded "Food & Drink" category
-    const categories = await alicePage.request.get('http://localhost:5173/api/categories').then((r) => r.json()) as Array<{ id: string; name: string }>
+    const categories = await alicePage.request.get(`${API}/categories`).then((r) => r.json()) as Array<{ id: string; name: string }>
     const foodCategory = categories.find((c) => c.name === 'Food & Drink')!
 
     // Current-month expense of 200
     const now = new Date()
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txn = await alicePage.request.post(`${API}/transactions`, {
       data: {
-        accountId: acct.id,
-        date: today,
-        merchant: 'Dinner Split',
-        amount: 200,
-        type: 'expense',
-        categoryId: foodCategory.id,
-        tag: '[]',
+        accountId: acct.id, date: today, merchant: 'Dinner Split', amount: 200,
+        type: 'expense', categoryId: foodCategory.id, tag: '[]',
       },
     }).then((r) => r.json()) as { id: string }
 
-    // Budget on Food & Drink, limit well above 200 so no over-budget alert noise
-    await alicePage.request.post('http://localhost:5173/api/budgets', {
+    await alicePage.request.post(`${API}/budgets`, {
       data: { categoryId: foodCategory.id, limitAmount: 1000 },
     })
 
-    // Before splitting: budget row shows the full 200 spent
-    await alicePage.goto('/wallet/budgets')
-    await expect(alicePage.locator('main').getByRole('heading', { name: 'Budgets', exact: true })).toBeVisible({ timeout: 15_000 })
-    const row = alicePage.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
-    await expect(row).toBeVisible({ timeout: 10_000 })
-    await expect(row.getByText(/RM\s?200\.00/)).toBeVisible({ timeout: 5000 })
+    const budgetRow = async () => {
+      await alicePage.goto('/wallet/budgets')
+      await expect(alicePage.locator('main').getByRole('heading', { name: 'Budgets', exact: true }))
+        .toBeVisible({ timeout: 15_000 })
+      const row = alicePage.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
+      await expect(row).toBeVisible({ timeout: 10_000 })
+      return row
+    }
 
-    // Alice splits the transaction 50/50 with Bob (100 each)
-    const members = await alicePage.request.get('http://localhost:5173/api/groups/members').then((r) => r.json()) as Array<{ user_id: string; username: string }>
+    // ── Before splitting: the full 200 ──
+    await expect((await budgetRow()).getByText(/RM\s?200\.00/)).toBeVisible({ timeout: 5000 })
+
+    // ── Split 50/50 — and nothing changes (§9.1) ──
+    const members = await alicePage.request.get(`${API}/groups/members`).then((r) => r.json()) as Array<{ user_id: string; username: string }>
     const bobId = members.find((m) => m.username === bobName)!.user_id
-    await alicePage.request.post(`http://localhost:5173/api/transactions/${txn.id}/split`, {
+    await alicePage.request.post(`${API}/transactions/${txn.id}/split`, {
       data: { recipientId: bobId, splitMode: 'equal' },
     })
 
-    // After splitting: spent reflects Alice's own RM100 share, not the full RM200
-    await alicePage.goto('/wallet/budgets')
-    await expect(alicePage.locator('main').getByRole('heading', { name: 'Budgets', exact: true })).toBeVisible({ timeout: 15_000 })
-    const rowAfter = alicePage.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
-    await expect(rowAfter).toBeVisible({ timeout: 10_000 })
-    await expect(rowAfter.getByText(/RM\s?100\.00/)).toBeVisible({ timeout: 5000 })
-    await expect(rowAfter.getByText(/RM\s?200\.00/)).not.toBeVisible()
+    const afterSplit = await budgetRow()
+    await expect(afterSplit.getByText(/RM\s?200\.00/)).toBeVisible({ timeout: 5000 })
+    await expect(afterSplit.getByText(/RM\s?100\.00/)).not.toBeVisible()
+
+    // ── Bob settles his RM100 — now it drops ──
+    const bobAcct = await bobPage.request.post(`${API}/accounts`, {
+      data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    // Alice shares her account so the creditor leg can be booked. W4 removes this
+    // requirement by having the creditor book their own leg on confirmation.
+    await alicePage.request.post(`${API}/accounts/${acct.id}/shares`, {
+      data: { groupId: group.id, canWrite: 1 },
+    })
+    const settle = await bobPage.request.post(`${API}/settlements`, {
+      data: { groupId: group.id, toUserId: aliceId, amount: 100, fromAccountId: bobAcct.id, toAccountId: acct.id },
+    })
+    expect(settle.ok()).toBeTruthy()
+
+    const afterSettle = await budgetRow()
+    await expect(afterSettle.getByText(/RM\s?100\.00/)).toBeVisible({ timeout: 5000 })
+    await expect(afterSettle.getByText(/RM\s?200\.00/)).not.toBeVisible()
 
     await aliceCtx.close()
     await bobCtx.close()

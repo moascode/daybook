@@ -712,7 +712,7 @@ wallet.get('/transactions/export', async (c) => {
   // effective_amount's bind leads, matching its placeholder position (§5.3).
   const { results } = await c.env.DB.prepare(
     `SELECT t.date, t.merchant, t.description, t.amount, t.type,
-            ${EFFECTIVE_AMOUNT_SQL('t')} AS effective_amount, t.is_reimbursement,
+            ${EFFECTIVE_AMOUNT_SQL('t')} AS effective_amount, t.is_balance_only,
             c.name AS category_name, a.name AS account_name, t.tag
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
@@ -1468,25 +1468,22 @@ wallet.get('/budgets/spending', async (c) => {
     return c.json({ error: 'month must be in YYYY-MM format' }, 400)
   }
 
+  // §3: this used to charge the budget the caller's own share_amount as soon as
+  // a split existed — pure accrual, which decision §9.1 rejects. The budget now
+  // carries the full amount until money actually comes back, matching the
+  // transaction list and the dashboard. Balance-only legs never count.
   const { results } = await c.env.DB.prepare(
     `SELECT t.category_id AS categoryId,
-            SUM(
-              CASE
-                WHEN EXISTS (SELECT 1 FROM transaction_splits ts WHERE ts.transaction_id = t.id)
-                  THEN COALESCE(own.share_amount, 0)
-                ELSE t.amount
-              END
-            ) AS spent
+            SUM(${EFFECTIVE_AMOUNT_SQL('t')}) AS spent
      FROM transactions t
-     LEFT JOIN transaction_splits own
-       ON own.transaction_id = t.id AND own.user_id = ?
      WHERE t.user_id = ?
        AND t.type = 'expense'
+       AND t.is_balance_only = 0
        AND t.category_id IS NOT NULL
        AND t.date LIKE ?
      GROUP BY t.category_id`,
   )
-    // The server bound @userId twice by name; positionally that is two binds.
+    // EFFECTIVE_AMOUNT_SQL's bind leads — its placeholder is in the projection.
     .bind(userId, userId, `${month}-%`)
     .all()
 

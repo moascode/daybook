@@ -37,9 +37,11 @@ export interface Transaction {
   // a transaction the viewer does not own. `amount` stays the ledger truth and
   // drives balances; `effectiveAmount` drives income/expense totals.
   effectiveAmount: number
-  // A settlement leg. Moves balances, never counted as income or expense —
-  // the payer's expense already fell by the settled amount.
-  isReimbursement: boolean
+  // The creditor's incoming settlement leg. Moves the balance, never counted as
+  // income — their expense already fell by the settled amount, so counting the
+  // arrival too would correct the same money twice. The debtor's outgoing
+  // payment is NOT flagged: it is a normal expense (§3).
+  isBalanceOnly: boolean
 }
 
 export interface Category {
