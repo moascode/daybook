@@ -106,6 +106,7 @@ jobs:
         with:
           name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
+          retention-days: 30
 
       # wrangler writes the real stack trace here and it dies with the runner.
       # An empty `✘ [ERROR]` on the console cost a full investigation to place;
@@ -117,5 +118,4 @@ jobs:
           name: wrangler-logs-shard-${{ matrix.shard }}
           path: ~/.config/.wrangler/logs/
           if-no-files-found: ignore
-          retention-days: 30
           retention-days: 30
