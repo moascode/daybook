@@ -31,7 +31,9 @@ const app = new Hono<AppEnv>()
 app.use('/api/*', async (c, next) => {
   const started = Date.now()
   await next()
-  console.log(`${c.req.method} ${new URL(c.req.url).pathname} ${c.res.status} ${Date.now() - started}ms`)
+  if (c.env.DAYBOOK_QUIET_LOGS !== '1') {
+    console.log(`${c.req.method} ${new URL(c.req.url).pathname} ${c.res.status} ${Date.now() - started}ms`)
+  }
 })
 
 // Blocker 4.5: the Workers-native replacement for helmet, which is Express

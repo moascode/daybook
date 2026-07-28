@@ -32,6 +32,13 @@ export interface Env {
 
   /** `'1'` mounts POST /api/test/reset. Never set in production. */
   DAYBOOK_TEST?: string
+  // '1' silences the per-request log line. Set only by the Playwright harness
+  // (--var in playwright.config.ts): every console.log in `wrangler dev` is
+  // forwarded through the InspectorProxyWorker, and a full suite emitted 15,480
+  // of them with no devtools attached to receive them. workerd died writing to
+  // that pipe ("Broken pipe", kj/async-io-unix.c++:186). Production and normal
+  // local dev keep the logs.
+  DAYBOOK_QUIET_LOGS?: string
 }
 
 /**

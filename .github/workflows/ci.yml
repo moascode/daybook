@@ -68,7 +68,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # 6 shards, not 3: wrangler dev died part-way through the longest shard on
+        # 7 GB runners, and workerd peaks around 1.1 GB during a long run. Halving
+        # each shard's length halves what accumulates in it — and CI gets faster.
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
 
@@ -87,20 +90,39 @@ jobs:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # Both steps shell out to apt, which can block indefinitely behind the
+      # runner's own unattended-upgrades holding the dpkg lock. Six shards means
+      # six chances per run instead of three, and a stuck job otherwise sits
+      # until the 15-minute job timeout with nothing saying why. Bounded so it
+      # fails fast and names itself.
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 6
         run: npx playwright install --with-deps chromium
 
       - name: Install Playwright system deps (cached hit)
         if: steps.pw-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 6
         run: npx playwright install-deps chromium
 
-      - name: Run Playwright tests (shard ${{ matrix.shard }}/3)
-        run: npx playwright test --shard=${{ matrix.shard }}/3
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/6)
+        run: npx playwright test --shard=${{ matrix.shard }}/6
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
+          retention-days: 30
+
+      # wrangler writes the real stack trace here and it dies with the runner.
+      # An empty `✘ [ERROR]` on the console cost a full investigation to place;
+      # this makes the next occurrence readable straight from the run page.
+      - name: Upload wrangler logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrangler-logs-shard-${{ matrix.shard }}
+          path: ~/.config/.wrangler/logs/
+          if-no-files-found: ignore
           retention-days: 30
