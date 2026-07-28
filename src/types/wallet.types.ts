@@ -32,6 +32,16 @@ export interface Transaction {
   createdAt: string
   updatedAt: string
   hasSplits?: boolean
+  // What this transaction actually cost the viewer (docs/split-settlement-plan.md
+  // §3): the ledger `amount` less whatever others have settled on it, and 0 for
+  // a transaction the viewer does not own. `amount` stays the ledger truth and
+  // drives balances; `effectiveAmount` drives income/expense totals.
+  effectiveAmount: number
+  // The creditor's incoming settlement leg. Moves the balance, never counted as
+  // income — their expense already fell by the settled amount, so counting the
+  // arrival too would correct the same money twice. The debtor's outgoing
+  // payment is NOT flagged: it is a normal expense (§3).
+  isBalanceOnly: boolean
 }
 
 export interface Category {

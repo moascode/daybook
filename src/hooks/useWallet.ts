@@ -48,6 +48,8 @@ interface TransactionRow {
   created_at: string
   updated_at: string
   has_splits?: number
+  effective_amount?: number
+  is_balance_only?: number
 }
 
 interface CategoryRow {
@@ -106,7 +108,29 @@ function mapTransaction(row: TransactionRow): Transaction {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     hasSplits: !!row.has_splits,
+    // Writes (POST/PATCH) echo the row back without the computed column, so fall
+    // back to the ledger amount rather than 0 — a 0 here would blank the totals
+    // until the next list refetch.
+    effectiveAmount: row.effective_amount ?? row.amount,
+    isBalanceOnly: !!row.is_balance_only,
   }
+}
+
+/**
+ * What a transaction contributes to the viewer's income/expense totals (§3).
+ *
+ * Two subtractions, and they are not the same one:
+ *  - `effectiveAmount` already removes what others have settled on the viewer's
+ *    own transaction, so the payer's expense falls as money comes back.
+ *  - `isBalanceOnly` drops the creditor's incoming leg entirely, because that
+ *    same money is already accounted for by the line above.
+ *
+ * The debtor's outgoing payment is neither: it is a plain expense, and the only
+ * record of what they bore. Flagging it too would zero their expense and make
+ * the household total half the real spend.
+ */
+export function countableAmount(t: Transaction): number {
+  return t.isBalanceOnly ? 0 : t.effectiveAmount
 }
 
 function mapCategory(row: CategoryRow): Category {
@@ -472,7 +496,7 @@ export function useWallet() {
     for (const t of transactions) {
       if (t.type !== 'expense' || !t.categoryId) continue
       if (!t.date.startsWith(monthYear)) continue
-      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount)
+      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + countableAmount(t))
     }
     return map
   }, [])
@@ -614,8 +638,12 @@ export function useWallet() {
     let totalExpense = 0
 
     for (const t of transactions) {
-      if (t.type === 'income') totalIncome += t.amount
-      else if (t.type === 'expense') totalExpense += t.amount
+      // §3: countableAmount, not t.amount — it nets off what others have settled
+      // and drops the creditor's incoming leg. t.amount remains the ledger truth
+      // and is what balances are built from.
+      const amt = countableAmount(t)
+      if (t.type === 'income') totalIncome += amt
+      else if (t.type === 'expense') totalExpense += amt
       // transfers excluded from totals
     }
 

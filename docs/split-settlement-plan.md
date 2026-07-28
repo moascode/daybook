@@ -88,8 +88,20 @@ There are only two mechanisms that can return money, and using both double-count
 kakon physically receives the money, so his account must reflect it — but if that
 entry counts as income, the reduction happens twice. Therefore:
 
-> **The settlement ledger legs are balance-only. They move account balances and
-> are excluded from income/expense totals everywhere.**
+> **The creditor's incoming leg is balance-only: it moves the account balance and
+> is excluded from income/expense totals. The debtor's outgoing payment is a
+> normal expense.**
+
+The asymmetry is not a wrinkle, it is the whole mechanism, and an earlier
+revision of this document got it wrong by saying "both legs are balance-only".
+That reading zeroes the debtor's expense — her payment is her *only* record of
+what she bore, since §3 gives her 0 on the payer's transaction — and the
+household total comes to 50 instead of 100. Corrected 2026-07-28 after the
+owner re-confirmed the table below as normative.
+
+- **Creditor (kakon receives):** excluded. His expense already fell by the
+  settled amount; counting the arrival as income corrects the same money twice.
+- **Debtor (tumpa pays):** counted as expense. Nothing else records her cost.
 
 That is B-16, forced. With it, all four figures are right, before *and* after
 settlement (RM100 expense, 50/50 split, RM50 settled):
@@ -143,10 +155,11 @@ ALTER TABLE settlements ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed';
 ALTER TABLE settlements ADD COLUMN confirmed_at TEXT DEFAULT NULL;
 ALTER TABLE settlements ADD COLUMN rejected_reason TEXT DEFAULT '';
 
--- Settlement ledger legs are balance-only: they must never be summed into
--- income or expense. A column, not a merchant-string or category match —
--- both are user-editable and would silently re-inflate the totals.
-ALTER TABLE transactions ADD COLUMN is_reimbursement INTEGER NOT NULL DEFAULT 0;
+-- Set on the CREDITOR's incoming leg only (see §3) — never on the debtor's
+-- payment, which is a normal expense. A column, not a merchant-string or
+-- category match: both are user-editable and an edit would silently
+-- re-inflate the totals with no visible cause.
+ALTER TABLE transactions ADD COLUMN is_balance_only INTEGER NOT NULL DEFAULT 0;
 
 CREATE INDEX IF NOT EXISTS idx_txn_splits_status ON transaction_splits(user_id, status);
 ```
@@ -160,15 +173,15 @@ it unconfirmed would strand it).
 
 ```sql
 UPDATE transaction_splits SET status = 'settled' WHERE settled_at IS NOT NULL;
-UPDATE transactions SET is_reimbursement = 1
-  WHERE id IN (SELECT from_transaction_id FROM settlements WHERE from_transaction_id IS NOT NULL
-               UNION
-               SELECT to_transaction_id   FROM settlements WHERE to_transaction_id   IS NOT NULL);
+UPDATE transactions SET is_balance_only = 1
+  WHERE id IN (SELECT to_transaction_id FROM settlements WHERE to_transaction_id IS NOT NULL);
 ```
 
-The second statement is what makes past months' figures consistent with the new
-rule. Verify the affected row count before and after — on current live data it
-should touch exactly the legs of the single existing settlement.
+Only `to_transaction_id` — the creditor's incoming leg. The debtor's leg stays a
+normal expense. On current live data this touches **0 rows**: the one existing
+settlement has `to_transaction_id = NULL`, because the counterparty leg could
+never be written (the recipient had no shared account of the payer's to target).
+That zero is the expected result, not a failed migration.
 
 ## 5. API
 
@@ -206,10 +219,14 @@ is where `settled_amount` is actually written, so that is where the race lives n
 ### 5.3 Changed reads
 
 - Transaction list and export return `effective_amount` alongside `amount`.
-- Every income/expense aggregate excludes `is_reimbursement = 1`:
-  transaction summary row, `/accounts/balances` **income/expense split only**
-  (balances themselves still include the leg — that is the whole point),
-  dashboard, reports, budgets, `getMonthlySpending`.
+- Every income/expense aggregate excludes `is_balance_only = 1`: transaction
+  summary row, dashboard, reports, budgets, `getMonthlySpending`. Account
+  balances still include the leg — that is the whole point of the flag.
+- `GET /budgets/spending` (`worker/routes/wallet.ts:1464`) currently computes
+  from `own.share_amount`, which is pure accrual and contradicts decision §9.1
+  (full amount until settled). It moves to the §3 effective amount. Found after
+  this document was first written; it is the one aggregate that already existed
+  server-side.
 - Group balances count only `status IN ('pending','awaiting_confirmation')`.
 
 ## 6. Client

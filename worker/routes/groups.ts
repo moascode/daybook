@@ -395,6 +395,7 @@ groups.get('/groups/:id/balances', async (c) => {
      JOIN group_members gm_d ON gm_d.user_id = ts.user_id AND gm_d.group_id = ?
      JOIN group_members gm_c ON gm_c.user_id = t.user_id AND gm_c.group_id = ?
      WHERE ts.settled_at IS NULL AND ts.user_id != t.user_id
+       AND ts.status IN ('pending', 'awaiting_confirmation')
      GROUP BY ts.user_id, t.user_id`,
   )
     .bind(id, id)

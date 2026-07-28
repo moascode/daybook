@@ -142,3 +142,134 @@ test.describe('52 — Split review (W1: visibility)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── W2: money semantics (docs/split-settlement-plan.md §3) ─────────────
+//
+// The four-number table, asserted end to end. This is the wave's whole point:
+// after a settlement the payer's expense must FALL by the settled amount, the
+// payee's payment must COUNT as their expense, both balances must be right, and
+// the household total must equal the real spend — before and after settlement.
+test.describe('52 — Split review (W2: money semantics)', () => {
+  test('the §3 four-number table holds before and after settlement', async ({ browser }) => {
+    // RM100 expense on the payer's card, split so the recipient owes RM50.
+    const f = await splitFixture(browser, 'fournum', priorMonthDate(), 100)
+
+    // Re-split 50/50 — the fixture's "none" mode gives the recipient 100%.
+    const resplit = await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'equal' },
+    })
+    expect(resplit.status()).toBe(201)
+
+    const summary = async (page: import('@playwright/test').Page) => {
+      const rows = await page.request.get(`${API}/transactions`).then((r) => r.json()) as
+        { type: string; effective_amount: number; is_balance_only: number }[]
+      let expense = 0
+      for (const t of rows) {
+        if (t.type === 'expense' && !t.is_balance_only) expense += t.effective_amount
+      }
+      return Math.round(expense * 100) / 100
+    }
+    const balance = async (page: import('@playwright/test').Page, acct: string) =>
+      page.request.get(`${API}/accounts/${acct}/balance`).then((r) => r.json())
+        .then((b: { balance: number }) => Math.round(b.balance * 100) / 100)
+
+    // ── Before settlement: it is all on the payer ──
+    expect(await summary(f.payer)).toBe(100)
+    expect(await summary(f.recip)).toBe(0)
+    expect(await balance(f.payer, f.acct.id)).toBe(-100)
+
+    // The recipient needs their own account to pay from (owner decision §9.5).
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'Recip Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+
+    // W2 only changes the money maths, not who picks the accounts — so booking
+    // the creditor's leg still requires them to have shared a writable account,
+    // which is the ergonomic dead end W4 removes (the creditor will book their
+    // own leg on confirmation). Sharing here keeps this test about §3.
+    const shared = await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
+      data: { groupId: f.group.id, canWrite: 1 },
+    })
+    expect(shared.ok()).toBeTruthy()
+
+    // ── Settle RM50 ──
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    const settle = await f.recip.request.post(`${API}/settlements`, {
+      data: {
+        groupId: f.group.id, toUserId: payerId, amount: 50,
+        fromAccountId: recipAcct.id, toAccountId: f.acct.id,
+      },
+    })
+    expect(settle.ok()).toBeTruthy()
+
+    // ── After settlement: the four numbers ──
+    // Payer's expense falls by exactly the settled amount…
+    expect(await summary(f.payer)).toBe(50)
+    // …and the payee's payment is their expense — NOT excluded. Flagging both
+    // legs balance-only would make this 0 and the household total half the spend.
+    expect(await summary(f.recip)).toBe(50)
+    // Balances still count the settlement legs — that is what the flag is for.
+    expect(await balance(f.payer, f.acct.id)).toBe(-50)
+    expect(await balance(f.recip, recipAcct.id)).toBe(-50)
+    // Household total equals the real RM100 spend.
+    expect((await summary(f.payer)) + (await summary(f.recip))).toBe(100)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The creditor's incoming leg must not inflate their income.
+  test('the settlement arrival is not counted as the payee\'s income', async ({ browser }) => {
+    const f = await splitFixture(browser, 'noincome', priorMonthDate(), 100)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R Card', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    // See the note in the four-number test: W4 removes this requirement.
+    await f.payer.request.post(`${API}/accounts/${f.acct.id}/shares`, {
+      data: { groupId: f.group.id, canWrite: 1 },
+    })
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+    await f.recip.request.post(`${API}/settlements`, {
+      data: {
+        groupId: f.group.id, toUserId: payerId, amount: 100,
+        fromAccountId: recipAcct.id, toAccountId: f.acct.id,
+      },
+    })
+
+    const rows = await f.payer.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { type: string; is_balance_only: number; effective_amount: number }[]
+    const incomeLeg = rows.find((t) => t.type === 'income')
+    expect(incomeLeg).toBeTruthy()
+    expect(incomeLeg?.is_balance_only).toBe(1)
+
+    const countedIncome = rows
+      .filter((t) => t.type === 'income' && !t.is_balance_only)
+      .reduce((s, t) => s + t.effective_amount, 0)
+    expect(countedIncome).toBe(0)
+
+    // The debtor's own leg is deliberately NOT flagged.
+    const debtorRows = await f.recip.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { type: string; is_balance_only: number }[]
+    const debtorLeg = debtorRows.find((t) => t.type === 'expense')
+    expect(debtorLeg?.is_balance_only).toBe(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // A non-owner gets 0 on someone else's transaction: their cost is the payment
+  // they book, never a slice of the payer's row. Counting both double-counts.
+  test('a recipient\'s effective amount on the payer\'s transaction is 0', async ({ browser }) => {
+    const f = await splitFixture(browser, 'noneffective', priorMonthDate(), 100)
+    const rows = await f.recip.request.get(`${API}/transactions`).then((r) => r.json()) as
+      { id: string; effective_amount: number }[]
+    const row = rows.find((t) => t.id === f.txn.id)
+    expect(row).toBeTruthy()
+    expect(row?.effective_amount).toBe(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})

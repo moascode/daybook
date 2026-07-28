@@ -197,12 +197,18 @@ settlements.post('/settlements', async (c) => {
       .prepare(
         `INSERT INTO transactions
            (id, user_id, account_id, destination_account_id, date, merchant, description,
-            amount, type, category_id, tag, import_hash, created_at, updated_at)
+            amount, type, category_id, tag, import_hash, is_balance_only, created_at, updated_at)
          VALUES
-           (?, ?, ?, NULL, ?, 'Settlement', ?, ?, ?, NULL, '[]', '', datetime('now'), datetime('now'))`,
+           (?, ?, ?, NULL, ?, 'Settlement', ?, ?, ?, NULL, '[]', '', ?, datetime('now'), datetime('now'))`,
       )
-      // id, userId, accountId, date, description, amount, type
-      .bind(id, userId, accountId, today, description, effective, type)
+      // id, userId, accountId, date, description, amount, type, is_balance_only
+      //
+      // §3: the creditor's income leg is balance-only — their expense already
+      // fell by the settled amount via EFFECTIVE_AMOUNT_SQL, so counting the
+      // arrival as income corrects the same money twice. The debtor's expense
+      // leg is NOT flagged: it is a plain expense and their only record of what
+      // they paid.
+      .bind(id, userId, accountId, today, description, effective, type, type === 'income' ? 1 : 0)
 
   // Compare-and-swap. The row is only updated if it is still exactly as it was
   // read — same settled_amount, still unsettled. A concurrent settlement that

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
-import { useWallet } from '@/hooks/useWallet'
+import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import {
@@ -36,8 +36,10 @@ function buildYoYData(transactions: Transaction[]) {
     const m = d.getMonth()
     if (y !== thisYear && y !== lastYear) continue
     if (!map[y][m]) map[y][m] = { income: 0, expense: 0 }
-    if (t.type === 'income') map[y][m].income += t.amount
-    else map[y][m].expense += t.amount
+    // §3: countableAmount nets off settled splits and drops the creditor's
+    // incoming leg. t.amount stays the ledger figure shown on the row itself.
+    if (t.type === 'income') map[y][m].income += countableAmount(t)
+    else map[y][m].expense += countableAmount(t)
   }
 
   return MONTHS.map((month, idx) => ({

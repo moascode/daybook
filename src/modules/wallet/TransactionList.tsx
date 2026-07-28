@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
+import { countableAmount } from '@/hooks/useWallet'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
@@ -35,8 +36,11 @@ function groupByDay(transactions: Transaction[]): DailyGroup[] {
     let totalIncome = 0
     let totalExpense = 0
     for (const t of txns) {
-      if (t.type === 'income') totalIncome += t.amount
-      else if (t.type === 'expense') totalExpense += t.amount
+      // §3: day totals use the viewer's countable amount, matching the summary
+      // row above the list. The per-row figure still shows the ledger amount.
+      const amt = countableAmount(t)
+      if (t.type === 'income') totalIncome += amt
+      else if (t.type === 'expense') totalExpense += amt
       // transfers excluded
     }
     groups.push({ date, transactions: txns, totalIncome, totalExpense })
