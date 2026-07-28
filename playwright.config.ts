@@ -33,6 +33,9 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
   expect: { timeout: 12_000 },
+  // Wipe the local D1 before each run — see e2e/global-setup.ts. Without this
+  // the database accumulates every user the suite has ever created, across runs.
+  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
