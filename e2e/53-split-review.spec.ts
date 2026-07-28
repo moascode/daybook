@@ -557,3 +557,70 @@ test.describe('53 — Split review (W4: two-step settlement)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── W5: the review queue (docs/split-settlement-plan.md §6, §7) ────────
+test.describe('53 — Split review (W5: review queue)', () => {
+  // A balance is one number standing in for a pile of splits. The bug that
+  // started all this was being shown that number with no route to its contents.
+  test('a balance opens into the transactions behind it, both directions', async ({ browser }) => {
+    const f = await splitFixture(browser, 'breakdown', priorMonthDate(), 100)
+
+    // Debtor's side: "You owe" opens into the claim.
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await f.recip.getByTestId('balance-breakdown-toggle').click()
+    await expect(f.recip.getByTestId('balance-breakdown')).toBeVisible({ timeout: 10_000 })
+    await expect(f.recip.getByTestId('breakdown-row')).toHaveCount(1)
+    await expect(f.recip.getByTestId('balance-breakdown')).toContainText(f.merchant)
+
+    // Creditor's side: "owes you" opens into the same underlying transaction.
+    await f.payer.goto('/wallet/shared')
+    await expect(f.payer.locator('main')).toBeVisible({ timeout: 20_000 })
+    await f.payer.getByTestId('balance-breakdown-toggle').click()
+    await expect(f.payer.getByTestId('balance-breakdown')).toBeVisible({ timeout: 10_000 })
+    await expect(f.payer.getByTestId('balance-breakdown')).toContainText(f.merchant)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The breakdown must not repeat the original bug: it starts at All time, and
+  // narrowing is a deliberate act.
+  test('the breakdown starts at all time and can be narrowed', async ({ browser }) => {
+    const f = await splitFixture(browser, 'bdrange', priorMonthDate(), 100)
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await f.recip.getByTestId('balance-breakdown-toggle').click()
+    // Visible by default even though the transaction is two months old.
+    await expect(f.recip.getByTestId('breakdown-row')).toHaveCount(1, { timeout: 10_000 })
+
+    // Narrowing to this month hides it, and says so rather than showing nothing.
+    await f.recip.getByTestId('balance-breakdown').getByTestId('filter-this-month').click()
+    await expect(f.recip.getByTestId('breakdown-empty')).toBeVisible({ timeout: 10_000 })
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // §6: the ledger amount stays visible; the share is shown beneath it.
+  test('a split row shows both the ledger amount and your share', async ({ browser }) => {
+    const f = await splitFixture(browser, 'shareline', priorMonthDate(), 100)
+    await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'equal' },
+    })
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    await settleAndConfirm(f, 50, recipAcct.id, f.acct.id)
+
+    await f.payer.goto('/wallet?range=all')
+    await expect(f.payer.getByText(f.merchant)).toBeVisible({ timeout: 15_000 })
+    const row = f.payer.locator('[data-testid="transaction-row"]').filter({ hasText: f.merchant })
+    // Ledger figure is never hidden — it is what left the account.
+    await expect(row).toContainText('100.00')
+    await expect(row.getByTestId('effective-amount')).toContainText('50.00')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})
