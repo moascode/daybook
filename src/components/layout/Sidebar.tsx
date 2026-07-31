@@ -21,8 +21,8 @@ import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
 import { useHouseholdStore } from '@/stores/household.store'
-import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
+import { refreshClaimBadge } from '@/lib/claim-badge'
 import { mapInvite } from '@/lib/household.mappers'
 
 /**
@@ -84,11 +84,14 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
   const location = useLocation()
   const isWalletRoute = location.pathname.startsWith('/wallet')
   const setPendingInvites = useHouseholdStore((s) => s.setPendingInvites)
-  const setPendingClaimCount = useHouseholdStore((s) => s.setPendingClaimCount)
 
   // Poll for pending invites and unresolved split claims so both badges stay
   // up-to-date. The claim badge is the fix for the failure that started this
   // work: a recipient had 15 splits against her and nothing told her.
+  //
+  // The claim count is computed by refreshClaimBadge so that this poll and the
+  // actions that resolve a claim agree on what the badge means — they used to
+  // write different numbers to the same field.
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -96,25 +99,12 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         const raw = await api.get<Record<string, unknown>[]>('/invites')
         if (!cancelled) setPendingInvites(raw.map(mapInvite))
       } catch { /* ignore */ }
-      try {
-        // Both halves of "something is waiting for me": splits I have not
-        // resolved, and payments claimed against me that I have not confirmed.
-        // One badge, because the user's question is the same either way.
-        const [claims, settlements] = await Promise.all([
-          api.get<unknown[]>('/transactions/splits/mine?status=pending'),
-          api.get<{ status?: string; to_user?: string }[]>('/settlements'),
-        ])
-        const me = useAppStore.getState().user?.id
-        const toConfirm = settlements.filter(
-          (x) => x.status === 'awaiting_confirmation' && x.to_user === me,
-        ).length
-        if (!cancelled) setPendingClaimCount(claims.length + toConfirm)
-      } catch { /* ignore */ }
+      if (!cancelled) await refreshClaimBadge()
     }
     load()
     const timer = setInterval(load, 60_000)
     return () => { cancelled = true; clearInterval(timer) }
-  }, [setPendingInvites, setPendingClaimCount])
+  }, [setPendingInvites])
   // null = follow the route (auto-expand on /wallet/*); true/false = manual override.
   const [walletOverride, setWalletOverride] = useState<boolean | null>(null)
   // Clear a manual override once the user leaves /wallet so a later visit

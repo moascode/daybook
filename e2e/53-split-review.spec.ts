@@ -394,12 +394,13 @@ test.describe('53 — Split review (W3: reject)', () => {
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
     await expect(f.recip.getByTestId('pending-claims-badge')).toHaveText('1', { timeout: 15_000 })
 
-    await expect(f.recip.getByTestId('claims-to-review')).toBeVisible()
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1)
     await f.recip.getByTestId('claim-reject').click()
     await f.recip.getByTestId('claim-reject-confirm').click()
 
-    await expect(f.recip.getByTestId('claims-to-review')).toHaveCount(0, { timeout: 10_000 })
-    await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0)
+    // The badge is refreshed by the reject itself, not by the sidebar's 60s
+    // poll — a queue that empties has to say so before the next minute.
+    await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0, { timeout: 10_000 })
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -565,38 +566,35 @@ test.describe('53 — Split review (W5: review queue)', () => {
   test('a balance opens into the transactions behind it, both directions', async ({ browser }) => {
     const f = await splitFixture(browser, 'breakdown', priorMonthDate(), 100)
 
-    // Debtor's side: "You owe" opens into the claim.
+    // Debtor's side: the claim is on the page, no disclosure needed.
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    await f.recip.getByTestId('balance-breakdown-toggle').click()
-    await expect(f.recip.getByTestId('balance-breakdown')).toBeVisible({ timeout: 10_000 })
-    await expect(f.recip.getByTestId('breakdown-row')).toHaveCount(1)
-    await expect(f.recip.getByTestId('balance-breakdown')).toContainText(f.merchant)
+    await expect(f.recip.getByTestId('splits-section')).toBeVisible({ timeout: 10_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1)
+    await expect(f.recip.getByTestId('splits-section')).toContainText(f.merchant)
 
-    // Creditor's side: "owes you" opens into the same underlying transaction.
+    // Creditor's side: the same underlying transaction, read from the other end.
     await f.payer.goto('/wallet/shared')
     await expect(f.payer.locator('main')).toBeVisible({ timeout: 20_000 })
-    await f.payer.getByTestId('balance-breakdown-toggle').click()
-    await expect(f.payer.getByTestId('balance-breakdown')).toBeVisible({ timeout: 10_000 })
-    await expect(f.payer.getByTestId('balance-breakdown')).toContainText(f.merchant)
+    await expect(f.payer.getByTestId('splits-section')).toBeVisible({ timeout: 10_000 })
+    await expect(f.payer.getByTestId('splits-section')).toContainText(f.merchant)
 
     await f.payerCtx.close()
     await f.recipCtx.close()
   })
 
-  // The breakdown must not repeat the original bug: it starts at All time, and
+  // The queue must not repeat the original bug: it starts at All time, and
   // narrowing is a deliberate act.
-  test('the breakdown starts at all time and can be narrowed', async ({ browser }) => {
+  test('the review queue starts at all time and can be narrowed', async ({ browser }) => {
     const f = await splitFixture(browser, 'bdrange', priorMonthDate(), 100)
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    await f.recip.getByTestId('balance-breakdown-toggle').click()
     // Visible by default even though the transaction is two months old.
-    await expect(f.recip.getByTestId('breakdown-row')).toHaveCount(1, { timeout: 10_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
 
     // Narrowing to this month hides it, and says so rather than showing nothing.
-    await f.recip.getByTestId('balance-breakdown').getByTestId('filter-this-month').click()
-    await expect(f.recip.getByTestId('breakdown-empty')).toBeVisible({ timeout: 10_000 })
+    await f.recip.getByTestId('splits-section').getByTestId('filter-this-month').click()
+    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -619,6 +617,100 @@ test.describe('53 — Split review (W5: review queue)', () => {
     // Ledger figure is never hidden — it is what left the account.
     await expect(row).toContainText('100.00')
     await expect(row.getByTestId('effective-amount')).toContainText('50.00')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})
+
+// ── R1: one list, tabs, notes, deep links (docs/shared-review-implementation-plan.md §2)
+//
+// The three renderers that used to draw the same rows in three shapes are one
+// component now. These assert what that unification is *for*, not that it
+// happened: a claim looks the same wherever you meet it, carries the payer's
+// reason, and leads back to the transaction it came from.
+test.describe('53 — Split review (R1: unified list)', () => {
+  // The note is the payer's explanation. Before R1 the column existed, the API
+  // returned it, and nothing ever wrote it — the recipient got a merchant, a
+  // date and an amount, with no way to tell an agreed cost from a mistake.
+  test('a note written at split time reaches the recipient', async ({ browser }) => {
+    const f = await splitFixture(browser, 'note', priorMonthDate(), 100)
+    await f.payer.request.post(`${API}/transactions/${f.txn.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'none', note: 'half the weekly shop' },
+    })
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row-note')).toContainText('half the weekly shop', {
+      timeout: 10_000,
+    })
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // Tabs are the claim's life, left to right. A rejected claim leaves the review
+  // queue but stays reachable — the reason is the payer's only feedback, and
+  // before R1 it was written to a column nothing rendered.
+  test('a rejected claim moves out of To review and into Rejected, with its reason', async ({ browser }) => {
+    const f = await splitFixture(browser, 'tabs', priorMonthDate(), 100)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
+
+    await f.recip.getByTestId('claim-reject').click()
+    await f.recip.locator('#reject-reason').fill('this one was mine alone')
+    await f.recip.getByTestId('claim-reject-confirm').click()
+
+    // Gone from the default tab...
+    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
+    // ...and present, with the reason, under Rejected.
+    await f.recip.getByTestId('split-tab-rejected').click()
+    await expect(f.recip.getByTestId('split-row-rejected')).toContainText('this one was mine alone', {
+      timeout: 10_000,
+    })
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // Every row leads back to its transaction. The link carries view=all&range=all
+  // because the list defaults to the current month and to your own rows — a
+  // claim from an earlier month, on someone else's transaction, would otherwise
+  // land on an empty page, which is the bug this workstream started from.
+  test('a claim row links to the transaction behind it', async ({ browser }) => {
+    const f = await splitFixture(browser, 'deeplink', priorMonthDate(), 100)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row-link')).toBeVisible({ timeout: 10_000 })
+    await f.recip.getByTestId('split-row-link').click()
+
+    // Lands on a populated list — not the empty state a month filter would give.
+    const row = f.recip.locator('[data-testid="transaction-row"]').filter({ hasText: f.merchant })
+    await expect(row).toBeVisible({ timeout: 15_000 })
+    await expect(row).toHaveAttribute('data-highlighted', 'true')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // A partly-paid claim used to show its full share in the review queue: the
+  // paid figure existed only inside the balance breakdown, so the queue said
+  // RM100 for a claim with RM40 left on it.
+  test('a partly-paid claim shows what is left and what is paid', async ({ browser }) => {
+    const f = await splitFixture(browser, 'partial', priorMonthDate(), 100)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    await settleAndConfirm(f, 60, recipAcct.id, f.acct.id)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    const row = f.recip.getByTestId('split-row').first()
+    await expect(row.getByTestId('split-row-amount')).toContainText('40.00', { timeout: 10_000 })
+    await expect(row.getByTestId('split-row-paid')).toContainText('60.00')
 
     await f.payerCtx.close()
     await f.recipCtx.close()

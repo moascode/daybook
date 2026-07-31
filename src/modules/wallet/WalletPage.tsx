@@ -140,6 +140,9 @@ export function WalletPage() {
     if (searchParams.get('range') === 'all') {
       setFilters({ dateFrom: '', dateTo: '' })
     }
+    // ?txn=<id> rings and scrolls to one row (see TransactionList). It is a
+    // highlight, not a filter: links that use it pair it with view=all&range=all
+    // so the row is inside the result set to begin with.
   }, [searchParams, setFilters])
 
   useEffect(() => {
@@ -746,6 +749,7 @@ export function WalletPage() {
             selectMode={selectMode}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
+            highlightId={searchParams.get('txn') ?? undefined}
           />
         )}
       </div>

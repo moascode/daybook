@@ -26,6 +26,10 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [splitMode, setSplitMode] = useState<SplitMode>('none')
   const [customAmounts, setCustomAmounts] = useState<[string, string]>(['', ''])
+  // Why the recipient is being asked for this. It reaches them in the review
+  // queue, where until now they had a merchant, a date and an amount and no way
+  // to tell an agreed cost from a mistake.
+  const [note, setNote] = useState('')
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +57,9 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
    }, [transaction, currentUserId])
 
   useEffect(() => {
-    if (open) { loadData() } // eslint-disable-line react-hooks/set-state-in-effect
+    // Clear the note on open: it belongs to one claim, and carrying the last
+    // one's explanation into the next would attach a wrong reason to a real debt.
+    if (open) { setNote(''); loadData() } // eslint-disable-line react-hooks/set-state-in-effect
    }, [open, loadData])
 
   const handleSave = async () => {
@@ -87,6 +93,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
         recipientId: selectedRecipient,
         splitMode,
         shareAmounts,
+        note,
        })
       onSaved()
       onOpenChange(false)
@@ -208,6 +215,22 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                  </div>
                </div>
              )}
+           </div>
+         )}
+
+         {selectedRecipient && (
+           <div>
+             <label htmlFor="split-note" className="mb-1 block text-xs font-medium text-gray-700">
+              Note for {groupMembers.find((m) => m.userId === selectedRecipient)?.username} (optional)
+             </label>
+             <Input
+              id="split-note"
+              value={note}
+              maxLength={500}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. half the weekly shop"
+              data-testid="split-note"
+             />
            </div>
          )}
 

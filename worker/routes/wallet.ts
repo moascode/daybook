@@ -1175,6 +1175,38 @@ wallet.get('/transactions/:id/splits', async (c) => {
   return c.json(results)
 })
 
+/**
+ * The settlement claim currently open against a split, or NULL.
+ *
+ * A debtor recording a payment writes settlement_split_lines rows and leaves the
+ * split's own status alone — deliberately, see settlements.ts:262. So "someone
+ * has paid this and is waiting on confirmation" lives here and nowhere else, and
+ * the id is what lets a row name the payment it is waiting on.
+ */
+const OPEN_CLAIM = `(SELECT l.settlement_id
+                       FROM settlement_split_lines l
+                       JOIN settlements sx ON sx.id = l.settlement_id
+                      WHERE l.share_id = ts.id AND sx.status = 'awaiting_confirmation'
+                      LIMIT 1)`
+
+/**
+ * The state a claim is actually in, as one value the UI can group by.
+ *
+ * `ts.status` alone cannot answer this: a claimed-but-unconfirmed split is still
+ * 'pending' in the column (above), so a naive status filter shows it as untouched
+ * and invites the debtor to pay it a second time. The awaiting test therefore has
+ * to come before the pass-through.
+ *
+ * The ELSE is a pass-through rather than a literal so 'approved' needs no edit
+ * here when it lands.
+ */
+const CLAIM_STATE_SQL = `CASE
+    WHEN ts.status = 'rejected' THEN 'rejected'
+    WHEN ts.status = 'settled' THEN 'settled'
+    WHEN ${OPEN_CLAIM} IS NOT NULL THEN 'awaiting_confirmation'
+    ELSE ts.status
+  END`
+
 // GET /transactions/splits/mine — every claim standing against the caller, with
 // enough of the underlying transaction to judge it (§6 review queue).
 //
@@ -1183,7 +1215,6 @@ wallet.get('/transactions/:id/splits', async (c) => {
 // splits because the transaction list defaulted to the current month.
 wallet.get('/transactions/splits/mine', async (c) => {
   const userId = c.get('userId')
-  const status = str(c.req.query('status'))
   // role=creditor flips the question from "what do I owe" to "what is owed to
   // me" — the same rows read from the other side, which is what the Shared
   // page needs to show the transactions behind each balance.
@@ -1192,12 +1223,48 @@ wallet.get('/transactions/splits/mine', async (c) => {
     ? ['t.user_id = ?', 'ts.user_id != t.user_id']
     : ['ts.user_id = ?']
   const binds: unknown[] = [userId]
-  if (status) {
+
+  // `state` is the derived claim state (see OPEN_CLAIM below), `status` the raw
+  // column. Both are accepted: the Shared page tabs filter on the derived value,
+  // while Sidebar.tsx and the e2e suite pass ?status=pending, and silently
+  // changing what that means would move the nav badge's count.
+  const state = str(c.req.query('state'))
+  const status = str(c.req.query('status'))
+  if (state) {
+    const wanted = state.split(',').map((s) => s.trim()).filter(Boolean)
+    if (wanted.length === 0) return c.json([])
+    conditions.push(`${CLAIM_STATE_SQL} IN (${wanted.map(() => '?').join(', ')})`)
+    binds.push(...wanted)
+  } else if (status) {
     conditions.push('ts.status = ?')
     binds.push(status)
   } else {
     conditions.push("ts.status != 'rejected'")
   }
+
+  // Narrow to one counterparty. The Shared page renders a section per (group,
+  // person) pair and used to fetch every split for the role and filter in the
+  // browser; the person is the other side of the row, whichever side we read from.
+  const counterparty = str(c.req.query('counterparty'))
+  if (counterparty) {
+    conditions.push(asCreditor ? 'ts.user_id = ?' : 't.user_id = ?')
+    binds.push(counterparty)
+  }
+
+  // Restrict to people who share a group with the caller. A split can only be
+  // made between co-members, so this narrows rather than filters — it exists so
+  // a section keyed on a group shows that group's claims and no others.
+  const groupId = str(c.req.query('groupId'))
+  if (groupId) {
+    conditions.push(
+      `EXISTS (SELECT 1 FROM group_members gm_d
+                JOIN group_members gm_c ON gm_c.group_id = gm_d.group_id
+               WHERE gm_d.group_id = ? AND gm_d.user_id = ts.user_id
+                 AND gm_c.user_id = t.user_id)`,
+    )
+    binds.push(groupId)
+  }
+
   // Optional date narrowing on the underlying transaction (owner asked for it
   // on the review queue). Absent by default — a claim is outstanding until it
   // is resolved, whatever month it came from.
@@ -1209,6 +1276,8 @@ wallet.get('/transactions/splits/mine', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.note,
             ts.status, ts.rejected_reason, ts.rejected_at, ts.settled_at, ts.created_at,
+            ${CLAIM_STATE_SQL} AS claim_state,
+            ${OPEN_CLAIM} AS settlement_id,
             t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
             t.category_id, u.username AS owner_username, t.user_id AS owner_id,
             du.username AS debtor_username, ts.user_id AS debtor_id
@@ -1282,7 +1351,13 @@ wallet.post('/transactions/splits/:id/reject', async (c) => {
   return c.json(row)
 })
 
-/** INSERT for one split row. */
+/**
+ * INSERT for one split row.
+ *
+ * The note is capped here rather than at each caller: both the single and the
+ * bulk route write through this, and a cap that lives in one of them is a cap
+ * the other silently lacks.
+ */
 const splitInsert = (db: D1Database, txnId: string, userId: string, amount: number, note: string) =>
   db
     .prepare(
@@ -1290,7 +1365,7 @@ const splitInsert = (db: D1Database, txnId: string, userId: string, amount: numb
        VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'))
        RETURNING *`,
     )
-    .bind(txnId, userId, amount, note)
+    .bind(txnId, userId, amount, note.slice(0, 500))
 
 // Quick single-transaction split — split with one recipient (full amount or split).
 wallet.post('/transactions/:id/split', async (c) => {
@@ -1300,6 +1375,11 @@ wallet.post('/transactions/:id/split', async (c) => {
   const recipientId = b.recipientId
   const splitMode = b.splitMode
   const shareAmounts = b.shareAmounts
+  // The payer's explanation of the claim, shown to the recipient in the review
+  // queue. Stored only on the recipient's row — it is addressed to them, and
+  // echoing it on the payer's own row would read as a note to self. Length is
+  // capped in splitInsert.
+  const note = typeof b.note === 'string' ? b.note : ''
 
   // 1. Transaction exists and the caller owns it.
   const txn = await c.env.DB.prepare('SELECT id, user_id, amount FROM transactions WHERE id = ?')
@@ -1340,12 +1420,12 @@ wallet.post('/transactions/:id/split', async (c) => {
 
   if (splitMode === 'none') {
     // Recipient owes 100% of the amount — no payer row (see CLAUDE.md §6).
-    shares = [{ userId: String(recipientId), shareAmount: txn.amount, note: '' }]
+    shares = [{ userId: String(recipientId), shareAmount: txn.amount, note }]
   } else if (splitMode === 'equal') {
     const [ownerShare, recipientShare] = splitEqually(txn.amount, 2)
     shares = [
       { userId, shareAmount: ownerShare, note: '' },
-      { userId: String(recipientId), shareAmount: recipientShare, note: '' },
+      { userId: String(recipientId), shareAmount: recipientShare, note },
     ]
   } else {
     if (!Array.isArray(shareAmounts) || shareAmounts.length !== 2) {
@@ -1362,7 +1442,7 @@ wallet.post('/transactions/:id/split', async (c) => {
     }
     shares = [
       { userId, shareAmount: shareAmounts[0], note: '' },
-      { userId: String(recipientId), shareAmount: shareAmounts[1], note: '' },
+      { userId: String(recipientId), shareAmount: shareAmounts[1], note },
     ]
   }
 

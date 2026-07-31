@@ -45,6 +45,46 @@ export interface TransactionShare {
   createdAt: string
 }
 
+/**
+ * The state a split claim is actually in — derived server-side, not the raw
+ * `transaction_splits.status` column.
+ *
+ * The two differ for a claimed-but-unconfirmed split, which stays 'pending' in
+ * the column on purpose (worker/routes/settlements.ts:262) because a partial
+ * payment leaves the rest of the split owed. Grouping the UI by the raw column
+ * would show such a claim as untouched and invite paying it twice.
+ */
+export type ClaimState = 'pending' | 'approved' | 'awaiting_confirmation' | 'settled' | 'rejected'
+
+/**
+ * One split claim, from either side. Replaces the two ad-hoc snake_case row
+ * shapes that ClaimsToReview and BalanceBreakdown each declared for the same
+ * endpoint.
+ */
+export interface SplitClaim {
+  id: string
+  transactionId: string
+  shareAmount: number
+  settledAmount: number
+  outstanding: number          // shareAmount − settledAmount
+  settledAt: string | null
+  note: string                 // the payer's explanation, addressed to the recipient
+  state: ClaimState
+  settlementId: string | null  // set only while state === 'awaiting_confirmation'
+  rejectedReason: string
+  rejectedAt: string | null
+  createdAt: string
+  date: string
+  merchant: string
+  description: string
+  transactionAmount: number
+  categoryId: string | null
+  ownerId: string              // the payer — the one owed
+  ownerUsername: string
+  debtorId: string             // the one who owes
+  debtorUsername: string
+}
+
 export interface GroupBalance {
   fromUserId: string
   fromUsername: string

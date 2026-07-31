@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
@@ -17,6 +17,8 @@ interface TransactionListProps {
   selectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
+  /** Row to ring and scroll to — set by /wallet?txn=<id> deep links. */
+  highlightId?: string
 }
 
 function groupByDay(transactions: Transaction[]): DailyGroup[] {
@@ -61,6 +63,7 @@ function TransactionRow({
   selectMode,
   isSelected,
   onToggleSelect,
+  highlighted,
 }: {
   transaction: Transaction
   accounts: Account[]
@@ -71,7 +74,16 @@ function TransactionRow({
   selectMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: string) => void
+  highlighted?: boolean
 }) {
+  const rowRef = useRef<HTMLDivElement>(null)
+
+  // Bring a deep-linked row into view. Arriving from the Shared page the target
+  // can be far down a list widened to all time, so landing at the top of it
+  // looks the same as landing on the wrong page.
+  useEffect(() => {
+    if (highlighted) rowRef.current?.scrollIntoView({ block: 'center' })
+  }, [highlighted])
   const account = accounts.find((a) => a.id === transaction.accountId)
   const destAccount = transaction.destinationAccountId
     ? accounts.find((a) => a.id === transaction.destinationAccountId)
@@ -121,7 +133,9 @@ function TransactionRow({
 
   return (
     <div
+      ref={rowRef}
       data-testid="transaction-row"
+      data-highlighted={highlighted ? 'true' : undefined}
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? `${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
@@ -130,6 +144,7 @@ function TransactionRow({
         interactive && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
         selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
+        highlighted && 'ring-2 ring-inset ring-brand-400 bg-brand-50/40',
       )}
       onClick={interactive ? handleRowClick : undefined}
       onKeyDown={interactive ? handleRowKeyDown : undefined}
@@ -275,6 +290,7 @@ export function TransactionList({
   selectMode,
   selectedIds,
   onToggleSelect,
+  highlightId,
 }: TransactionListProps) {
   const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
 
@@ -323,6 +339,7 @@ export function TransactionList({
                   selectMode={selectMode}
                   isSelected={selectedIds?.has(t.id)}
                   onToggleSelect={onToggleSelect}
+                  highlighted={highlightId === t.id}
                 />
               ))}
             </div>
