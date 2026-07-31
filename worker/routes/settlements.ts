@@ -12,6 +12,159 @@ export const settlements = new Hono<AppEnv>()
 /** Round to cents the same way the server does, so amounts stay comparable. */
 const cents = (n: number) => Math.round(n * 100) / 100
 
+interface OutstandingSplit {
+  id: string
+  share_amount: number
+  settled_amount: number
+  category_id: string | null
+  merchant: string
+  date: string
+}
+
+/**
+ * The debtor's unclaimed splits owed to the creditor, oldest first.
+ *
+ * Shared by the preview and the commit path deliberately. A preview computed
+ * from its own copy of this query is a promise the commit does not have to keep:
+ * it would drift the moment either changed, and the user has been taught to
+ * trust it. One definition, two callers.
+ *
+ * Unclaimed only — a split already awaiting confirmation has been paid once and
+ * must not be claimed again. Both resting states are payable: agreeing to a debt
+ * is an acknowledgement, not a precondition.
+ */
+async function outstandingSplitsFor(
+  db: D1Database,
+  groupId: string,
+  debtorId: string,
+  creditorId: string,
+): Promise<OutstandingSplit[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ts.id, ts.share_amount, ts.settled_amount, t.category_id,
+              t.merchant, t.date
+       FROM transaction_splits ts
+       JOIN transactions t ON t.id = ts.transaction_id
+       JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
+       WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
+         AND ts.status IN ('pending', 'approved')
+         AND ts.id NOT IN (
+           SELECT l.share_id FROM settlement_split_lines l
+           JOIN settlements sx ON sx.id = l.settlement_id
+           WHERE sx.status = 'awaiting_confirmation'
+         )
+       ORDER BY ts.created_at ASC`,
+    )
+    .bind(groupId, debtorId, creditorId)
+    .all<OutstandingSplit>()
+  return results
+}
+
+export interface Allocation {
+  id: string
+  previousSettled: number
+  newSettled: number
+  appliedAmount: number
+  categoryId: string | null
+  merchant: string
+  date: string
+}
+
+/**
+ * Spreads a payment across outstanding splits, FIFO and partial-aware (B-02) —
+ * not whole-split-or-nothing.
+ *
+ * Pure, so the preview can show exactly what the commit will do without
+ * touching the database.
+ */
+function allocate(splits: OutstandingSplit[], amount: number): Allocation[] {
+  let remaining = amount
+  const applied: Allocation[] = []
+  for (const split of splits) {
+    if (remaining <= 0.005) break
+    const outstanding = cents(split.share_amount - split.settled_amount)
+    if (outstanding <= 0) continue
+    const amt = Math.min(remaining, outstanding)
+    applied.push({
+      id: split.id,
+      previousSettled: split.settled_amount,
+      newSettled: cents(split.settled_amount + amt),
+      appliedAmount: cents(amt),
+      categoryId: split.category_id,
+      merchant: split.merchant,
+      date: split.date,
+    })
+    remaining -= amt
+  }
+  return applied
+}
+
+/**
+ * POST /api/settlements/preview — what a given amount would actually clear.
+ *
+ * Read-only. Settling used to be "type a number and hope": the FIFO spread and
+ * the over-payment cap were both invisible until after the write, so the user
+ * learned what they had done from the result. This shows it first, computed by
+ * the same two functions the commit uses.
+ *
+ * Registered before POST /settlements/:id/* — a literal segment and a parameter
+ * at the same position are exactly the collision groups.ts documents.
+ */
+settlements.post('/settlements/preview', async (c) => {
+  const callerId = c.get('userId')
+  const db = c.env.DB
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+
+  const groupId = String(b.groupId ?? '')
+  const counterpartyId = String(b.counterpartyId ?? '')
+  const amount = Number(b.amount)
+  if (!groupId || !counterpartyId) {
+    return c.json({ error: 'groupId and counterpartyId are required' }, 400)
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return c.json({ error: 'a positive amount is required' }, 400)
+  }
+  // Direction mirrors POST /settlements: the caller names the other party, and
+  // whether they are paying or being paid follows from which way the debt runs.
+  const asCreditor = b.role === 'creditor'
+  const debtorId = asCreditor ? counterpartyId : callerId
+  const creditorId = asCreditor ? callerId : counterpartyId
+
+  const [callerIn, otherIn] = await Promise.all([
+    isGroupMember(db, callerId, groupId),
+    isGroupMember(db, counterpartyId, groupId),
+  ])
+  if (!callerIn || !otherIn) {
+    return c.json({ error: 'both users must be in the group' }, 403)
+  }
+
+  const splits = await outstandingSplitsFor(db, groupId, debtorId, creditorId)
+  const outstanding = cents(
+    splits.reduce((sum, s) => sum + (s.share_amount - s.settled_amount), 0),
+  )
+  // The same cap the commit applies (U-13). Surfacing it here turns a
+  // post-hoc "we reduced your payment" notice into something the user can see
+  // before they commit to it.
+  const capped = amount > outstanding + 0.005
+  const effective = cents(Math.min(amount, outstanding))
+  const lines = allocate(splits, effective)
+
+  return c.json({
+    outstanding,
+    requested: cents(amount),
+    applied: effective,
+    capped,
+    lines: lines.map((l) => ({
+      splitId: l.id,
+      merchant: l.merchant,
+      date: l.date,
+      applied: l.appliedAmount,
+      // True when this payment finishes the split off, rather than chipping at it.
+      clears: l.newSettled + 0.005 >= splits.find((s) => s.id === l.id)!.share_amount,
+    })),
+  })
+})
+
 // POST /api/settlements — record that a debtor paid a creditor; books the two
 // ledger legs and clears the debtor's outstanding shares (partial-aware).
 //
@@ -156,53 +309,14 @@ settlements.post('/settlements', async (c) => {
   }
 
   // B-02: FIFO across the debtor's outstanding shares owed to the creditor,
-  // applying a partial amount to each (not whole-share-or-nothing).
-  const { results: pending } = await db
-    .prepare(
-      // Unclaimed splits only: one already awaiting confirmation has been paid
-      // once and must not be claimed again. Its category comes along for the
-      // inheritance rule below. Both resting states are payable — see above.
-      `SELECT ts.id, ts.share_amount, ts.settled_amount, t.category_id
-       FROM transaction_splits ts
-       JOIN transactions t ON t.id = ts.transaction_id
-       JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
-       WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
-         AND ts.status IN ('pending', 'approved')
-         AND ts.id NOT IN (
-           SELECT l.share_id FROM settlement_split_lines l
-           JOIN settlements sx ON sx.id = l.settlement_id
-           WHERE sx.status = 'awaiting_confirmation'
-         )
-       ORDER BY ts.created_at ASC`,
-    )
-    .bind(groupId, debtorId, creditorId)
-    .all<{ id: string; share_amount: number; settled_amount: number; category_id: string | null }>()
+  // applying a partial amount to each (not whole-share-or-nothing). The same
+  // two functions back POST /settlements/preview, so what the user is shown
+  // before confirming is what actually happens.
+  const pending = await outstandingSplitsFor(db, groupId, debtorId, creditorId)
 
   // ── Compute the entire write set in JS ───────────────
 
-  let remaining = effective
-  const applied: {
-    id: string
-    previousSettled: number
-    newSettled: number
-    appliedAmount: number
-    categoryId: string | null
-  }[] = []
-
-  for (const share of pending) {
-    if (remaining <= 0.005) break
-    const outstanding = cents(share.share_amount - share.settled_amount)
-    if (outstanding <= 0) continue
-    const amt = Math.min(remaining, outstanding)
-    applied.push({
-      id: share.id,
-      previousSettled: share.settled_amount,
-      newSettled: cents(share.settled_amount + amt),
-      appliedAmount: cents(amt),
-      categoryId: share.category_id,
-    })
-    remaining -= amt
-  }
+  const applied = allocate(pending, effective)
 
   // §9.7: the debtor's payment inherits the original transaction's category, so
   // their food budget sees food. Only when every split being cleared agrees —

@@ -964,3 +964,105 @@ test.describe('53 — Split review (R2: approved)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── R3: allocation preview (docs/shared-review-implementation-plan.md §4.2) ──
+test.describe('53 — Split review (R3: settle preview)', () => {
+  // Settling was "type a number and hope": the FIFO spread and the over-payment
+  // cap were both invisible until after the write.
+  test('the preview names the claims an amount will clear, and marks partials', async ({ browser }) => {
+    const f = await splitFixture(browser, 'preview', priorMonthDate(), 100)
+    const txn2 = await f.payer.request.post(`${API}/transactions`, {
+      data: { accountId: f.acct.id, date: priorMonthDate(), merchant: 'SecondPrev', amount: 60, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+    await f.payer.request.post(`${API}/transactions/${txn2.id}/split`, {
+      data: { recipientId: f.recipientId, splitMode: 'none' },
+    })
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+
+    // 130 of 160: clears the first claim whole and part of the second.
+    const res = await f.recip.request.post(`${API}/settlements/preview`, {
+      data: { groupId: f.group.id, counterpartyId: payerId, role: 'debtor', amount: 130 },
+    })
+    expect(res.ok()).toBeTruthy()
+    const preview = await res.json() as {
+      outstanding: number; applied: number; capped: boolean
+      lines: { merchant: string; applied: number; clears: boolean }[]
+    }
+    expect(Math.round(preview.outstanding)).toBe(160)
+    expect(Math.round(preview.applied)).toBe(130)
+    expect(preview.capped).toBe(false)
+    expect(preview.lines).toHaveLength(2)
+    expect(preview.lines[0].clears).toBe(true)
+    expect(Math.round(preview.lines[0].applied)).toBe(100)
+    expect(preview.lines[1].clears).toBe(false)
+    expect(Math.round(preview.lines[1].applied)).toBe(30)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The cap (U-13) becomes something the user sees before committing rather
+  // than a notice explaining what already happened.
+  test('over-paying is shown as capped before it is committed', async ({ browser }) => {
+    const f = await splitFixture(browser, 'prevcap', priorMonthDate(), 100)
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+
+    const preview = await f.recip.request.post(`${API}/settlements/preview`, {
+      data: { groupId: f.group.id, counterpartyId: payerId, role: 'debtor', amount: 500 },
+    }).then((r) => r.json()) as { capped: boolean; applied: number; outstanding: number }
+    expect(preview.capped).toBe(true)
+    expect(Math.round(preview.applied)).toBe(100)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The preview must describe the commit, not its own idea of it.
+  test('what the preview promises is what settling actually does', async ({ browser }) => {
+    const f = await splitFixture(browser, 'prevmatch', priorMonthDate(), 100)
+    const recipAcct = await f.recip.request.post(`${API}/accounts`, {
+      data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+
+    const preview = await f.recip.request.post(`${API}/settlements/preview`, {
+      data: { groupId: f.group.id, counterpartyId: payerId, role: 'debtor', amount: 70 },
+    }).then((r) => r.json()) as { lines: { splitId: string; applied: number }[] }
+
+    await settleAndConfirm(f, 70, recipAcct.id, f.acct.id)
+
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=approved`)
+      .then((r) => r.json()) as { id: string; settled_amount: number }[]
+    // Every promised line landed, at the promised figure.
+    for (const line of preview.lines) {
+      const claim = claims.find((c) => c.id === line.splitId)
+      expect(claim).toBeTruthy()
+      expect(Math.round(claim!.settled_amount)).toBe(Math.round(line.applied))
+    }
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // A preview is an aid, not an oracle: it must not leak other people's claims.
+  test('the preview refuses a group the caller is not in', async ({ browser }) => {
+    const f = await splitFixture(browser, 'prevscope', priorMonthDate(), 100)
+    const outCtx = await browser.newContext()
+    const out = await outCtx.newPage()
+    await out.request.post(`${API}/auth/signup`, { data: { username: `po_${Date.now()}`, password: 'test-password' } })
+    const payerId = await f.payer.request.get(`${API}/auth/me`).then((r) => r.json())
+      .then((m: { user: { id: string } }) => m.user.id)
+
+    const res = await out.request.post(`${API}/settlements/preview`, {
+      data: { groupId: f.group.id, counterpartyId: payerId, role: 'debtor', amount: 50 },
+    })
+    expect(res.status()).toBe(403)
+
+    await outCtx.close()
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})
