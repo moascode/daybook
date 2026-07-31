@@ -93,7 +93,23 @@ but the plan below assumes them.
 |---|---|---|
 | `ClaimsToReview.tsx` | 162 | `SplitsSection` + `SplitList` |
 | `BalanceBreakdown.tsx` | 118 | same |
-| "Payments to confirm" block in `SharedPage.tsx:171-199` | 29 | the `awaiting_confirmation` tab, creditor side |
+
+**Correction (review, 2026-07-31): "Payments to confirm" stays.** The first draft
+folded `SharedPage.tsx:171-199` into the `awaiting_confirmation` tab. That is
+wrong on two counts:
+
+- It is **settlement-shaped, not split-shaped.** One settlement can clear several
+  splits (`settlement_split_lines` is a junction table), so the fold renders N
+  rows each carrying a Confirm button that would confirm the same whole
+  settlement — the same action offered several times, each labelled with one
+  slice of what it does.
+- `ConfirmReceiptDialog` takes a `Settlement` (`ConfirmReceiptDialog.tsx:33`), and
+  `GET /transactions/splits/mine` returns no settlement id, so a split row cannot
+  drive it at all.
+
+The block keeps its place above the sections. The `awaiting_confirmation` tab is
+**informational on both sides** — it answers "where did this claim go?", and the
+action stays where the object is whole.
 
 ### 2.2 New files
 
@@ -151,9 +167,13 @@ Shared                                            [View split transactions ↗]
                                           [Settle up RM 776.65 ▸]
 ```
 
-- **Person first.** One `SplitsSection` per counterparty, not per group per
-  direction. The group name is a subtitle, rendered only when the user is in more
-  than one group (`groups.length > 1`) — with one household it is noise.
+- **Person first.** One `SplitsSection` per **(group, counterparty) pair**, not per
+  group per direction. The group name is a subtitle, rendered only when the user is
+  in more than one group (`groups.length > 1`) — with one household it is noise.
+  The pair, not the counterparty alone: balances and settlements are per-group in
+  the data model and `SettleUpDialog` requires a `groupId`
+  (`SettleUpDialog.tsx:31`), so a section spanning two groups could not settle.
+  Person-first is how it *reads*; the group is still how it keys.
 - Tabs are `SplitList` filtered by `claim_state`, with counts from the same fetch.
   The **Agreed** tab appears in R2; R1 ships To review / Paid, unconfirmed /
   Settled / Rejected.
@@ -170,7 +190,7 @@ Shared                                            [View split transactions ↗]
 |---|---|---|
 | pending | ✓ Approve · ✗ Reject | "awaiting their review" |
 | approved *(R2)* | ✗ Reject · Pay this one *(R3)* | "agreed" |
-| awaiting_confirmation | "waiting on {creditor}" | Confirm · Reject |
+| awaiting_confirmation | "waiting on {creditor} to confirm" | "you marked this received" — the Confirm/Reject action stays on the settlement block above (§2.1) |
 | settled | date settled | date settled |
 | rejected | reason | reason · **Re-split** *(R3)* |
 
@@ -182,7 +202,11 @@ inside `BalanceBreakdown:102` and is invisible in the review queue — O-3.
 
 All in `worker/routes/wallet.ts`:
 
-1. `GET /transactions/splits/mine` returns `claim_state` (§0.2) and accepts:
+1. `GET /transactions/splits/mine` returns `claim_state` (§0.2) plus
+   `settlement_id` — the open claim covering this split, `NULL` unless
+   `claim_state = 'awaiting_confirmation'`. It comes from the same
+   `settlement_split_lines` join that derives the state, so it is free, and
+   without it an awaiting row cannot name the payment it is waiting on. Accepts:
    - `state=` as a comma list, replacing the single-value `status=` (keep `status=`
      working — `Sidebar.tsx:96` and the e2e suite both pass it)
    - `counterparty=<userId>` so `SplitsSection` stops fetching wide and filtering in
@@ -202,9 +226,11 @@ All in `worker/routes/wallet.ts`:
   `highlightId`; the row gets a ring and `scrollIntoView({ block: 'center' })` on
   mount. Rows link to `/wallet?txn=<id>&view=all&range=all` — all three params, or
   the target lands outside the default month filter and the link appears broken,
-  which is the bug this workstream exists to fix (`SharedPage.tsx:147`).
-- `SharedPage.tsx` drops to a shell: headline, sections, dialogs. Target ~120 lines
-  from 331.
+  which is the bug this workstream exists to fix (`SharedPage.tsx:147`). The list
+  renders every matching row with no pagination or windowing (checked), so a
+  highlight is always reachable once the filters admit it.
+- `SharedPage.tsx` drops to a shell: headline, payments-to-confirm, sections,
+  dialogs. Target ~150 lines from 331.
 
 ### 2.7 Tests (R1)
 
@@ -349,6 +375,10 @@ post-hoc one.
 
 Under D-1 the FIFO order is unchanged: `ORDER BY ts.created_at ASC` over both
 pending and approved.
+
+Register `/settlements/preview` **before** any `/settlements/:id` route, or the
+param route swallows it — the same trap `worker/routes/groups.ts` documents for
+the literal `/groups/members` against `/groups/:id`.
 
 ### 4.3 Rejection feedback
 
