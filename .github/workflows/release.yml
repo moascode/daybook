@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: write # required to create the GitHub Release
+  actions: read # required to read this commit's CI result
 
 concurrency:
   group: release-${{ github.ref }}
@@ -51,21 +52,59 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck (client + worker)
+      # ── Gate: this exact commit must already be green on CI ──────────────
+      #
+      # Promotion, not re-testing. CI has already run typecheck, lint and the
+      # full sharded e2e suite against this SHA; running them again here costs
+      # ~4 minutes, duplicates the flake surface (a release could fail for a
+      # reason that has nothing to do with the release), and proves nothing new.
+      #
+      # What re-running *did* buy was a guarantee that the deployed tree is a
+      # tested tree — a tag can point at any commit, including one CI never saw.
+      # Asserting the SHA's CI result keeps that guarantee without the cost.
+      - name: Require a green CI run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          npm run build
-          npm run typecheck:worker
+          set -euo pipefail
+          SHA='${{ github.sha }}'
+          echo "Looking for a CI run against $SHA"
+          # A tag is usually pushed moments after a merge, so CI for that commit
+          # may still be running. Wait rather than failing the release on a race.
+          deadline=$(( $(date +%s) + 1500 ))
+          while :; do
+            run=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$SHA&per_page=100" \
+                    --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last')
+            if [ -n "$run" ] && [ "$run" != "null" ]; then
+              status=$(echo "$run" | jq -r '.status')
+              conclusion=$(echo "$run" | jq -r '.conclusion // "none"')
+              url=$(echo "$run" | jq -r '.html_url')
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  echo "✓ CI is green for $SHA — $url"
+                  exit 0
+                fi
+                echo "✗ CI for $SHA concluded '$conclusion' — $url" >&2
+                echo "Fix CI and re-tag, or re-run that CI run if it failed spuriously." >&2
+                exit 1
+              fi
+              echo "  CI is $status — waiting…"
+            else
+              echo "  no CI run found for this commit yet — waiting…"
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "✗ No completed CI run for $SHA within 25 minutes." >&2
+              echo "Tags must point at a commit CI has built. Push the commit to main first." >&2
+              exit 1
+            fi
+            sleep 20
+          done
 
-      - name: Lint
-        run: npm run lint
-
-      # Gate the release on the e2e suite — never deploy a red build.
-      - name: Install Playwright browsers
-        timeout-minutes: 6
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Playwright tests
-        run: npx playwright test
+      # The client bundle still has to exist locally for `wrangler deploy` to
+      # upload it — wrangler bundles the Worker from source at deploy time, so
+      # there is no prebuilt Worker artifact to promote, only this.
+      - name: Build client bundle
+        run: npm run build
 
       # ── Everything below touches production ──────────────────────────────
       - name: Apply D1 migrations (remote)

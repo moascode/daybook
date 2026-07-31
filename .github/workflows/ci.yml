@@ -65,6 +65,16 @@ jobs:
     name: E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     timeout-minutes: 15
     runs-on: ubuntu-latest
+    # The official Playwright image ships the browsers AND every system library
+    # they need. That removes both `playwright install` steps, and with them the
+    # apt/dpkg lock hang that was the single largest source of red CI on this
+    # repo — the most recent main failure never ran a test at all, it sat on
+    # `install-deps` until the timeout and was killed as an orphan process.
+    # Pin the tag to the @playwright/test version in package.json; a mismatch
+    # makes Playwright re-download browsers at run time, which puts the apt
+    # problem straight back.
+    container:
+      image: mcr.microsoft.com/playwright:v1.60.0-noble
     strategy:
       fail-fast: false
       matrix:
@@ -82,28 +92,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: pw-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-
-      # Both steps shell out to apt, which can block indefinitely behind the
-      # runner's own unattended-upgrades holding the dpkg lock. Six shards means
-      # six chances per run instead of three, and a stuck job otherwise sits
-      # until the 15-minute job timeout with nothing saying why. Bounded so it
-      # fails fast and names itself.
-      - name: Install Playwright browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 6
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps (cached hit)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 6
-        run: npx playwright install-deps chromium
 
       - name: Run Playwright tests (shard ${{ matrix.shard }}/6)
         run: npx playwright test --shard=${{ matrix.shard }}/6
@@ -123,6 +111,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wrangler-logs-shard-${{ matrix.shard }}
-          path: ~/.config/.wrangler/logs/
+          # upload-artifact globs; it does not expand `~`. HOME is /root in the
+          # container and /home/runner on a bare runner, so name both rather
+          # than silently uploading nothing — which is what "No files were
+          # found" meant on the last few failures.
+          path: |
+            /root/.config/.wrangler/logs/
+            /home/runner/.config/.wrangler/logs/
           if-no-files-found: ignore
           retention-days: 30
