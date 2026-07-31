@@ -104,6 +104,23 @@ export async function fillTransactionForm(
 ) {
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
+
+  // The form's account list is populated from GET /accounts after the dialog
+  // opens. Filling and saving before that resolves submits with no account, the
+  // save fails, and the dialog stays open — surfacing as `expect(dialog)
+  // .toBeHidden()` timing out at the very bottom of this helper, which points
+  // nowhere near the actual cause. Waiting here fixes every caller at once;
+  // several tests open this form immediately after navigating to /wallet.
+  const accountSelect = dialog.locator('#account, #from-account').first()
+  if (await accountSelect.count()) {
+    await expect
+      .poll(async () => accountSelect.locator('option[value]:not([value=""])').count(), {
+        timeout: 15_000,
+        message: 'transaction form never loaded an account to select',
+      })
+      .toBeGreaterThan(0)
+  }
+
   if (fields.type) await dialog.getByRole('button', { name: fields.type }).click()
   if (fields.date) await dialog.getByLabel('Date').fill(fields.date)
   await dialog.getByLabel('Amount').fill(fields.amount)
