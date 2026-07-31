@@ -160,6 +160,12 @@ export function SharedPage() {
     .filter((h) => h.status === 'awaiting_confirmation' && h.toUserId === currentUserId)
 
   const anyHistory = Object.values(historyByGroup).some((h) => h.length > 0)
+  // "Settled up" is a statement about outstanding money, not about whether any
+  // sections are on screen. Sections now persist after a balance clears — that
+  // is how the settled claims behind it stay reachable — so keying the message
+  // off their absence would have hidden it in exactly the case it exists for.
+  const nothingOutstanding = totals.owedToMe < 0.005 && totals.iOwe < 0.005
+  const allSettled = nothingOutstanding && (anyHistory || pairings.length > 0)
 
   if (!currentUserId) return null
 
@@ -260,11 +266,14 @@ export function SharedPage() {
         </div>
       )}
 
-      {pairings.length === 0 && (
+      {allSettled && (
+        <p className="py-2 text-center text-sm text-gray-500" data-testid="all-settled">
+          All settled up! 🎉
+        </p>
+      )}
+      {pairings.length === 0 && !allSettled && (
         <p className="py-2 text-center text-sm text-gray-500">
-          {anyHistory
-            ? 'All settled up! 🎉'
-            : 'No splits yet — split your first expense from Transactions'}
+          No splits yet — split your first expense from Transactions
         </p>
       )}
 
