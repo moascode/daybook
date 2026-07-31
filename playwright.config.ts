@@ -38,7 +38,28 @@ export default defineConfig({
   globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: 0,
+  // Local runs stay strict — a failure on this machine is a failure.
+  //
+  // CI retries twice, and this is MITIGATION, not a fix. `wrangler dev` dies
+  // mid-run on CI runners with:
+  //   kj/async-io-unix.c++:186: disconnected: ::write(...): Broken pipe
+  // which is workerd writing to a pipe whose reader has gone. It takes whatever
+  // test happened to be running with it, so the failure lands on an arbitrary
+  // spec and looks like a different bug every time. It cost most of a session to
+  // place, because the message was empty until the e2e jobs moved into the
+  // Playwright container.
+  //
+  // Every genuine app and test bug found while chasing it has been fixed
+  // separately (the unbounded D1 growth, two async-<select> races, the
+  // transaction form's account list). What is left is the runtime itself, in a
+  // dev-only tool, and it is not worth blocking releases on.
+  //
+  // Retries keep this visible rather than hidden: Playwright reports a
+  // retried-then-passed test as **flaky**, so a real regression that fails every
+  // attempt still goes red, and a rising flaky count is a signal to come back to
+  // this. Revisit if wrangler ever exposes a way to turn the inspector off —
+  // there is none as of 4.114.
+  retries: process.env.CI ? 2 : 0,
   workers: 1,
   reporter: [
     ['list'],
