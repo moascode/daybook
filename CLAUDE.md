@@ -1209,6 +1209,75 @@ Current phase:  LIVE on Cloudflare Workers + D1.
                    target); server/ stays only as the schema reference that
                    scripts/schema-diff.mjs gates CI against.
 
+                *** SHARED REVIEW FLOW R1-R3 — IN REVIEW, NOT DEPLOYED ***
+                PR #95, branch claude/shared-to-review-improvements-of1zu7.
+                docs/shared-review-implementation-plan.md. 500/500 e2e under
+                CI settings; schema-diff clean at 28 objects.
+                R1 One SplitList + person-first SplitsSection replace the
+                   three renderers that drew the same claims three ways
+                   (ClaimsToReview and BalanceBreakdown are deleted).
+                   Lifecycle tabs over a DERIVED claim_state: the raw
+                   status column cannot drive them, because a claimed but
+                   unconfirmed split deliberately stays 'pending'
+                   (settlements.ts:262), so grouping on it shows a paid
+                   claim as untouched and invites paying it twice. Split
+                   notes are now captured as well as shown — the column
+                   and the API always had one, but no dialog ever wrote it.
+                   Rows deep-link to their transaction (?txn=, ringed and
+                   scrolled to), carrying view=all&range=all so an older
+                   claim does not land on an empty list.
+                R2 The 'approved' state (migration 0011, mirrored to
+                   server/migrations/0010). Agreeing empties the review
+                   queue and clears the nav badge WITHOUT moving a single
+                   figure — approval is an acknowledgement, not a gate, so
+                   a recipient cannot zero a creditor's books by not
+                   clicking. Balances gained agreed/unreviewed subtotals.
+                   TWELVE 'pending' literals in the settlement guards
+                   widened or retargeted; a thirteenth was deleted as dead.
+                   The trap was the debtor-side CAS probe, which wrote
+                   status='pending' as a supposed no-op — true only while
+                   pending was the sole payable state. With approved
+                   payable too it silently demoted an agreed claim back
+                   into the review queue on every payment recorded against
+                   it. It now assigns settled_amount to itself.
+                   D-1 paying implies agreeing: every post-settlement and
+                   rollback resting state is 'approved', which closes the
+                   partial-settlement bug (a part-paid claim reappeared
+                   looking untouched) and means undo needs no memory of the
+                   prior status.
+                R3 Bulk agree (not bulk reject — the reason is the useful
+                   half). POST /settlements/preview shows what an amount
+                   will clear, sharing ONE query and ONE allocation
+                   function with the commit path so the preview cannot
+                   drift from what actually happens. Rejected claims show
+                   who rejected them and why, with Re-split — the reason
+                   was previously collected, stored, and rendered nowhere.
+                Four bugs the tests caught, all recorded in the plan §5a:
+                the "All settled up" message became unreachable; acting on
+                a claim reset your tab (revision was in the React key, so
+                the section remounted); a cleared balance defaulted to the
+                wrong direction and rendered the payer's section empty; and
+                the note needed capturing before it could be shown.
+
+                *** E2E NOW RUNS ON ONE CLOCK ***
+                The suite failed on a SCHEDULE rather than on a change: for
+                the eight hours a day when the UTC date and the Malaysian
+                date differ, rows the Worker stamped "today" (todayStr(),
+                pinned to Asia/Kuala_Lumpur per B-11) landed outside the
+                month the client was showing. Specs were split between two
+                incompatible conventions — toISOString() gives the UTC
+                date, local date parts give the host's — so there was NO
+                timezone at which the whole suite was green inside that
+                window; fixing one convention broke the other.
+                playwright.config.ts now pins the browser AND the test
+                process to the business timezone (the TZ assignment must
+                precede the imports — Node caches the zone on first use),
+                with businessToday()/businessDatePlus() in e2e/helpers.ts.
+                Specs 03 and 37 were patched for this one at a time before;
+                this addresses the cause. Also de-bombed 32-wallet-error-
+                toasts, which hardcoded nextDueDate '2026-08-01' and began
+                failing when that day arrived.
+
                 *** BLOCKED: no CLOUDFLARE_API_TOKEN repo secret. ***
                 Until the owner adds one (Workers Scripts: Edit + D1: Edit),
                 a version tag will fail release.yml at the migration step.
@@ -1461,7 +1530,7 @@ Phase status
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-07-28/29
+Last session:   2026-07-31/08-01
 Last completed: - CSV transfer import + twin-linking implemented (PRs #60 + #61,
                   awaiting owner merge — #61 is stacked on #60).
                 - Phase 5b fully implemented and merged (PR #18 + follow-ups):
@@ -1514,7 +1583,22 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      Review/merge PR feat/workers-auth (Phase 3), then Phase 4 —
+Next task:      REVIEW + MERGE PR #95 (Shared review flow R1-R3). It is the
+                only thing in flight. R2 rewrites twelve money-path
+                settlement guards against a live deployment with two real
+                users and 15 outstanding claims, so it wants an owner's
+                eyes on the diff and a `wrangler d1 export` first.
+                After merging, the deploy is TWO MANUAL STEPS (release.yml
+                still cannot run — no CLOUDFLARE_API_TOKEN):
+                  1. wrangler d1 migrations apply daybook --remote
+                     (applies 0011_split_approved.sql — one nullable
+                     column, no backfill, no money figure moves)
+                  2. npm run deploy:worker
+                Deferred from the plan, needing no sign-off: §4.4 the
+                per-claim timeline (every timestamp already exists), and
+                D-5 auto-approve as a per-group "we trust each other"
+                setting if the review queue proves tedious.
+                Older, still open: Phase 4 —
                 port the route modules in ascending risk order
                 (settings 21 lines → tasks 94 → settlements 299 → groups
                 382 → wallet 1,461; 156 .prepare() sites total). Convert

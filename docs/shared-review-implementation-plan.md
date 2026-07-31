@@ -1,6 +1,10 @@
 # Shared review flow — implementation plan (R1 / R2 / R3)
 
-**Status:** planned 2026-07-31. Owner approved the direction in
+**Status: R1, R2 and R3 all IMPLEMENTED** on
+`claude/shared-to-review-improvements-of1zu7` (PR #95), 2026-07-31/08-01.
+Full suite 500/500 under CI settings; `scripts/schema-diff.mjs` clean.
+**Not merged and not deployed** — see §7 for what is left.
+Planned 2026-07-31; the owner approved the direction in
 `docs/shared-review-improvements.md` and asked for the tabbed list explicitly.
 **Scope:** the seven items the owner named — SplitList unification with status
 tabs, person-first grouping, inline ✓/✗ plus multi-select bulk approve, the split
@@ -414,6 +418,61 @@ storage.
 | Preview drifting from commit | One shared helper (§4.2), enforced by both callers using it |
 | e2e churn — 20 tests in spec 53 | R1 retargets four; the rest assert server behaviour and are untouched |
 | Live data: 15 outstanding claims, 2 real users | R2 has no backfill and no money-figure change. `wrangler d1 export` before the deploy regardless |
+
+## 5a. What implementation changed — corrections on record
+
+Everything in §2–§4 shipped as designed. These are the things the plan did not
+foresee, recorded so they are not rediscovered as mysteries.
+
+### Four bugs the work introduced and the tests caught
+
+| # | Bug | Why it happened |
+|---|---|---|
+| C-1 | **"All settled up! 🎉" became unreachable.** | The message keyed off there being no sections on screen. R1 deliberately keeps a section alive after its balance clears — that is how the settled claims behind it stay reachable — so the condition became permanently false in exactly the case the message exists for. It now keys off outstanding money, which is what it was always claiming. |
+| C-2 | **Acting on a claim reset the tab you were in.** | The post-action refresh was forced by putting a revision counter in the section's React `key`, which remounts it and discards tab and date-range state. Agreeing to one claim while working through the Agreed tab bounced the user back to To review. `revision` is a prop now; `useSplits` re-runs on it. Regression test: "acting on a claim keeps you on the tab you were working in". |
+| C-3 | **A cleared balance took the wrong side.** | `iAmCreditor: !!owedToMe` silently means "debtor" when there is no balance at all — which is the state after every claim is rejected or settled. The payer's own section then fetched the wrong side of itself and rendered empty, which is precisely where the rejection history lives. Direction now falls back to the claims when there is no balance to read it from. |
+| C-4 | **The split note had to be captured before it could be shown.** | §0.1 predicted this and it held: the column, the API field and the bulk route all carried a note, but no dialog ever wrote one, so displaying it alone would have rendered an empty string on every row in production. Capture shipped in R1 with the display. |
+
+### Deviations from the plan as written
+
+- **§2.1 — "Payments to confirm" stayed.** Corrected during review, before any
+  code: it is settlement-shaped, not split-shaped. One settlement can clear
+  several claims, so folding it into a per-split tab would have offered the same
+  Confirm action once per slice, and `ConfirmReceiptDialog` needs a `Settlement`
+  a split row cannot supply. `splits/mine` returns `settlement_id` so an
+  awaiting row can still name what it is waiting on.
+- **§3.3 was twelve sites, not eleven** — the first count missed that one
+  statement's `SET` and `WHERE` both carried the literal.
+- **A thirteenth site was deleted rather than widened.** The rollback at
+  `settlements.ts:364` guarded on `status='awaiting_confirmation'`, which the
+  forward path never sets. It matched zero rows every time.
+- **`refreshClaimBadge` was extracted** (not in the plan). The sidebar counted
+  claims *plus* payments awaiting confirmation while the review queue counted
+  claims alone, and both wrote the same store field — so the badge meant
+  different things depending on which page you were on. One definition now.
+- **Bulk reject was dropped from §4.1.** Agreeing is batched; rejecting is not.
+  The reason is the useful half of a rejection, and one reason spread across a
+  batch is noise on every row it does not describe.
+- **§4.4 per-claim timeline: not built.** Every timestamp it needs exists
+  (`created_at`, `approved_at`, `settled_at`, `confirmed_at`, `rejected_at`);
+  the row-level state hints covered the actual question — who is this waiting
+  on — so the expandable timeline was left for when someone wants the audit.
+
+### A pre-existing bug found on the way, fixed separately
+
+The suite failed **on a schedule rather than on a change**: for the eight hours
+a day when the UTC date and the Malaysian date differ, rows the Worker stamped
+"today" (`worker/lib.ts todayStr()`, pinned to Asia/Kuala_Lumpur per B-11)
+landed outside the month the client was showing. Specs were split between two
+incompatible conventions — `toISOString()` yields the UTC date, local date parts
+yield the host's — so **there was no timezone at which the whole suite was
+green** inside that window; fixing one convention broke the other.
+
+`playwright.config.ts` now pins the browser *and* the test process to the app's
+business timezone, with `businessToday()`/`businessDatePlus()` helpers so spec
+date arithmetic cannot drift from it again. CLAUDE.md records specs 03 and 37
+being patched for this one at a time; this addresses the cause. Own commit,
+unrelated to R1–R3.
 
 ## 6. Out of scope
 
