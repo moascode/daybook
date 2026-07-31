@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm } from './helpers'
+import { fillAccountForm, fillTransactionForm, businessToday } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -104,7 +104,7 @@ test.describe('35 — Transaction splits', () => {
     })
     const acct = await acctRes.json()
     // Use today's date so the transaction appears in the default date filter
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     await alicePage.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Lunch', amount: 50, type: 'expense', tag: '[]' },
     })
@@ -151,7 +151,7 @@ test.describe('35 — Transaction splits', () => {
     const acct = await alicePage.request.post('http://localhost:5173/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Dinner', amount: 80, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
@@ -193,7 +193,7 @@ test.describe('35 — Transaction splits', () => {
       data: { name: 'Legacy Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
     const txn = await page.request.post('http://localhost:5173/api/transactions', {
-      data: { accountId: acct.id, date: new Date().toISOString().slice(0, 10), merchant: 'Legacy', amount: 10, type: 'expense', tag: '[]' },
+      data: { accountId: acct.id, date: businessToday(), merchant: 'Legacy', amount: 10, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
     const post = await page.request.post(`http://localhost:5173/api/transactions/${txn.id}/shares`, {

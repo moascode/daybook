@@ -1,3 +1,21 @@
+// ── One clock for the whole suite ─────────────────────
+//
+// Set before anything else in this file, because Node resolves the local
+// timezone lazily and caches it on first use — after that, changing TZ does
+// nothing.
+//
+// Three clocks have to agree or the suite fails on a schedule instead of on a
+// change: the Worker stamps rows via worker/lib.ts todayStr(), pinned to
+// Asia/Kuala_Lumpur (B-11); the browser decides which month the transaction
+// list defaults to; and the spec process computes the dates it expects to see.
+// Left to the host, the third is whatever the machine is set to — UTC in CI —
+// so for the eight hours a day when the UTC date and the Malaysian date differ,
+// rows created "today" landed outside the month the client was showing.
+//
+// Pinning `use.timezoneId` alone is not enough: it moves the browser but leaves
+// spec-side date arithmetic on the host clock, which just relocates the seam.
+process.env.TZ = 'Asia/Kuala_Lumpur'
+
 import { defineConfig, devices } from '@playwright/test'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -67,6 +85,20 @@ export default defineConfig({
   ],
   use: {
     baseURL: 'http://localhost:5173',
+    // Pin the browser to the app's business timezone — the same one
+    // worker/lib.ts todayStr() is pinned to (B-11), so the clock the server
+    // stamps rows with and the clock the client filters months by agree.
+    //
+    // Without this the suite is only green when the host happens to sit in a
+    // timezone where the UTC date and the Malaysian date coincide — false for
+    // eight hours out of every twenty-four. Rows created "today" server-side
+    // landed outside the client's current-month filter, and specs failed on a
+    // schedule rather than on a change. CLAUDE.md records specs 03 and 37
+    // being patched for this one at a time; this fixes the cause.
+    //
+    // Test code must not read the host clock either — use businessToday()
+    // from e2e/helpers.ts, never new Date().toISOString().
+    timezoneId: 'Asia/Kuala_Lumpur',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
