@@ -1066,3 +1066,65 @@ test.describe('53 — Split review (R3: settle preview)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── R3: bulk actions and the rejection loop (§4.1, §4.3) ──────────────
+test.describe('53 — Split review (R3: bulk + rejection loop)', () => {
+  // Fifteen claims meant fifteen decisions. Agreeing is safe to batch because
+  // it moves no money; rejecting deliberately is not batched — the reason is
+  // the useful half of it, and one reason spread across a batch is noise on
+  // every row it does not describe.
+  test('several claims can be agreed to at once', async ({ browser }) => {
+    const f = await splitFixture(browser, 'bulk', priorMonthDate(), 100)
+    for (const [i, amt] of [40, 25].entries()) {
+      const t = await f.payer.request.post(`${API}/transactions`, {
+        data: { accountId: f.acct.id, date: priorMonthDate(), merchant: `Bulk${i}`, amount: amt, type: 'expense', tag: '[]' },
+      }).then((r) => r.json()) as { id: string }
+      await f.payer.request.post(`${API}/transactions/${t.id}/split`, {
+        data: { recipientId: f.recipientId, splitMode: 'none' },
+      })
+    }
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(3, { timeout: 10_000 })
+
+    await f.recip.getByTestId('split-select-all').click()
+    await expect(f.recip.getByTestId('split-bulk-bar')).toContainText('3 selected')
+    await f.recip.getByTestId('split-bulk-approve').click()
+
+    // Queue empty, badge clear, and the debt entirely intact.
+    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
+    await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0, { timeout: 10_000 })
+    await expect(f.recip.getByTestId('section-balance')).toContainText('165.00')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // The rejection reason used to be collected, stored, and rendered nowhere:
+  // the payer's balance just dropped, with no notice and nothing to act on.
+  test('the payer sees the rejection reason and can re-split from it', async ({ browser }) => {
+    const f = await splitFixture(browser, 'rejloop', priorMonthDate(), 100)
+    const claims = await f.recip.request.get(`${API}/transactions/splits/mine?status=pending`)
+      .then((r) => r.json()) as { id: string }[]
+    await f.recip.request.post(`${API}/transactions/splits/${claims[0].id}/reject`, {
+      data: { reason: 'this one was mine alone' },
+    })
+
+    await f.payer.goto('/wallet/shared')
+    await expect(f.payer.locator('main')).toBeVisible({ timeout: 20_000 })
+    await f.payer.getByTestId('split-tab-rejected').click()
+
+    const row = f.payer.getByTestId('split-row-rejected')
+    await expect(row).toContainText('rejected this', { timeout: 10_000 })
+    await expect(row).toContainText('this one was mine alone')
+
+    // Re-split lands on the transaction with the split dialog already open.
+    await f.payer.getByTestId('split-row-resplit').click()
+    await expect(f.payer.getByRole('dialog')).toBeVisible({ timeout: 15_000 })
+    await expect(f.payer.getByRole('dialog')).toContainText('Split')
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})

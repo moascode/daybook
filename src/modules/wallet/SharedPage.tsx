@@ -73,10 +73,12 @@ export function SharedPage() {
         api.get<Record<string, unknown>[]>('/transactions/splits/mine?role=creditor&state=pending,approved,awaiting_confirmation,settled,rejected'),
       ])
       const mapped = groupRows.map(mapGroup)
-      const claimants = new Set([
-        ...mine.map(mapSplitClaim).map((c) => c.ownerId),
-        ...theirs.map(mapSplitClaim).map((c) => c.debtorId),
-      ])
+      // Who I hold claims against, and who holds claims against me. Kept apart
+      // rather than merged into one "people" set: once a balance is fully
+      // cleared there is nothing left to read a direction from, and defaulting
+      // to one made a section fetch the wrong side of itself and render empty.
+      const peopleWhoOweMe = new Set(theirs.map(mapSplitClaim).map((c) => c.debtorId))
+      const peopleIOwe = new Set(mine.map(mapSplitClaim).map((c) => c.ownerId))
 
       const perGroup = await Promise.all(
         mapped.map(async (g) => {
@@ -100,14 +102,19 @@ export function SharedPage() {
             (b) => b.fromUserId === currentUserId && b.toUserId === member.userId,
           )
           const balance = owedToMe ?? iOwe ?? null
+          const owesMe = peopleWhoOweMe.has(member.userId)
+          const iOweThem = peopleIOwe.has(member.userId)
           // A co-member with no balance and no claims has nothing to show.
-          if (!balance && !claimants.has(member.userId)) continue
+          if (!balance && !owesMe && !iOweThem) continue
           nextPairings.push({
             groupId: group.id,
             groupName: group.name,
             counterpartyId: member.userId,
             counterpartyUsername: member.username,
-            iAmCreditor: !!owedToMe,
+            // The live balance decides while there is one; history decides once
+            // it clears. With claims in both directions and no balance the
+            // creditor side wins — it is the one with an action on it.
+            iAmCreditor: balance ? !!owedToMe : owesMe,
             balance,
           })
         }

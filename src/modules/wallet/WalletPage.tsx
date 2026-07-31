@@ -143,6 +143,9 @@ export function WalletPage() {
     // ?txn=<id> rings and scrolls to one row (see TransactionList). It is a
     // highlight, not a filter: links that use it pair it with view=all&range=all
     // so the row is inside the result set to begin with.
+    // ?split=1 alongside it opens the split dialog once the row has loaded —
+    // that is the Re-split action on a rejected claim, which has to reach a
+    // dialog that lives here and needs a whole Transaction to open.
   }, [searchParams, setFilters])
 
   useEffect(() => {
@@ -150,6 +153,16 @@ export function WalletPage() {
     loadCategories()
     loadTags()
   }, [loadAccounts, loadCategories, loadTags])
+
+  // Deferred until the transactions arrive: the dialog needs the row, not just
+  // its id, and on a cold load the list is still empty when the params are read.
+  const splitParam = searchParams.get('split')
+  const txnParam = searchParams.get('txn')
+  useEffect(() => {
+    if (splitParam !== '1' || !txnParam) return
+    const target = transactions.find((t) => t.id === txnParam)
+    if (target) setSplitTarget(target) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [splitParam, txnParam, transactions])
 
   useEffect(() => {
     // dataVersion: re-fetch when data changed out-of-band

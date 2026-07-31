@@ -85,6 +85,17 @@ export async function approveSplit(id: string): Promise<void> {
   await refreshClaimBadge()
 }
 
+/**
+ * Agrees to several claims at once. Ids that are not the caller's are skipped
+ * server-side rather than failing the batch, so a stale selection degrades to
+ * "fewer approved" instead of an error.
+ */
+export async function approveSplits(ids: string[]): Promise<number> {
+  const res = await api.post<{ approved: number }>('/transactions/splits/approve', { ids })
+  await refreshClaimBadge()
+  return res.approved
+}
+
 /** Takes the agreement back. Allowed until money moves against the claim. */
 export async function unapproveSplit(id: string): Promise<void> {
   await api.post(`/transactions/splits/${id}/unapprove`, {})

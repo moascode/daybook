@@ -3,7 +3,7 @@ import { ArrowRightLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
-import { useSplits, approveSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
+import { useSplits, approveSplit, approveSplits, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { SplitList } from './SplitList'
@@ -62,6 +62,7 @@ export function SplitsSection({
   const [rejecting, setRejecting] = useState<SplitClaim | null>(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const addToast = useToastStore((s) => s.addToast)
 
   const { claims, loading, reload } = useSplits({
@@ -79,6 +80,21 @@ export function SplitsSection({
     for (const claim of claims) (acc[claim.state] ??= []).push(claim)
     return acc
   }, [claims])
+
+  // Selecting is only meaningful where a bulk action exists: unreviewed claims
+  // the caller actually holds. Everything else is a read-only record.
+  const canBulk = role === 'debtor' && tab === 'pending'
+  const visible = byState[tab] ?? []
+  const selectedHere = visible.filter((c) => selected.has(c.id))
+  const selectedTotal = selectedHere.reduce((sum, c) => sum + c.outstanding, 0)
+
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   // A tab with nothing in it and nothing to gain is not worth a click. 'To
   // review' always shows so its zero is legible as "nothing waiting on you"
@@ -109,6 +125,23 @@ export function SplitsSection({
       })
     } catch (err: unknown) {
       addToast({ message: errorMessage(err, 'Could not agree to this split.'), duration: 5000 })
+    }
+  }
+
+  const handleBulkApprove = async () => {
+    const ids = selectedHere.map((c) => c.id)
+    if (ids.length === 0) return
+    setBusy(true)
+    try {
+      const n = await approveSplits(ids)
+      setSelected(new Set())
+      await reload()
+      onChanged()
+      addToast({ message: `Agreed to ${n} split${n === 1 ? '' : 's'}`, duration: 4000 })
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not agree to those splits.'), duration: 5000 })
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -194,7 +227,7 @@ export function SplitsSection({
             type="button"
             role="tab"
             aria-selected={tab === t.state}
-            onClick={() => setTab(t.state)}
+            onClick={() => { setTab(t.state); setSelected(new Set()) }}
             data-testid={`split-tab-${t.state}`}
             className={cn(
               'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
@@ -216,19 +249,55 @@ export function SplitsSection({
       {/* Opt-in, and starting at All time. A claim is outstanding until it is
           resolved, so defaulting to the current month here would recreate the
           original bug — a debt on screen with an empty list under it. */}
-      <div className="border-b border-gray-100 px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
         <DateRangeControl value={range} onChange={setRange} />
+        {canBulk && visible.length > 1 && (
+          <button
+            type="button"
+            onClick={() =>
+              setSelected(
+                selectedHere.length === visible.length
+                  ? new Set()
+                  : new Set(visible.map((c) => c.id)),
+              )
+            }
+            className="text-xs font-medium text-brand-600 hover:underline"
+            data-testid="split-select-all"
+          >
+            {selectedHere.length === visible.length ? 'Clear selection' : 'Select all'}
+          </button>
+        )}
       </div>
+
+      {selectedHere.length > 0 && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-brand-50/60 px-4 py-2"
+          data-testid="split-bulk-bar"
+        >
+          <span className="text-xs font-medium text-gray-700">
+            {selectedHere.length} selected · {formatMYR(selectedTotal)}
+          </span>
+          {/* Agree in bulk, but never reject in bulk: rejecting is a message to
+              another person about a specific claim, and the reason is the useful
+              half of it. One shared reason across a batch would be noise on
+              every row it did not describe. */}
+          <Button size="sm" onClick={handleBulkApprove} disabled={busy} data-testid="split-bulk-approve">
+            Agree to {selectedHere.length}
+          </Button>
+        </div>
+      )}
 
       {loading ? (
         <p className="px-4 py-6 text-center text-xs text-gray-400">Loading…</p>
       ) : (
         <SplitList
-          claims={byState[tab] ?? []}
+          claims={visible}
           role={role}
           emptyMessage={emptyFor(tab, role, counterpartyUsername)}
           onApprove={handleApprove}
           onReject={(claim) => { setRejecting(claim); setReason('') }}
+          selectedIds={canBulk ? selected : undefined}
+          onToggleSelect={canBulk ? toggleSelect : undefined}
         />
       )}
 

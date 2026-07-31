@@ -12,6 +12,9 @@ interface SplitListProps {
   emptyMessage: string
   onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
+  /** Present only on tabs where a bulk action is possible. */
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
 /**
@@ -29,7 +32,15 @@ interface SplitListProps {
  * rather than an active filter. That is the bug this whole workstream started
  * from.
  */
-export function SplitList({ claims, role, emptyMessage, onApprove, onReject }: SplitListProps) {
+export function SplitList({
+  claims,
+  role,
+  emptyMessage,
+  onApprove,
+  onReject,
+  selectedIds,
+  onToggleSelect,
+}: SplitListProps) {
   if (claims.length === 0) {
     return (
       <p className="px-4 py-6 text-center text-xs text-gray-400" data-testid="split-list-empty">
@@ -47,6 +58,8 @@ export function SplitList({ claims, role, emptyMessage, onApprove, onReject }: S
           role={role}
           onApprove={onApprove}
           onReject={onReject}
+          selected={selectedIds?.has(claim.id)}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </ul>
@@ -58,11 +71,15 @@ function SplitRow({
   role,
   onApprove,
   onReject,
+  selected,
+  onToggleSelect,
 }: {
   claim: SplitClaim
   role: 'debtor' | 'creditor'
   onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }) {
   const isPartial = claim.settledAmount > 0.005 && claim.state !== 'settled'
   // Rejecting is the debtor's lever alone, and only while nothing has been paid.
@@ -77,7 +94,21 @@ function SplitRow({
   const canApprove = role === 'debtor' && !!onApprove && claim.state === 'pending'
 
   return (
-    <li className="flex items-start gap-3 px-4 py-3" data-testid="split-row" data-state={claim.state}>
+    <li
+      className={cn('flex items-start gap-3 px-4 py-3', selected && 'bg-brand-50')}
+      data-testid="split-row"
+      data-state={claim.state}
+    >
+      {onToggleSelect && (
+        <input
+          type="checkbox"
+          checked={selected ?? false}
+          onChange={() => onToggleSelect(claim.id)}
+          className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-brand-600"
+          data-testid="split-row-select"
+          aria-label={`Select ${claim.merchant || 'this split'}`}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <Link
           to={`/wallet?txn=${claim.transactionId}&view=all&range=all`}
@@ -103,7 +134,22 @@ function SplitRow({
         )}
         {claim.state === 'rejected' && (
           <p className="mt-1 text-xs text-red-600" data-testid="split-row-rejected">
-            Rejected{claim.rejectedReason ? ` — “${claim.rejectedReason}”` : ''}
+            {role === 'creditor'
+              ? `${claim.debtorUsername} rejected this`
+              : 'You rejected this'}
+            {claim.rejectedReason ? ` — “${claim.rejectedReason}”` : ''}
+            {/* The payer's way back in. Before this the reason was collected,
+                stored, and rendered nowhere: their balance simply dropped, with
+                no notice, no explanation, and nothing to act on. */}
+            {role === 'creditor' && (
+              <Link
+                to={`/wallet?txn=${claim.transactionId}&split=1&view=all&range=all`}
+                className="ml-2 font-medium text-brand-600 hover:underline"
+                data-testid="split-row-resplit"
+              >
+                Re-split
+              </Link>
+            )}
           </p>
         )}
         <StateHint claim={claim} role={role} />
