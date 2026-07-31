@@ -53,8 +53,10 @@ export function SharedPage() {
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
   // Bumped after any action that changes a claim, to re-run the sections' own
-  // fetches. They own their data (each has its own date range); this is how the
-  // page tells them the world moved underneath.
+  // fetches. They own their data (each has its own tab and date range); this is
+  // how the page tells them the world moved underneath — as a prop, never as
+  // part of their key, because remounting would discard that state and bounce
+  // the user out of whatever tab they were working in.
   const [revision, setRevision] = useState(0)
 
   const loadAll = useCallback(async () => {
@@ -279,7 +281,7 @@ export function SharedPage() {
 
       {pairings.map((p) => (
         <SplitsSection
-          key={`${p.groupId}:${p.counterpartyId}:${revision}`}
+          key={`${p.groupId}:${p.counterpartyId}`}
           groupId={p.groupId}
           groupName={p.groupName}
           showGroupName={groups.length > 1}
@@ -287,6 +289,7 @@ export function SharedPage() {
           counterpartyUsername={p.counterpartyUsername}
           iAmCreditor={p.iAmCreditor}
           balance={p.balance}
+          revision={revision}
           onSettle={() => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance })}
           onChanged={refresh}
         />

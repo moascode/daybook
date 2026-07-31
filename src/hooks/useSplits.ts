@@ -11,6 +11,13 @@ export interface SplitQuery {
   groupId?: string
   dateFrom?: string
   dateTo?: string
+  /**
+   * Bumped by the page when something outside this hook changed the claims.
+   * A prop rather than a remount: the section owns tab and date-range state, and
+   * remounting to force a refetch threw both away — agreeing to one claim
+   * bounced the user back to the "To review" tab mid-review.
+   */
+  revision?: number
 }
 
 /**
@@ -27,12 +34,16 @@ export interface SplitQuery {
  * whatever month it came from; that was the original bug.
  */
 export function useSplits(query: SplitQuery) {
-  const { role, counterparty, groupId, dateFrom, dateTo } = query
+  const { role, counterparty, groupId, dateFrom, dateTo, revision } = query
   const [claims, setClaims] = useState<SplitClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
   const load = useCallback(async () => {
+    // `revision` is a refetch trigger, not a query input: reading it here is
+    // what makes it a genuine dependency rather than one the linter is right to
+    // call unnecessary. Bumping it re-runs this without remounting the caller.
+    void revision
     setError(false)
     try {
       const qs = new URLSearchParams()
@@ -53,7 +64,7 @@ export function useSplits(query: SplitQuery) {
     } finally {
       setLoading(false)
     }
-  }, [role, counterparty, groupId, dateFrom, dateTo])
+  }, [role, counterparty, groupId, dateFrom, dateTo, revision])
 
   useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
 
@@ -63,6 +74,21 @@ export function useSplits(query: SplitQuery) {
 /** Claims in one state, newest transaction first (the server already sorts). */
 export function claimsInState(claims: SplitClaim[], state: ClaimState): SplitClaim[] {
   return claims.filter((c) => c.state === state)
+}
+
+/**
+ * Agrees to a claim. Nothing about the money moves — the debt was already owed
+ * — so this is safe to offer as a one-click action with an undo.
+ */
+export async function approveSplit(id: string): Promise<void> {
+  await api.post(`/transactions/splits/${id}/approve`, {})
+  await refreshClaimBadge()
+}
+
+/** Takes the agreement back. Allowed until money moves against the claim. */
+export async function unapproveSplit(id: string): Promise<void> {
+  await api.post(`/transactions/splits/${id}/unapprove`, {})
+  await refreshClaimBadge()
 }
 
 /**

@@ -3,7 +3,7 @@ import { ArrowRightLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
-import { useSplits, rejectSplit } from '@/hooks/useSplits'
+import { useSplits, approveSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { SplitList } from './SplitList'
@@ -28,6 +28,8 @@ interface SplitsSectionProps {
   /** True when the counterparty owes the current user. */
   iAmCreditor: boolean
   balance: GroupBalance | null
+  /** Bumped by the page when a claim changed elsewhere; refetches in place. */
+  revision: number
   onSettle: () => void
   onChanged: () => void
 }
@@ -50,6 +52,7 @@ export function SplitsSection({
   counterpartyUsername,
   iAmCreditor,
   balance,
+  revision,
   onSettle,
   onChanged,
 }: SplitsSectionProps) {
@@ -67,6 +70,7 @@ export function SplitsSection({
     groupId,
     dateFrom: range.dateFrom || undefined,
     dateTo: range.dateTo || undefined,
+    revision,
   })
 
   const byState = useMemo(() => {
@@ -80,6 +84,33 @@ export function SplitsSection({
   // review' always shows so its zero is legible as "nothing waiting on you"
   // rather than as a missing tab.
   const visibleTabs = TABS.filter((t) => t.state === 'pending' || byState[t.state].length > 0)
+
+  // Agreeing is one click with an undo rather than a confirm dialog: it moves no
+  // money and is fully reversible, so making it cost a modal would tax the
+  // common case — an uncontested split — which is exactly what the original
+  // design was right to avoid.
+  const handleApprove = async (claim: SplitClaim) => {
+    try {
+      await approveSplit(claim.id)
+      await reload()
+      onChanged()
+      addToast({
+        message: `Agreed: ${claim.merchant || 'split'}`,
+        duration: 6000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            unapproveSplit(claim.id)
+              .then(async () => { await reload(); onChanged() })
+              .catch((err: unknown) =>
+                addToast({ message: errorMessage(err, 'Could not undo that.'), duration: 5000 }))
+          },
+        },
+      })
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not agree to this split.'), duration: 5000 })
+    }
+  }
 
   const confirmReject = async () => {
     if (!rejecting) return
@@ -99,6 +130,8 @@ export function SplitsSection({
   }
 
   const amount = balance?.amount ?? 0
+  const agreed = balance?.agreedAmount ?? 0
+  const unreviewed = balance?.unreviewedAmount ?? 0
 
   return (
     <section
@@ -113,16 +146,28 @@ export function SplitsSection({
         </div>
         <div className="flex items-center gap-3">
           {amount > 0.005 && (
-            <span
-              className={cn(
-                'text-sm font-semibold',
-                iAmCreditor ? 'text-positive-700' : 'text-red-700',
+            <div className="text-right">
+              <span
+                className={cn(
+                  'text-sm font-semibold',
+                  iAmCreditor ? 'text-positive-700' : 'text-red-700',
+                )}
+                data-testid="section-balance"
+              >
+                {iAmCreditor ? 'owes you ' : 'you owe '}
+                {formatMYR(amount)}
+              </span>
+              {/* Split by agreement, but only when it says something: a balance
+                  that is entirely one or the other is fully described by the
+                  number above it. This is what tells a creditor whether they are
+                  waiting on money or on a conversation. */}
+              {unreviewed > 0.005 && agreed > 0.005 && (
+                <p className="mt-0.5 text-[11px] text-gray-500" data-testid="section-balance-split">
+                  {formatMYR(agreed)} agreed · {formatMYR(unreviewed)}{' '}
+                  {iAmCreditor ? 'awaiting their review' : 'to review'}
+                </p>
               )}
-              data-testid="section-balance"
-            >
-              {iAmCreditor ? 'owes you ' : 'you owe '}
-              {formatMYR(amount)}
-            </span>
+            </div>
           )}
           {balance && amount > 0.005 && (
             <Button size="sm" variant={iAmCreditor ? 'secondary' : 'primary'} onClick={onSettle}>
@@ -182,6 +227,7 @@ export function SplitsSection({
           claims={byState[tab] ?? []}
           role={role}
           emptyMessage={emptyFor(tab, role, counterpartyUsername)}
+          onApprove={handleApprove}
           onReject={(claim) => { setRejecting(claim); setReason('') }}
         />
       )}

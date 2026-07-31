@@ -30,6 +30,8 @@ alters tables that `0004_sharing` creates.
 | `0006_partial_settlement.sql` | `0007_partial_settlement.sql` |
 | `0007_rename_transaction_shares.sql` | `0008_rename_transaction_shares.sql` |
 | `0008_absorbed_import_hashes.sql` | `0009_absorbed_import_hashes.sql` |
+| `0009_split_review.sql` | `0010_split_review.sql` |
+| `0010_split_approved.sql` | `0011_split_approved.sql` |
 
 Renumbering is safe precisely because D1 starts empty: no `d1_migrations` row
 refers to the old names, so there is no history to invalidate. **That stops being

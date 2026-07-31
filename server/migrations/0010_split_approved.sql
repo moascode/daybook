@@ -1,0 +1,16 @@
+-- Mirrors worker/migrations/0011_split_approved.sql — scripts/schema-diff.mjs
+-- gates CI on the two staying identical.
+-- The `approved` claim state (docs/shared-review-implementation-plan.md §3).
+--
+-- 'approved' is a new value in the existing transaction_splits.status TEXT
+-- column, so there is no status column to add here. Only the timestamp is new,
+-- and it exists for the per-claim timeline: created → approved → paid → settled.
+--
+-- No backfill. Every existing claim stays 'pending', which is the honest state
+-- for one nobody has agreed to yet — and it keeps the nav badge lit for them,
+-- which is the point.
+--
+-- Approval is an acknowledgement, NOT a gate: pending, approved and
+-- awaiting_confirmation all count toward a balance, so nothing about the money
+-- moves when this lands. See §1 D-3.
+ALTER TABLE transaction_splits ADD COLUMN approved_at TEXT DEFAULT NULL;

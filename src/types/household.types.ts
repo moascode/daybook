@@ -91,6 +91,12 @@ export interface GroupBalance {
   toUserId: string
   toUsername: string
   amount: number
+  // The same total, split by whether the debtor has agreed to it yet. Lets a
+  // creditor tell "waiting on money" from "waiting on a conversation" — before
+  // this they were the same number. Approximate when debts run both ways
+  // between two people, for the same reason the netted total is.
+  agreedAmount?: number
+  unreviewedAmount?: number
 }
 
 export interface Settlement {

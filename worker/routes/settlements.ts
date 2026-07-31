@@ -106,7 +106,10 @@ settlements.post('/settlements', async (c) => {
        JOIN transactions t ON t.id = ts.transaction_id
        JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
        WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
-         AND ts.status = 'pending'
+         -- 'approved' settles exactly like 'pending': agreeing to a debt is an
+         -- acknowledgement, not a precondition, and certainly not a thing that
+         -- should make the debt unpayable.
+         AND ts.status IN ('pending', 'approved')
          -- Minus anything already claimed and awaiting the creditor's
          -- confirmation. Without this a debtor could pay the same debt twice
          -- while the first payment sits unconfirmed.
@@ -156,15 +159,15 @@ settlements.post('/settlements', async (c) => {
   // applying a partial amount to each (not whole-share-or-nothing).
   const { results: pending } = await db
     .prepare(
-      // status='pending' only: a split already awaiting confirmation has been
-      // paid once and must not be claimed again. Its category comes along for
-      // the inheritance rule below.
+      // Unclaimed splits only: one already awaiting confirmation has been paid
+      // once and must not be claimed again. Its category comes along for the
+      // inheritance rule below. Both resting states are payable — see above.
       `SELECT ts.id, ts.share_amount, ts.settled_amount, t.category_id
        FROM transaction_splits ts
        JOIN transactions t ON t.id = ts.transaction_id
        JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
        WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
-         AND ts.status = 'pending'
+         AND ts.status IN ('pending', 'approved')
          AND ts.id NOT IN (
            SELECT l.share_id FROM settlement_split_lines l
            JOIN settlements sx ON sx.id = l.settlement_id
@@ -264,17 +267,28 @@ settlements.post('/settlements', async (c) => {
         // to awaiting_confirmation would strand the remainder as unclaimable.
         // The row is touched only to prove it has not changed under us — the
         // no-op write keeps meta.changes meaningful as a guard.
+        //
+        // The write assigns settled_amount to itself rather than writing a
+        // status literal. It used to write status='pending', which was a true
+        // no-op only while 'pending' was the sole payable state; with 'approved'
+        // payable too, that literal silently demoted an agreed claim back into
+        // the recipient's review queue on every payment they recorded.
         db
           .prepare(
-            `UPDATE transaction_splits SET status = 'pending'
-              WHERE id = ? AND status = 'pending' AND settled_at IS NULL AND settled_amount = ?`,
+            `UPDATE transaction_splits SET settled_amount = settled_amount
+              WHERE id = ? AND status IN ('pending', 'approved')
+                AND settled_at IS NULL AND settled_amount = ?`,
           )
           .bind(a.id, a.previousSettled)
       : db
           .prepare(
+            // Paying is agreeing: a claim that has had money put against it
+            // rests in 'approved', never back in 'pending'. A partly-paid claim
+            // returning to the review queue looking untouched is what made
+            // partial settlement so confusing before.
             `UPDATE transaction_splits
                 SET settled_amount = ?,
-                    status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'pending' END,
+                    status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'approved' END,
                     settled_at = CASE WHEN ? >= share_amount THEN datetime('now') ELSE NULL END
               WHERE id = ? AND settled_at IS NULL AND settled_amount = ?`,
           )
@@ -357,21 +371,23 @@ settlements.post('/settlements', async (c) => {
       // Restore whichever column this shape actually wrote. The awaiting path
       // never touched settled_amount, so rewinding it here would corrupt a
       // partially-settled share rather than repair it.
-      ...survivors.map((a) =>
-        needsConfirmation
-          ? db
-              .prepare(
-                `UPDATE transaction_splits SET status = 'pending'
-                  WHERE id = ? AND status = 'awaiting_confirmation'`,
-              )
-              .bind(a.id)
-          : db
-              .prepare(
-                `UPDATE transaction_splits SET settled_amount = ?, settled_at = NULL, status = 'pending'
-                  WHERE id = ? AND settled_amount = ?`,
-              )
-              .bind(a.previousSettled, a.id, a.newSettled),
-      ),
+      // The awaiting path has nothing to rewind: its forward write was a no-op
+      // probe that left status and settled_amount exactly as it found them, and
+      // deleting the settlement above is what releases the splits. There used to
+      // be an UPDATE here guarding on status='awaiting_confirmation', a status
+      // the forward path never sets — it matched zero rows every time.
+      ...survivors
+        .filter(() => !needsConfirmation)
+        .map((a) =>
+          db
+            .prepare(
+              // Back to 'approved', not 'pending': the money is being unwound,
+              // but the recipient's agreement to owe it is not.
+              `UPDATE transaction_splits SET settled_amount = ?, settled_at = NULL, status = 'approved'
+                WHERE id = ? AND settled_amount = ?`,
+            )
+            .bind(a.previousSettled, a.id, a.newSettled),
+        ),
     ])
 
     console.warn(
@@ -464,10 +480,12 @@ settlements.post('/settlements/:id/confirm', async (c) => {
               SET settled_amount = ?,
                   -- 'settled' only once the whole share is paid. Marking a
                   -- partly-paid share settled drops it out of the balance query
-                  -- and silently forgives the remainder.
-                  status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'pending' END,
+                  -- and silently forgives the remainder. The unpaid remainder
+                  -- rests in 'approved' — money went against this claim, so it
+                  -- is not something the recipient still has to review.
+                  status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'approved' END,
                   settled_at = CASE WHEN ? >= share_amount THEN datetime('now') ELSE NULL END
-            WHERE id = ? AND status = 'pending' AND settled_amount = ?`,
+            WHERE id = ? AND status IN ('pending', 'approved') AND settled_amount = ?`,
         )
         .bind(a.next, a.next, a.next, a.shareId, a.previous),
     ),
@@ -516,7 +534,7 @@ settlements.post('/settlements/:id/confirm', async (c) => {
         db
           .prepare(
             `UPDATE transaction_splits
-                SET settled_amount = ?, settled_at = NULL, status = 'pending'
+                SET settled_amount = ?, settled_at = NULL, status = 'approved'
               WHERE id = ? AND settled_amount = ?`,
           )
           .bind(a.previous, a.shareId, a.next),
@@ -556,9 +574,10 @@ settlements.post('/settlements/:id/reject', async (c) => {
     .bind(id)
     .all<{ share_id: string }>()
 
-  // The splits were never moved out of 'pending' — marking the settlement
-  // rejected is what releases them, because the claimable-amount query only
-  // excludes lines belonging to an *awaiting* settlement.
+  // The splits' own status was never moved — marking the settlement rejected is
+  // what releases them, because the claimable-amount query only excludes lines
+  // belonging to an *awaiting* settlement. Each split therefore returns to
+  // whichever resting state it held, 'pending' or 'approved', with no write.
   void lines
   await db.batch([
     ...(st.from_transaction_id
@@ -677,9 +696,13 @@ settlements.delete('/settlements/:id', async (c) => {
           db.prepare('SELECT 1 WHERE ?').bind(line.share_id)
         : db
             .prepare(
+              // 'approved', not 'pending'. Undoing a settlement takes back the
+              // money, not the recipient's agreement that they owed it — and an
+              // undo can land weeks later, so re-queueing the claim for review
+              // would ask them to re-decide something they already decided.
               `UPDATE transaction_splits
                   SET settled_amount = MAX(0, ROUND(settled_amount - ?, 2)),
-                      status = 'pending',
+                      status = 'approved',
                       settled_at = CASE WHEN ROUND(settled_amount - ?, 2) >= share_amount
                                         THEN settled_at ELSE NULL END
                 WHERE id = ?`,

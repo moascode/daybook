@@ -1293,6 +1293,126 @@ wallet.get('/transactions/splits/mine', async (c) => {
   return c.json(results)
 })
 
+/**
+ * Bulk approve is capped at the same 500 as splits/status: an unbounded id list
+ * becomes an unbounded IN clause.
+ */
+const MAX_BULK_SPLITS = 500
+
+// POST /transactions/splits/approve — agree to several claims at once.
+//
+// No ordering hazard against /transactions/splits/:id/approve despite the shared
+// prefix: that route needs a fourth segment, so the two cannot both match. The
+// literal /transactions/splits/mine and /status alongside it are the same shape.
+wallet.post('/transactions/splits/approve', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const ids = b.ids
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return c.json({ error: 'ids array is required and must be non-empty' }, 400)
+  }
+  if (ids.length > MAX_BULK_SPLITS) {
+    return c.json({ error: `cannot approve more than ${MAX_BULK_SPLITS} splits at once` }, 400)
+  }
+  const placeholders = ids.map(() => '?').join(', ')
+  // user_id scoping in the WHERE, not a preflight: another user's id simply does
+  // not match, so a mixed list approves the caller's own claims and silently
+  // skips the rest rather than failing the whole batch or leaking which ids
+  // exist. The returned count says how many actually moved.
+  const res = await c.env.DB.prepare(
+    `UPDATE transaction_splits
+        SET status = 'approved', approved_at = datetime('now')
+      WHERE id IN (${placeholders}) AND user_id = ? AND status = 'pending'`,
+  )
+    .bind(...ids.map(String), userId)
+    .run()
+  return c.json({ approved: res.meta?.changes ?? 0 })
+})
+
+/**
+ * POST /transactions/splits/:id/approve — the recipient agrees they owe it.
+ *
+ * The review queue used to empty only when money moved, so the nav badge could
+ * never be cleared by acknowledging a claim — and a badge that cannot be cleared
+ * is one people stop reading, which is the failure this whole workstream exists
+ * to fix.
+ *
+ * Approval deliberately does NOT gate the balance: an approved claim is owed
+ * exactly as a pending one is (worker/routes/groups.ts:407). All it changes is
+ * whether the recipient still has to look at it.
+ */
+wallet.post('/transactions/splits/:id/approve', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const row = await c.env.DB.prepare(
+    `UPDATE transaction_splits
+        SET status = 'approved', approved_at = datetime('now')
+      WHERE id = ? AND user_id = ? AND status = 'pending'
+      RETURNING *`,
+  )
+    .bind(id, userId)
+    .first()
+
+  if (!row) {
+    // 404 for someone else's split, the same non-disclosure rule the reject
+    // route and the group routes use — an id must not be probeable.
+    const split = await c.env.DB.prepare(
+      'SELECT status, user_id FROM transaction_splits WHERE id = ?',
+    )
+      .bind(id)
+      .first<{ status: string; user_id: string }>()
+    if (!split || split.user_id !== userId) return c.json({ error: 'split not found' }, 404)
+    return c.json({ error: `this split is already ${split.status}` }, 409)
+  }
+  return c.json(row)
+})
+
+// POST /transactions/splits/:id/unapprove — take the agreement back.
+//
+// Approval has to be reversible or it is a trap: it is one click, and a
+// recipient who agrees and then spots the problem would otherwise be locked in.
+// Only until money moves — after that the settlement is the thing to undo.
+wallet.post('/transactions/splits/:id/unapprove', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const split = await c.env.DB.prepare(
+    'SELECT id, user_id, status, settled_amount FROM transaction_splits WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; status: string; settled_amount: number }>()
+  if (!split || split.user_id !== userId) return c.json({ error: 'split not found' }, 404)
+  if (split.settled_amount > 0.005) {
+    return c.json(
+      { error: 'this split has been (partly) settled; undo the settlement first' },
+      409,
+    )
+  }
+  // An open payment claim also blocks it: the split is spoken for, and dropping
+  // it back into the review queue would invite rejecting something already paid.
+  const claimed = await c.env.DB.prepare(
+    `SELECT 1 AS ok FROM settlement_split_lines l
+       JOIN settlements sx ON sx.id = l.settlement_id
+      WHERE l.share_id = ? AND sx.status = 'awaiting_confirmation'`,
+  )
+    .bind(id)
+    .first()
+  if (claimed) {
+    return c.json({ error: 'a payment is awaiting confirmation on this split' }, 409)
+  }
+
+  const row = await c.env.DB.prepare(
+    `UPDATE transaction_splits SET status = 'pending', approved_at = NULL
+      WHERE id = ? AND status = 'approved'
+      RETURNING *`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return c.json({ error: `this split is ${split.status}, not approved` }, 409)
+  return c.json(row)
+})
+
 // POST /transactions/splits/:id/reject — the recipient declines a claim (§5.2).
 //
 // Rejection is the review step. It is the recipient's only lever, so it belongs
@@ -1337,16 +1457,20 @@ wallet.post('/transactions/splits/:id/reject', async (c) => {
   }
 
   const row = await c.env.DB.prepare(
+    // Rejecting stays reachable from 'approved': approval is reversible until
+    // money moves, and a recipient who agreed to a claim and then found it wrong
+    // must not be locked into it. The preflight above already refuses once
+    // anything has been paid.
     `UPDATE transaction_splits
      SET status = 'rejected', rejected_reason = ?, rejected_at = datetime('now')
-     WHERE id = ? AND status = 'pending'
+     WHERE id = ? AND status IN ('pending', 'approved')
      RETURNING *`,
   )
     .bind(reason, id)
     .first()
   // The guard above and this WHERE can disagree only if another request moved
   // the row in between; report that rather than a misleading success.
-  if (!row) return c.json({ error: 'split is no longer pending' }, 409)
+  if (!row) return c.json({ error: 'split is no longer open' }, 409)
 
   return c.json(row)
 })

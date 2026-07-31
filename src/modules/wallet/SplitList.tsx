@@ -10,6 +10,7 @@ interface SplitListProps {
   /** Which side the current user is on for these rows. */
   role: 'debtor' | 'creditor'
   emptyMessage: string
+  onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
 }
 
@@ -28,7 +29,7 @@ interface SplitListProps {
  * rather than an active filter. That is the bug this whole workstream started
  * from.
  */
-export function SplitList({ claims, role, emptyMessage, onReject }: SplitListProps) {
+export function SplitList({ claims, role, emptyMessage, onApprove, onReject }: SplitListProps) {
   if (claims.length === 0) {
     return (
       <p className="px-4 py-6 text-center text-xs text-gray-400" data-testid="split-list-empty">
@@ -40,7 +41,13 @@ export function SplitList({ claims, role, emptyMessage, onReject }: SplitListPro
   return (
     <ul className="divide-y divide-gray-100" data-testid="split-list">
       {claims.map((claim) => (
-        <SplitRow key={claim.id} claim={claim} role={role} onReject={onReject} />
+        <SplitRow
+          key={claim.id}
+          claim={claim}
+          role={role}
+          onApprove={onApprove}
+          onReject={onReject}
+        />
       ))}
     </ul>
   )
@@ -49,10 +56,12 @@ export function SplitList({ claims, role, emptyMessage, onReject }: SplitListPro
 function SplitRow({
   claim,
   role,
+  onApprove,
   onReject,
 }: {
   claim: SplitClaim
   role: 'debtor' | 'creditor'
+  onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
 }) {
   const isPartial = claim.settledAmount > 0.005 && claim.state !== 'settled'
@@ -63,6 +72,9 @@ function SplitRow({
     role === 'debtor' &&
     !!onReject &&
     (claim.state === 'pending' || claim.state === 'approved')
+  // Agreeing is the debtor's move and only from unreviewed. It moves no money —
+  // the debt was already owed — which is why it can be a single click.
+  const canApprove = role === 'debtor' && !!onApprove && claim.state === 'pending'
 
   return (
     <li className="flex items-start gap-3 px-4 py-3" data-testid="split-row" data-state={claim.state}>
@@ -126,6 +138,17 @@ function SplitRow({
               still worth is the only figure that can be acted on. */}
           {formatMYR(claim.state === 'settled' ? claim.shareAmount : claim.outstanding)}
         </span>
+        {canApprove && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onApprove(claim)}
+            data-testid="claim-approve"
+            aria-label={`Agree to ${claim.merchant || 'this split'}`}
+          >
+            <Check className="h-3.5 w-3.5 text-positive-600" />
+          </Button>
+        )}
         {canReject && (
           <Button
             variant="ghost"
@@ -137,7 +160,9 @@ function SplitRow({
             <X className="h-3.5 w-3.5" />
           </Button>
         )}
-        {claim.state === 'settled' && <Check className="h-4 w-4 text-positive-600" />}
+        {claim.state === 'settled' && (
+          <Check className="h-4 w-4 text-positive-600" aria-label="Settled" />
+        )}
       </div>
     </li>
   )
@@ -156,6 +181,8 @@ function StateHint({ claim, role }: { claim: SplitClaim; role: 'debtor' | 'credi
   const hint: Partial<Record<ClaimState, string>> = {
     pending:
       role === 'creditor' ? `Awaiting ${claim.debtorUsername}’s review` : '',
+    approved:
+      role === 'debtor' ? 'Agreed — not paid yet' : 'Agreed, not paid yet',
     awaiting_confirmation:
       role === 'debtor'
         ? `Paid — waiting on ${claim.ownerUsername} to confirm`
