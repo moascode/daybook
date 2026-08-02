@@ -9,7 +9,7 @@
     "dev:all": "tsx server/index.ts & SERVER_PID=$!; trap 'kill $SERVER_PID 2>/dev/null' EXIT; vite",
     "typecheck:server": "tsc -p server/tsconfig.json",
     "typecheck:worker": "tsc -p worker/tsconfig.json",
-    "dev:worker": "vite build && wrangler dev --env dev",
+    "dev:worker": "vite build && wrangler d1 migrations apply daybook --env dev --local && wrangler dev --env dev --port 8788 --show-interactive-dev-session false",
     "deploy:worker": "vite build && wrangler deploy --env=\"\"",
     "d1:migrate": "wrangler d1 migrations apply daybook --local",
     "d1:schema-diff": "tsx scripts/schema-diff.mjs",

@@ -222,6 +222,120 @@ test.describe('54 — Cancelling a split you made', () => {
   })
 })
 
+// The card used to take one direction, chosen from whichever way the NETTED
+// balance pointed, and fetch only that role. With debts running both ways the
+// smaller direction was never fetched: no row, no agree, no reject — the money
+// visible only as a page total nothing on screen could explain.
+test.describe('54 — A person card is two-way', () => {
+  /** Kakon is owed 30 by Tumpa and owes her 15 — the case that broke. */
+  async function bothWays(browser: Browser, tag: string) {
+    const f = await fixture(browser, tag, { merchant: 'KAKON_PAID' })
+    const back = await f.recip.request.post(`${API}/transactions`, {
+      data: {
+        accountId: f.recipAcct.id, date: businessToday(), merchant: 'TUMPA_PAID',
+        amount: 15, type: 'expense', tag: '[]',
+      },
+    }).then((r) => r.json()) as { id: string }
+    const res = await f.recip.request.post(`${API}/transactions/${back.id}/split`, {
+      data: { recipientId: f.payerId, splitMode: 'none' },
+    })
+    expect(res.status()).toBe(201)
+    return f
+  }
+
+  test('shows both directions and the net, not just the netted side', async ({ browser }) => {
+    const f = await bothWays(browser, 'twoway')
+
+    await f.payer.goto('/wallet/shared')
+    await expect(f.payer.getByTestId('total-owed-to-me')).toHaveText(/100\.00/)
+    await expect(f.payer.getByTestId('total-i-owe')).toHaveText(/15\.00/)
+    await expect(f.payer.getByTestId('section-balance')).toContainText('owes you')
+
+    // The page headline is gross both ways, so neither direction can be netted
+    // out of existence.
+    await expect(f.payer.getByTestId('headline-owed-to-me')).toHaveText(/100\.00/)
+    await expect(f.payer.getByTestId('headline-i-owe')).toHaveText(/15\.00/)
+    await expect(f.payer.getByTestId('headline-net')).toHaveText(/85\.00/)
+
+    await close(f)
+  })
+
+  test('the claim that used to be unreachable has a row, and can be agreed to', async ({ browser }) => {
+    const f = await bothWays(browser, 'reach')
+
+    await f.payer.goto('/wallet/shared')
+    // Opens on the side with something waiting on him — the RM15 he owes.
+    await f.payer.getByTestId('direction-i-owe').click()
+    const row = f.payer.getByTestId('split-row').filter({ hasText: 'TUMPA_PAID' })
+    await expect(row).toBeVisible()
+    await expect(row.getByTestId('claim-approve')).toBeVisible()
+
+    await row.getByTestId('claim-approve').click()
+    await expect(f.payer.getByTestId('split-tab-approved')).toBeVisible()
+
+    const agreed = await f.payer.request
+      .get(`${API}/transactions/splits/mine?state=approved`)
+      .then((r) => r.json()) as { merchant: string }[]
+    expect(agreed.map((c) => c.merchant)).toEqual(['TUMPA_PAID'])
+
+    await close(f)
+  })
+
+  test('the toggle switches direction, and each side carries its own action', async ({ browser }) => {
+    const f = await bothWays(browser, 'toggle')
+
+    await f.payer.goto('/wallet/shared')
+
+    await f.payer.getByTestId('direction-owed-to-me').click()
+    const theirs = f.payer.getByTestId('split-row').filter({ hasText: 'KAKON_PAID' })
+    await expect(theirs).toBeVisible()
+    // A claim he made: his to withdraw, not to agree to.
+    await expect(theirs.getByTestId('claim-cancel')).toBeVisible()
+    await expect(theirs.getByTestId('claim-approve')).toHaveCount(0)
+
+    await f.payer.getByTestId('direction-i-owe').click()
+    const mine = f.payer.getByTestId('split-row').filter({ hasText: 'TUMPA_PAID' })
+    await expect(mine).toBeVisible()
+    await expect(mine.getByTestId('claim-approve')).toBeVisible()
+    await expect(mine.getByTestId('claim-cancel')).toHaveCount(0)
+
+    await close(f)
+  })
+
+  // Resolving the last claim on your side used to flip the card to the other
+  // direction, taking the row you just acted on and the tab you were heading for
+  // with it.
+  test('the direction stays put after you resolve the last claim on it', async ({ browser }) => {
+    const f = await fixture(browser, 'stay')
+
+    await f.recip.goto('/wallet/shared')
+    await f.recip.getByTestId('claim-reject').click()
+    await f.recip.locator('#reject-reason').fill('mine alone')
+    await f.recip.getByTestId('claim-reject-confirm').click()
+
+    // Still on "You owe …", with the Rejected tab reachable.
+    await expect(f.recip.getByTestId('direction-i-owe')).toHaveAttribute('aria-selected', 'true')
+    await f.recip.getByTestId('split-tab-rejected').click()
+    await expect(f.recip.getByTestId('split-row-rejected')).toContainText('mine alone')
+
+    await close(f)
+  })
+
+  test('a bar segment opens its tab', async ({ browser }) => {
+    const f = await fixture(browser, 'segtab')
+    await f.recip.request.post(`${API}/transactions/splits/${f.splitId}/approve`, { data: {} })
+
+    await f.recip.goto('/wallet/shared')
+    const segment = f.recip.getByTestId('split-state-segment').first()
+    await expect(segment).toHaveAttribute('data-state', 'approved')
+    await segment.click()
+    await expect(f.recip.getByTestId('split-tab-approved')).toHaveAttribute('aria-selected', 'true')
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1)
+
+    await close(f)
+  })
+})
+
 test.describe('54 — The review row itself', () => {
   test('carries the description, which is what the claim is judged by', async ({ browser }) => {
     const f = await fixture(browser, 'desc', {
@@ -404,11 +518,11 @@ test.describe('54 — State bar', () => {
     })
 
     await f.payer.goto('/wallet/shared')
-    await expect(f.payer.getByTestId('state-bar-owed-to-me')).toBeVisible()
-    await expect(f.payer.getByTestId('state-bar-owed-to-me').getByTestId('state-bar-total'))
-      .toHaveText(/50\.00/)
-    // Nothing flows the other way at all, so that bar should not exist.
-    await expect(f.payer.getByTestId('state-bar-i-owe')).toHaveCount(0)
+    await expect(f.payer.getByTestId('total-owed-to-me')).toHaveText(/50\.00/)
+    // Nothing flows the other way at all — not even the payer's own share row,
+    // which is the whole point.
+    await expect(f.payer.getByTestId('total-i-owe')).toHaveText(/0\.00/)
+    await expect(f.payer.getByTestId('headline-i-owe')).toHaveText(/0\.00/)
 
     await close(f)
   })

@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "daybook",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--port", "5173"],
-      "port": 5173
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:worker"],
+      "port": 8788
     }
   ]
 }

@@ -66,7 +66,10 @@ test.describe('35 — Transaction splits', () => {
     // E-2: Verify balance is reflected on the Wallet Shared page
     await alicePage.goto('/wallet/shared')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 10_000 })
-    await expect(alicePage.getByText('owes you')).toBeVisible({ timeout: 5000 })
+    // The net figure, by testid: "owes you" is now legitimately three elements —
+    // the row label, the net, and the direction tab — since the card became
+    // two-way, and a bare text match resolves to all of them.
+    await expect(alicePage.getByTestId('section-balance')).toContainText('owes you', { timeout: 5000 })
 
     // Bob's view: Shared with me filter (a Sharing pill inside the Filters section)
     await bobPage.goto('/wallet')

@@ -7,11 +7,10 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
 import { SplitsSection } from './SplitsSection'
-import { SplitStateBar } from './SplitStateBar'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
-import { formatMYR } from '@/lib/utils'
+import { cn, formatMYR } from '@/lib/utils'
 import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
 import type { Group, GroupBalance, GroupMember, Settlement, SplitClaim } from '@/types/household.types'
 
@@ -28,7 +27,6 @@ interface Pairing {
   groupName: string
   counterpartyId: string
   counterpartyUsername: string
-  iAmCreditor: boolean
   balance: GroupBalance | null
 }
 
@@ -121,15 +119,15 @@ export function SharedPage() {
           const iOweThem = peopleIOwe.has(member.userId)
           // A co-member with no balance and no claims has nothing to show.
           if (!balance && !owesMe && !iOweThem) continue
+          // No direction is chosen here any more. Picking one — from the netted
+          // balance, which is what this used to do — is exactly how the other
+          // direction's claims became unreachable. The card renders both and
+          // decides which to open on from what is actually waiting.
           nextPairings.push({
             groupId: group.id,
             groupName: group.name,
             counterpartyId: member.userId,
             counterpartyUsername: member.username,
-            // The live balance decides while there is one; history decides once
-            // it clears. With claims in both directions and no balance the
-            // creditor side wins — it is the one with an action on it.
-            iAmCreditor: balance ? !!owedToMe : owesMe,
             balance,
           })
         }
@@ -190,15 +188,22 @@ export function SharedPage() {
   // sections are on screen. Sections now persist after a balance clears — that
   // is how the settled claims behind it stay reachable — so keying the message
   // off their absence would have hidden it in exactly the case it exists for.
+  // Gross, not netted — see the headline card below for why.
+  const outstandingOf = (claims: SplitClaim[]) =>
+    claims.reduce(
+      (sum, c) => (c.state === 'settled' || c.state === 'rejected' ? sum : sum + c.outstanding),
+      0,
+    )
+  const grossOwedToMe = outstandingOf(claimsOwedToMe)
+  const grossIOwe = outstandingOf(claimsIOwe)
+
   // The claim check is not redundant with the balance one: group balances are
   // netted, so two people owing each other the same amount nets to zero on both
   // sides while every one of those claims is still open. Without this the page
   // would congratulate them on being settled up with a review queue full of work.
-  const noOpenClaims = ![...claimsOwedToMe, ...claimsIOwe].some(
-    (c) => c.state !== 'settled' && c.state !== 'rejected' && c.outstanding > 0.005,
-  )
   const nothingOutstanding =
-    totals.owedToMe < 0.005 && totals.iOwe < 0.005 && noOpenClaims
+    totals.owedToMe < 0.005 && totals.iOwe < 0.005
+    && grossOwedToMe < 0.005 && grossIOwe < 0.005
   const allSettled = nothingOutstanding && (anyHistory || pairings.length > 0)
 
   if (!currentUserId) return null
@@ -259,30 +264,49 @@ export function SharedPage() {
         </Link>
       </div>
 
-      {/* The two directions, each broken down by where the money has got to.
-          Stacked rather than side by side: the bars need the width, and halving
-          it turns every segment label into a tooltip-only value.
+      {/* The quick overview: what is coming to you, what is going out, and which
+          way you are up overall. Gross both ways rather than netted, so it agrees
+          with the person cards below and so a direction can never go missing from
+          it — a netted zero once hid a whole pile of claims from this page.
 
-          Above the person cards on purpose — this is the shape of the whole
-          page in one glance, and the sections below are the detail behind it. */}
-      <div className="space-y-5 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
-        <SplitStateBar
-          title="Owed to you"
-          claims={claimsOwedToMe}
-          personOf={(c) => c.debtorUsername}
-          testId="state-bar-owed-to-me"
-        />
-        <SplitStateBar
-          title="You owe"
-          claims={claimsIOwe}
-          personOf={(c) => c.ownerUsername}
-          testId="state-bar-i-owe"
-        />
-        {/* Both bars render nothing when a direction has neither outstanding nor
-            settled claims, which would otherwise leave an empty card. */}
-        {claimsOwedToMe.length === 0 && claimsIOwe.length === 0 && (
-          <p className="text-sm text-gray-500">Nothing shared yet.</p>
-        )}
+          The per-state breakdown lives inside each person card, where the date
+          filter that scopes it also lives. */}
+      <div className="flex flex-wrap gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
+        <div className="min-w-[7rem] flex-1">
+          <p className="text-xs text-gray-500">Owed to you</p>
+          <p className="text-lg font-bold text-positive-700" data-testid="headline-owed-to-me">
+            {formatMYR(grossOwedToMe)}
+          </p>
+        </div>
+        <div className="min-w-[7rem] flex-1">
+          <p className="text-xs text-gray-500">You owe</p>
+          <p className="text-lg font-bold text-red-700" data-testid="headline-i-owe">
+            {formatMYR(grossIOwe)}
+          </p>
+        </div>
+        {/* The rule separates Net from the two gross figures, but only while it
+            is beside them — once it wraps to its own line it is a stray mark. */}
+        <div className="min-w-[7rem] flex-1 sm:border-l sm:border-gray-100 sm:pl-4">
+          <p className="text-xs text-gray-500">Net</p>
+          <p
+            className={cn(
+              'text-lg font-bold',
+              Math.abs(grossOwedToMe - grossIOwe) < 0.005
+                ? 'text-gray-500'
+                : grossOwedToMe > grossIOwe
+                  ? 'text-positive-700'
+                  : 'text-red-700',
+            )}
+            data-testid="headline-net"
+          >
+            {/* An explicit sign, so "up overall" and "down overall" are legible
+                without reading the colour — the same rule the dashboard's Net
+                figure follows (B9/C13). */}
+            {Math.abs(grossOwedToMe - grossIOwe) < 0.005
+              ? formatMYR(0)
+              : `${grossOwedToMe > grossIOwe ? '+' : '−'}${formatMYR(Math.abs(grossOwedToMe - grossIOwe))}`}
+          </p>
+        </div>
       </div>
 
       {awaitingMyConfirmation.length > 0 && (
@@ -334,7 +358,7 @@ export function SharedPage() {
           showGroupName={groups.length > 1}
           counterpartyId={p.counterpartyId}
           counterpartyUsername={p.counterpartyUsername}
-          iAmCreditor={p.iAmCreditor}
+          currentUserId={currentUserId}
           balance={p.balance}
           revision={revision}
           onSettle={() => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance })}

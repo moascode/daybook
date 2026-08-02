@@ -5,8 +5,17 @@ import { mapSplitClaim } from '@/lib/household.mappers'
 import type { ClaimState, SplitClaim } from '@/types/household.types'
 
 export interface SplitQuery {
-  /** 'debtor' = claims against me; 'creditor' = claims I have made on others. */
-  role: 'debtor' | 'creditor'
+  /**
+   * 'debtor' = claims against me; 'creditor' = claims I have made on others;
+   * 'both' = one of each, in parallel.
+   *
+   * 'both' exists because a pair of people is not one direction. The Shared page
+   * used to pick a single role per person from whichever way the *netted*
+   * balance pointed, which meant that when two people owed each other, the
+   * smaller direction's claims were never fetched at all — no row, no agree, no
+   * reject, and the money only visible as a total the page could not explain.
+   */
+  role: 'debtor' | 'creditor' | 'both'
   counterparty?: string
   groupId?: string
   dateFrom?: string
@@ -35,7 +44,11 @@ export interface SplitQuery {
  */
 export function useSplits(query: SplitQuery) {
   const { role, counterparty, groupId, dateFrom, dateTo, revision } = query
-  const [claims, setClaims] = useState<SplitClaim[]>([])
+  // `claims` stays the caller's own direction so existing call sites are
+  // unchanged; `owedToMe`/`iOwe` are the two sides named, for callers that need
+  // both at once.
+  const [owedToMe, setOwedToMe] = useState<SplitClaim[]>([])
+  const [iOwe, setIOwe] = useState<SplitClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -45,9 +58,10 @@ export function useSplits(query: SplitQuery) {
     // call unnecessary. Bumping it re-runs this without remounting the caller.
     void revision
     setError(false)
-    try {
+
+    const fetchSide = async (asCreditor: boolean) => {
       const qs = new URLSearchParams()
-      if (role === 'creditor') qs.set('role', 'creditor')
+      if (asCreditor) qs.set('role', 'creditor')
       // Every state including rejected — the tabs need them all. Without this
       // the endpoint defaults to hiding rejected claims and the Rejected tab
       // is permanently empty.
@@ -57,9 +71,25 @@ export function useSplits(query: SplitQuery) {
       if (dateFrom) qs.set('dateFrom', dateFrom)
       if (dateTo) qs.set('dateTo', dateTo)
       const rows = await api.get<Record<string, unknown>[]>(`/transactions/splits/mine?${qs}`)
-      setClaims(rows.map(mapSplitClaim))
+      // `splits/mine` matches on ts.user_id alone, so the debtor side of an
+      // equal split hands back the payer's OWN share row — you, owing yourself.
+      // It is not a claim and must not be counted as one.
+      return rows.map(mapSplitClaim).filter((c) => c.ownerId !== c.debtorId)
+    }
+
+    try {
+      // In parallel: two round trips, one render. Sequential would show one
+      // direction populated and the other empty for a frame, which reads as the
+      // very bug this replaced.
+      const [credit, debit] = await Promise.all([
+        role === 'debtor' ? Promise.resolve([]) : fetchSide(true),
+        role === 'creditor' ? Promise.resolve([]) : fetchSide(false),
+      ])
+      setOwedToMe(credit)
+      setIOwe(debit)
     } catch {
-      setClaims([])
+      setOwedToMe([])
+      setIOwe([])
       setError(true)
     } finally {
       setLoading(false)
@@ -68,7 +98,14 @@ export function useSplits(query: SplitQuery) {
 
   useEffect(() => { load() }, [load]) // eslint-disable-line react-hooks/set-state-in-effect
 
-  return { claims, loading, error, reload: load }
+  return {
+    claims: role === 'creditor' ? owedToMe : iOwe,
+    owedToMe,
+    iOwe,
+    loading,
+    error,
+    reload: load,
+  }
 }
 
 /** Claims in one state, newest transaction first (the server already sorts). */
