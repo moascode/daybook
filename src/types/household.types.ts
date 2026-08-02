@@ -66,6 +66,10 @@ export interface SplitClaim {
   transactionId: string
   shareAmount: number
   settledAmount: number
+  // How much of settledAmount was netted off against a debt running the other
+  // way rather than paid in cash. A netted claim is settled like any other; this
+  // only says how, for the row hint.
+  offsetAmount: number
   outstanding: number          // shareAmount − settledAmount
   settledAt: string | null
   note: string                 // the payer's explanation, addressed to the recipient
@@ -106,9 +110,15 @@ export interface Settlement {
   fromUsername: string
   toUserId: string
   toUsername: string
-  amount: number
+  amount: number               // the CASH that moved; may be 0 for a pure netting
+  // Cancelled against a debt running the other way. amount + offsetTotal is what
+  // the settlement actually discharged on the payer's side.
+  offsetTotal: number
   currency: string
   note: string
+  // The period it covered, when it was scoped to one. Null means all time.
+  scopeFrom: string | null
+  scopeTo: string | null
   fromTransactionId: string | null
   toTransactionId: string | null
   originalTransactionId: string | null

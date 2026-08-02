@@ -54,7 +54,11 @@ export function SharedPage() {
   const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  const [settleTarget, setSettleTarget] = useState<{ groupId: string; balance: GroupBalance } | null>(null)
+  // The section's date range travels with the settle target, so the dialog
+  // settles the period you were looking at rather than all time.
+  const [settleTarget, setSettleTarget] = useState<
+    { groupId: string; balance: GroupBalance; range: { dateFrom: string; dateTo: string } } | null
+  >(null)
   const [confirmTarget, setConfirmTarget] = useState<Settlement | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
@@ -361,7 +365,7 @@ export function SharedPage() {
           currentUserId={currentUserId}
           balance={p.balance}
           revision={revision}
-          onSettle={() => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance })}
+          onSettle={(range) => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance, range })}
           onChanged={refresh}
         />
       ))}
@@ -453,6 +457,7 @@ export function SharedPage() {
       <SettleUpDialog
         groupId={settleTarget?.groupId ?? ''}
         balance={settleTarget?.balance ?? null}
+        range={settleTarget?.range}
         currentUserId={currentUserId}
         accounts={accounts}
         onClose={() => setSettleTarget(null)}

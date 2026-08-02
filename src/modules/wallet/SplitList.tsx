@@ -269,6 +269,22 @@ function SplitRow({
  * row would show the same action several times, each labelled with one slice of
  * what it does.
  */
+/**
+ * " — RM15 paid, RM15 netted", or nothing when it was a plain cash settlement.
+ *
+ * Netting is not a different outcome — the claim is Settled either way, in the
+ * same tab with the same badge — so it belongs in the detail line rather than in
+ * a state of its own.
+ */
+function settledHow(claim: SplitClaim): string {
+  const netted = claim.offsetAmount
+  if (netted <= 0.005) return ''
+  const paid = Math.round((claim.settledAmount - netted) * 100) / 100
+  return paid > 0.005
+    ? ` — ${formatMYR(paid)} paid, ${formatMYR(netted)} netted`
+    : ` — ${formatMYR(netted)} netted, no cash`
+}
+
 function StateHint({ claim, role }: { claim: SplitClaim; role: 'debtor' | 'creditor' }) {
   const hint: Partial<Record<ClaimState, string>> = {
     pending:
@@ -279,9 +295,14 @@ function StateHint({ claim, role }: { claim: SplitClaim; role: 'debtor' | 'credi
       role === 'debtor'
         ? `Paid — waiting on ${claim.ownerUsername} to confirm`
         : 'Payment recorded — confirm it above to clear this',
-    settled: claim.settledAt
-      ? `Settled ${format(parseISO(claim.settledAt.slice(0, 10)), 'dd MMM yyyy')}`
-      : 'Settled',
+    // How it cleared, not just that it did. A debt cancelled against one running
+    // the other way is settled like any other — no money moved, which is exactly
+    // the part worth saying out loud.
+    settled: `${
+      claim.settledAt
+        ? `Settled ${format(parseISO(claim.settledAt.slice(0, 10)), 'dd MMM yyyy')}`
+        : 'Settled'
+    }${settledHow(claim)}`,
   }
   const text = hint[claim.state]
   if (!text) return null

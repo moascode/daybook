@@ -17,7 +17,7 @@ import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
-import { useWallet } from '@/hooks/useWallet'
+import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
@@ -113,12 +113,19 @@ export function WalletPage() {
 
   // Income/expense/net for the currently loaded transactions — derived state,
   // recomputed whenever the transaction list changes (transfers excluded).
+  //
+  // §3: countableAmount, not t.amount — the same figure the day headers below,
+  // the dashboard and the budgets all report. Summing the ledger amount here
+  // double-counted splits (a RM30 expense split entirely onto someone else reads
+  // "your share RM 0.00" on its own row while adding RM30 to the total directly
+  // above it) and counted the creditor's balance-only settlement leg as income.
   const summary = useMemo(() => {
     let totalIncome = 0
     let totalExpense = 0
     for (const t of transactions) {
-      if (t.type === 'income') totalIncome += t.amount
-      else if (t.type === 'expense') totalExpense += t.amount
+      const amt = countableAmount(t)
+      if (t.type === 'income') totalIncome += amt
+      else if (t.type === 'expense') totalExpense += amt
     }
     return { totalIncome, totalExpense, net: totalIncome - totalExpense }
   }, [transactions])
@@ -622,13 +629,13 @@ export function WalletPage() {
           <div className="flex items-center gap-1.5 text-xs font-medium text-positive-600">
             <TrendingUp className="h-3.5 w-3.5" /> Income
           </div>
-          <p className="mt-1 text-lg font-bold text-positive-700">{formatMYR(summary.totalIncome)}</p>
+          <p className="mt-1 text-lg font-bold text-positive-700" data-testid="summary-income">{formatMYR(summary.totalIncome)}</p>
         </div>
         <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
           <div className="flex items-center gap-1.5 text-xs font-medium text-red-600">
             <TrendingDown className="h-3.5 w-3.5" /> Expense
           </div>
-          <p className="mt-1 text-lg font-bold text-red-700">{formatMYR(summary.totalExpense)}</p>
+          <p className="mt-1 text-lg font-bold text-red-700" data-testid="summary-expense">{formatMYR(summary.totalExpense)}</p>
         </div>
         <div className={cn(
           'rounded-lg border px-4 py-3',
@@ -636,7 +643,7 @@ export function WalletPage() {
         )}>
           <div className="text-xs font-medium text-gray-500">Net</div>
           {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
-          <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')}>
+          <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')} data-testid="summary-net">
             {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>

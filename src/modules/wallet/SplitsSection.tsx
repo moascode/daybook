@@ -33,7 +33,8 @@ interface SplitsSectionProps {
   balance: GroupBalance | null
   /** Bumped by the page when a claim changed elsewhere; refetches in place. */
   revision: number
-  onSettle: () => void
+  /** Called with the range on screen, so the dialog inherits the period. */
+  onSettle: (range: { dateFrom: string; dateTo: string }) => void
   onChanged: () => void
 }
 
@@ -256,7 +257,7 @@ export function SplitsSection({
             {showGroupName && <p className="mt-0.5 text-xs text-gray-400">{groupName}</p>}
           </div>
           {balance && netAmount > 0.005 && (
-            <Button size="sm" variant={iAmNetCreditor ? 'secondary' : 'primary'} onClick={onSettle}>
+            <Button size="sm" variant={iAmNetCreditor ? 'secondary' : 'primary'} onClick={() => onSettle(range)}>
               {iAmNetCreditor ? (
                 <>
                   <Check className="mr-1 h-3.5 w-3.5" />

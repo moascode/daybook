@@ -42,6 +42,9 @@ export interface Transaction {
   // arrival too would correct the same money twice. The debtor's outgoing
   // payment is NOT flagged: it is a normal expense (§3).
   isBalanceOnly: boolean
+  // A real expense that moved no money: a debt discharged by netting rather than
+  // by cash. Counts as spending everywhere EXCEPT the account balance.
+  isNonCash: boolean
 }
 
 export interface Category {
