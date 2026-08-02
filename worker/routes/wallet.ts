@@ -202,12 +202,17 @@ wallet.get('/accounts/balances', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT a.id,
             COALESCE(a.opening_balance, 0)
+            -- is_non_cash rows are excluded HERE and nowhere else: a netted
+            -- settlement is real spending (it stays in the list, the dashboard,
+            -- reports and budgets) but no money left the account, so counting it
+            -- would walk the balance down by a debt that was paid in kind.
             + COALESCE((SELECT SUM(CASE t.type
                                      WHEN 'income' THEN t.amount
                                      WHEN 'expense' THEN -t.amount
                                      WHEN 'transfer' THEN -t.amount
                                      ELSE 0 END)
-                        FROM transactions t WHERE t.account_id = a.id), 0)
+                        FROM transactions t
+                        WHERE t.account_id = a.id AND t.is_non_cash = 0), 0)
             + COALESCE((SELECT SUM(t.amount)
                         FROM transactions t
                         WHERE t.destination_account_id = a.id AND t.type = 'transfer'), 0)
@@ -250,7 +255,9 @@ wallet.get('/accounts/:id/balance', async (c) => {
        COALESCE(SUM(CASE WHEN account_id = ? AND type = 'transfer' THEN amount END), 0) AS transfer_out,
        COALESCE(SUM(CASE WHEN destination_account_id = ? AND type = 'transfer' THEN amount END), 0) AS transfer_in
      FROM transactions
-     WHERE account_id = ? OR destination_account_id = ?`,
+     -- is_non_cash excluded, exactly as in the batched route above: real
+     -- spending, but no money moved, so it must not touch a balance.
+     WHERE is_non_cash = 0 AND (account_id = ? OR destination_account_id = ?)`,
   )
     .bind(id, id, id, id, id, id)
     .first<{ income: number; expense: number; transfer_out: number; transfer_in: number }>()
@@ -1274,7 +1281,8 @@ wallet.get('/transactions/splits/mine', async (c) => {
   if (dateTo) { conditions.push('t.date <= ?'); binds.push(dateTo) }
 
   const { results } = await c.env.DB.prepare(
-    `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.note,
+    `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.offset_amount,
+            ts.note,
             ts.status, ts.rejected_reason, ts.rejected_at, ts.settled_at, ts.created_at,
             ${CLAIM_STATE_SQL} AS claim_state,
             ${OPEN_CLAIM} AS settlement_id,

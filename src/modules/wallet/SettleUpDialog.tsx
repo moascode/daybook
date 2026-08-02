@@ -13,10 +13,20 @@ interface PreviewLine {
   merchant: string
   date: string
   applied: number
+  /** Cleared by cancelling a debt running the other way, rather than by cash. */
+  netted: number
+  paid: number
   clears: boolean
 }
 
 interface Preview {
+  theyOweYou: number
+  youOweThem: number
+  /** min(each direction) — discharged on both sides, no money. */
+  offset: number
+  /** Positive when they owe you; negative when you owe them. */
+  net: number
+  payerId: string | null
   outstanding: number
   requested: number
   applied: number
@@ -36,6 +46,8 @@ interface SettleUpDialogProps {
   balance: GroupBalance | null
   currentUserId: string
   accounts: SettleAccount[]
+  /** The period on screen. Inherited so the dialog settles what you were looking at. */
+  range?: { dateFrom: string; dateTo: string }
   onClose: () => void
   onSettled: () => void
 }
@@ -45,7 +57,7 @@ interface SettleUpDialogProps {
  * real transfer transactions on both ledgers (their side only when a shared
  * account is chosen).
  */
-export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onClose, onSettled }: SettleUpDialogProps) {
+export function SettleUpDialog({ groupId, balance, currentUserId, accounts, range, onClose, onSettled }: SettleUpDialogProps) {
   const [form, setForm] = useState({ myAccountId: '', amount: '', note: '' })
   const [settling, setSettling] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,21 +86,31 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
   // What this amount would actually clear, computed server-side by the same
   // functions the commit uses — a preview that reimplemented the FIFO spread
   // would be a promise the commit does not have to keep.
+  const counterpartyId = balance ? (iAmCreditor ? balance.fromUserId : balance.toUserId) : ''
+  // Pulled out of the optional prop: an optional-chained member in a dependency
+  // list is not something the compiler can prove stable, so it gives up on the
+  // memoization entirely.
+  const dateFrom = range?.dateFrom
+  const dateTo = range?.dateTo
+
   const loadPreview = useCallback(async () => {
-    if (!balance || !form.amount || Number(form.amount) <= 0) { setPreview(null); return }
+    if (!balance) { setPreview(null); return }
     try {
+      // No amount floor any more: a zero-net pair is a real settlement — the two
+      // piles cancel and nothing moves — so the preview has to load for it too.
       const res = await api.post<Preview>('/settlements/preview', {
         groupId,
-        counterpartyId: iAmCreditor ? balance.fromUserId : balance.toUserId,
-        role: iAmCreditor ? 'creditor' : 'debtor',
-        amount: Number(form.amount),
+        counterpartyId,
+        amount: form.amount === '' ? undefined : Number(form.amount),
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
       })
       setPreview(res)
     } catch {
       // A preview is an aid, not a gate: if it fails the dialog still settles.
       setPreview(null)
     }
-  }, [balance, form.amount, groupId, iAmCreditor])
+  }, [balance, counterpartyId, form.amount, groupId, dateFrom, dateTo])
 
   useEffect(() => {
     // Debounced so typing an amount does not fire a request per keystroke.
@@ -111,6 +133,10 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
         ...(iAmCreditor ? { fromUserId: balance.fromUserId } : { toUserId: balance.toUserId }),
         amount: Number(form.amount),
         note: form.note,
+        // The scope the figures above were computed over. Sending it is what
+        // makes "settle this month" mean the month you were looking at.
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
         ...(iAmCreditor
           ? { toAccountId: form.myAccountId }
           : { fromAccountId: form.myAccountId }),
@@ -140,6 +166,35 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
             : <>Recording your payment to <strong>{balance.toUsername}</strong></>
           }
         </p>
+        {/* The netting, stated rather than hidden. Only when there is any: with
+            debt in one direction only this is three lines saying one number. */}
+        {preview && preview.offset > 0.005 && (
+          <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs" data-testid="settle-netting">
+            <div className="flex justify-between">
+              <span className="text-gray-600">{counterpartyUsername} owes you</span>
+              <span className="tabular-nums text-gray-700">{formatMYR(preview.theyOweYou)}</span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span className="text-gray-600">You owe {counterpartyUsername}</span>
+              <span className="tabular-nums text-gray-700">{formatMYR(preview.youOweThem)}</span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span className="text-gray-600">Netted off</span>
+              <span className="tabular-nums text-gray-700">−{formatMYR(preview.offset)}</span>
+            </div>
+            <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-medium">
+              <span className="text-gray-900">
+                {Math.abs(preview.net) < 0.005
+                  ? 'Nothing left to pay'
+                  : preview.payerId === currentUserId
+                    ? `You pay ${counterpartyUsername}`
+                    : `${counterpartyUsername} pays you`}
+              </span>
+              <span className="tabular-nums text-gray-900">{formatMYR(Math.abs(preview.net))}</span>
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
           <Input
@@ -169,6 +224,14 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, onCl
                   </span>
                   <span className="ml-3 shrink-0 tabular-nums text-gray-700">
                     {formatMYR(l.applied)}
+                    {/* How it was cleared, when it was not simply paid. Netting
+                        and paying leave the same claim settled but very
+                        different marks in the ledger. */}
+                    {l.netted > 0.005 && (
+                      <span className="ml-1 text-gray-400">
+                        {l.paid > 0.005 ? `(${formatMYR(l.netted)} netted)` : 'netted'}
+                      </span>
+                    )}
                     {/* Says which of these the payment finishes off. Chipping at
                         a claim and clearing it look identical in a list of
                         amounts, and only one of them removes it from the queue. */}

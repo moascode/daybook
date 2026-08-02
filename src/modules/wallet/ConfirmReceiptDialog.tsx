@@ -65,9 +65,28 @@ export function ConfirmReceiptDialog({
       {settlement && (
         <div className="space-y-3">
           <p className="text-sm text-gray-700">
-            <span className="font-semibold">{settlement.fromUsername}</span> recorded a payment of{' '}
-            <span className="font-semibold">{formatMYR(settlement.amount)}</span> to you.
+            {settlement.amount > 0.005 ? (
+              <>
+                <span className="font-semibold">{settlement.fromUsername}</span> recorded a payment of{' '}
+                <span className="font-semibold">{formatMYR(settlement.amount)}</span> to you.
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">{settlement.fromUsername}</span> says you two are
+                square — no money changes hands.
+              </>
+            )}
           </p>
+          {/* What this clears beyond the cash. Confirming writes off claims in
+              BOTH directions, and half of them are yours; agreeing to that
+              without being told is not agreeing. */}
+          {settlement.offsetTotal > 0.005 && (
+            <p className="text-xs text-gray-600" data-testid="confirm-netting">
+              It also nets off <span className="font-medium">{formatMYR(settlement.offsetTotal)}</span>{' '}
+              each way — what you owed {settlement.fromUsername} cancels the same amount they owed
+              you, so no cash moves for that part.
+            </p>
+          )}
           {settlement.note && <p className="text-xs text-gray-500">Note: {settlement.note}</p>}
 
           {!rejecting ? (

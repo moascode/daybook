@@ -50,6 +50,7 @@ interface TransactionRow {
   has_splits?: number
   effective_amount?: number
   is_balance_only?: number
+  is_non_cash?: number
 }
 
 interface CategoryRow {
@@ -113,6 +114,7 @@ function mapTransaction(row: TransactionRow): Transaction {
     // until the next list refetch.
     effectiveAmount: row.effective_amount ?? row.amount,
     isBalanceOnly: !!row.is_balance_only,
+    isNonCash: !!row.is_non_cash,
   }
 }
 
