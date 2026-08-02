@@ -1,6 +1,41 @@
 import type { Page, Browser } from '@playwright/test'
 import { expect } from '@playwright/test'
 
+/**
+ * Today, in the app's business timezone (Asia/Kuala_Lumpur).
+ *
+ * The one correct way for a spec to say "today". Two wrong ways were in use and
+ * they fail at opposite ends of the same eight-hour window:
+ *
+ *   new Date().toISOString().slice(0, 10)  → the UTC date, which is yesterday
+ *                                            in Malaysia after 16:00 UTC
+ *   local date parts                       → the host's date, which is whatever
+ *                                            the machine happens to be set to
+ *
+ * The server stamps rows via worker/lib.ts todayStr(), pinned to this zone, and
+ * playwright.config.ts pins the browser to it too. Deriving dates the same way
+ * keeps all three in agreement no matter what the host clock says.
+ */
+export function businessToday(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+/** `days` from today, in the business timezone. Negative goes back. */
+export function businessDatePlus(days: number): string {
+  const d = new Date(Date.now() + days * 86_400_000)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
 /** Wait for the app shell to confirm the app has mounted */
 export async function waitForApp(page: Page) {
   // On desktop the sidebar aside is visible; on mobile the main element is visible.

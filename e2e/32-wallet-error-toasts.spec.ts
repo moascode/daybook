@@ -9,7 +9,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage } from './helpers'
+import { newAppPage, businessDatePlus } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -102,7 +102,12 @@ test('failed recurring rule delete shows an error toast and keeps the row', asyn
       merchant: 'Toast Subscription',
       type: 'expense',
       frequency: 'monthly',
-      nextDueDate: '2026-08-01',
+      // Relative, not a literal. This was '2026-08-01', which worked until the
+      // day arrived: a rule whose next due date is today is due, and a due rule
+      // is processed on load, so the row under test changed out from under it.
+      // A test that starts failing on a calendar date rather than on a change
+      // is worse than no test.
+      nextDueDate: businessDatePlus(30),
     },
   })
   expect(recRes.status()).toBe(201)

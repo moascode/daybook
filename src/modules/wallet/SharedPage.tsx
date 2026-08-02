@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Users, Check, ArrowRightLeft, ExternalLink } from 'lucide-react'
+import { Users, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
-import { ClaimsToReview } from './ClaimsToReview'
+import { SplitsSection } from './SplitsSection'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
-import { BalanceBreakdown } from './BalanceBreakdown'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
-import { mapGroup, mapSettlement } from '@/lib/household.mappers'
-import type { Group, GroupBalance, Settlement } from '@/types/household.types'
+import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
+import type { Group, GroupBalance, GroupMember, Settlement } from '@/types/household.types'
 
 interface SettleAccount {
   id: string
@@ -21,82 +20,161 @@ interface SettleAccount {
   sharedByUsername?: string
 }
 
+/** One rendered section: a person, within a group. */
+interface Pairing {
+  groupId: string
+  groupName: string
+  counterpartyId: string
+  counterpartyUsername: string
+  iAmCreditor: boolean
+  balance: GroupBalance | null
+}
+
 /**
- * Wallet → Shared (/wallet/shared): the money outcomes of sharing — who owes
- * whom, Settle Up, and settlement history, sectioned per group (balances and
- * settlements are per-group in the data model). Group administration lives in
- * Settings → Sharing.
+ * Wallet → Shared (/wallet/shared): everything standing between you and the
+ * people you split with — what is owed, what is waiting on whom, and the
+ * settlements that cleared it. Group administration lives in Settings → Sharing.
+ *
+ * Organised person first. A balance is one number standing in for a pile of
+ * claims, and the failure this page was rebuilt around was someone being shown
+ * that number with no way to reach what it was made of.
  */
 export function SharedPage() {
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const [groups, setGroups] = useState<Group[]>([])
-  const [balancesByGroup, setBalancesByGroup] = useState<Record<string, GroupBalance[]>>({})
+  const [pairings, setPairings] = useState<Pairing[]>([])
   const [historyByGroup, setHistoryByGroup] = useState<Record<string, Settlement[]>>({})
   const [accounts, setAccounts] = useState<SettleAccount[]>([])
+  const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [settleTarget, setSettleTarget] = useState<{ groupId: string; balance: GroupBalance } | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<Settlement | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
+  // Bumped after any action that changes a claim, to re-run the sections' own
+  // fetches. They own their data (each has its own tab and date range); this is
+  // how the page tells them the world moved underneath — as a prop, never as
+  // part of their key, because remounting would discard that state and bounce
+  // the user out of whatever tab they were working in.
+  const [revision, setRevision] = useState(0)
 
   const loadAll = useCallback(async () => {
     setLoadError(false)
     try {
-      const [groupRows, accountRows] = await Promise.all([
+      const [groupRows, accountRows, mine, theirs] = await Promise.all([
         api.get<Record<string, unknown>[]>('/groups'),
         api.get<SettleAccount[]>('/accounts'),
+        // Which people you have any history with, in either direction. Sections
+        // are driven by this rather than by balances alone: once a balance is
+        // cleared it disappears, and with it the only route back to the settled
+        // claims behind it. Two requests for the whole page, not per section.
+        api.get<Record<string, unknown>[]>('/transactions/splits/mine?state=pending,approved,awaiting_confirmation,settled,rejected'),
+        api.get<Record<string, unknown>[]>('/transactions/splits/mine?role=creditor&state=pending,approved,awaiting_confirmation,settled,rejected'),
       ])
       const mapped = groupRows.map(mapGroup)
-      const results = await Promise.all(
+      // Who I hold claims against, and who holds claims against me. Kept apart
+      // rather than merged into one "people" set: once a balance is fully
+      // cleared there is nothing left to read a direction from, and defaulting
+      // to one made a section fetch the wrong side of itself and render empty.
+      const peopleWhoOweMe = new Set(theirs.map(mapSplitClaim).map((c) => c.debtorId))
+      const peopleIOwe = new Set(mine.map(mapSplitClaim).map((c) => c.ownerId))
+
+      const perGroup = await Promise.all(
         mapped.map(async (g) => {
-          const [bal, hist] = await Promise.all([
+          const [bal, hist, members] = await Promise.all([
             api.get<GroupBalance[]>(`/groups/${g.id}/balances`),
             api.get<Record<string, unknown>[]>(`/settlements?groupId=${g.id}`),
+            api.get<Record<string, unknown>[]>(`/groups/${g.id}/members`),
           ])
-          return { id: g.id, balances: bal, history: hist.map(mapSettlement) }
+          return { group: g, balances: bal, history: hist.map(mapSettlement), members: members.map(mapMember) }
         }),
       )
+
+      const nextPairings: Pairing[] = []
+      for (const { group, balances, members } of perGroup) {
+        for (const member of members as GroupMember[]) {
+          if (member.userId === currentUserId) continue
+          const owedToMe = balances.find(
+            (b) => b.toUserId === currentUserId && b.fromUserId === member.userId,
+          )
+          const iOwe = balances.find(
+            (b) => b.fromUserId === currentUserId && b.toUserId === member.userId,
+          )
+          const balance = owedToMe ?? iOwe ?? null
+          const owesMe = peopleWhoOweMe.has(member.userId)
+          const iOweThem = peopleIOwe.has(member.userId)
+          // A co-member with no balance and no claims has nothing to show.
+          if (!balance && !owesMe && !iOweThem) continue
+          nextPairings.push({
+            groupId: group.id,
+            groupName: group.name,
+            counterpartyId: member.userId,
+            counterpartyUsername: member.username,
+            // The live balance decides while there is one; history decides once
+            // it clears. With claims in both directions and no balance the
+            // creditor side wins — it is the one with an action on it.
+            iAmCreditor: balance ? !!owedToMe : owesMe,
+            balance,
+          })
+        }
+      }
+      // Largest outstanding first — the thing most worth acting on, at the top.
+      nextPairings.sort((a, b) => (b.balance?.amount ?? 0) - (a.balance?.amount ?? 0))
+
+      const allBalances = perGroup.flatMap((p) => p.balances)
       setGroups(mapped)
       setAccounts(accountRows)
-      setBalancesByGroup(Object.fromEntries(results.map((r) => [r.id, r.balances])))
-      setHistoryByGroup(Object.fromEntries(results.map((r) => [r.id, r.history])))
+      setPairings(nextPairings)
+      setHistoryByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.history])))
+      setTotals({
+        owedToMe: allBalances
+          .filter((b) => b.toUserId === currentUserId)
+          .reduce((s, b) => s + b.amount, 0),
+        iOwe: allBalances
+          .filter((b) => b.fromUserId === currentUserId)
+          .reduce((s, b) => s + b.amount, 0),
+      })
     } catch {
       setLoadError(true)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [currentUserId])
 
   useEffect(() => { loadAll() }, [loadAll]) // eslint-disable-line react-hooks/set-state-in-effect
+
+  const refresh = useCallback(async () => {
+    await loadAll()
+    setRevision((r) => r + 1)
+  }, [loadAll])
 
   const handleUndoSettlement = async (id: string) => {
     setUndoError(null)
     try {
       await api.delete(`/settlements/${id}`)
-      await loadAll()
+      await refresh()
       setUndoTarget(null)
     } catch (err: unknown) {
       setUndoError((err as Error)?.message ?? 'Failed to undo settlement')
     }
   }
 
-  // All-groups headline — purely visual sums of the per-group balances
-  const allBalances = Object.values(balancesByGroup).flat()
-  const totalOwedToMe = allBalances
-    .filter((b) => b.toUserId === currentUserId)
-    .reduce((s, b) => s + b.amount, 0)
-  const totalIOwe = allBalances
-    .filter((b) => b.fromUserId === currentUserId)
-    .reduce((s, b) => s + b.amount, 0)
-  const anyHistory = Object.values(historyByGroup).some((h) => h.length > 0)
-
   // Payments claimed by someone else and waiting on me. These are money in my
   // direction that has not landed in my books yet, so they belong at the top —
-  // not buried in the settlement history below.
+  // not buried in the settlement history below. Settlement-shaped on purpose:
+  // one payment can clear several claims, so the action belongs to the payment.
   const awaitingMyConfirmation = Object.values(historyByGroup)
     .flat()
     .filter((h) => h.status === 'awaiting_confirmation' && h.toUserId === currentUserId)
+
+  const anyHistory = Object.values(historyByGroup).some((h) => h.length > 0)
+  // "Settled up" is a statement about outstanding money, not about whether any
+  // sections are on screen. Sections now persist after a balance clears — that
+  // is how the settled claims behind it stay reachable — so keying the message
+  // off their absence would have hidden it in exactly the case it exists for.
+  const nothingOutstanding = totals.owedToMe < 0.005 && totals.iOwe < 0.005
+  const allSettled = nothingOutstanding && (anyHistory || pairings.length > 0)
 
   if (!currentUserId) return null
 
@@ -138,7 +216,6 @@ export function SharedPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      {/* Header + all-groups headline total */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-base font-semibold text-gray-900">Shared</h2>
@@ -160,11 +237,11 @@ export function SharedPage() {
       <div className="flex gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
         <div className="flex-1">
           <p className="text-xs text-gray-500">Owed to you</p>
-          <p className="text-lg font-bold text-positive-700">{formatMYR(totalOwedToMe)}</p>
+          <p className="text-lg font-bold text-positive-700">{formatMYR(totals.owedToMe)}</p>
         </div>
         <div className="flex-1">
           <p className="text-xs text-gray-500">You owe</p>
-          <p className="text-lg font-bold text-red-700">{formatMYR(totalIOwe)}</p>
+          <p className="text-lg font-bold text-red-700">{formatMYR(totals.iOwe)}</p>
         </div>
       </div>
 
@@ -198,101 +275,63 @@ export function SharedPage() {
         </div>
       )}
 
-      <ClaimsToReview onChanged={loadAll} />
-
-      {allBalances.length === 0 && (
-        <p className="text-sm text-gray-500 py-2 text-center">
-          {anyHistory
-            ? 'All settled up! 🎉'
-            : 'No splits yet — split your first expense from Transactions'}
+      {allSettled && (
+        <p className="py-2 text-center text-sm text-gray-500" data-testid="all-settled">
+          All settled up! 🎉
+        </p>
+      )}
+      {pairings.length === 0 && !allSettled && (
+        <p className="py-2 text-center text-sm text-gray-500">
+          No splits yet — split your first expense from Transactions
         </p>
       )}
 
-      {/* Per-group sections */}
+      {pairings.map((p) => (
+        <SplitsSection
+          key={`${p.groupId}:${p.counterpartyId}`}
+          groupId={p.groupId}
+          groupName={p.groupName}
+          showGroupName={groups.length > 1}
+          counterpartyId={p.counterpartyId}
+          counterpartyUsername={p.counterpartyUsername}
+          iAmCreditor={p.iAmCreditor}
+          balance={p.balance}
+          revision={revision}
+          onSettle={() => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance })}
+          onChanged={refresh}
+        />
+      ))}
+
+      {/* Settlement history, per group. Settlement-shaped, like the confirm
+          block above: one row is one payment, whatever it cleared. */}
       {groups.map((group) => {
-        const balances = balancesByGroup[group.id] ?? []
         const history = historyByGroup[group.id] ?? []
-        const owedToMe = balances.filter((b) => b.toUserId === currentUserId)
-        const myDebts = balances.filter((b) => b.fromUserId === currentUserId)
-        if (balances.length === 0 && history.length === 0) return null
-
+        if (history.length === 0) return null
         return (
-          <section key={group.id} className="space-y-4" data-testid="shared-group-section">
-            <h3 className="flex items-center gap-2 font-semibold text-gray-900">
-              <Users className="h-4 w-4 text-purple-600" />
-              {group.name}
-            </h3>
-
-            {/* U-1: "Owed to you" section with Mark Received button */}
-            {owedToMe.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Owed to you</h4>
-                {owedToMe.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="rounded-lg border border-positive-200 bg-positive-50 px-4 py-3 mb-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-medium text-gray-900">{b.fromUsername}</span>
-                        <span className="text-sm text-gray-500 ml-2">owes you</span>
-                        <span className="ml-2 font-semibold text-positive-700">{formatMYR(b.amount)}</span>
-                      </div>
-                      <Button size="sm" variant="secondary" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        Mark Received
-                      </Button>
-                    </div>
-                    <BalanceBreakdown counterpartyId={b.fromUserId} iAmCreditor />
+          <div key={group.id} data-testid="settlement-history">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+              Recent settlements{groups.length > 1 ? ` · ${group.name}` : ''}
+            </h4>
+            <div className="space-y-2">
+              {history.slice(0, 10).map((s) => (
+                <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm">
+                  <div>
+                    <span className="font-medium">{s.fromUsername}</span>
+                    <span className="mx-1 text-gray-500">→</span>
+                    <span className="font-medium">{s.toUsername}</span>
+                    <span className="ml-2 text-gray-700">{formatMYR(s.amount)}</span>
+                    {s.note && <span className="ml-2 text-gray-400">({s.note})</span>}
                   </div>
-                ))}
-              </div>
-            )}
-            {myDebts.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">You owe</h4>
-                {myDebts.map((b) => (
-                  <div key={`${b.fromUserId}-${b.toUserId}`} className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm text-gray-500">You owe</span>
-                        <span className="font-medium text-gray-900 ml-2">{b.toUsername}</span>
-                        <span className="ml-2 font-semibold text-red-700">{formatMYR(b.amount)}</span>
-                      </div>
-                      <Button size="sm" onClick={() => setSettleTarget({ groupId: group.id, balance: b })}>
-                        <ArrowRightLeft className="h-3.5 w-3.5 mr-1" />
-                        Settle Up
-                      </Button>
-                    </div>
-                    <BalanceBreakdown counterpartyId={b.toUserId} iAmCreditor={false} />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Settlement history */}
-            {history.length > 0 && (
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Recent settlements</h4>
-                <div className="space-y-2">
-                  {history.slice(0, 10).map((s) => (
-                    <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm">
-                      <div>
-                        <span className="font-medium">{s.fromUsername}</span>
-                        <span className="text-gray-500 mx-1">→</span>
-                        <span className="font-medium">{s.toUsername}</span>
-                        <span className="ml-2 text-gray-700">{formatMYR(s.amount)}</span>
-                        {s.note && <span className="ml-2 text-gray-400">({s.note})</span>}
-                      </div>
-                      {/* C-3: use fromUserId (not fromUser) */}
-                      {s.fromUserId === currentUserId && (
-                        <Button size="sm" variant="ghost" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>
-                          Undo
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                  {/* C-3: use fromUserId (not fromUser) */}
+                  {s.fromUserId === currentUserId && (
+                    <Button size="sm" variant="ghost" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>
+                      Undo
+                    </Button>
+                  )}
                 </div>
-              </div>
-            )}
-          </section>
+              ))}
+            </div>
+          </div>
         )
       })}
 
@@ -310,21 +349,20 @@ export function SharedPage() {
         </div>
       </Modal>
 
-      {/* Settle up dialog */}
       <SettleUpDialog
         groupId={settleTarget?.groupId ?? ''}
         balance={settleTarget?.balance ?? null}
         currentUserId={currentUserId}
         accounts={accounts}
         onClose={() => setSettleTarget(null)}
-        onSettled={() => { setSettleTarget(null); loadAll() }}
+        onSettled={() => { setSettleTarget(null); refresh() }}
       />
 
       <ConfirmReceiptDialog
         settlement={confirmTarget}
         accounts={accounts}
         onClose={() => setConfirmTarget(null)}
-        onDone={() => { setConfirmTarget(null); loadAll() }}
+        onDone={() => { setConfirmTarget(null); refresh() }}
       />
     </div>
   )

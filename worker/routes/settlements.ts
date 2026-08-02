@@ -12,6 +12,159 @@ export const settlements = new Hono<AppEnv>()
 /** Round to cents the same way the server does, so amounts stay comparable. */
 const cents = (n: number) => Math.round(n * 100) / 100
 
+interface OutstandingSplit {
+  id: string
+  share_amount: number
+  settled_amount: number
+  category_id: string | null
+  merchant: string
+  date: string
+}
+
+/**
+ * The debtor's unclaimed splits owed to the creditor, oldest first.
+ *
+ * Shared by the preview and the commit path deliberately. A preview computed
+ * from its own copy of this query is a promise the commit does not have to keep:
+ * it would drift the moment either changed, and the user has been taught to
+ * trust it. One definition, two callers.
+ *
+ * Unclaimed only — a split already awaiting confirmation has been paid once and
+ * must not be claimed again. Both resting states are payable: agreeing to a debt
+ * is an acknowledgement, not a precondition.
+ */
+async function outstandingSplitsFor(
+  db: D1Database,
+  groupId: string,
+  debtorId: string,
+  creditorId: string,
+): Promise<OutstandingSplit[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ts.id, ts.share_amount, ts.settled_amount, t.category_id,
+              t.merchant, t.date
+       FROM transaction_splits ts
+       JOIN transactions t ON t.id = ts.transaction_id
+       JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
+       WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
+         AND ts.status IN ('pending', 'approved')
+         AND ts.id NOT IN (
+           SELECT l.share_id FROM settlement_split_lines l
+           JOIN settlements sx ON sx.id = l.settlement_id
+           WHERE sx.status = 'awaiting_confirmation'
+         )
+       ORDER BY ts.created_at ASC`,
+    )
+    .bind(groupId, debtorId, creditorId)
+    .all<OutstandingSplit>()
+  return results
+}
+
+export interface Allocation {
+  id: string
+  previousSettled: number
+  newSettled: number
+  appliedAmount: number
+  categoryId: string | null
+  merchant: string
+  date: string
+}
+
+/**
+ * Spreads a payment across outstanding splits, FIFO and partial-aware (B-02) —
+ * not whole-split-or-nothing.
+ *
+ * Pure, so the preview can show exactly what the commit will do without
+ * touching the database.
+ */
+function allocate(splits: OutstandingSplit[], amount: number): Allocation[] {
+  let remaining = amount
+  const applied: Allocation[] = []
+  for (const split of splits) {
+    if (remaining <= 0.005) break
+    const outstanding = cents(split.share_amount - split.settled_amount)
+    if (outstanding <= 0) continue
+    const amt = Math.min(remaining, outstanding)
+    applied.push({
+      id: split.id,
+      previousSettled: split.settled_amount,
+      newSettled: cents(split.settled_amount + amt),
+      appliedAmount: cents(amt),
+      categoryId: split.category_id,
+      merchant: split.merchant,
+      date: split.date,
+    })
+    remaining -= amt
+  }
+  return applied
+}
+
+/**
+ * POST /api/settlements/preview — what a given amount would actually clear.
+ *
+ * Read-only. Settling used to be "type a number and hope": the FIFO spread and
+ * the over-payment cap were both invisible until after the write, so the user
+ * learned what they had done from the result. This shows it first, computed by
+ * the same two functions the commit uses.
+ *
+ * Registered before POST /settlements/:id/* — a literal segment and a parameter
+ * at the same position are exactly the collision groups.ts documents.
+ */
+settlements.post('/settlements/preview', async (c) => {
+  const callerId = c.get('userId')
+  const db = c.env.DB
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+
+  const groupId = String(b.groupId ?? '')
+  const counterpartyId = String(b.counterpartyId ?? '')
+  const amount = Number(b.amount)
+  if (!groupId || !counterpartyId) {
+    return c.json({ error: 'groupId and counterpartyId are required' }, 400)
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return c.json({ error: 'a positive amount is required' }, 400)
+  }
+  // Direction mirrors POST /settlements: the caller names the other party, and
+  // whether they are paying or being paid follows from which way the debt runs.
+  const asCreditor = b.role === 'creditor'
+  const debtorId = asCreditor ? counterpartyId : callerId
+  const creditorId = asCreditor ? callerId : counterpartyId
+
+  const [callerIn, otherIn] = await Promise.all([
+    isGroupMember(db, callerId, groupId),
+    isGroupMember(db, counterpartyId, groupId),
+  ])
+  if (!callerIn || !otherIn) {
+    return c.json({ error: 'both users must be in the group' }, 403)
+  }
+
+  const splits = await outstandingSplitsFor(db, groupId, debtorId, creditorId)
+  const outstanding = cents(
+    splits.reduce((sum, s) => sum + (s.share_amount - s.settled_amount), 0),
+  )
+  // The same cap the commit applies (U-13). Surfacing it here turns a
+  // post-hoc "we reduced your payment" notice into something the user can see
+  // before they commit to it.
+  const capped = amount > outstanding + 0.005
+  const effective = cents(Math.min(amount, outstanding))
+  const lines = allocate(splits, effective)
+
+  return c.json({
+    outstanding,
+    requested: cents(amount),
+    applied: effective,
+    capped,
+    lines: lines.map((l) => ({
+      splitId: l.id,
+      merchant: l.merchant,
+      date: l.date,
+      applied: l.appliedAmount,
+      // True when this payment finishes the split off, rather than chipping at it.
+      clears: l.newSettled + 0.005 >= splits.find((s) => s.id === l.id)!.share_amount,
+    })),
+  })
+})
+
 // POST /api/settlements — record that a debtor paid a creditor; books the two
 // ledger legs and clears the debtor's outstanding shares (partial-aware).
 //
@@ -106,7 +259,10 @@ settlements.post('/settlements', async (c) => {
        JOIN transactions t ON t.id = ts.transaction_id
        JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
        WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
-         AND ts.status = 'pending'
+         -- 'approved' settles exactly like 'pending': agreeing to a debt is an
+         -- acknowledgement, not a precondition, and certainly not a thing that
+         -- should make the debt unpayable.
+         AND ts.status IN ('pending', 'approved')
          -- Minus anything already claimed and awaiting the creditor's
          -- confirmation. Without this a debtor could pay the same debt twice
          -- while the first payment sits unconfirmed.
@@ -153,53 +309,14 @@ settlements.post('/settlements', async (c) => {
   }
 
   // B-02: FIFO across the debtor's outstanding shares owed to the creditor,
-  // applying a partial amount to each (not whole-share-or-nothing).
-  const { results: pending } = await db
-    .prepare(
-      // status='pending' only: a split already awaiting confirmation has been
-      // paid once and must not be claimed again. Its category comes along for
-      // the inheritance rule below.
-      `SELECT ts.id, ts.share_amount, ts.settled_amount, t.category_id
-       FROM transaction_splits ts
-       JOIN transactions t ON t.id = ts.transaction_id
-       JOIN group_members gm ON gm.user_id = t.user_id AND gm.group_id = ?
-       WHERE ts.user_id = ? AND t.user_id = ? AND ts.settled_at IS NULL
-         AND ts.status = 'pending'
-         AND ts.id NOT IN (
-           SELECT l.share_id FROM settlement_split_lines l
-           JOIN settlements sx ON sx.id = l.settlement_id
-           WHERE sx.status = 'awaiting_confirmation'
-         )
-       ORDER BY ts.created_at ASC`,
-    )
-    .bind(groupId, debtorId, creditorId)
-    .all<{ id: string; share_amount: number; settled_amount: number; category_id: string | null }>()
+  // applying a partial amount to each (not whole-share-or-nothing). The same
+  // two functions back POST /settlements/preview, so what the user is shown
+  // before confirming is what actually happens.
+  const pending = await outstandingSplitsFor(db, groupId, debtorId, creditorId)
 
   // ── Compute the entire write set in JS ───────────────
 
-  let remaining = effective
-  const applied: {
-    id: string
-    previousSettled: number
-    newSettled: number
-    appliedAmount: number
-    categoryId: string | null
-  }[] = []
-
-  for (const share of pending) {
-    if (remaining <= 0.005) break
-    const outstanding = cents(share.share_amount - share.settled_amount)
-    if (outstanding <= 0) continue
-    const amt = Math.min(remaining, outstanding)
-    applied.push({
-      id: share.id,
-      previousSettled: share.settled_amount,
-      newSettled: cents(share.settled_amount + amt),
-      appliedAmount: cents(amt),
-      categoryId: share.category_id,
-    })
-    remaining -= amt
-  }
+  const applied = allocate(pending, effective)
 
   // §9.7: the debtor's payment inherits the original transaction's category, so
   // their food budget sees food. Only when every split being cleared agrees —
@@ -264,17 +381,28 @@ settlements.post('/settlements', async (c) => {
         // to awaiting_confirmation would strand the remainder as unclaimable.
         // The row is touched only to prove it has not changed under us — the
         // no-op write keeps meta.changes meaningful as a guard.
+        //
+        // The write assigns settled_amount to itself rather than writing a
+        // status literal. It used to write status='pending', which was a true
+        // no-op only while 'pending' was the sole payable state; with 'approved'
+        // payable too, that literal silently demoted an agreed claim back into
+        // the recipient's review queue on every payment they recorded.
         db
           .prepare(
-            `UPDATE transaction_splits SET status = 'pending'
-              WHERE id = ? AND status = 'pending' AND settled_at IS NULL AND settled_amount = ?`,
+            `UPDATE transaction_splits SET settled_amount = settled_amount
+              WHERE id = ? AND status IN ('pending', 'approved')
+                AND settled_at IS NULL AND settled_amount = ?`,
           )
           .bind(a.id, a.previousSettled)
       : db
           .prepare(
+            // Paying is agreeing: a claim that has had money put against it
+            // rests in 'approved', never back in 'pending'. A partly-paid claim
+            // returning to the review queue looking untouched is what made
+            // partial settlement so confusing before.
             `UPDATE transaction_splits
                 SET settled_amount = ?,
-                    status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'pending' END,
+                    status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'approved' END,
                     settled_at = CASE WHEN ? >= share_amount THEN datetime('now') ELSE NULL END
               WHERE id = ? AND settled_at IS NULL AND settled_amount = ?`,
           )
@@ -357,21 +485,23 @@ settlements.post('/settlements', async (c) => {
       // Restore whichever column this shape actually wrote. The awaiting path
       // never touched settled_amount, so rewinding it here would corrupt a
       // partially-settled share rather than repair it.
-      ...survivors.map((a) =>
-        needsConfirmation
-          ? db
-              .prepare(
-                `UPDATE transaction_splits SET status = 'pending'
-                  WHERE id = ? AND status = 'awaiting_confirmation'`,
-              )
-              .bind(a.id)
-          : db
-              .prepare(
-                `UPDATE transaction_splits SET settled_amount = ?, settled_at = NULL, status = 'pending'
-                  WHERE id = ? AND settled_amount = ?`,
-              )
-              .bind(a.previousSettled, a.id, a.newSettled),
-      ),
+      // The awaiting path has nothing to rewind: its forward write was a no-op
+      // probe that left status and settled_amount exactly as it found them, and
+      // deleting the settlement above is what releases the splits. There used to
+      // be an UPDATE here guarding on status='awaiting_confirmation', a status
+      // the forward path never sets — it matched zero rows every time.
+      ...survivors
+        .filter(() => !needsConfirmation)
+        .map((a) =>
+          db
+            .prepare(
+              // Back to 'approved', not 'pending': the money is being unwound,
+              // but the recipient's agreement to owe it is not.
+              `UPDATE transaction_splits SET settled_amount = ?, settled_at = NULL, status = 'approved'
+                WHERE id = ? AND settled_amount = ?`,
+            )
+            .bind(a.previousSettled, a.id, a.newSettled),
+        ),
     ])
 
     console.warn(
@@ -464,10 +594,12 @@ settlements.post('/settlements/:id/confirm', async (c) => {
               SET settled_amount = ?,
                   -- 'settled' only once the whole share is paid. Marking a
                   -- partly-paid share settled drops it out of the balance query
-                  -- and silently forgives the remainder.
-                  status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'pending' END,
+                  -- and silently forgives the remainder. The unpaid remainder
+                  -- rests in 'approved' — money went against this claim, so it
+                  -- is not something the recipient still has to review.
+                  status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'approved' END,
                   settled_at = CASE WHEN ? >= share_amount THEN datetime('now') ELSE NULL END
-            WHERE id = ? AND status = 'pending' AND settled_amount = ?`,
+            WHERE id = ? AND status IN ('pending', 'approved') AND settled_amount = ?`,
         )
         .bind(a.next, a.next, a.next, a.shareId, a.previous),
     ),
@@ -516,7 +648,7 @@ settlements.post('/settlements/:id/confirm', async (c) => {
         db
           .prepare(
             `UPDATE transaction_splits
-                SET settled_amount = ?, settled_at = NULL, status = 'pending'
+                SET settled_amount = ?, settled_at = NULL, status = 'approved'
               WHERE id = ? AND settled_amount = ?`,
           )
           .bind(a.previous, a.shareId, a.next),
@@ -556,9 +688,10 @@ settlements.post('/settlements/:id/reject', async (c) => {
     .bind(id)
     .all<{ share_id: string }>()
 
-  // The splits were never moved out of 'pending' — marking the settlement
-  // rejected is what releases them, because the claimable-amount query only
-  // excludes lines belonging to an *awaiting* settlement.
+  // The splits' own status was never moved — marking the settlement rejected is
+  // what releases them, because the claimable-amount query only excludes lines
+  // belonging to an *awaiting* settlement. Each split therefore returns to
+  // whichever resting state it held, 'pending' or 'approved', with no write.
   void lines
   await db.batch([
     ...(st.from_transaction_id
@@ -677,9 +810,13 @@ settlements.delete('/settlements/:id', async (c) => {
           db.prepare('SELECT 1 WHERE ?').bind(line.share_id)
         : db
             .prepare(
+              // 'approved', not 'pending'. Undoing a settlement takes back the
+              // money, not the recipient's agreement that they owed it — and an
+              // undo can land weeks later, so re-queueing the claim for review
+              // would ask them to re-decide something they already decided.
               `UPDATE transaction_splits
                   SET settled_amount = MAX(0, ROUND(settled_amount - ?, 2)),
-                      status = 'pending',
+                      status = 'approved',
                       settled_at = CASE WHEN ROUND(settled_amount - ?, 2) >= share_amount
                                         THEN settled_at ELSE NULL END
                 WHERE id = ?`,

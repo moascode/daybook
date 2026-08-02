@@ -388,29 +388,57 @@ groups.get('/groups/:id/balances', async (c) => {
   // Net outstanding unsettled splits per debtor/creditor pair. A positive
   // balance means `fromUser` owes `toUser` (the original transaction owner).
   const { results: shares } = await c.env.DB.prepare(
+    // 'approved' counts exactly like 'pending'. Approval is an acknowledgement,
+    // not a gate — a debt is owed from the moment it is claimed, and a creditor's
+    // balance must not drop to zero while they wait for the other side to work
+    // through a queue. `agreed` and `unreviewed` split the same total so the
+    // creditor can tell "waiting on money" from "waiting on a conversation".
     `SELECT ts.user_id AS debtor_id, t.user_id AS creditor_id,
-            SUM(ts.share_amount - ts.settled_amount) AS total_owed
+            SUM(ts.share_amount - ts.settled_amount) AS total_owed,
+            SUM(CASE WHEN ts.status = 'pending' THEN ts.share_amount - ts.settled_amount
+                     ELSE 0 END) AS total_unreviewed,
+            SUM(CASE WHEN ts.status IN ('approved', 'awaiting_confirmation')
+                     THEN ts.share_amount - ts.settled_amount ELSE 0 END) AS total_agreed
      FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN group_members gm_d ON gm_d.user_id = ts.user_id AND gm_d.group_id = ?
      JOIN group_members gm_c ON gm_c.user_id = t.user_id AND gm_c.group_id = ?
      WHERE ts.settled_at IS NULL AND ts.user_id != t.user_id
-       AND ts.status IN ('pending', 'awaiting_confirmation')
+       AND ts.status IN ('pending', 'approved', 'awaiting_confirmation')
      GROUP BY ts.user_id, t.user_id`,
   )
     .bind(id, id)
-    .all<{ debtor_id: string; creditor_id: string; total_owed: number }>()
+    .all<{
+      debtor_id: string
+      creditor_id: string
+      total_owed: number
+      total_unreviewed: number
+      total_agreed: number
+    }>()
 
   // Net the bidirectional amounts into a single direction.
   type NetBalance = { fromUserId: string; toUserId: string; amount: number }
   const netMap = new Map<string, number>()
+  // The agreed/unreviewed breakdown is netted in lockstep with the total, so it
+  // stays consistent with it. When debts run BOTH ways between two people the
+  // split is approximate — the same information loss the netted total already
+  // accepts — so it is clamped into [0, |amount|] rather than allowed to go
+  // negative or to exceed what is owed.
+  const agreedMap = new Map<string, number>()
+  const unreviewedMap = new Map<string, number>()
+  const accumulate = (map: Map<string, number>, key: string, delta: number) =>
+    map.set(key, (map.get(key) ?? 0) + delta)
   for (const row of shares) {
     const fwd = `${row.debtor_id}:${row.creditor_id}`
     const rev = `${row.creditor_id}:${row.debtor_id}`
     if (netMap.has(rev)) {
       netMap.set(rev, (netMap.get(rev) ?? 0) - row.total_owed)
+      accumulate(agreedMap, rev, -row.total_agreed)
+      accumulate(unreviewedMap, rev, -row.total_unreviewed)
     } else {
-      netMap.set(fwd, (netMap.get(fwd) ?? 0) + row.total_owed)
+      accumulate(netMap, fwd, row.total_owed)
+      accumulate(agreedMap, fwd, row.total_agreed)
+      accumulate(unreviewedMap, fwd, row.total_unreviewed)
     }
   }
 
@@ -423,11 +451,20 @@ groups.get('/groups/:id/balances', async (c) => {
     .all<{ user_id: string; username: string }>()
   const usernameMap = new Map(members.map((m) => [m.user_id, m.username]))
 
-  const balances: (NetBalance & { fromUsername: string; toUsername: string })[] = []
+  const balances: (NetBalance & {
+    fromUsername: string
+    toUsername: string
+    agreedAmount: number
+    unreviewedAmount: number
+  })[] = []
   for (const [key, amount] of netMap) {
     // Sub-half-cent residue is rounding noise, not a debt.
     if (Math.abs(amount) < 0.005) continue
     const [a, b] = key.split(':')
+    const owed = Math.abs(amount)
+    const clamp = (v: number) => Math.min(owed, Math.max(0, v))
+    const agreedAmount = clamp(Math.abs(agreedMap.get(key) ?? 0))
+    const unreviewedAmount = clamp(Math.abs(unreviewedMap.get(key) ?? 0))
     if (amount > 0) {
       balances.push({
         fromUserId: a,
@@ -435,6 +472,8 @@ groups.get('/groups/:id/balances', async (c) => {
         amount,
         fromUsername: usernameMap.get(a) ?? a,
         toUsername: usernameMap.get(b) ?? b,
+        agreedAmount,
+        unreviewedAmount,
       })
     } else {
       balances.push({
@@ -443,6 +482,8 @@ groups.get('/groups/:id/balances', async (c) => {
         amount: -amount,
         fromUsername: usernameMap.get(b) ?? b,
         toUsername: usernameMap.get(a) ?? a,
+        agreedAmount,
+        unreviewedAmount,
       })
     }
   }

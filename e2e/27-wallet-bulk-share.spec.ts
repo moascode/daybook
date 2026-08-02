@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { newAppPage } from './helpers'
+import { newAppPage, businessToday } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -9,7 +9,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
       data: { name: 'Test Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     await page.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Bulk Share Test', amount: 50, type: 'expense', tag: '[]' },
     })
@@ -85,7 +85,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
       data: { name: 'Test Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     await page.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Share Txn A', amount: 30, type: 'expense', tag: '[]' },
     })
@@ -160,7 +160,7 @@ test.describe('27 — Bulk share with group members', () => {
 
   test('Per-transaction mode control with owner-absorbs rounding', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     await alicePage.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Odd Cents', amount: 10.01, type: 'expense', tag: '[]' },
     })
@@ -203,7 +203,7 @@ test.describe('27 — Bulk share with group members', () => {
 
   test('Keep as-is save refreshes Shared badges and exits select mode', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobPage, bobName, acct } = await setupPair(browser)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = businessToday()
     await alicePage.request.post('http://localhost:5173/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Badge Refresh', amount: 50, type: 'expense', tag: '[]' },
     })
