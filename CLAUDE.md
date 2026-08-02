@@ -1187,6 +1187,37 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
+                *** THREE REPORTED BUGS FIXED — IN REVIEW ***
+                Branch fix/wallet-balance-date-categories. New spec 56;
+                539/539 e2e green.
+                1. NET WORTH COUNTED OTHER PEOPLE'S MONEY. GET /api/accounts
+                   returns own + shared-in accounts, and both banners summed
+                   the whole array — so a co-member's account read straight
+                   into the viewer's total. Reproduced with two real users:
+                   RM100 of own money displayed as RM10,099 across "2
+                   accounts". Two call sites, two different code paths
+                   (AccountsPage useMemo, WalletPage loadNetWorth + its
+                   effect); both now sum ownAccounts. Shared cards still
+                   render with their real balance — only the TOTAL is
+                   yours alone, and the "across N accounts" caption counts
+                   the same set the figure was summed over.
+                   The underlying per-account balance arithmetic was
+                   verified correct and was never the bug.
+                2. Day headers gained the weekday ('EEE, dd MMM yyyy').
+                3. Categories could not be added in practice: the manager
+                   existed and worked, but its ONLY entry point was a
+                   "Manage categories…" option inside the Category filter
+                   dropdown, inside the collapsed filter panel. Added a
+                   Categories button to the Transactions toolbar; same
+                   modal, no new component.
+                Also fixed while verifying: the batched /accounts/balances
+                query filtered is_non_cash = 0 on three of its four arms
+                but not the transfer-IN leg, while /accounts/:id/balance
+                filters all four. Equivalent only because nothing writes a
+                non-cash transfer today (settlement legs are income or
+                expense) — the two routes are documented as needing to
+                agree, so the first such row would have split them.
+
 Current phase:  LIVE on Cloudflare Workers + D1.
                 https://daybook.moascode.workers.dev — deployed 2026-07-28,
                 version b9934eed, D1 migration 0010 applied. Production
@@ -1539,7 +1570,7 @@ Phase status
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-07-31/08-01
+Last session:   2026-08-03
 Last completed: - CSV transfer import + twin-linking implemented (PRs #60 + #61,
                   awaiting owner merge — #61 is stacked on #60).
                 - Phase 5b fully implemented and merged (PR #18 + follow-ups):
