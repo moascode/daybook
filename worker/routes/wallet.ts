@@ -213,9 +213,16 @@ wallet.get('/accounts/balances', async (c) => {
                                      ELSE 0 END)
                         FROM transactions t
                         WHERE t.account_id = a.id AND t.is_non_cash = 0), 0)
+            -- is_non_cash = 0 belongs on the incoming leg too. Nothing writes a
+            -- non-cash transfer today (settlement legs are only income/expense),
+            -- so this arm was equivalent by luck rather than by construction —
+            -- and the per-account route below applies the filter to all four
+            -- arms. Left as it was, the first non-cash transfer would make the
+            -- two routes disagree about one account's balance.
             + COALESCE((SELECT SUM(t.amount)
                         FROM transactions t
-                        WHERE t.destination_account_id = a.id AND t.type = 'transfer'), 0)
+                        WHERE t.destination_account_id = a.id AND t.type = 'transfer'
+                          AND t.is_non_cash = 0), 0)
             AS balance
      FROM accounts a
      WHERE a.id IN (${placeholders})`,

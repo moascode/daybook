@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, X, Users } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -176,21 +176,27 @@ export function WalletPage() {
     loadTransactions({ ...filters, view: filters.view })
   }, [filters, loadTransactions, dataVersion])
 
-  // Total balance across all accounts. Balances are independent of the active
-  // filters, so this is keyed on `accounts` (and dataVersion) — NOT on the
-  // filtered transaction list. Mutations refresh it explicitly below.
+  // Net worth is what YOU own, so shared-in accounts are excluded: `accounts`
+  // carries co-members' accounts too, and summing those reported a partner's
+  // money as ours. They stay in the filters and the list — only the total is
+  // ours alone. Mirrors AccountsPage, which had the same defect.
+  const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+
+  // Balances are independent of the active filters, so this is keyed on
+  // `ownAccounts` (and dataVersion) — NOT on the filtered transaction list.
+  // Mutations refresh it explicitly below.
   const loadNetWorth = useCallback(async () => {
     const balances = await getAccountBalances()
-    setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
-  }, [accounts, getAccountBalances])
+    setNetWorth(ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
+  }, [ownAccounts, getAccountBalances])
 
   useEffect(() => {
     let cancelled = false
     getAccountBalances().then((balances) => {
-      if (!cancelled) setNetWorth(accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
+      if (!cancelled) setNetWorth(ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
     })
     return () => { cancelled = true }
-  }, [accounts, getAccountBalances, dataVersion])
+  }, [ownAccounts, getAccountBalances, dataVersion])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     try {
@@ -445,6 +451,22 @@ export function WalletPage() {
               Select
             </Button>
           )}
+          {/* Category management had exactly one entry point: a "Manage
+              categories…" option inside the Category filter dropdown, itself
+              inside the collapsed filter panel. Nobody looks three levels down
+              a filter to create something, so adding a category read as
+              impossible. Same modal, surfaced in the toolbar. */}
+          {!selectMode && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCategoryManagerOpen(true)}
+              data-testid="manage-categories"
+            >
+              <Tag className="h-3.5 w-3.5" />
+              Categories
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
             <Download className="h-3.5 w-3.5" />
             Export
@@ -472,9 +494,10 @@ export function WalletPage() {
         </WelcomeCard>
       )}
 
-      {/* Total balance hero */}
-      {accounts.length > 0 && (
-        <NetWorthBanner netWorth={netWorth} accountCount={accounts.length} className="mb-4" />
+      {/* Total balance hero — the caption must count the same set the figure
+          was summed over, i.e. owned accounts only. */}
+      {ownAccounts.length > 0 && (
+        <NetWorthBanner netWorth={netWorth} accountCount={ownAccounts.length} className="mb-4" />
       )}
 
       {/* Filter bar + summary — hidden until there's an account to work with

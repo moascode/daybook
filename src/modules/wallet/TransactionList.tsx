@@ -309,7 +309,7 @@ export function TransactionList({
             {/* Day header */}
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                {format(parseISO(group.date), 'dd MMM yyyy')}
+                {format(parseISO(group.date), 'EEE, dd MMM yyyy')}
               </span>
               <div className="flex items-center gap-3 text-xs">
                 {group.totalIncome > 0 && (

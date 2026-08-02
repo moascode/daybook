@@ -35,11 +35,19 @@ export function AccountsPage() {
     return () => { cancelled = true }
   }, [accounts, getAccountBalances])
 
-  // With no accounts the reduce over [] yields 0, so the empty case needs no
-  // special handling.
+  // Net worth is what YOU own. `accounts` also carries shared-in accounts —
+  // a co-member's account, visible through a group — and folding those into
+  // the total reported their money as ours (a partner's RM9,999 current
+  // account read straight into our net worth). Their cards still show, with
+  // their real balance; only the total is ours alone.
+  //
+  // With no owned accounts the reduce over [] yields 0, so the empty case
+  // needs no special handling.
+  const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+
   const netWorth = useMemo(
-    () => (balances === null ? null : accounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)),
-    [accounts, balances],
+    () => (balances === null ? null : ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)),
+    [ownAccounts, balances],
   )
 
   const handleAdd = useCallback(async (data: AccountFormData) => {
@@ -88,9 +96,10 @@ export function AccountsPage() {
         </Button>
       </div>
 
-      {/* Net worth banner */}
-      {accounts.length > 0 && (
-        <NetWorthBanner netWorth={netWorth} accountCount={accounts.length} className="mb-5" />
+      {/* Net worth banner — counts owned accounts only, so the caption must
+          count the same set the figure was summed over. */}
+      {ownAccounts.length > 0 && (
+        <NetWorthBanner netWorth={netWorth} accountCount={ownAccounts.length} className="mb-5" />
       )}
 
       {accounts.length === 0 ? (
