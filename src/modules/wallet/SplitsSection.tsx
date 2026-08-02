@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRightLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -7,6 +7,7 @@ import { useSplits, approveSplit, approveSplits, cancelSplit, rejectSplit, unapp
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { SplitList } from './SplitList'
+import { SplitStateBar } from './SplitStateBar'
 import type { ClaimState, GroupBalance, SplitClaim } from '@/types/household.types'
 
 /** Tab order is the claim's life, left to right. */
@@ -18,6 +19,9 @@ const TABS: { state: ClaimState; label: string }[] = [
   { state: 'rejected', label: 'Rejected' },
 ]
 
+/** Which side of the pair is on screen. */
+type Direction = 'owed-to-me' | 'i-owe'
+
 interface SplitsSectionProps {
   groupId: string
   groupName: string
@@ -25,8 +29,7 @@ interface SplitsSectionProps {
   showGroupName: boolean
   counterpartyId: string
   counterpartyUsername: string
-  /** True when the counterparty owes the current user. */
-  iAmCreditor: boolean
+  currentUserId: string
   balance: GroupBalance | null
   /** Bumped by the page when a claim changed elsewhere; refetches in place. */
   revision: number
@@ -34,9 +37,25 @@ interface SplitsSectionProps {
   onChanged: () => void
 }
 
+/** Outstanding money in a set of claims — settled and rejected are not owed. */
+function outstandingOf(claims: SplitClaim[]): number {
+  return claims.reduce(
+    (sum, c) => (c.state === 'settled' || c.state === 'rejected' ? sum : sum + c.outstanding),
+    0,
+  )
+}
+
 /**
  * One counterparty within one group: what stands between the two of you, in
- * whatever state, with the actions that belong to your side of it.
+ * both directions, with the actions that belong to your side of each.
+ *
+ * **Both directions is the point.** This card used to take a single
+ * `iAmCreditor` decided by whichever way the *netted* balance pointed, and fetch
+ * that one role. When two people owed each other, the smaller direction's claims
+ * were never fetched — Kakon owed RM30 and owing RM15 saw "You owe RM15" in the
+ * page total and "Nothing waiting on their review" in the list, with no row to
+ * agree to, reject, or even look at. The toggle below is what makes that money
+ * reachable.
  *
  * Keyed on the (group, counterparty) pair rather than the person alone. Person
  * first is how it reads — the group name is a subtitle, and only when there is
@@ -50,14 +69,16 @@ export function SplitsSection({
   showGroupName,
   counterpartyId,
   counterpartyUsername,
-  iAmCreditor,
+  currentUserId,
   balance,
   revision,
   onSettle,
   onChanged,
 }: SplitsSectionProps) {
-  const role = iAmCreditor ? 'creditor' : 'debtor'
   const [range, setRange] = useState({ dateFrom: '', dateTo: '' })
+  // null until a side is settled on — first by the effect below, from the first
+  // data to arrive, and after that only by the user.
+  const [chosen, setChosen] = useState<Direction | null>(null)
   const [tab, setTab] = useState<ClaimState>('pending')
   const [rejecting, setRejecting] = useState<SplitClaim | null>(null)
   const [cancelling, setCancelling] = useState<SplitClaim | null>(null)
@@ -66,14 +87,48 @@ export function SplitsSection({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const addToast = useToastStore((s) => s.addToast)
 
-  const { claims, loading, reload } = useSplits({
-    role,
+  const { owedToMe, iOwe, loading, reload } = useSplits({
+    role: 'both',
     counterparty: counterpartyId,
     groupId,
     dateFrom: range.dateFrom || undefined,
     dateTo: range.dateTo || undefined,
     revision,
   })
+
+  const theyOweYou = outstandingOf(owedToMe)
+  const youOweThem = outstandingOf(iOwe)
+  const net = theyOweYou - youOweThem
+
+  // Open on the side with something waiting on YOU; failing that, the bigger pile.
+  //
+  // Decided once, on the first data to arrive, and never recomputed — because the
+  // inputs move as you work. A live rule flips the card to the other direction the
+  // moment you agree to or reject the last claim against you, taking the row you
+  // just acted on and the tab you were heading for with it.
+  useEffect(() => {
+    if (chosen !== null || (owedToMe.length === 0 && iOwe.length === 0)) return
+    setChosen( // eslint-disable-line react-hooks/set-state-in-effect
+      iOwe.some((c) => c.state === 'pending')
+        ? 'i-owe'
+        : theyOweYou >= youOweThem
+          ? 'owed-to-me'
+          : 'i-owe',
+    )
+  }, [chosen, owedToMe, iOwe, theyOweYou, youOweThem])
+
+  const direction: Direction = chosen ?? 'owed-to-me'
+
+  const claims = direction === 'owed-to-me' ? owedToMe : iOwe
+  // Your side of the claims on screen: they are yours to withdraw when you made
+  // them, theirs to agree to or reject when you did not.
+  const role = direction === 'owed-to-me' ? 'creditor' : 'debtor'
+
+  const selectDirection = (next: Direction) => {
+    setChosen(next)
+    setTab('pending')
+    setSelected(new Set())
+  }
 
   const byState = useMemo(() => {
     const acc = {} as Record<ClaimState, SplitClaim[]>
@@ -183,9 +238,10 @@ export function SplitsSection({
     }
   }
 
-  const amount = balance?.amount ?? 0
-  const agreed = balance?.agreedAmount ?? 0
-  const unreviewed = balance?.unreviewedAmount ?? 0
+  // The settle button acts on the group balance, which is netted per pair — so
+  // its direction comes from the balance, not from whichever side is on screen.
+  const iAmNetCreditor = !!balance && balance.toUserId === currentUserId
+  const netAmount = balance?.amount ?? 0
 
   return (
     <section
@@ -193,39 +249,15 @@ export function SplitsSection({
       data-testid="splits-section"
       data-counterparty={counterpartyUsername}
     >
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-4 py-3">
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900">{counterpartyUsername}</h3>
-          {showGroupName && <p className="mt-0.5 text-xs text-gray-400">{groupName}</p>}
-        </div>
-        <div className="flex items-center gap-3">
-          {amount > 0.005 && (
-            <div className="text-right">
-              <span
-                className={cn(
-                  'text-sm font-semibold',
-                  iAmCreditor ? 'text-positive-700' : 'text-red-700',
-                )}
-                data-testid="section-balance"
-              >
-                {iAmCreditor ? 'owes you ' : 'you owe '}
-                {formatMYR(amount)}
-              </span>
-              {/* Split by agreement, but only when it says something: a balance
-                  that is entirely one or the other is fully described by the
-                  number above it. This is what tells a creditor whether they are
-                  waiting on money or on a conversation. */}
-              {unreviewed > 0.005 && agreed > 0.005 && (
-                <p className="mt-0.5 text-[11px] text-gray-500" data-testid="section-balance-split">
-                  {formatMYR(agreed)} agreed · {formatMYR(unreviewed)}{' '}
-                  {iAmCreditor ? 'awaiting their review' : 'to review'}
-                </p>
-              )}
-            </div>
-          )}
-          {balance && amount > 0.005 && (
-            <Button size="sm" variant={iAmCreditor ? 'secondary' : 'primary'} onClick={onSettle}>
-              {iAmCreditor ? (
+      <header className="border-b border-gray-100 px-4 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900">{counterpartyUsername}</h3>
+            {showGroupName && <p className="mt-0.5 text-xs text-gray-400">{groupName}</p>}
+          </div>
+          {balance && netAmount > 0.005 && (
+            <Button size="sm" variant={iAmNetCreditor ? 'secondary' : 'primary'} onClick={onSettle}>
+              {iAmNetCreditor ? (
                 <>
                   <Check className="mr-1 h-3.5 w-3.5" />
                   Mark Received
@@ -239,7 +271,110 @@ export function SplitsSection({
             </Button>
           )}
         </div>
+
+        {/* Both directions and then the net, in that order. The gross figures are
+            what the two piles of claims are worth; the net is what one payment
+            would clear. Showing only the net is what let a whole direction go
+            missing from this card. */}
+        <dl className="mt-2 space-y-1 text-xs" data-testid="section-totals">
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-gray-500">{counterpartyUsername} owes you</dt>
+            <dd className="font-medium tabular-nums text-gray-900" data-testid="total-owed-to-me">
+              {formatMYR(theyOweYou)}
+            </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="text-gray-500">You owe {counterpartyUsername}</dt>
+            <dd className="font-medium tabular-nums text-gray-900" data-testid="total-i-owe">
+              {formatMYR(youOweThem)}
+            </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-3 border-t border-gray-100 pt-1">
+            <dt className="text-gray-500">Net</dt>
+            <dd
+              className={cn(
+                'text-sm font-semibold',
+                Math.abs(net) < 0.005
+                  ? 'text-gray-500'
+                  : net > 0
+                    ? 'text-positive-700'
+                    : 'text-red-700',
+              )}
+              data-testid="section-balance"
+            >
+              {Math.abs(net) < 0.005
+                ? 'square'
+                : net > 0
+                  ? `${counterpartyUsername} owes you ${formatMYR(net)}`
+                  : `you owe ${counterpartyUsername} ${formatMYR(-net)}`}
+            </dd>
+          </div>
+        </dl>
       </header>
+
+      {/* Opt-in, and starting at All time. A claim is outstanding until it is
+          resolved, so defaulting to the current month here would recreate the
+          original bug — a debt on screen with an empty list under it. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
+        <DateRangeControl value={range} onChange={setRange} />
+        {canBulk && visible.length > 1 && (
+          <button
+            type="button"
+            onClick={() =>
+              setSelected(
+                selectedHere.length === visible.length
+                  ? new Set()
+                  : new Set(visible.map((c) => c.id)),
+              )
+            }
+            className="text-xs font-medium text-brand-600 hover:underline"
+            data-testid="split-select-all"
+          >
+            {selectedHere.length === visible.length ? 'Clear selection' : 'Select all'}
+          </button>
+        )}
+      </div>
+
+      <div className="border-b border-gray-100 px-4 py-2">
+        <div
+          className="flex w-full rounded-lg bg-gray-100 p-0.5"
+          role="tablist"
+          aria-label="Direction"
+        >
+          {([
+            ['owed-to-me', `${counterpartyUsername} owes you`],
+            ['i-owe', `You owe ${counterpartyUsername}`],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={direction === value}
+              onClick={() => selectDirection(value)}
+              data-testid={`direction-${value}`}
+              className={cn(
+                'min-w-0 flex-1 truncate rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                direction === value
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-900',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* The bar draws the direction on screen, over the date range on screen.
+            Selecting a segment opens that tab. */}
+        <div className="mt-2">
+          <SplitStateBar
+            claims={claims}
+            personOf={(c) => (direction === 'owed-to-me' ? c.debtorUsername : c.ownerUsername)}
+            onSelectState={(state) => { setTab(state); setSelected(new Set()) }}
+            testId={`state-bar-${direction}`}
+          />
+        </div>
+      </div>
 
       <div className="flex flex-wrap gap-1 border-b border-gray-100 px-2 py-2" role="tablist">
         {visibleTabs.map((t) => (
@@ -265,29 +400,6 @@ export function SplitsSection({
             )}
           </button>
         ))}
-      </div>
-
-      {/* Opt-in, and starting at All time. A claim is outstanding until it is
-          resolved, so defaulting to the current month here would recreate the
-          original bug — a debt on screen with an empty list under it. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
-        <DateRangeControl value={range} onChange={setRange} />
-        {canBulk && visible.length > 1 && (
-          <button
-            type="button"
-            onClick={() =>
-              setSelected(
-                selectedHere.length === visible.length
-                  ? new Set()
-                  : new Set(visible.map((c) => c.id)),
-              )
-            }
-            className="text-xs font-medium text-brand-600 hover:underline"
-            data-testid="split-select-all"
-          >
-            {selectedHere.length === visible.length ? 'Clear selection' : 'Select all'}
-          </button>
-        )}
       </div>
 
       {selectedHere.length > 0 && (

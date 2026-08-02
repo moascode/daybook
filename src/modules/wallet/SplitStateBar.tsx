@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { formatMYR } from '@/lib/utils'
 import type { ClaimState, SplitClaim } from '@/types/household.types'
 
@@ -30,12 +30,16 @@ interface Segment {
 }
 
 interface SplitStateBarProps {
-  /** 'Owed to you' or 'You owe'. */
-  title: string
-  /** Every claim in this direction, any state. */
+  /**
+   * The claims to draw, already narrowed to one direction and one date range by
+   * the caller. Filtering here would put the same date logic in two places and
+   * let the bar disagree with the list under it.
+   */
   claims: SplitClaim[]
   /** Names the counterparty on each row, per direction. */
   personOf: (claim: SplitClaim) => string
+  /** Selecting a segment opens that tab — the bar is navigation, not decoration. */
+  onSelectState?: (state: ClaimState) => void
   testId: string
 }
 
@@ -50,25 +54,36 @@ interface SplitStateBarProps {
  *
  * Part-to-whole of a single total, so: one horizontal stacked bar, not a pie and
  * not three bars. Horizontal because the category names are long.
+ *
+ * No heading or total of its own: it sits inside a person card that already
+ * states both directions and the net, and a fourth figure alongside those would
+ * be one number too many.
  */
-export function SplitStateBar({ title, claims, personOf, testId }: SplitStateBarProps) {
-  const trackRef = useRef<HTMLDivElement>(null)
+export function SplitStateBar({ claims, personOf, onSelectState, testId }: SplitStateBarProps) {
   const [trackWidth, setTrackWidth] = useState(0)
   const [hovered, setHovered] = useState<number | null>(null)
+  const observerRef = useRef<ResizeObserver | null>(null)
 
   // Inline labels are drawn only where they fit, which cannot be known without
   // the rendered width — the track is fluid and the segments are percentages of
   // it. Measured rather than guessed: the alternative is text spilling out of
   // its own segment, and clipping it with overflow:hidden crops the first
   // characters, which is worse than no label at all.
-  useLayoutEffect(() => {
-    const el = trackRef.current
+  //
+  // A callback ref, not useLayoutEffect + useRef. This component returns null
+  // until it has claims, and the section mounts it before its fetch resolves —
+  // so a mount-time effect ran once against a node that did not exist yet, never
+  // re-ran, and every label silently vanished. A callback ref fires whenever the
+  // node actually attaches.
+  const trackRef = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect()
+    observerRef.current = null
     if (!el) return
     setTrackWidth(el.clientWidth)
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(([entry]) => setTrackWidth(entry.contentRect.width))
     ro.observe(el)
-    return () => ro.disconnect()
+    observerRef.current = ro
   }, [])
 
   const segments: Segment[] = []
@@ -88,15 +103,6 @@ export function SplitStateBar({ title, claims, personOf, testId }: SplitStateBar
     })
   }
 
-  // Gross claims in this direction, not the netted group balance the sections
-  // below show.
-  //
-  // These have to be the same number as the segments, and netting makes them
-  // different: with debts running both ways the netted "you owe" collapses to
-  // RM0.00 while there is still real money in the To review bucket, so the card
-  // printed a zero directly above a bar that disagreed with it. The two
-  // directions are separate piles of claims, and this is what each pile is
-  // worth; netting is a settlement concern and stays where settling happens.
   const segmentTotal = segments.reduce((sum, s) => sum + s.amount, 0)
   // Cleared money, as a caption rather than a fourth segment. Settled amounts
   // are cumulative and outstanding ones are not, so a settled block would grow
@@ -110,22 +116,19 @@ export function SplitStateBar({ title, claims, personOf, testId }: SplitStateBar
 
   return (
     <div data-testid={testId}>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="text-xs font-medium text-gray-600">{title}</p>
-        <p className="text-sm font-semibold tabular-nums text-gray-900" data-testid="state-bar-total">
-          {formatMYR(segmentTotal)}
-        </p>
-      </div>
-
       {segmentTotal > 0.005 && (
-        <div className="relative mt-1.5">
+        <div className="relative">
           {/* role="img" with the whole breakdown in the label: the bar itself is
               decorative to a screen reader, and the legend below repeats every
               figure in text, so nothing here is gated behind a hover. */}
+          {/* The whole breakdown in the group label, because the segments are
+              individually reachable: a screen reader hears what the bar is, then
+              each state as a button that opens it. The legend below repeats
+              every figure in text too, so nothing is gated behind a hover. */}
           <div
             ref={trackRef}
-            role="img"
-            aria-label={`${title}: ${segments.map((s) => `${s.label} ${formatMYR(s.amount)}`).join(', ')}`}
+            role="group"
+            aria-label={`By state: ${segments.map((s) => `${s.label} ${formatMYR(s.amount)}`).join(', ')}`}
             className="flex h-7 w-full gap-0.5 rounded-md"
             onMouseLeave={() => setHovered(null)}
           >
@@ -137,8 +140,9 @@ export function SplitStateBar({ title, claims, personOf, testId }: SplitStateBar
               const width = (trackWidth * pct) / 100
               const inline = fittingLabel(seg, width)
               return (
-                <div
+                <button
                   key={seg.state}
+                  type="button"
                   data-testid="split-state-segment"
                   data-state={seg.state}
                   style={{
@@ -147,11 +151,15 @@ export function SplitStateBar({ title, claims, personOf, testId }: SplitStateBar
                     backgroundColor: seg.color,
                     color: inkOn(seg.color),
                   }}
-                  className="flex cursor-default items-center justify-center whitespace-nowrap px-2 text-[11px] font-medium first:rounded-l-md last:rounded-r-md"
+                  className="flex items-center justify-center whitespace-nowrap px-2 text-[11px] font-medium first:rounded-l-md last:rounded-r-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-1"
                   onMouseEnter={() => setHovered(i)}
+                  onFocus={() => setHovered(i)}
+                  onBlur={() => setHovered(null)}
+                  onClick={() => onSelectState?.(seg.state)}
+                  aria-label={`${seg.label} ${formatMYR(seg.amount)} — show these`}
                 >
                   {inline}
-                </div>
+                </button>
               )
             })}
           </div>

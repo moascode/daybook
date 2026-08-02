@@ -411,9 +411,18 @@ scripts/
 > Worker; `run_worker_first = ["/api/*"]` means only API paths run code. Single
 > origin is preserved, exactly as `server/index.ts:77-85` does today.
 >
-> Scripts: `npm run dev:worker` (build + `wrangler dev`), `npm run typecheck:worker`,
-> `npm run deploy:worker`. `wrangler dev` serves built `dist/`, not Vite — rebuild
-> to see client changes.
+> Scripts: `npm run dev:worker` (build + apply local D1 migrations + `wrangler
+> dev` on **:8788**), `npm run typecheck:worker`, `npm run deploy:worker`.
+> `wrangler dev` serves built `dist/`, not Vite — rebuild to see client changes.
+> `.claude/launch.json` runs `dev:worker`, so the Browser pane gets `/api` too;
+> `npm run dev` (plain Vite) has served no API since the Phase 6 migration.
+>
+> **:8788, deliberately not :5173.** The e2e harness owns 5173 and sets
+> `reuseExistingServer`, so a hand-started dev server on that port is silently
+> adopted by `playwright test` — and because the harness build sets `VITE_E2E=1`
+> and this one does not, every spec relying on the `window.__test*` hooks
+> (sidebar nav, CSV import, task search/undo) fails with no hint that the wrong
+> server is answering. Keep the two on separate ports.
 
 ### Production deployment layout (`~/daybook/` by default)
 ```
