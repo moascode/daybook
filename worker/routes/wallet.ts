@@ -1014,6 +1014,148 @@ wallet.delete('/transactions/:id', async (c) => {
   return c.body(null, 204)
 })
 
+// ── Bulk categorise / tag ─────────────────────────────
+//
+// Re-filing a month of imported rows one dialog at a time is the single most
+// tedious thing in the app. This applies a category and/or a tag change to a
+// whole selection in ONE batch().
+//
+// Deliberately NOT built on PATCH /transactions/:id in a loop: that route is
+// ~130 lines of split-rescaling and per-row permission lookups, and on D1 each
+// call is a network round trip, so 300 rows would be 300 sequential requests
+// (the N+1 shape spike S2 warned about). Category and tags cannot change an
+// amount, so none of the rescale machinery applies here.
+
+/** Normalise a tag list: trimmed, non-empty, de-duplicated, order preserved. */
+function cleanTags(values: unknown): string[] | null {
+  if (!Array.isArray(values)) return null
+  const out: string[] = []
+  for (const v of values) {
+    if (typeof v !== 'string') return null
+    const t = v.trim()
+    if (t && !out.includes(t)) out.push(t)
+  }
+  return out
+}
+
+/** Parse the stored `tag` column, which holds a JSON array (see CLAUDE.md §6). */
+function storedTags(raw: string | null): string[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    // Pre-0002 rows held a bare string. Migrations converted them, but a value
+    // that survived is still a real tag — treat it as one rather than losing it.
+    return raw ? [raw] : []
+  }
+}
+
+wallet.post('/transactions/bulk-update', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+
+  const ids = Array.isArray(b.ids) ? b.ids : null
+  if (!ids || ids.length === 0) return c.json({ error: 'ids array is required and must be non-empty' }, 400)
+  if (ids.some((id) => typeof id !== 'string' || !id)) {
+    return c.json({ error: 'each id must be a non-empty string' }, 400)
+  }
+  // Same ceiling as bulk splits — an unbounded IN clause is the hazard.
+  if (ids.length > 500) return c.json({ error: 'cannot update more than 500 transactions at once' }, 400)
+
+  const setsCategory = 'categoryId' in b
+  const categoryId = setsCategory ? (b.categoryId === null || b.categoryId === '' ? null : String(b.categoryId)) : undefined
+
+  const tagsInput = b.tags as { mode?: unknown; values?: unknown } | undefined
+  let tagMode: 'add' | 'replace' | 'remove' | null = null
+  let tagValues: string[] = []
+  if (tagsInput !== undefined) {
+    const mode = String(tagsInput?.mode ?? '')
+    if (mode !== 'add' && mode !== 'replace' && mode !== 'remove') {
+      return c.json({ error: 'tags.mode must be one of: add, replace, remove' }, 400)
+    }
+    const cleaned = cleanTags(tagsInput?.values)
+    if (cleaned === null) return c.json({ error: 'tags.values must be an array of strings' }, 400)
+    // 'replace' with an empty list is how you clear tags; add/remove of nothing
+    // is a no-op the caller almost certainly did not mean.
+    if (cleaned.length === 0 && mode !== 'replace') {
+      return c.json({ error: `tags.values must be non-empty for mode "${mode}"` }, 400)
+    }
+    tagMode = mode
+    tagValues = cleaned
+  }
+
+  if (!setsCategory && tagMode === null) {
+    return c.json({ error: 'nothing to update: provide categoryId and/or tags' }, 400)
+  }
+
+  // One read for the whole selection.
+  const uniqueIds = [...new Set(ids as string[])]
+  const placeholders = uniqueIds.map(() => '?').join(',')
+  const { results: rows } = await c.env.DB.prepare(
+    `SELECT id, user_id, account_id, type, tag FROM transactions WHERE id IN (${placeholders})`,
+  )
+    .bind(...uniqueIds)
+    .all<{ id: string; user_id: string; account_id: string; type: string; tag: string | null }>()
+
+  if (rows.length !== uniqueIds.length) return c.json({ error: 'one or more transactions not found' }, 404)
+
+  // Permission, resolved with ONE query rather than canWriteAccount() per row.
+  const writable = await writableAccountIds(c.env.DB, userId)
+  const writableSet = new Set(writable)
+  for (const r of rows) {
+    if (r.user_id !== userId && !writableSet.has(r.account_id)) {
+      return c.json({ error: 'no permission to edit one or more of these transactions' }, 403)
+    }
+  }
+
+  // A category must belong to the caller — same rule PATCH enforces.
+  if (categoryId) {
+    if (!(await ownsAllRefs(c.env.DB, userId, [['categories', categoryId]]))) {
+      return c.json({ error: 'invalid category reference' }, 400)
+    }
+  }
+
+  // Transfers carry neither a category nor tags (§9.2 — the single-transaction
+  // form hides both fields for them). Skip rather than reject: a selection made
+  // by dragging down a list will often contain one, and failing the whole
+  // request over it would make the feature unusable.
+  const targets = rows.filter((r) => r.type !== 'transfer')
+  const skippedTransfers = rows.length - targets.length
+
+  const writes = targets.map((r) => {
+    const sets: string[] = []
+    const binds: unknown[] = []
+
+    if (setsCategory) {
+      sets.push('category_id = ?')
+      binds.push(categoryId)
+    }
+    if (tagMode) {
+      const current = storedTags(r.tag)
+      let next: string[]
+      if (tagMode === 'replace') next = tagValues
+      else if (tagMode === 'add') next = [...current, ...tagValues.filter((t) => !current.includes(t))]
+      else next = current.filter((t) => !tagValues.includes(t))
+      sets.push('tag = ?')
+      binds.push(JSON.stringify(next))
+    }
+
+    sets.push("updated_at = datetime('now')")
+    // Scoped by the ORIGINAL owner, so a co-member editing a shared-account
+    // transaction updates the right row without taking ownership of it —
+    // the same rule updateRow() applies on the single-transaction path.
+    binds.push(r.id, r.user_id)
+    return c.env.DB.prepare(
+      `UPDATE transactions SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`,
+    ).bind(...binds.map(normalizeBind))
+  })
+
+  if (writes.length > 0) await c.env.DB.batch(writes)
+
+  return c.json({ updated: writes.length, skippedTransfers })
+})
+
 /** True when any split on this transaction is settled or partially paid. */
 async function hasSettledShare(db: D1Database, transactionId: string): Promise<boolean> {
   const row = await db

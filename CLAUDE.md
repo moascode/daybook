@@ -1187,9 +1187,43 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-                *** THREE REPORTED BUGS FIXED — IN REVIEW ***
-                Branch fix/wallet-balance-date-categories. New spec 56;
-                539/539 e2e green.
+                *** BULK CATEGORIES + TAGS — IN REVIEW ***
+                Branch feat/bulk-category-tags. New spec 57 (13 tests).
+                Select mode gains "Categorise N" alongside Split/Delete:
+                one dialog sets a category and/or changes tags across the
+                whole selection.
+                POST /transactions/bulk-update {ids, categoryId?, tags?}
+                where tags is {mode: add|replace|remove, values}. ONE
+                batch() for the whole selection — deliberately NOT a loop
+                over PATCH /transactions/:id, which is ~130 lines of
+                split-rescaling and a per-row permission lookup, i.e. 300
+                sequential D1 round trips for 300 rows (the S2 N+1 shape).
+                Category and tags cannot change an amount, so none of the
+                rescale machinery applies.
+                Permission resolved with ONE writableAccountIds() call,
+                not canWriteAccount() per row; updates stay scoped to the
+                ORIGINAL owner's user_id so a co-member editing a
+                shared-account row does not take ownership of it.
+                TRANSFERS ARE SKIPPED, NOT REJECTED (§9.2: they carry
+                neither field). A selection dragged down a list will often
+                contain one, and failing the whole request over it would
+                make the feature unusable — the response reports
+                {updated, skippedTransfers} and the dialog says so up
+                front rather than letting the count come back short with
+                no explanation.
+                'replace' with an empty list is how you clear tags; add/
+                remove of nothing is rejected as an unintended no-op. The
+                dialog only treats an empty replace as "clear" once the
+                user has actually touched the tag controls, so opening it
+                to change a category cannot wipe tags.
+                The dialog is MOUNTED ONLY WHILE OPEN, so its fields reset
+                by unmounting rather than through a state-resetting effect
+                (which react-hooks/set-state-in-effect flags as an error,
+                not a warning).
+
+                *** THREE REPORTED BUGS FIXED — SHIPPED 2026-08-02 ***
+                PR #101, merged and deployed 2026-08-02 (version
+                87d64a7e). New spec 56; 539/539 e2e green. No migration.
                 1. NET WORTH COUNTED OTHER PEOPLE'S MONEY. GET /api/accounts
                    returns own + shared-in accounts, and both banners summed
                    the whole array — so a co-member's account read straight

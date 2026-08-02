@@ -15,6 +15,7 @@ import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
+import { BulkEditDialog } from '@/modules/wallet/BulkEditDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
@@ -43,6 +44,7 @@ export function WalletPage() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    bulkUpdateTransactions,
     linkTransfer,
     exportTransactions,
     getAccountBalances,
@@ -78,6 +80,7 @@ export function WalletPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkSplitOpen, setBulkSplitOpen] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
 
   // Split transaction state
   const [splitTarget, setSplitTarget] = useState<Transaction | null>(null)
@@ -297,6 +300,36 @@ export function WalletPage() {
     await loadTransactions(filtersRef.current)
     await loadNetWorth()
   }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth, addToast])
+
+  const handleBulkEdit = useCallback(
+    async (changes: {
+      categoryId?: string | null
+      tags?: { mode: 'add' | 'replace' | 'remove'; values: string[] }
+    }) => {
+      // Errors propagate to the dialog, which shows them inline and stays open
+      // so the selection is not lost — unlike a toast, which would leave the
+      // user looking at a closed dialog wondering whether anything happened.
+      const { updated, skippedTransfers } = await bulkUpdateTransactions(Array.from(selectedIds), changes)
+
+      setSelectedIds(new Set())
+      setSelectMode(false)
+      // A re-category can move rows out of the active filter, so reload rather
+      // than patching the store.
+      await loadTransactions(filtersRef.current)
+      await loadTags()
+
+      addToast({
+        message:
+          `Updated ${updated} transaction${updated !== 1 ? 's' : ''}` +
+          (skippedTransfers > 0
+            ? ` — ${skippedTransfers} transfer${skippedTransfers !== 1 ? 's' : ''} skipped`
+            : ''),
+        duration: 4000,
+      })
+    },
+    [selectedIds, bulkUpdateTransactions, loadTransactions, loadTags, addToast],
+  )
+
   function openSplitDialog(transaction: Transaction) {
     setSplitTarget(transaction)
   }
@@ -697,6 +730,15 @@ export function WalletPage() {
             {selectedIds.size > 0 && (
               <>
                 <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setBulkEditOpen(true)}
+                  data-testid="bulk-edit-btn"
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  Categorise {selectedIds.size}
+                </Button>
+                <Button
                   variant="primary"
                   size="sm"
                   onClick={() => setBulkSplitOpen(true)}
@@ -857,6 +899,20 @@ export function WalletPage() {
         confirmLabel={`Delete ${selectedIds.size}`}
         confirmTestId="confirm-bulk-delete"
       />
+
+      {/* Mounted only while open, so the dialog's fields reset by unmounting
+          rather than via a state-resetting effect. */}
+      {bulkEditOpen && (
+        <BulkEditDialog
+          open
+          onOpenChange={setBulkEditOpen}
+          selectedTransactionIds={Array.from(selectedIds)}
+          transactions={transactions}
+          categories={categories}
+          availableTags={tags}
+          onApply={handleBulkEdit}
+        />
+      )}
 
       <BulkSplitDialog
         open={bulkSplitOpen}
