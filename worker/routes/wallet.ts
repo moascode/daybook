@@ -1475,6 +1475,104 @@ wallet.post('/transactions/splits/:id/reject', async (c) => {
   return c.json(row)
 })
 
+// DELETE /transactions/splits/:id — the payer withdraws a claim they made.
+//
+// The mirror of reject, from the other side. Rejecting was the recipient's only
+// lever and the payer had none: a split made by mistake — wrong person, wrong
+// amount, wrong transaction — could only be got rid of by asking the person it
+// was aimed at to reject it, which is an odd thing to have to ask for.
+//
+// Allowed until money moves, exactly as reject is: 'pending' or 'approved', and
+// nothing settled or awaiting confirmation against it. Past that point the claim
+// has a payment attached and the settlement is the thing to undo first.
+wallet.delete('/transactions/splits/:id', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const db = c.env.DB
+
+  const split = await db
+    .prepare(
+      `SELECT ts.id, ts.transaction_id, ts.user_id, ts.status, ts.settled_amount,
+              t.user_id AS owner_id
+         FROM transaction_splits ts
+         JOIN transactions t ON t.id = ts.transaction_id
+        WHERE ts.id = ?`,
+    )
+    .bind(id)
+    .first<{
+      id: string
+      transaction_id: string
+      user_id: string
+      status: string
+      settled_amount: number
+      owner_id: string
+    }>()
+  // 404 rather than 403 for someone else's split — the same non-disclosure rule
+  // reject and the group routes use, so an id cannot be probed for existence.
+  if (!split || split.owner_id !== userId) return c.json({ error: 'split not found' }, 404)
+  // The payer's own row records their half of the cost; it is not a claim on
+  // anybody, so there is nothing to withdraw. Cancelling the recipient's row
+  // takes this one with it (below).
+  if (split.user_id === split.owner_id) {
+    return c.json({ error: 'that is your own share, not a claim you can cancel' }, 400)
+  }
+
+  if (split.status === 'settled' || split.settled_amount > 0.005) {
+    return c.json(
+      { error: 'this split has been (partly) settled; undo the settlement before cancelling it' },
+      409,
+    )
+  }
+  const claimed = await db
+    .prepare(
+      `SELECT 1 AS ok FROM settlement_split_lines l
+         JOIN settlements sx ON sx.id = l.settlement_id
+        WHERE l.share_id = ? AND sx.status = 'awaiting_confirmation'`,
+    )
+    .bind(id)
+    .first()
+  if (claimed) {
+    return c.json(
+      { error: 'a payment is awaiting confirmation on this split; resolve that first' },
+      409,
+    )
+  }
+
+  // Guarded in the WHERE rather than on the row read above, so a concurrent
+  // settle or reject loses the race cleanly instead of being overwritten. A
+  // rejected claim is deliberately not cancellable: it is already inert, and the
+  // recipient's rejection — and their reason — is a record, not clutter.
+  const res = await db
+    .prepare(
+      `DELETE FROM transaction_splits
+        WHERE id = ? AND status IN ('pending', 'approved') AND settled_amount <= 0.005`,
+    )
+    .bind(id)
+    .run()
+  if (!res.meta.changes) return c.json({ error: 'this split is no longer open' }, 409)
+
+  // With the last claim gone the payer's own share row describes a split that no
+  // longer exists, so it goes too and the transaction reads as unsplit again.
+  //
+  // Separate from the DELETE above rather than batched with it: the guard has to
+  // be able to fail without taking the owner row with it. If this second step
+  // never runs the leftover row is inert — has_splits (:685) and
+  // EFFECTIVE_AMOUNT_SQL both ignore rows belonging to the transaction's owner —
+  // and the next re-split clears it, since that path deletes every row first.
+  const { results: rest } = await db
+    .prepare('SELECT id, user_id FROM transaction_splits WHERE transaction_id = ?')
+    .bind(split.transaction_id)
+    .all<{ id: string; user_id: string }>()
+  if (rest.length > 0 && rest.every((r) => r.user_id === split.owner_id)) {
+    await db
+      .prepare('DELETE FROM transaction_splits WHERE transaction_id = ? AND user_id = ?')
+      .bind(split.transaction_id, split.owner_id)
+      .run()
+  }
+
+  return c.body(null, 204)
+})
+
 /**
  * INSERT for one split row.
  *

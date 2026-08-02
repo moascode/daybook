@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
+import { format } from 'date-fns'
 import { Users, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { SettleUpDialog } from './SettleUpDialog'
 import { SplitsSection } from './SplitsSection'
+import { SplitStateBar } from './SplitStateBar'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
 import { useAppStore } from '@/stores/app.store'
 import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
 import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
-import type { Group, GroupBalance, GroupMember, Settlement } from '@/types/household.types'
+import type { Group, GroupBalance, GroupMember, Settlement, SplitClaim } from '@/types/household.types'
 
 interface SettleAccount {
   id: string
@@ -46,6 +48,12 @@ export function SharedPage() {
   const [historyByGroup, setHistoryByGroup] = useState<Record<string, Settlement[]>>({})
   const [accounts, setAccounts] = useState<SettleAccount[]>([])
   const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
+  // Every claim in each direction, kept rather than discarded after the pairing
+  // pass: the state bars break the two headline numbers down by where the money
+  // has got to, and these are the rows that say. No extra request — the page was
+  // already fetching both sides to work out who to render a section for.
+  const [claimsIOwe, setClaimsIOwe] = useState<SplitClaim[]>([])
+  const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [settleTarget, setSettleTarget] = useState<{ groupId: string; balance: GroupBalance } | null>(null)
@@ -77,8 +85,15 @@ export function SharedPage() {
       // rather than merged into one "people" set: once a balance is fully
       // cleared there is nothing left to read a direction from, and defaulting
       // to one made a section fetch the wrong side of itself and render empty.
-      const peopleWhoOweMe = new Set(theirs.map(mapSplitClaim).map((c) => c.debtorId))
-      const peopleIOwe = new Set(mine.map(mapSplitClaim).map((c) => c.ownerId))
+      // `splits/mine` matches on ts.user_id alone, so an equal or custom split
+      // returns the payer's OWN share row alongside real claims — you, owing
+      // yourself. Harmless while these arrays only fed a set of counterparty
+      // ids (the pairing loop skips itself), but the bars sum them, and a
+      // self-row showed up as money to review in the "You owe" direction.
+      const claimsAgainstMe = mine.map(mapSplitClaim).filter((c) => c.ownerId !== c.debtorId)
+      const claimsIHold = theirs.map(mapSplitClaim)
+      const peopleWhoOweMe = new Set(claimsIHold.map((c) => c.debtorId))
+      const peopleIOwe = new Set(claimsAgainstMe.map((c) => c.ownerId))
 
       const perGroup = await Promise.all(
         mapped.map(async (g) => {
@@ -126,6 +141,8 @@ export function SharedPage() {
       setGroups(mapped)
       setAccounts(accountRows)
       setPairings(nextPairings)
+      setClaimsIOwe(claimsAgainstMe)
+      setClaimsOwedToMe(claimsIHold)
       setHistoryByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.history])))
       setTotals({
         owedToMe: allBalances
@@ -173,7 +190,15 @@ export function SharedPage() {
   // sections are on screen. Sections now persist after a balance clears — that
   // is how the settled claims behind it stay reachable — so keying the message
   // off their absence would have hidden it in exactly the case it exists for.
-  const nothingOutstanding = totals.owedToMe < 0.005 && totals.iOwe < 0.005
+  // The claim check is not redundant with the balance one: group balances are
+  // netted, so two people owing each other the same amount nets to zero on both
+  // sides while every one of those claims is still open. Without this the page
+  // would congratulate them on being settled up with a review queue full of work.
+  const noOpenClaims = ![...claimsOwedToMe, ...claimsIOwe].some(
+    (c) => c.state !== 'settled' && c.state !== 'rejected' && c.outstanding > 0.005,
+  )
+  const nothingOutstanding =
+    totals.owedToMe < 0.005 && totals.iOwe < 0.005 && noOpenClaims
   const allSettled = nothingOutstanding && (anyHistory || pairings.length > 0)
 
   if (!currentUserId) return null
@@ -234,15 +259,30 @@ export function SharedPage() {
         </Link>
       </div>
 
-      <div className="flex gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
-        <div className="flex-1">
-          <p className="text-xs text-gray-500">Owed to you</p>
-          <p className="text-lg font-bold text-positive-700">{formatMYR(totals.owedToMe)}</p>
-        </div>
-        <div className="flex-1">
-          <p className="text-xs text-gray-500">You owe</p>
-          <p className="text-lg font-bold text-red-700">{formatMYR(totals.iOwe)}</p>
-        </div>
+      {/* The two directions, each broken down by where the money has got to.
+          Stacked rather than side by side: the bars need the width, and halving
+          it turns every segment label into a tooltip-only value.
+
+          Above the person cards on purpose — this is the shape of the whole
+          page in one glance, and the sections below are the detail behind it. */}
+      <div className="space-y-5 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
+        <SplitStateBar
+          title="Owed to you"
+          claims={claimsOwedToMe}
+          personOf={(c) => c.debtorUsername}
+          testId="state-bar-owed-to-me"
+        />
+        <SplitStateBar
+          title="You owe"
+          claims={claimsIOwe}
+          personOf={(c) => c.ownerUsername}
+          testId="state-bar-i-owe"
+        />
+        {/* Both bars render nothing when a direction has neither outstanding nor
+            settled claims, which would otherwise leave an empty card. */}
+        {claimsOwedToMe.length === 0 && claimsIOwe.length === 0 && (
+          <p className="text-sm text-gray-500">Nothing shared yet.</p>
+        )}
       </div>
 
       {awaitingMyConfirmation.length > 0 && (
@@ -314,17 +354,54 @@ export function SharedPage() {
             </h4>
             <div className="space-y-2">
               {history.slice(0, 10).map((s) => (
-                <div key={s.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm">
-                  <div>
-                    <span className="font-medium">{s.fromUsername}</span>
-                    <span className="mx-1 text-gray-500">→</span>
-                    <span className="font-medium">{s.toUsername}</span>
-                    <span className="ml-2 text-gray-700">{formatMYR(s.amount)}</span>
-                    {s.note && <span className="ml-2 text-gray-400">({s.note})</span>}
+                <div
+                  key={s.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
+                  data-testid="settlement-row"
+                >
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {/* break-words for the wrap (usernames have no spaces to
+                          wrap at) and min-w-0 to let it happen — a flex item
+                          defaults to min-width:auto, so it refuses to shrink
+                          below its content and the clip takes the difference. */}
+                      <span className="min-w-0 break-words">
+                        <span className="font-medium">{s.fromUsername}</span>
+                        <span className="mx-1 text-gray-500">→</span>
+                        <span className="font-medium">{s.toUsername}</span>
+                      </span>
+                      <span className="font-semibold text-gray-900">{formatMYR(s.amount)}</span>
+                      <SettlementStatus status={s.status} />
+                    </div>
+                    {/* When it happened. A settlement history with no dates is a
+                        list of amounts you have to take on trust — and with the
+                        undo window now a week rather than a day, the date is
+                        also what says whether Undo is still on the table. */}
+                    <p className="mt-0.5 text-xs text-gray-500" data-testid="settlement-row-date">
+                      {settlementDate(s.settledAt)}
+                    </p>
+                    {/* The note the payer wrote, and — when the creditor said the
+                        money never arrived — their reason. Both were being
+                        stored and shown in a dim parenthetical or not at all. */}
+                    {s.note && (
+                      <p className="mt-1 break-words text-xs italic text-gray-600" data-testid="settlement-row-note">
+                        &ldquo;{s.note}&rdquo;
+                      </p>
+                    )}
+                    {s.status === 'rejected' && s.rejectedReason && (
+                      <p className="mt-1 break-words text-xs text-red-600" data-testid="settlement-row-reason">
+                        {s.toUsername} rejected this &mdash; &ldquo;{s.rejectedReason}&rdquo;
+                      </p>
+                    )}
                   </div>
-                  {/* C-3: use fromUserId (not fromUser) */}
-                  {s.fromUserId === currentUserId && (
-                    <Button size="sm" variant="ghost" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>
+                  {/* C-3: use fromUserId (not fromUser).
+                      Hidden once the window has clearly passed rather than
+                      offered and refused — a button whose only outcome is a 409
+                      is worse than no button. Near the boundary it stays visible
+                      and the server has the final say, since only it knows the
+                      business-timezone date. */}
+                  {s.fromUserId === currentUserId && withinUndoWindow(s.settledAt) && (
+                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>
                       Undo
                     </Button>
                   )}
@@ -365,5 +442,53 @@ export function SharedPage() {
         onDone={() => { setConfirmTarget(null); refresh() }}
       />
     </div>
+  )
+}
+
+/**
+ * `settled_at` as a readable date.
+ *
+ * SQLite writes it with `datetime('now')` — a space separator, no zone, always
+ * UTC. Handing that to parseISO as-is gets it parsed as local time, which slides
+ * the date by 8 hours here; making the zone explicit is what keeps a settlement
+ * recorded at 07:00 MYT from being shown as the previous day.
+ */
+function settlementDate(settledAt: string): string {
+  if (!settledAt) return ''
+  const parsed = new Date(`${settledAt.replace(' ', 'T')}${settledAt.includes('Z') ? '' : 'Z'}`)
+  if (Number.isNaN(parsed.getTime())) return settledAt.slice(0, 10)
+  return format(parsed, 'dd MMM yyyy, HH:mm')
+}
+
+/**
+ * Whether Undo is still worth offering, matching the server's window
+ * (worker/routes/settlements.ts UNDO_WINDOW_DAYS).
+ *
+ * Deliberately generous at the edge: this compares instants, the server compares
+ * business-timezone calendar dates, and the two disagree by up to a day. Erring
+ * towards showing the button means the worst case is a clear 409 rather than a
+ * silently missing action on a settlement that was still undoable.
+ */
+const UNDO_WINDOW_DAYS = 7
+function withinUndoWindow(settledAt: string): boolean {
+  if (!settledAt) return true
+  const parsed = new Date(`${settledAt.replace(' ', 'T')}${settledAt.includes('Z') ? '' : 'Z'}`)
+  if (Number.isNaN(parsed.getTime())) return true
+  return Date.now() - parsed.getTime() <= (UNDO_WINDOW_DAYS + 1) * 86_400_000
+}
+
+function SettlementStatus({ status }: { status: Settlement['status'] }) {
+  const style = {
+    awaiting_confirmation: { label: 'Awaiting confirmation', cls: 'bg-amber-50 text-amber-700' },
+    confirmed: { label: 'Confirmed', cls: 'bg-positive-50 text-positive-700' },
+    rejected: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
+  }[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600' }
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style.cls}`}
+      data-testid="settlement-row-status"
+    >
+      {style.label}
+    </span>
   )
 }

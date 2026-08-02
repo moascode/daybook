@@ -103,6 +103,16 @@ export async function unapproveSplit(id: string): Promise<void> {
 }
 
 /**
+ * Withdraws a claim the caller made on someone else — the payer's mirror of
+ * reject. Allowed until money moves against it; past that the server refuses and
+ * the settlement has to be undone first.
+ */
+export async function cancelSplit(id: string): Promise<void> {
+  await api.delete(`/transactions/splits/${id}`)
+  await refreshClaimBadge()
+}
+
+/**
  * Rejects a claim and refreshes the nav badge.
  *
  * The badge refresh is part of the action, not an afterthought: the sidebar

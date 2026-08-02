@@ -42,6 +42,35 @@ test.post('/test/reset', async (c) => {
   return c.json({ status: 'reset' })
 })
 
+// Age a settlement by N days so the undo window can be tested at both edges.
+//
+// The window is the only rule in the app whose input is wall-clock elapsed time,
+// and `settled_at` is written server-side by datetime('now') — there is no
+// request that can produce an old settlement. Without this the seven-day rule
+// could only ever be exercised on its "still fresh" side, which is the side that
+// cannot fail.
+test.post('/test/backdate-settlement', async (c) => {
+  const userId = await readSession(c)
+  if (!userId) return c.json({ error: 'not authenticated' }, 401)
+
+  const b: { id?: string; days?: number } =
+    await c.req.json<{ id?: string; days?: number }>().catch(() => ({}))
+  const days = Number(b.days)
+  if (!b.id || !Number.isInteger(days) || days < 0) {
+    return c.json({ error: 'id and a non-negative integer days are required' }, 400)
+  }
+
+  const res = await c.env.DB.prepare(
+    `UPDATE settlements SET settled_at = datetime('now', ?)
+      WHERE id = ? AND (from_user = ? OR to_user = ?)`,
+  )
+    .bind(`-${days} days`, b.id, userId, userId)
+    .run()
+  if (!res.meta.changes) return c.json({ error: 'settlement not found' }, 404)
+
+  return c.json({ status: 'backdated', days })
+})
+
 // Inject a legacy transaction with tag='' for the requesting user's first
 // account. Simulates rows created before multi-tag support, where the SQLite
 // column default ('') was used — json_each() throws on those, which is what

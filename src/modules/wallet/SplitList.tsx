@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Check, X } from 'lucide-react'
+import { Check, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { cn, formatMYR } from '@/lib/utils'
 import type { ClaimState, SplitClaim } from '@/types/household.types'
@@ -12,6 +12,8 @@ interface SplitListProps {
   emptyMessage: string
   onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
+  /** The payer withdrawing their own claim. Creditor-side rows only. */
+  onCancel?: (claim: SplitClaim) => void
   /** Present only on tabs where a bulk action is possible. */
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
@@ -38,6 +40,7 @@ export function SplitList({
   emptyMessage,
   onApprove,
   onReject,
+  onCancel,
   selectedIds,
   onToggleSelect,
 }: SplitListProps) {
@@ -58,6 +61,7 @@ export function SplitList({
           role={role}
           onApprove={onApprove}
           onReject={onReject}
+          onCancel={onCancel}
           selected={selectedIds?.has(claim.id)}
           onToggleSelect={onToggleSelect}
         />
@@ -71,6 +75,7 @@ function SplitRow({
   role,
   onApprove,
   onReject,
+  onCancel,
   selected,
   onToggleSelect,
 }: {
@@ -78,6 +83,7 @@ function SplitRow({
   role: 'debtor' | 'creditor'
   onApprove?: (claim: SplitClaim) => void
   onReject?: (claim: SplitClaim) => void
+  onCancel?: (claim: SplitClaim) => void
   selected?: boolean
   onToggleSelect?: (id: string) => void
 }) {
@@ -92,6 +98,17 @@ function SplitRow({
   // Agreeing is the debtor's move and only from unreviewed. It moves no money —
   // the debt was already owed — which is why it can be a single click.
   const canApprove = role === 'debtor' && !!onApprove && claim.state === 'pending'
+  // Cancelling is the payer's mirror of reject and lives under the same rule —
+  // open until money moves. A rejected claim is left alone: it is already inert,
+  // and the recipient's reason is a record worth keeping.
+  const canCancel =
+    role === 'creditor' &&
+    !!onCancel &&
+    (claim.state === 'pending' || claim.state === 'approved')
+  // A transaction with no merchant is not nameless — it usually has a
+  // description, and falling through to it beats labelling the row "(no
+  // merchant)" while the text that would identify it sits one line below.
+  const title = claim.merchant || claim.description || '(no merchant)'
 
   return (
     <li
@@ -106,18 +123,35 @@ function SplitRow({
           onChange={() => onToggleSelect(claim.id)}
           className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-brand-600"
           data-testid="split-row-select"
-          aria-label={`Select ${claim.merchant || 'this split'}`}
+          aria-label={`Select ${title}`}
         />
       )}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        {/* `block` is load-bearing, not tidiness: `truncate` sets overflow and
+            white-space, neither of which an inline element clips against. A long
+            merchant name therefore ran straight out of this column and printed
+            over the amount and the action buttons to its right. */}
         <Link
           to={`/wallet?txn=${claim.transactionId}&view=all&range=all`}
-          className="truncate text-sm font-medium text-gray-900 hover:text-brand-600 hover:underline"
+          className="block truncate text-sm font-medium text-gray-900 hover:text-brand-600 hover:underline"
           data-testid="split-row-link"
         >
-          {claim.merchant || '(no merchant)'}
+          {title}
         </Link>
-        <p className="mt-0.5 text-xs text-gray-500">
+        {/* The description, whenever it is not already the title above. A
+            merchant and an amount are not enough to judge a claim by — "GRAB"
+            for RM60 is a question; "GRAB · airport run, split the fare" is an
+            answer. Clamped rather than truncated: two lines of it are worth more
+            than one, and it is the field being reviewed. */}
+        {claim.description && claim.description !== title && (
+          <p className="mt-0.5 line-clamp-2 break-words text-xs text-gray-700" data-testid="split-row-description">
+            {claim.description}
+          </p>
+        )}
+        {/* break-words, because the text that lands here is a username and a
+            username has no spaces to wrap at. Without it a long one overflows
+            the column and is chopped mid-word by the clip above. */}
+        <p className="mt-0.5 break-words text-xs text-gray-500">
           {claim.date && format(parseISO(claim.date), 'dd MMM yyyy')}
           {' · '}
           {role === 'debtor' ? `from ${claim.ownerUsername}` : `${claim.debtorUsername} owes`}
@@ -128,7 +162,7 @@ function SplitRow({
           )}
         </p>
         {claim.note && (
-          <p className="mt-1 truncate text-xs italic text-gray-600" data-testid="split-row-note">
+          <p className="mt-1 line-clamp-2 break-words text-xs italic text-gray-600" data-testid="split-row-note">
             “{claim.note}”
           </p>
         )}
@@ -190,7 +224,7 @@ function SplitRow({
             size="sm"
             onClick={() => onApprove(claim)}
             data-testid="claim-approve"
-            aria-label={`Agree to ${claim.merchant || 'this split'}`}
+            aria-label={`Agree to ${title}`}
           >
             <Check className="h-3.5 w-3.5 text-positive-600" />
           </Button>
@@ -201,9 +235,21 @@ function SplitRow({
             size="sm"
             onClick={() => onReject(claim)}
             data-testid="claim-reject"
-            aria-label={`Reject ${claim.merchant || 'this split'}`}
+            aria-label={`Reject ${title}`}
           >
             <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+        {canCancel && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onCancel(claim)}
+            data-testid="claim-cancel"
+            aria-label={`Cancel the split for ${title}`}
+            title="Cancel this split"
+          >
+            <Undo2 className="h-3.5 w-3.5 text-gray-500" />
           </Button>
         )}
         {claim.state === 'settled' && (
