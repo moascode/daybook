@@ -1253,10 +1253,33 @@ EOF
                 agree, so the first such row would have split them.
 
 Current phase:  LIVE on Cloudflare Workers + D1.
-                https://daybook.moascode.workers.dev — deployed 2026-07-28,
-                version b9934eed, D1 migration 0010 applied. Production
-                holds 2 real users (kakon, tumpa), 15 outstanding split
-                claims totalling RM776.65.
+                https://daybook.moascode.workers.dev — v2.2.0 released
+                2026-08-02 by tag, D1 migration 0012 applied to remote
+                BEFORE the deploy, smoke test green. Production holds 2
+                real users (kakon, tumpa).
+
+                *** v2.2.0 — SETTLING NOW NETS (PRs #96, #97, #98) ***
+                Settling reads BOTH directions between two people,
+                cancels min(each way) and moves only the difference.
+                Kakon owed RM30 and owing RM15 is one payment of RM15
+                clearing both claims; it used to take RM45 of cash and
+                then refuse everything, because the "no outstanding
+                balance" guard fired the moment the net hit zero while
+                both claims sat half-open.
+                A netted debt books like a cash settlement minus the
+                money: a categorised expense flagged is_non_cash, which
+                counts as spending everywhere EXCEPT the account balance.
+                Booking it nowhere was the trap — it deleted RM30 of real
+                household spending from both sets of books.
+                Also shipped: a person card shows BOTH directions with a
+                toggle (the smaller direction's claims were previously
+                unreachable — no row, no agree, no reject); the payer can
+                withdraw a split they made; the settlement undo window is
+                a week rather than the calendar day; the Transactions
+                summary reports what you bore rather than the ledger
+                gross; and settlement legs no longer inherit another
+                user's category id (per-user categories meant the payment
+                landed in a category its owner does not have).
 
                 *** SPLIT → SETTLEMENT REVIEW FLOW SHIPPED (W1-W6) ***
                 docs/split-settlement-plan.md, all six waves merged.
@@ -1352,13 +1375,14 @@ Current phase:  LIVE on Cloudflare Workers + D1.
                 toasts, which hardcoded nextDueDate '2026-08-01' and began
                 failing when that day arrived.
 
-                *** BLOCKED: no CLOUDFLARE_API_TOKEN repo secret. ***
-                Until the owner adds one (Workers Scripts: Edit + D1: Edit),
-                a version tag will fail release.yml at the migration step.
-                The 2026-07-28 deploy was therefore run by hand from an
-                OAuth-authenticated machine. Tagging afterwards is safe and
-                idempotent — migrations no-op, the deploy re-uploads the
-                same code, and the release notes get published.
+                *** RESOLVED: CLOUDFLARE_API_TOKEN is set. ***
+                The owner added CLOUDFLARE_API_TOKEN and
+                CLOUDFLARE_ACCOUNT_ID on 2026-07-31, so release.yml runs
+                end to end. v2.2.0 was the first tag-triggered deploy —
+                no manual steps. Note a local `wrangler … --remote` still
+                fails from the owner's Mac (account not authorised); only
+                CI holds a token, so verify remote D1 from the release
+                log rather than the command line.
                 (docs/option-2-workers-d1-plan.md). Owner chose Option 2 on
                 2026-07-27 over the spike doc's ambivalent §6.
 Phase status:   Phase 0 (spikes) COMPLETE — S1/S2/S4 measured, no blocker
@@ -1657,17 +1681,19 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      REVIEW + MERGE PR #95 (Shared review flow R1-R3). It is the
-                only thing in flight. R2 rewrites twelve money-path
-                settlement guards against a live deployment with two real
-                users and 15 outstanding claims, so it wants an owner's
-                eyes on the diff and a `wrangler d1 export` first.
-                After merging, the deploy is TWO MANUAL STEPS (release.yml
-                still cannot run — no CLOUDFLARE_API_TOKEN):
-                  1. wrangler d1 migrations apply daybook --remote
-                     (applies 0011_split_approved.sql — one nullable
-                     column, no backfill, no money figure moves)
-                  2. npm run deploy:worker
+Next task:      NOTHING IN FLIGHT. PR #95 merged; #96/#97/#98 merged and
+                released as v2.2.0 on 2026-08-02.
+                Worth doing next, in rough order of value:
+                • Rate limiting (blocker 4.3) — the URL is public and this
+                  is the only open risk on a live money app.
+                • Watch the netting paths with real use. Every new column
+                  defaults to 0 and one-directional debt takes the old
+                  code path exactly, so nothing changes until you and
+                  Tumpa genuinely owe each other both ways.
+                • The day-header totals in TransactionList.tsx were NOT
+                  audited when the summary tiles moved to countableAmount
+                  (#98) — check whether they double-count splits the same
+                  way the tiles did.
                 Deferred from the plan, needing no sign-off: §4.4 the
                 per-claim timeline (every timestamp already exists), and
                 D-5 auto-approve as a per-group "we trust each other"
@@ -1743,10 +1769,12 @@ Next task:      REVIEW + MERGE PR #95 (Shared review flow R1-R3). It is the
                 on the same disk as the DB) are both path-independent and
                 unblocked → PR3 access path. PR2 is the highest-value item.
 
-Blockers:       CLOUDFLARE_API_TOKEN repo secret — OWNER ONLY. Blocks
-                release.yml (tag-triggered deploy), nothing else. Production
-                is live and serving.
+Blockers:       NONE. Production is live and serving.
+                (Resolved: CLOUDFLARE_API_TOKEN — set 2026-07-31, first
+                used by the v2.2.0 tag on 2026-08-02.)
                 (Resolved: M6 passwords — PRs #79/#80.)
+                Rate limiting is still not configured and the URL is
+                public — the one open risk, unchanged.
                 Phase 6 COMPLETE — 455/455 specs green against the Worker.
                 Harness now ONE webServer (`wrangler dev --env dev` on 5173),
                 replacing tsx+Vite+DAYBOOK_API_TARGET proxy. Two things this
