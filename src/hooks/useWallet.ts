@@ -432,6 +432,28 @@ export function useWallet() {
     useWalletStore.getState().removeTransaction(id)
   }, [])
 
+  /**
+   * Apply a category and/or a tag change to many transactions in one request.
+   * Returns what the server actually did — `skippedTransfers` is not an error:
+   * transfers carry neither field (§9.2), so they are passed over rather than
+   * failing a selection that happens to include one.
+   *
+   * The caller reloads the list afterwards; nothing is written to the store
+   * here, because a bulk edit can move rows in or out of the active filter
+   * (re-categorising is often done *while* filtered by category).
+   */
+  const bulkUpdateTransactions = useCallback(
+    async (
+      ids: string[],
+      changes: { categoryId?: string | null; tags?: { mode: 'add' | 'replace' | 'remove'; values: string[] } },
+    ): Promise<{ updated: number; skippedTransfers: number }> =>
+      api.post<{ updated: number; skippedTransfers: number }>('/transactions/bulk-update', {
+        ids,
+        ...changes,
+      }),
+    [],
+  )
+
   // Merge two rows (one expense + one matching income on another account) into
   // a single transfer. The server decides which row survives; both originals
   // are dropped from the store and the merged transfer added back.
@@ -690,6 +712,7 @@ export function useWallet() {
     addTransaction,
     updateTransaction,
     deleteTransaction,
+    bulkUpdateTransactions,
     linkTransfer,
 
     // Batch
