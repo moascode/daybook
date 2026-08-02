@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
 import { canWriteAccount, isGroupMember } from '../lib/sharing.ts'
-import { businessDateOf, newId, todayStr } from '../lib.ts'
+import { businessDateOf, daysBetween, newId, todayStr } from '../lib.ts'
 
 // Port of server/routes/settlements.ts, including the atomicity work the plan
 // schedules for Phase 5 — the two cannot be separated, because the Express
@@ -743,7 +743,17 @@ settlements.get('/settlements', async (c) => {
   return c.json(results)
 })
 
-// DELETE /api/settlements/:id — undo settlement (same-day only).
+/**
+ * How long a settlement stays undoable, in whole business-timezone days.
+ *
+ * Counted from the calendar date it was recorded, so "7" means "today plus the
+ * next seven days" rather than a rolling 168 hours — the same shape the previous
+ * same-day rule had, just wider. A named constant because the number appears in
+ * the error message the user reads.
+ */
+const UNDO_WINDOW_DAYS = 7
+
+// DELETE /api/settlements/:id — undo settlement (within UNDO_WINDOW_DAYS).
 settlements.delete('/settlements/:id', async (c) => {
   const userId = c.get('userId')
   const db = c.env.DB
@@ -765,15 +775,24 @@ settlements.delete('/settlements/:id', async (c) => {
 
   if (!settlement) return c.json({ error: 'settlement not found' }, 404)
 
-  // Only allow undo within the same calendar day, in the business timezone.
+  // Only allow undo within UNDO_WINDOW_DAYS, in the business timezone.
   //
-  // The server compared `settled_at.slice(0, 10)` against a local-time
-  // todayStr(). settled_at is written by datetime('now'), which SQLite emits in
-  // UTC, so on the Mac that compared a UTC date against an MYT date — they
-  // disagree for the first 8 hours of every MYT day, silently refusing a valid
-  // same-day undo. Converting explicitly makes both sides the same zone.
-  if (businessDateOf(settlement.settled_at) !== todayStr()) {
-    return c.json({ error: 'can only undo a settlement on the same day it was created' }, 409)
+  // The window was one calendar day, which in practice meant "until midnight" —
+  // a settlement recorded at 23:00 was unundoable an hour later, and one spotted
+  // the next morning could not be fixed at all. A week is long enough that a
+  // mistake found at the weekend is still reversible, and still short enough
+  // that undo cannot silently rewrite last month's books.
+  //
+  // Both sides are converted to business-timezone dates first. settled_at is
+  // written by datetime('now'), which SQLite emits in UTC, so comparing it raw
+  // against todayStr() compares a UTC date against an MYT date — they disagree
+  // for the first 8 hours of every MYT day.
+  const age = daysBetween(businessDateOf(settlement.settled_at), todayStr())
+  if (age > UNDO_WINDOW_DAYS) {
+    return c.json(
+      { error: `can only undo a settlement within ${UNDO_WINDOW_DAYS} days of creating it` },
+      409,
+    )
   }
 
   // B-02: subtract exactly what this settlement applied to each share, and

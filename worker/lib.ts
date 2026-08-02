@@ -146,6 +146,22 @@ export function businessDateOf(sqlUtcDatetime: string): string {
   return dateFmt.format(parsed)
 }
 
+/**
+ * Whole calendar days between two YYYY-MM-DD dates, `to` − `from`.
+ *
+ * Both sides are read as UTC midnight rather than as local dates: the inputs are
+ * already business-timezone calendar dates (businessDateOf / todayStr), so the
+ * only job left is to subtract them without letting a second timezone in. Using
+ * `new Date('2026-08-02')` would parse as UTC anyway, but being explicit is what
+ * stops a later edit from reintroducing the shift this whole helper exists to
+ * avoid.
+ */
+export function daysBetween(from: string, to: string): number {
+  const ms = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10))
+    - Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))
+  return Math.round(ms / 86_400_000)
+}
+
 /** D1 binds numbers/strings/null/ArrayBuffer — coerce the rest. */
 export function normalizeBind(v: unknown): unknown {
   if (typeof v === 'boolean') return v ? 1 : 0

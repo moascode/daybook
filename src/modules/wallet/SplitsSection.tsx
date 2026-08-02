@@ -3,7 +3,7 @@ import { ArrowRightLeft, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
-import { useSplits, approveSplit, approveSplits, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
+import { useSplits, approveSplit, approveSplits, cancelSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { SplitList } from './SplitList'
@@ -60,6 +60,7 @@ export function SplitsSection({
   const [range, setRange] = useState({ dateFrom: '', dateTo: '' })
   const [tab, setTab] = useState<ClaimState>('pending')
   const [rejecting, setRejecting] = useState<SplitClaim | null>(null)
+  const [cancelling, setCancelling] = useState<SplitClaim | null>(null)
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -157,6 +158,26 @@ export function SplitsSection({
       onChanged()
     } catch (err: unknown) {
       addToast({ message: errorMessage(err, 'Could not reject this split.'), duration: 5000 })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Confirmed rather than offered with an undo, unlike agreeing. Agreeing is a
+  // statement about your own view of a claim and costs nothing to redo;
+  // cancelling deletes the claim outright, and the way back is re-splitting the
+  // transaction from scratch — not an undo, so it should not be presented as one.
+  const confirmCancel = async () => {
+    if (!cancelling) return
+    setBusy(true)
+    try {
+      await cancelSplit(cancelling.id)
+      addToast({ message: `Split cancelled: ${cancelling.merchant || 'split'}`, duration: 4000 })
+      setCancelling(null)
+      await reload()
+      onChanged()
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not cancel this split.'), duration: 5000 })
     } finally {
       setBusy(false)
     }
@@ -296,6 +317,7 @@ export function SplitsSection({
           emptyMessage={emptyFor(tab, role, counterpartyUsername)}
           onApprove={handleApprove}
           onReject={(claim) => { setRejecting(claim); setReason('') }}
+          onCancel={setCancelling}
           selectedIds={canBulk ? selected : undefined}
           onToggleSelect={canBulk ? toggleSelect : undefined}
         />
@@ -345,6 +367,43 @@ export function SplitsSection({
               data-testid="claim-reject-confirm"
             >
               Reject split
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!cancelling}
+        onOpenChange={(next) => { if (!next) setCancelling(null) }}
+        title="Cancel this split?"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            {cancelling && (
+              <>
+                {formatMYR(cancelling.outstanding)} you claimed from{' '}
+                {cancelling.debtorUsername} for{' '}
+                <span className="font-medium">{cancelling.merchant || cancelling.description || '(no merchant)'}</span>.
+              </>
+            )}
+          </p>
+          <p className="text-xs text-gray-500">
+            No money moves. The claim disappears from {cancelling?.debtorUsername}&rsquo;s review
+            queue and the transaction goes back to costing you the full amount. You can split it
+            again at any time.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setCancelling(null)}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={confirmCancel}
+              disabled={busy}
+              data-testid="claim-cancel-confirm"
+            >
+              Cancel split
             </Button>
           </div>
         </div>
