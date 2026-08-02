@@ -29,6 +29,13 @@ function daysAgo(days: number): string {
   }).format(new Date(Date.now() - days * 86_400_000))
 }
 
+/** formatMYR's output, tolerant of the ICU space between symbol and digits, and
+ *  of the explicit '+' the Net tile prepends when it is not negative. */
+function money(n: number): RegExp {
+  const sign = n < 0 ? '-' : '\\+?'
+  return new RegExp(`^${sign}RM\\s*${Math.abs(n).toFixed(2).replace('.', '\\.')}$`)
+}
+
 interface Person {
   ctx: BrowserContext
   page: Page
@@ -278,10 +285,10 @@ test.describe('55 — Netting in the UI', () => {
     expect(bore).toBeCloseTo(15, 2)
 
     await f.kakon.page.goto('/wallet?view=all&range=all')
-    await expect(f.kakon.page.getByTestId('summary-expense')).toHaveText(formatted(bore))
+    await expect(f.kakon.page.getByTestId('summary-expense')).toHaveText(money(bore))
     // The incoming settlement leg moved money but is not income.
-    await expect(f.kakon.page.getByTestId('summary-income')).toHaveText(formatted(0))
-    await expect(f.kakon.page.getByTestId('summary-net')).toHaveText(`-${formatted(bore)}`)
+    await expect(f.kakon.page.getByTestId('summary-income')).toHaveText(money(0))
+    await expect(f.kakon.page.getByTestId('summary-net')).toHaveText(money(-bore))
 
     // And the row it is summing still shows the ledger amount it was paid at —
     // the summary nets down, the row does not.
