@@ -160,7 +160,7 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
   return (
     <Modal open={!!balance} onOpenChange={onClose} title="Settle Up">
       <div className="space-y-4">
-        <p className="text-sm text-gray-700">
+        <p className="text-sm text-fg-muted">
           {iAmCreditor
             ? <>Recording that <strong>{balance.fromUsername}</strong> paid you</>
             : <>Recording your payment to <strong>{balance.toUsername}</strong></>
@@ -169,46 +169,46 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
         {/* The netting, stated rather than hidden. Only when there is any: with
             debt in one direction only this is three lines saying one number. */}
         {preview && preview.offset > 0.005 && (
-          <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs" data-testid="settle-netting">
+          <div className="rounded-lg border border-line-subtle bg-surface-sunken p-3 text-xs" data-testid="settle-netting">
             <div className="flex justify-between">
-              <span className="text-gray-600">{counterpartyUsername} owes you</span>
-              <span className="tabular-nums text-gray-700">{formatMYR(preview.theyOweYou)}</span>
+              <span className="text-fg-muted">{counterpartyUsername} owes you</span>
+              <span className="tabular-nums text-fg-muted">{formatMYR(preview.theyOweYou)}</span>
             </div>
             <div className="mt-1 flex justify-between">
-              <span className="text-gray-600">You owe {counterpartyUsername}</span>
-              <span className="tabular-nums text-gray-700">{formatMYR(preview.youOweThem)}</span>
+              <span className="text-fg-muted">You owe {counterpartyUsername}</span>
+              <span className="tabular-nums text-fg-muted">{formatMYR(preview.youOweThem)}</span>
             </div>
             <div className="mt-1 flex justify-between">
-              <span className="text-gray-600">Netted off</span>
-              <span className="tabular-nums text-gray-700">−{formatMYR(preview.offset)}</span>
+              <span className="text-fg-muted">Netted off</span>
+              <span className="tabular-nums text-fg-muted">−{formatMYR(preview.offset)}</span>
             </div>
-            <div className="mt-1.5 flex justify-between border-t border-gray-200 pt-1.5 font-medium">
-              <span className="text-gray-900">
+            <div className="mt-1.5 flex justify-between border-t border-line pt-1.5 font-medium">
+              <span className="text-fg">
                 {Math.abs(preview.net) < 0.005
                   ? 'Nothing left to pay'
                   : preview.payerId === currentUserId
                     ? `You pay ${counterpartyUsername}`
                     : `${counterpartyUsername} pays you`}
               </span>
-              <span className="tabular-nums text-gray-900">{formatMYR(Math.abs(preview.net))}</span>
+              <span className="tabular-nums text-fg">{formatMYR(Math.abs(preview.net))}</span>
             </div>
           </div>
         )}
 
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Amount</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Amount</label>
           <Input
             type="number"
             step="0.01"
             value={form.amount}
             onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
           />
-          <p className="mt-1 text-xs text-gray-400">Pay less than the full amount to settle part of it.</p>
+          <p className="mt-1 text-xs text-fg-faint">Pay less than the full amount to settle part of it.</p>
         </div>
 
         {preview && preview.lines.length > 0 && (
-          <div className="rounded-lg border border-gray-100 bg-gray-50 p-3" data-testid="settle-preview">
-            <p className="mb-1.5 text-xs font-medium text-gray-700">
+          <div className="rounded-lg border border-line-subtle bg-surface-sunken p-3" data-testid="settle-preview">
+            <p className="mb-1.5 text-xs font-medium text-fg-muted">
               {preview.capped
                 ? `More than is owed — ${formatMYR(preview.applied)} will be applied, clearing:`
                 : 'This clears:'}
@@ -216,26 +216,26 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
             <ul className="space-y-1">
               {preview.lines.map((l) => (
                 <li key={l.splitId} className="flex items-center justify-between text-xs" data-testid="settle-preview-line">
-                  <span className="min-w-0 truncate text-gray-600">
+                  <span className="min-w-0 truncate text-fg-muted">
                     {l.merchant || '(no merchant)'}
-                    <span className="ml-1.5 text-gray-400">
+                    <span className="ml-1.5 text-fg-faint">
                       {l.date && format(parseISO(l.date), 'dd MMM')}
                     </span>
                   </span>
-                  <span className="ml-3 shrink-0 tabular-nums text-gray-700">
+                  <span className="ml-3 shrink-0 tabular-nums text-fg-muted">
                     {formatMYR(l.applied)}
                     {/* How it was cleared, when it was not simply paid. Netting
                         and paying leave the same claim settled but very
                         different marks in the ledger. */}
                     {l.netted > 0.005 && (
-                      <span className="ml-1 text-gray-400">
+                      <span className="ml-1 text-fg-faint">
                         {l.paid > 0.005 ? `(${formatMYR(l.netted)} netted)` : 'netted'}
                       </span>
                     )}
                     {/* Says which of these the payment finishes off. Chipping at
                         a claim and clearing it look identical in a list of
                         amounts, and only one of them removes it from the queue. */}
-                    {!l.clears && <span className="ml-1 text-gray-400">part</span>}
+                    {!l.clears && <span className="ml-1 text-fg-faint">part</span>}
                   </span>
                 </li>
               ))}
@@ -254,13 +254,13 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
         />
         {/* Says what happens next. Recording a payment does not clear the debt
             on its own — the other person has to say it arrived. */}
-        <p className="text-xs text-gray-400" data-testid="settle-explainer">
+        <p className="text-xs text-fg-faint" data-testid="settle-explainer">
           {iAmCreditor
             ? `This records that ${counterpartyUsername} paid you, and books the money into your account.`
             : `This books the payment out of your account. ${counterpartyUsername} confirms it arrived before the balance clears.`}
         </p>
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Note (optional)</label>
+          <label className="block text-xs font-medium text-fg-muted mb-1">Note (optional)</label>
           <Input
             placeholder="e.g. cash settlement"
             value={form.note}

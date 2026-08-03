@@ -712,39 +712,39 @@ export function UATPage() {
             <FlaskConical className="h-5 w-5 text-violet-600" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-900">UAT Test Runner</h1>
-            <p className="text-xs text-gray-500">Automated end-to-end tests against the live database</p>
+            <h1 className="text-lg font-bold text-fg">UAT Test Runner</h1>
+            <p className="text-xs text-fg-subtle">Automated end-to-end tests against the live database</p>
           </div>
         </div>
       </div>
 
       {/* ── Summary bar ────────────────────────────────────── */}
       <div className="mb-5 flex items-center gap-3">
-        <div className="flex flex-1 items-center gap-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+        <div className="flex flex-1 items-center gap-4 rounded-xl border border-line bg-surface px-4 py-3">
           <div className="text-center">
-            <p className="text-xl font-bold text-gray-900">{total}</p>
-            <p className="text-xs text-gray-400">Total</p>
+            <p className="text-xl font-bold text-fg">{total}</p>
+            <p className="text-xs text-fg-faint">Total</p>
           </div>
-          <div className="h-8 w-px bg-gray-100" />
+          <div className="h-8 w-px bg-surface-hover" />
           <div className="text-center">
             <p className="text-xl font-bold text-green-600">{passCount}</p>
-            <p className="text-xs text-gray-400">Passed</p>
+            <p className="text-xs text-fg-faint">Passed</p>
           </div>
-          <div className="h-8 w-px bg-gray-100" />
+          <div className="h-8 w-px bg-surface-hover" />
           <div className="text-center">
             <p className="text-xl font-bold text-red-500">{failCount}</p>
-            <p className="text-xs text-gray-400">Failed</p>
+            <p className="text-xs text-fg-faint">Failed</p>
           </div>
-          <div className="h-8 w-px bg-gray-100" />
+          <div className="h-8 w-px bg-surface-hover" />
           <div className="text-center">
-            <p className="text-xl font-bold text-gray-400">{total - totalDone}</p>
-            <p className="text-xs text-gray-400">Pending</p>
+            <p className="text-xl font-bold text-fg-faint">{total - totalDone}</p>
+            <p className="text-xs text-fg-faint">Pending</p>
           </div>
 
           {/* Progress bar */}
           {running || allDone ? (
             <div className="flex-1 mx-2">
-              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div className="h-2 rounded-full bg-surface-hover overflow-hidden">
                 <div
                   className={cn(
                     'h-full rounded-full transition-all duration-300',
@@ -753,7 +753,7 @@ export function UATPage() {
                   style={{ width: `${(totalDone / total) * 100}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-0.5 text-right">{Math.round((totalDone / total) * 100)}%</p>
+              <p className="text-xs text-fg-faint mt-0.5 text-right">{Math.round((totalDone / total) * 100)}%</p>
             </div>
           ) : null}
         </div>
@@ -762,7 +762,7 @@ export function UATPage() {
           <button
             onClick={resetAll}
             disabled={running}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-gray-50 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-fg-subtle transition-colors hover:bg-surface-sunken disabled:opacity-40"
             title="Reset all results"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -771,7 +771,7 @@ export function UATPage() {
             onClick={runAll}
             disabled={running}
             className={cn(
-              'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors',
+              'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-fg-on-accent transition-colors',
               running
                 ? 'bg-violet-300 cursor-not-allowed'
                 : 'bg-violet-600 hover:bg-violet-700 shadow-sm',
@@ -815,15 +815,15 @@ export function UATPage() {
           const isOpen = !collapsed.has(suite)
 
           return (
-            <div key={suite} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+            <div key={suite} className="overflow-hidden rounded-xl border border-line bg-surface">
               {/* Suite header */}
               <button
-                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-surface-sunken transition-colors"
                 onClick={() => toggleSuite(suite)}
               >
                 <div className="flex items-center gap-2.5">
-                  {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
-                  <span className="text-sm font-semibold text-gray-800">{suite}</span>
+                  {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-fg-faint" /> : <ChevronRight className="h-3.5 w-3.5 text-fg-faint" />}
+                  <span className="text-sm font-semibold text-fg">{suite}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   {suiteFailed > 0 && (
@@ -833,7 +833,7 @@ export function UATPage() {
                     'rounded-full px-2 py-0.5 font-medium',
                     suitePassed === suiteTotal && suiteTotal > 0
                       ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500',
+                      : 'bg-surface-hover text-fg-subtle',
                   )}>
                     {suitePassed}/{suiteTotal}
                   </span>
@@ -842,13 +842,13 @@ export function UATPage() {
 
               {/* Tests */}
               {isOpen && (
-                <div className="divide-y divide-gray-50 border-t border-gray-100">
+                <div className="divide-y divide-line-subtle border-t border-line-subtle">
                   {suiteResults.map((result) => (
                     <div key={result.id} className="px-4 py-2.5">
                       <div className="flex items-start gap-3">
                         {/* Status icon */}
                         <div className="mt-0.5 shrink-0">
-                          {result.status === 'pending' && <Clock className="h-4 w-4 text-gray-300" />}
+                          {result.status === 'pending' && <Clock className="h-4 w-4 text-fg-faint" />}
                           {result.status === 'running' && (
                             <div className="h-4 w-4 rounded-full border-2 border-violet-400 border-t-transparent animate-spin" />
                           )}
@@ -861,9 +861,9 @@ export function UATPage() {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={cn(
                               'text-sm',
-                              result.status === 'pass' && 'text-gray-700',
+                              result.status === 'pass' && 'text-fg-muted',
                               result.status === 'fail' && 'text-red-700 font-medium',
-                              result.status === 'pending' && 'text-gray-400',
+                              result.status === 'pending' && 'text-fg-faint',
                               result.status === 'running' && 'text-violet-700',
                             )}>
                               {result.name}
@@ -881,7 +881,7 @@ export function UATPage() {
 
                         {/* Duration */}
                         {result.duration !== undefined && (
-                          <span className="shrink-0 text-xs text-gray-400">{result.duration}ms</span>
+                          <span className="shrink-0 text-xs text-fg-faint">{result.duration}ms</span>
                         )}
                       </div>
                     </div>
@@ -894,7 +894,7 @@ export function UATPage() {
       </div>
 
       {/* ── Footer note ─────────────────────────────────────── */}
-      <p className="mt-6 text-center text-xs text-gray-400">
+      <p className="mt-6 text-center text-xs text-fg-faint">
         Tests run against the live PGlite database. All test data is created and cleaned up automatically.
       </p>
     </div>

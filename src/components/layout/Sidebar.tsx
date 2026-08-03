@@ -69,7 +69,7 @@ const topLinkClass = ({ isActive }: { isActive: boolean }) =>
     'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
     isActive
       ? 'bg-brand-50 text-brand-700'
-      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+      : 'text-fg-muted hover:bg-surface-sunken hover:text-fg',
   )
 
 const subLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -77,7 +77,7 @@ const subLinkClass = ({ isActive }: { isActive: boolean }) =>
     'flex items-center gap-2.5 rounded-lg py-1.5 pl-9 pr-3 text-[13px] font-medium transition-colors',
     isActive
       ? 'bg-brand-50 text-brand-700'
-      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+      : 'text-fg-subtle hover:bg-surface-sunken hover:text-fg',
   )
 
 export function Sidebar({ open = true, onClose }: SidebarProps) {
@@ -121,17 +121,17 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center justify-between gap-2.5 px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-white">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-sm font-bold text-fg-on-accent">
             D
           </div>
-          <span className="text-lg font-bold tracking-tight text-gray-900">
+          <span className="text-lg font-bold tracking-tight text-fg">
             Daybook
           </span>
         </div>
         {/* Close button — mobile only */}
         {onClose && (
           <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:hidden"
             onClick={onClose}
             aria-label="Close sidebar"
           >
@@ -171,7 +171,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
               onClick={() => setWalletOverride(!walletExpanded)}
               aria-label={walletExpanded ? 'Collapse Wallet' : 'Expand Wallet'}
               aria-expanded={walletExpanded}
-              className="ml-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:h-7 md:w-7"
+              className="ml-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:h-7 md:w-7"
             >
               <ChevronDown
                 className={cn(
@@ -186,7 +186,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
             <div className="mt-0.5 space-y-2 pb-1">
               {walletGroups.map((group) => (
                 <div key={group.label} className="space-y-0.5">
-                  <p className="px-3 pb-0.5 pl-9 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  <p className="px-3 pb-0.5 pl-9 text-[10px] font-semibold uppercase tracking-wider text-fg-faint">
                     {group.label}
                   </p>
                   {group.items.map((item) => (
@@ -218,7 +218,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       </nav>
 
       {/* Bottom: Settings */}
-      <div className="shrink-0 border-t border-gray-200 px-3 py-3">
+      <div className="shrink-0 border-t border-line px-3 py-3">
         {/* end=false: stay highlighted on /settings/sharing; badge surfaces pending invites */}
         <NavLink to="/settings" end={false} onClick={onClose} className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
           <span className="flex items-center gap-3">
@@ -227,7 +227,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
           </span>
           <InvitationsBadge />
         </NavLink>
-        <p className="mt-2 px-3 text-xs text-gray-400">Daybook</p>
+        <p className="mt-2 px-3 text-xs text-fg-faint">Daybook</p>
       </div>
     </>
   )
@@ -235,7 +235,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop sidebar — always visible on md+ */}
-      <aside className="hidden md:flex h-full w-56 flex-col border-r border-gray-200 bg-white">
+      <aside className="hidden md:flex h-full w-56 flex-col border-r border-line bg-surface">
         {navContent}
       </aside>
 
@@ -244,12 +244,12 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
         <div className="fixed inset-0 z-50 flex md:hidden">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-overlay/40"
             onClick={onClose}
             aria-hidden
           />
           {/* Drawer */}
-          <aside className="relative flex h-full w-56 flex-col border-r border-gray-200 bg-white shadow-xl">
+          <aside className="relative flex h-full w-56 flex-col border-r border-line bg-surface shadow-xl">
             {navContent}
           </aside>
         </div>

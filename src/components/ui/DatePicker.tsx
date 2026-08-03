@@ -15,7 +15,7 @@ export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-sm font-medium text-gray-700"
+            className="text-sm font-medium text-fg-muted"
           >
             {label}
           </label>
@@ -25,9 +25,9 @@ export const DatePicker = forwardRef<HTMLInputElement, DatePickerProps>(
           id={inputId}
           type="date"
           className={cn(
-            'rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm',
+            'rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm',
             'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
-            'disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400',
+            'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-faint',
             error && 'border-red-400 focus:border-red-500 focus:ring-red-500/20',
             className,
           )}

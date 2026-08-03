@@ -180,8 +180,8 @@ export function RecurringPage() {
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Recurring</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h2 className="text-base font-semibold text-fg">Recurring</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">
             Repeating bills &amp; income — posted automatically when due
           </p>
         </div>
@@ -211,12 +211,12 @@ export function RecurringPage() {
               <div
                 key={rule.id}
                 data-testid="recurring-row"
-                className="rounded-xl border border-gray-200 bg-white p-4"
+                className="rounded-xl border border-line bg-surface p-4"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-gray-900 text-sm">
+                      <span className="font-medium text-fg text-sm">
                         {rule.merchant || '(no merchant)'}
                       </span>
                       <Badge variant={isIncome ? 'success' : 'danger'}>
@@ -225,7 +225,7 @@ export function RecurringPage() {
                       <Badge variant="default">{freqLabel}</Badge>
                       {category && <Badge variant="default">{category.name}</Badge>}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-fg-subtle">
                       Next: {dueDateDisplay}
                       {account && <span className="ml-3">{account.name}</span>}
                     </div>
@@ -235,7 +235,7 @@ export function RecurringPage() {
                       className={
                         isIncome
                           ? 'text-sm font-semibold text-positive-700'
-                          : 'text-sm font-semibold text-gray-900'
+                          : 'text-sm font-semibold text-fg'
                       }
                     >
                       {isIncome ? '+' : '−'}
@@ -261,7 +261,7 @@ export function RecurringPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
+                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-fg-subtle hover:text-red-600"
                         onClick={() => crud.openDelete(rule.id)}
                         aria-label={`Delete ${rule.merchant || 'recurring rule'}`}
                       >

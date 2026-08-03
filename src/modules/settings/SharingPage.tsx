@@ -84,8 +84,8 @@ export function SharingPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Sharing</h2>
-          <p className="mt-0.5 text-xs text-gray-500">Household groups — share accounts and split expenses with family or housemates</p>
+          <h2 className="text-base font-semibold text-fg">Sharing</h2>
+          <p className="mt-0.5 text-xs text-fg-subtle">Household groups — share accounts and split expenses with family or housemates</p>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
           <Plus className="h-3.5 w-3.5 mr-1" />
@@ -94,8 +94,8 @@ export function SharingPage() {
       </div>
 
       {loadError ? (
-        <div className="rounded-xl border border-gray-200 bg-white px-5 py-6 text-center">
-          <p className="text-sm text-gray-600">Couldn&rsquo;t load your groups.</p>
+        <div className="rounded-xl border border-line bg-surface px-5 py-6 text-center">
+          <p className="text-sm text-fg-muted">Couldn&rsquo;t load your groups.</p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={() => { setLoading(true); loadAll() }}>
             Retry
           </Button>
@@ -148,7 +148,7 @@ export function SharingPage() {
       <Modal open={createOpen} onOpenChange={setCreateOpen} title="New Group">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Group name</label>
+            <label className="block text-sm font-medium text-fg-muted mb-1">Group name</label>
             <Input
               placeholder="e.g. Rodriguez Family"
               value={newName}

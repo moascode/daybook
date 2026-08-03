@@ -46,14 +46,14 @@ export function SplitList({
 }: SplitListProps) {
   if (claims.length === 0) {
     return (
-      <p className="px-4 py-6 text-center text-xs text-gray-400" data-testid="split-list-empty">
+      <p className="px-4 py-6 text-center text-xs text-fg-faint" data-testid="split-list-empty">
         {emptyMessage}
       </p>
     )
   }
 
   return (
-    <ul className="divide-y divide-gray-100" data-testid="split-list">
+    <ul className="divide-y divide-line-subtle" data-testid="split-list">
       {claims.map((claim) => (
         <SplitRow
           key={claim.id}
@@ -121,7 +121,7 @@ function SplitRow({
           type="checkbox"
           checked={selected ?? false}
           onChange={() => onToggleSelect(claim.id)}
-          className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-brand-600"
+          className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-line-strong text-brand-600"
           data-testid="split-row-select"
           aria-label={`Select ${title}`}
         />
@@ -133,7 +133,7 @@ function SplitRow({
             over the amount and the action buttons to its right. */}
         <Link
           to={`/wallet?txn=${claim.transactionId}&view=all&range=all`}
-          className="block truncate text-sm font-medium text-gray-900 hover:text-brand-600 hover:underline"
+          className="block truncate text-sm font-medium text-fg hover:text-brand-600 hover:underline"
           data-testid="split-row-link"
         >
           {title}
@@ -144,14 +144,14 @@ function SplitRow({
             answer. Clamped rather than truncated: two lines of it are worth more
             than one, and it is the field being reviewed. */}
         {claim.description && claim.description !== title && (
-          <p className="mt-0.5 line-clamp-2 break-words text-xs text-gray-700" data-testid="split-row-description">
+          <p className="mt-0.5 line-clamp-2 break-words text-xs text-fg-muted" data-testid="split-row-description">
             {claim.description}
           </p>
         )}
         {/* break-words, because the text that lands here is a username and a
             username has no spaces to wrap at. Without it a long one overflows
             the column and is chopped mid-word by the clip above. */}
-        <p className="mt-0.5 break-words text-xs text-gray-500">
+        <p className="mt-0.5 break-words text-xs text-fg-subtle">
           {claim.date && format(parseISO(claim.date), 'dd MMM yyyy')}
           {' · '}
           {role === 'debtor' ? `from ${claim.ownerUsername}` : `${claim.debtorUsername} owes`}
@@ -162,7 +162,7 @@ function SplitRow({
           )}
         </p>
         {claim.note && (
-          <p className="mt-1 line-clamp-2 break-words text-xs italic text-gray-600" data-testid="split-row-note">
+          <p className="mt-1 line-clamp-2 break-words text-xs italic text-fg-muted" data-testid="split-row-note">
             “{claim.note}”
           </p>
         )}
@@ -189,13 +189,13 @@ function SplitRow({
         <StateHint claim={claim} role={role} />
         {isPartial && (
           <div className="mt-1.5 flex items-center gap-2">
-            <div className="h-1 w-24 overflow-hidden rounded-full bg-gray-200">
+            <div className="h-1 w-24 overflow-hidden rounded-full bg-line">
               <div
                 className="h-full rounded-full bg-brand-500"
                 style={{ width: `${Math.min(100, (claim.settledAmount / claim.shareAmount) * 100)}%` }}
               />
             </div>
-            <span className="text-[11px] text-gray-500" data-testid="split-row-paid">
+            <span className="text-[11px] text-fg-subtle" data-testid="split-row-paid">
               {formatMYR(claim.settledAmount)} paid
             </span>
           </div>
@@ -207,7 +207,7 @@ function SplitRow({
           className={cn(
             'text-sm font-semibold',
             claim.state === 'settled' || claim.state === 'rejected'
-              ? 'text-gray-400'
+              ? 'text-fg-faint'
               : role === 'debtor'
                 ? 'text-red-700'
                 : 'text-positive-700',
@@ -249,7 +249,7 @@ function SplitRow({
             aria-label={`Cancel the split for ${title}`}
             title="Cancel this split"
           >
-            <Undo2 className="h-3.5 w-3.5 text-gray-500" />
+            <Undo2 className="h-3.5 w-3.5 text-fg-subtle" />
           </Button>
         )}
         {claim.state === 'settled' && (
@@ -307,7 +307,7 @@ function StateHint({ claim, role }: { claim: SplitClaim; role: 'debtor' | 'credi
   const text = hint[claim.state]
   if (!text) return null
   return (
-    <p className="mt-1 text-[11px] text-gray-400" data-testid="split-row-hint">
+    <p className="mt-1 text-[11px] text-fg-faint" data-testid="split-row-hint">
       {text}
     </p>
   )

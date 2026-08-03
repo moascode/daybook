@@ -7,7 +7,7 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
     'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
     isActive
       ? 'bg-brand-50 text-brand-700'
-      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+      : 'text-fg-subtle hover:bg-surface-sunken hover:text-fg',
   )
 
 /**

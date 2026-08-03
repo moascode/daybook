@@ -31,10 +31,10 @@ export function PendingInvites({ invites, onRefresh }: { invites: GroupInvite[];
     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
       <h3 className="text-sm font-semibold text-blue-800">Pending invitations</h3>
       {invites.map((inv) => (
-        <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white border border-blue-100 px-4 py-2.5">
+        <div key={inv.id} className="flex items-center justify-between rounded-lg bg-surface border border-blue-100 px-4 py-2.5">
           <div>
-            <span className="text-sm font-medium text-gray-900">{inv.groupName}</span>
-            <span className="text-xs text-gray-500 ml-2">from {inv.invitedByUsername}</span>
+            <span className="text-sm font-medium text-fg">{inv.groupName}</span>
+            <span className="text-xs text-fg-subtle ml-2">from {inv.invitedByUsername}</span>
           </div>
           <div className="flex gap-1">
             <Button size="sm" onClick={() => handle(inv.id, 'accept')} disabled={acting === inv.id}>

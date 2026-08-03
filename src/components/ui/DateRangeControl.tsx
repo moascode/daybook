@@ -52,7 +52,7 @@ export function DateRangeControl({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       {!customOnly && (
-        <div className="flex rounded-lg border border-gray-200 bg-white" role="group" aria-label="Date range">
+        <div className="flex rounded-lg border border-line bg-surface" role="group" aria-label="Date range">
           {presets.map((preset) => (
             <button
               key={preset}
@@ -62,7 +62,7 @@ export function DateRangeControl({
               aria-pressed={active === preset}
               className={cn(
                 'px-3 py-2 text-sm font-medium transition-colors first:rounded-l-lg last:rounded-r-lg',
-                active === preset ? 'bg-brand-500 text-white' : 'text-gray-600 hover:bg-gray-50',
+                active === preset ? 'bg-brand-500 text-fg-on-accent' : 'text-fg-muted hover:bg-surface-sunken',
               )}
             >
               {PRESET_META[preset].label}

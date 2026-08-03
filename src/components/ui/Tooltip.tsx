@@ -20,10 +20,10 @@ export function Tooltip({ label, children, side = 'bottom' }: TooltipProps) {
           <RadixTooltip.Content
             side={side}
             sideOffset={6}
-            className="z-50 rounded-md bg-gray-900 px-2 py-1 text-xs font-medium text-white shadow-md"
+            className="z-50 rounded-md bg-surface-inverted px-2 py-1 text-xs font-medium text-fg-inverted shadow-md"
           >
             {label}
-            <RadixTooltip.Arrow className="fill-gray-900" />
+            <RadixTooltip.Arrow className="fill-surface-inverted" />
           </RadixTooltip.Content>
         </RadixTooltip.Portal>
       </RadixTooltip.Root>

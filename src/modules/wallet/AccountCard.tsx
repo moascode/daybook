@@ -71,7 +71,7 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
       tabIndex={0}
       aria-label={`View transactions for ${account.name}`}
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-gray-200 bg-white',
+        'group relative overflow-hidden rounded-xl border border-line bg-surface',
         'transition-shadow hover:shadow-md cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2'
       )}
@@ -98,12 +98,12 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
               />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900">{account.name}</h3>
+              <h3 className="font-semibold text-fg">{account.name}</h3>
               <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                 <Badge color={account.color}>
                   {ACCOUNT_TYPE_LABELS[account.type]}
                 </Badge>
-                <span className="text-xs text-gray-400">{account.currency}</span>
+                <span className="text-xs text-fg-faint">{account.currency}</span>
                 {account.isShared && account.sharedByUsername && (
                   <span className="flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
                     <Share2 className="h-2.5 w-2.5" />
@@ -122,7 +122,7 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
 
           {/* Actions — always visible (B6), emphasised on hover like transaction rows */}
           <div
-            className="flex gap-1 text-gray-400 transition-colors group-hover:text-gray-600"
+            className="flex gap-1 text-fg-faint transition-colors group-hover:text-fg-muted"
             onClick={(e) => e.stopPropagation()}
           >
             {/* U-2: share button — only shown for own (non-shared-in) accounts */}
@@ -164,23 +164,23 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
 
         {/* Description */}
         {account.description && (
-          <p className="mt-2 text-sm text-gray-500 line-clamp-1">
+          <p className="mt-2 text-sm text-fg-subtle line-clamp-1">
             {account.description}
           </p>
         )}
 
         {/* Balance */}
         <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+          <p className="text-xs font-medium uppercase tracking-wider text-fg-faint">
             Balance
           </p>
           <p
             className={cn(
               'mt-0.5 text-xl font-bold',
               balance === null
-                ? 'text-gray-300'
+                ? 'text-fg-faint'
                 : balance >= 0
-                  ? 'text-gray-900'
+                  ? 'text-fg'
                   : 'text-red-600'
             )}
           >

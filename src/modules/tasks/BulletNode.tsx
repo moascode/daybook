@@ -114,7 +114,7 @@ export function BulletNode({
       <div
         className={cn(
           'relative flex items-start rounded-md transition-colors',
-          'hover:bg-gray-50',
+          'hover:bg-surface-sunken',
           task.isCompleted && 'opacity-60',
         )}
         style={{ paddingLeft: depth * 22 }}
@@ -124,7 +124,7 @@ export function BulletNode({
           <button
             className={cn(
               'flex h-7 w-5 shrink-0 items-center justify-center rounded transition-colors',
-              selected ? 'text-brand-500' : 'text-gray-300 hover:text-gray-500',
+              selected ? 'text-brand-500' : 'text-fg-faint hover:text-fg-subtle',
             )}
             onClick={() => onToggleSelect?.(task.id)}
             role="checkbox"
@@ -139,9 +139,9 @@ export function BulletNode({
           <button
             className={cn(
               'flex h-7 w-5 shrink-0 items-center justify-center',
-              'text-gray-300 opacity-0 group-hover/node:opacity-100',
+              'text-fg-faint opacity-0 group-hover/node:opacity-100',
               'transition-opacity cursor-grab active:cursor-grabbing touch-none',
-              'rounded hover:text-gray-500 pointer-events-none group-hover/node:pointer-events-auto',
+              'rounded hover:text-fg-subtle pointer-events-none group-hover/node:pointer-events-auto',
             )}
             aria-label="Drag to reorder"
             title="Drag to reorder"
@@ -158,7 +158,7 @@ export function BulletNode({
           className={cn(
             'flex h-7 w-5 shrink-0 items-center justify-center rounded transition-colors',
             hasChildren
-              ? 'text-gray-300 hover:text-gray-600 cursor-pointer'
+              ? 'text-fg-faint hover:text-fg-muted cursor-pointer'
               : 'text-transparent pointer-events-none',
           )}
           onClick={() => hasChildren && onToggleCollapse(task.id)}
@@ -182,7 +182,7 @@ export function BulletNode({
             'flex items-center justify-center transition-all duration-150',
             task.isCompleted
               ? 'border-brand-500 bg-brand-500 shadow-sm'
-              : 'border-gray-300 bg-white hover:border-brand-400',
+              : 'border-line-strong bg-surface hover:border-brand-400',
           )}
           onClick={() => onToggleComplete(task.id)}
           aria-label={task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
@@ -190,7 +190,7 @@ export function BulletNode({
           tabIndex={-1}
         >
           {task.isCompleted && (
-            <Check className="h-2 w-2 text-white" strokeWidth={3.5} />
+            <Check className="h-2 w-2 text-fg-on-accent" strokeWidth={3.5} />
           )}
         </button>
 
@@ -244,7 +244,7 @@ export function BulletNode({
               'flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded transition-colors',
               showNote || task.note.length > 0
                 ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50'
-                : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100',
+                : 'text-fg-faint hover:text-fg-subtle hover:bg-surface-hover',
             )}
             onClick={handleToggleNote}
             title={showNote ? 'Hide note' : task.note ? 'Show note' : 'Add note'}
@@ -258,7 +258,7 @@ export function BulletNode({
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button
-                className="flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                className="flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
                 aria-label="Task options"
                 tabIndex={-1}
               >
@@ -268,54 +268,54 @@ export function BulletNode({
 
             <DropdownMenu.Portal>
               <DropdownMenu.Content
-                className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-gray-200 bg-white p-1 shadow-xl shadow-gray-200/60 animate-in fade-in-0 zoom-in-95"
+                className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95"
                 sideOffset={4}
                 align="end"
               >
                 <DropdownMenu.Item
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={() => onToggleComplete(task.id)}
                 >
-                  <CheckSquare className="h-3.5 w-3.5 text-gray-400" />
+                  <CheckSquare className="h-3.5 w-3.5 text-fg-faint" />
                   {task.isCompleted ? 'Mark incomplete' : 'Mark complete'}
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={() => onZoomIn(task.id)}
                 >
-                  <Target className="h-3.5 w-3.5 text-gray-400" />
+                  <Target className="h-3.5 w-3.5 text-fg-faint" />
                   Focus on this task
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={handleToggleNote}
                 >
-                  <StickyNote className="h-3.5 w-3.5 text-gray-400" />
+                  <StickyNote className="h-3.5 w-3.5 text-fg-faint" />
                   {showNote ? 'Hide note' : 'Add note'}
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={() => {
                     setPendingDueDate(task.dueDate ?? '')
                     setShowDueDateDialog(true)
                   }}
                 >
-                  <CalendarClock className="h-3.5 w-3.5 text-gray-400" />
+                  <CalendarClock className="h-3.5 w-3.5 text-fg-faint" />
                   Set due date
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none hover:bg-gray-50 focus:bg-gray-50"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={() => onSaveAsTemplate(task)}
                 >
-                  <BookCopy className="h-3.5 w-3.5 text-gray-400" />
+                  <BookCopy className="h-3.5 w-3.5 text-fg-faint" />
                   Save as template
                 </DropdownMenu.Item>
 
-                <DropdownMenu.Separator className="my-1 h-px bg-gray-100" />
+                <DropdownMenu.Separator className="my-1 h-px bg-surface-hover" />
 
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"

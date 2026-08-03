@@ -2,9 +2,315 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ *  THEME TOKENS — GENERATED FILE, DO NOT EDIT BY HAND
+ *  Source: scripts/gen-theme-tokens.mjs   Regenerate: npm run gen:tokens
+ * ─────────────────────────────────────────────────────────────────────────
+ *  Every colour in the app resolves through a custom property below, so the
+ *  light and dark themes are defined here and nowhere else. Values are
+ *  space-separated RGB channels rather than hex because tailwind.config.js
+ *  wraps them as rgb(var(--token) / <alpha-value>) — that is what keeps
+ *  opacity modifiers like bg-brand-50/40 and ring-brand-500/20 working.
+ *
+ *  Two families, deliberately handled differently:
+ *
+ *  1. NEUTRALS (--surface, --fg, --line ...) are SEMANTIC. Components say
+ *     bg-surface / text-fg-subtle, never bg-white / text-gray-500, because a
+ *     literal grey step is meaningless once the scale inverts: "gray-900
+ *     text" is the darkest thing on screen in light and nearly the lightest
+ *     in dark. A new component gets dark mode for free, with no dark:
+ *     variants to remember.
+ *
+ *  2. ACCENTS (--c-brand-*, --c-red-* ...) keep Tailwind's NUMERIC scale
+ *     (bg-red-50, text-red-600) and are remapped underneath. Light values are
+ *     Tailwind's own hexes, so light mode renders exactly as it did before
+ *     this layer existed. Dark values are the same ramp MIRRORED (50<->950,
+ *     100<->900, ... 500<->500): a -50 tint chip becomes a -950 tint chip,
+ *     -600/-700 accent text becomes -400/-300 and stays legible on a dark
+ *     surface, and solid -500 fills are identical in both themes so primary
+ *     buttons do not shift.
+ */
+
 @layer base {
+  :root {
+    color-scheme: light;
+
+    /* Neutrals — semantic. Light values match the greys they replaced. */
+    --canvas: 249 250 251;          /* was gray-50      app background      */
+    --surface: 255 255 255;         /* was white        cards, panels, bars */
+    --surface-raised: 255 255 255;  /*                  modals, dropdowns   */
+    --surface-sunken: 249 250 251;  /* was gray-50      wells, table heads  */
+    --surface-hover: 243 244 246;   /* was gray-100     hover+static fills  */
+    --surface-inverted: 17 24 39;   /* was gray-900     toasts, tooltips    */
+    --fg-inverted: 255 255 255;     /* was white        text on the above   */
+    --fg-inverted-muted: 156 163 175; /* was gray-400   dim text on above   */
+    --fg: 17 24 39;                 /* was gray-900/800 primary text        */
+    --fg-muted: 55 65 81;           /* was gray-700/600 secondary text      */
+    --fg-subtle: 107 114 128;       /* was gray-500     labels, captions    */
+    --fg-faint: 156 163 175;        /* was gray-400/300 icons, disabled     */
+    --fg-on-accent: 255 255 255;    /*                  text on solid fills */
+    --line-subtle: 243 244 246;     /* was gray-100     dividers            */
+    --line: 229 231 235;            /* was gray-200     default border      */
+    --line-strong: 209 213 219;     /* was gray-300     inputs, emphasis    */
+    --overlay: 0 0 0;               /*                  modal scrim         */
+
+    /* Accents — Tailwind's ramps, unchanged. */
+    --c-brand-50: 240 253 246;
+    --c-brand-100: 220 252 233;
+    --c-brand-200: 187 247 212;
+    --c-brand-300: 134 239 176;
+    --c-brand-400: 74 222 131;
+    --c-brand-500: 29 158 117;
+    --c-brand-600: 22 163 94;
+    --c-brand-700: 21 128 74;
+    --c-brand-800: 22 101 61;
+    --c-brand-900: 20 83 52;
+    --c-brand-950: 5 46 26;
+
+    --c-red-50: 254 242 242;
+    --c-red-100: 254 226 226;
+    --c-red-200: 254 202 202;
+    --c-red-300: 252 165 165;
+    --c-red-400: 248 113 113;
+    --c-red-500: 239 68 68;
+    --c-red-600: 220 38 38;
+    --c-red-700: 185 28 28;
+    --c-red-800: 153 27 27;
+    --c-red-900: 127 29 29;
+    --c-red-950: 69 10 10;
+
+    --c-amber-50: 255 251 235;
+    --c-amber-100: 254 243 199;
+    --c-amber-200: 253 230 138;
+    --c-amber-300: 252 211 77;
+    --c-amber-400: 251 191 36;
+    --c-amber-500: 245 158 11;
+    --c-amber-600: 217 119 6;
+    --c-amber-700: 180 83 9;
+    --c-amber-800: 146 64 14;
+    --c-amber-900: 120 53 15;
+    --c-amber-950: 69 26 3;
+
+    --c-blue-50: 239 246 255;
+    --c-blue-100: 219 234 254;
+    --c-blue-200: 191 219 254;
+    --c-blue-300: 147 197 253;
+    --c-blue-400: 96 165 250;
+    --c-blue-500: 59 130 246;
+    --c-blue-600: 37 99 235;
+    --c-blue-700: 29 78 216;
+    --c-blue-800: 30 64 175;
+    --c-blue-900: 30 58 138;
+    --c-blue-950: 23 37 84;
+
+    --c-green-50: 240 253 244;
+    --c-green-100: 220 252 231;
+    --c-green-200: 187 247 208;
+    --c-green-300: 134 239 172;
+    --c-green-400: 74 222 128;
+    --c-green-500: 34 197 94;
+    --c-green-600: 22 163 74;
+    --c-green-700: 21 128 61;
+    --c-green-800: 22 101 52;
+    --c-green-900: 20 83 45;
+    --c-green-950: 5 46 22;
+
+    --c-purple-50: 250 245 255;
+    --c-purple-100: 243 232 255;
+    --c-purple-200: 233 213 255;
+    --c-purple-300: 216 180 254;
+    --c-purple-400: 192 132 252;
+    --c-purple-500: 168 85 247;
+    --c-purple-600: 147 51 234;
+    --c-purple-700: 126 34 206;
+    --c-purple-800: 107 33 168;
+    --c-purple-900: 88 28 135;
+    --c-purple-950: 59 7 100;
+
+    --c-indigo-50: 238 242 255;
+    --c-indigo-100: 224 231 255;
+    --c-indigo-200: 199 210 254;
+    --c-indigo-300: 165 180 252;
+    --c-indigo-400: 129 140 248;
+    --c-indigo-500: 99 102 241;
+    --c-indigo-600: 79 70 229;
+    --c-indigo-700: 67 56 202;
+    --c-indigo-800: 55 48 163;
+    --c-indigo-900: 49 46 129;
+    --c-indigo-950: 30 27 75;
+
+    --c-orange-50: 255 247 237;
+    --c-orange-100: 255 237 213;
+    --c-orange-200: 254 215 170;
+    --c-orange-300: 253 186 116;
+    --c-orange-400: 251 146 60;
+    --c-orange-500: 249 115 22;
+    --c-orange-600: 234 88 12;
+    --c-orange-700: 194 65 12;
+    --c-orange-800: 154 52 18;
+    --c-orange-900: 124 45 18;
+    --c-orange-950: 67 20 7;
+
+    --c-yellow-50: 254 252 232;
+    --c-yellow-100: 254 249 195;
+    --c-yellow-200: 254 240 138;
+    --c-yellow-300: 253 224 71;
+    --c-yellow-400: 250 204 21;
+    --c-yellow-500: 234 179 8;
+    --c-yellow-600: 202 138 4;
+    --c-yellow-700: 161 98 7;
+    --c-yellow-800: 133 77 14;
+    --c-yellow-900: 113 63 18;
+    --c-yellow-950: 66 32 6;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    /* Neutrals — not a mechanical inversion. The surface steps are tuned so
+       "sunken" still reads recessed and "hover" still reads lifted, which
+       means they move in the opposite direction to their light values. */
+    --canvas: 13 17 23;
+    --surface: 22 27 34;
+    --surface-raised: 28 33 41;
+    --surface-sunken: 15 20 26;
+    --surface-hover: 33 38 45;
+    /* Toasts and tooltips invert against the page in BOTH themes so they read
+       as chrome floating over the app rather than as another card. */
+    --surface-inverted: 230 237 243;
+    --fg-inverted: 13 17 23;
+    --fg-inverted-muted: 87 96 106;
+    --fg: 230 237 243;
+    --fg-muted: 177 186 196;
+    --fg-subtle: 139 148 158;
+    --fg-faint: 110 118 129;
+    --fg-on-accent: 255 255 255;
+    --line-subtle: 31 36 44;
+    --line: 42 49 59;
+    --line-strong: 58 66 78;
+    --overlay: 0 0 0;
+
+    /* Accents — Tailwind's ramps, mirrored. */
+    --c-brand-50: 5 46 26;
+    --c-brand-100: 20 83 52;
+    --c-brand-200: 22 101 61;
+    --c-brand-300: 21 128 74;
+    --c-brand-400: 22 163 94;
+    --c-brand-500: 29 158 117;
+    --c-brand-600: 74 222 131;
+    --c-brand-700: 134 239 176;
+    --c-brand-800: 187 247 212;
+    --c-brand-900: 220 252 233;
+    --c-brand-950: 240 253 246;
+
+    --c-red-50: 69 10 10;
+    --c-red-100: 127 29 29;
+    --c-red-200: 153 27 27;
+    --c-red-300: 185 28 28;
+    --c-red-400: 220 38 38;
+    --c-red-500: 239 68 68;
+    --c-red-600: 248 113 113;
+    --c-red-700: 252 165 165;
+    --c-red-800: 254 202 202;
+    --c-red-900: 254 226 226;
+    --c-red-950: 254 242 242;
+
+    --c-amber-50: 69 26 3;
+    --c-amber-100: 120 53 15;
+    --c-amber-200: 146 64 14;
+    --c-amber-300: 180 83 9;
+    --c-amber-400: 217 119 6;
+    --c-amber-500: 245 158 11;
+    --c-amber-600: 251 191 36;
+    --c-amber-700: 252 211 77;
+    --c-amber-800: 253 230 138;
+    --c-amber-900: 254 243 199;
+    --c-amber-950: 255 251 235;
+
+    --c-blue-50: 23 37 84;
+    --c-blue-100: 30 58 138;
+    --c-blue-200: 30 64 175;
+    --c-blue-300: 29 78 216;
+    --c-blue-400: 37 99 235;
+    --c-blue-500: 59 130 246;
+    --c-blue-600: 96 165 250;
+    --c-blue-700: 147 197 253;
+    --c-blue-800: 191 219 254;
+    --c-blue-900: 219 234 254;
+    --c-blue-950: 239 246 255;
+
+    --c-green-50: 5 46 22;
+    --c-green-100: 20 83 45;
+    --c-green-200: 22 101 52;
+    --c-green-300: 21 128 61;
+    --c-green-400: 22 163 74;
+    --c-green-500: 34 197 94;
+    --c-green-600: 74 222 128;
+    --c-green-700: 134 239 172;
+    --c-green-800: 187 247 208;
+    --c-green-900: 220 252 231;
+    --c-green-950: 240 253 244;
+
+    --c-purple-50: 59 7 100;
+    --c-purple-100: 88 28 135;
+    --c-purple-200: 107 33 168;
+    --c-purple-300: 126 34 206;
+    --c-purple-400: 147 51 234;
+    --c-purple-500: 168 85 247;
+    --c-purple-600: 192 132 252;
+    --c-purple-700: 216 180 254;
+    --c-purple-800: 233 213 255;
+    --c-purple-900: 243 232 255;
+    --c-purple-950: 250 245 255;
+
+    --c-indigo-50: 30 27 75;
+    --c-indigo-100: 49 46 129;
+    --c-indigo-200: 55 48 163;
+    --c-indigo-300: 67 56 202;
+    --c-indigo-400: 79 70 229;
+    --c-indigo-500: 99 102 241;
+    --c-indigo-600: 129 140 248;
+    --c-indigo-700: 165 180 252;
+    --c-indigo-800: 199 210 254;
+    --c-indigo-900: 224 231 255;
+    --c-indigo-950: 238 242 255;
+
+    --c-orange-50: 67 20 7;
+    --c-orange-100: 124 45 18;
+    --c-orange-200: 154 52 18;
+    --c-orange-300: 194 65 12;
+    --c-orange-400: 234 88 12;
+    --c-orange-500: 249 115 22;
+    --c-orange-600: 251 146 60;
+    --c-orange-700: 253 186 116;
+    --c-orange-800: 254 215 170;
+    --c-orange-900: 255 237 213;
+    --c-orange-950: 255 247 237;
+
+    --c-yellow-50: 66 32 6;
+    --c-yellow-100: 113 63 18;
+    --c-yellow-200: 133 77 14;
+    --c-yellow-300: 161 98 7;
+    --c-yellow-400: 202 138 4;
+    --c-yellow-500: 234 179 8;
+    --c-yellow-600: 250 204 21;
+    --c-yellow-700: 253 224 71;
+    --c-yellow-800: 254 240 138;
+    --c-yellow-900: 254 249 195;
+    --c-yellow-950: 254 252 232;
+  }
+
   body {
-    @apply text-gray-900 antialiased;
+    @apply bg-canvas text-fg antialiased;
     margin: 0;
+  }
+
+  /* Native controls (date pickers, scrollbars, autofill) follow the theme via
+     color-scheme above; this keeps form text from inheriting a stale colour. */
+  input,
+  textarea,
+  select {
+    color-scheme: inherit;
   }
 }

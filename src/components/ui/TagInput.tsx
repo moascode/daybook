@@ -102,12 +102,12 @@ export function TagInput({
   return (
     <div ref={containerRef} className="relative flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={id} className="text-sm font-medium text-gray-700">
+        <label htmlFor={id} className="text-sm font-medium text-fg-muted">
           {label}
         </label>
       )}
       <div
-        className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-2 py-1.5 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 cursor-text"
+        className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-line-strong bg-surface px-2 py-1.5 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 cursor-text"
         onClick={() => inputRef.current?.focus()}
       >
         {value.map((tag) => (
@@ -135,19 +135,19 @@ export function TagInput({
           onKeyDown={handleKeyDown}
           onFocus={() => setIsOpen(true)}
           placeholder={value.length === 0 ? placeholder : undefined}
-          className="min-w-[80px] flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400"
+          className="min-w-[80px] flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-faint"
           autoComplete="off"
         />
       </div>
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border border-line bg-surface shadow-lg">
           {filteredSuggestions.map((s, i) => (
             <button
               key={s}
               type="button"
               onMouseDown={(e) => { e.preventDefault(); addTag(s); setIsOpen(false) }}
               className={cn(
-                'w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50',
+                'w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface-sunken',
                 i === highlightedIndex && 'bg-brand-50 text-brand-700',
               )}
             >

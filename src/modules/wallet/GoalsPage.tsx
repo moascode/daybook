@@ -91,8 +91,8 @@ export function GoalsPage() {
     <div className="max-w-2xl mx-auto">
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Goals</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Track your savings targets</p>
+          <h2 className="text-base font-semibold text-fg">Goals</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">Track your savings targets</p>
         </div>
         <Button size="sm" onClick={openCreate}>
           <Plus className="h-3.5 w-3.5" />
@@ -119,12 +119,12 @@ export function GoalsPage() {
               <div
                 key={goal.id}
                 data-testid="goal-card"
-                className="rounded-xl border border-gray-200 bg-white p-4"
+                className="rounded-xl border border-line bg-surface p-4"
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
-                    <p className="font-medium text-gray-900 text-sm">{goal.name}</p>
-                    {account && <p className="text-xs text-gray-500 mt-0.5">{account.name}</p>}
+                    <p className="font-medium text-fg text-sm">{goal.name}</p>
+                    {account && <p className="text-xs text-fg-subtle mt-0.5">{account.name}</p>}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
@@ -139,7 +139,7 @@ export function GoalsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-fg-subtle hover:text-red-600"
                       onClick={() => crud.openDelete(goal.id)}
                       aria-label={`Delete ${goal.name}`}
                     >
@@ -148,14 +148,14 @@ export function GoalsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                <div className="flex items-center justify-between text-xs text-fg-subtle mb-1.5">
                   <span>{formatMYR(saved)} saved</span>
                   <span>Target: {formatMYR(goal.targetAmount)}</span>
                 </div>
 
                 <div
                   data-testid="goal-progress"
-                  className="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden"
+                  className="h-2.5 w-full rounded-full bg-surface-hover overflow-hidden"
                 >
                   <div
                     className="h-full rounded-full bg-brand-500 transition-all duration-300"
@@ -163,7 +163,7 @@ export function GoalsPage() {
                   />
                 </div>
 
-                <p className="mt-1 text-right text-xs text-gray-400">{percent.toFixed(0)}%</p>
+                <p className="mt-1 text-right text-xs text-fg-faint">{percent.toFixed(0)}%</p>
               </div>
             )
           })}

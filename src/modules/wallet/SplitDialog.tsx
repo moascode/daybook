@@ -109,10 +109,10 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   return (
      <Modal open={open} onOpenChange={onOpenChange} title="Split Transaction">
        <div className="space-y-4">
-         <div className="rounded-lg bg-gray-50 px-4 py-3">
-           <p className="text-xs text-gray-500">Split</p>
-           <p className="font-semibold text-gray-900">{transaction.merchant || 'Transaction'}</p>
-           <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
+         <div className="rounded-lg bg-surface-sunken px-4 py-3">
+           <p className="text-xs text-fg-subtle">Split</p>
+           <p className="font-semibold text-fg">{transaction.merchant || 'Transaction'}</p>
+           <p className="text-lg font-bold text-fg">{formatMYR(amount)}</p>
          </div>
 
          {/* §2.2: existing shares + overwrite warning */}
@@ -120,7 +120,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-splits">
              <p className="text-xs font-medium text-amber-800">Currently split</p>
              {existingShares.map((s) => (
-               <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
+               <div key={s.id} className="flex items-center justify-between text-sm text-fg-muted">
                  <span>{s.userId === currentUserId ? 'You' : s.username}</span>
                  <span>
                    {formatMYR(s.shareAmount)}
@@ -134,9 +134,9 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
 
          {/* Recipient selector */}
          {loadingMembers ? (
-           <p className="text-sm text-gray-400 text-center py-2">Loading members…</p>
+           <p className="text-sm text-fg-faint text-center py-2">Loading members…</p>
          ) : groupMembers.length === 0 ? (
-           <p className="text-sm text-gray-500 text-center py-2">
+           <p className="text-sm text-fg-subtle text-center py-2">
              <Users className="h-4 w-4 inline mr-1" />
             No group members yet. Invite people in Settings → Sharing first.
            </p>
@@ -157,7 +157,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
          {/* Split mode selector */}
          {selectedRecipient && (
            <div>
-             <p className="text-xs font-medium text-gray-700 mb-2">How to split</p>
+             <p className="text-xs font-medium text-fg-muted mb-2">How to split</p>
              <div className="flex gap-2">
                <Button
                 variant={splitMode === 'none' ? 'primary' : 'secondary'}
@@ -189,7 +189,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
              {splitMode === 'custom' && (
                <div className="mt-3 space-y-2">
                  <div className="flex items-center gap-3">
-                   <span className="text-sm text-gray-700">You</span>
+                   <span className="text-sm text-fg-muted">You</span>
                    <Input
                     type="number"
                     step="0.01"
@@ -200,7 +200,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                    />
                  </div>
                  <div className="flex items-center gap-3">
-                   <span className="text-sm text-gray-700">{groupMembers.find((m) => m.userId === selectedRecipient)?.username}</span>
+                   <span className="text-sm text-fg-muted">{groupMembers.find((m) => m.userId === selectedRecipient)?.username}</span>
                    <Input
                     type="number"
                     step="0.01"
@@ -210,7 +210,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                     placeholder={formatMYR(amount / 2)}
                    />
                  </div>
-                 <div className="text-right text-xs text-gray-500">
+                 <div className="text-right text-xs text-fg-subtle">
                   Total: {formatMYR((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0))} / {formatMYR(amount)}
                  </div>
                </div>
@@ -220,7 +220,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
 
          {selectedRecipient && (
            <div>
-             <label htmlFor="split-note" className="mb-1 block text-xs font-medium text-gray-700">
+             <label htmlFor="split-note" className="mb-1 block text-xs font-medium text-fg-muted">
               Note for {groupMembers.find((m) => m.userId === selectedRecipient)?.username} (optional)
              </label>
              <Input

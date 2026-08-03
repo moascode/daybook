@@ -4,6 +4,7 @@ import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { formatMYR, formatAxisMYR, monthRange, POSITIVE_MONEY_COLOR } from '@/lib/utils'
+import { useChartTheme } from '@/hooks/useChartTheme'
 import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
@@ -67,6 +68,7 @@ function saveDismissed(userId: string, ids: Set<string>) {
 }
 
 export function Dashboard() {
+  const chart = useChartTheme()
   const { loadTransactions, loadCategories, loadAccounts, loadRecurringTransactions, accounts, categories, recurringTransactions } = useWallet()
   const userId = useAppStore((s) => s.user?.id ?? '')
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -233,22 +235,22 @@ export function Dashboard() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <div className="flex items-center gap-2 text-sm text-fg-subtle">
             <TrendingUp className="h-4 w-4 text-positive-500" />
             Income
           </div>
           <p className="mt-1 text-xl font-bold text-positive-600">{formatMYR(summary.income)}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <div className="flex items-center gap-2 text-sm text-fg-subtle">
             <TrendingDown className="h-4 w-4 text-red-500" />
             Expense
           </div>
           <p className="mt-1 text-xl font-bold text-red-600">{formatMYR(summary.expense)}</p>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="rounded-xl border border-line bg-surface p-4">
+          <div className="flex items-center gap-2 text-sm text-fg-subtle">
             <ArrowUpDown className="h-4 w-4 text-blue-500" />
             Net
           </div>
@@ -274,20 +276,20 @@ export function Dashboard() {
                 <div
                   key={bill.id}
                   data-testid="bill-reminder"
-                  className="flex items-center justify-between rounded-lg bg-white border border-amber-100 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg bg-surface border border-amber-100 px-3 py-2"
                 >
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{bill.merchant || '(no merchant)'}</p>
+                    <p className="text-sm font-medium text-fg">{bill.merchant || '(no merchant)'}</p>
                     <p className="text-xs text-amber-600">
                       {days < 0 ? `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}` : days === 0 ? 'due soon' : `due in ${days} day${days !== 1 ? 's' : ''}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-gray-700">{formatMYR(bill.amount)}</span>
+                    <span className="text-sm font-semibold text-fg-muted">{formatMYR(bill.amount)}</span>
                     <button
                       aria-label="Dismiss"
                       onClick={() => handleDismiss(bill.id)}
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      className="rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
@@ -301,8 +303,8 @@ export function Dashboard() {
 
       {/* Cash flow chart */}
       {weeklyData.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <h3 className="mb-4 text-sm font-semibold text-gray-900">Cash Flow by Week</h3>
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <h3 className="mb-4 text-sm font-semibold text-fg">Cash Flow by Week</h3>
           <div
             role="img"
             aria-label={`Cash flow by week bar chart. ${weeklyData
@@ -311,10 +313,10 @@ export function Dashboard() {
           >
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="week" fontSize={12} tickLine={false} />
-              <YAxis fontSize={12} tickLine={false} tickFormatter={formatAxisMYR} />
-              <Tooltip formatter={(value: number) => formatMYR(value)} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+              <XAxis stroke={chart.axis} tick={{ fill: chart.axis }} dataKey="week" fontSize={12} tickLine={false} />
+              <YAxis stroke={chart.axis} tick={{ fill: chart.axis }} fontSize={12} tickLine={false} tickFormatter={formatAxisMYR} />
+              <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle} formatter={(value: number) => formatMYR(value)} />
               <Legend />
               <Bar dataKey="income" fill={POSITIVE_MONEY_COLOR} radius={[4, 4, 0, 0]} />
               <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -327,8 +329,8 @@ export function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Category pie chart */}
         {categoryData.length > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h3 className="mb-4 text-sm font-semibold text-gray-900">Spending by Category</h3>
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <h3 className="mb-4 text-sm font-semibold text-fg">Spending by Category</h3>
             <div
               role="img"
               aria-label={`Spending by category pie chart. ${categoryData
@@ -354,7 +356,7 @@ export function Dashboard() {
                     <Cell key={idx} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatMYR(value)} />
+                <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle} formatter={(value: number) => formatMYR(value)} />
               </PieChart>
             </ResponsiveContainer>
             </div>
@@ -363,8 +365,8 @@ export function Dashboard() {
 
         {/* Account spending chart */}
         {accountData.length > 0 && (
-          <div className="rounded-xl border border-gray-200 bg-white p-5">
-            <h3 className="mb-4 text-sm font-semibold text-gray-900">Spending by Account</h3>
+          <div className="rounded-xl border border-line bg-surface p-5">
+            <h3 className="mb-4 text-sm font-semibold text-fg">Spending by Account</h3>
             <div
               role="img"
               aria-label={`Spending by account bar chart. ${accountData
@@ -373,10 +375,10 @@ export function Dashboard() {
             >
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={accountData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" fontSize={12} tickFormatter={formatAxisMYR} />
-                <YAxis type="category" dataKey="name" fontSize={12} width={100} />
-                <Tooltip formatter={(value: number) => formatMYR(value)} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+                <XAxis stroke={chart.axis} tick={{ fill: chart.axis }} type="number" fontSize={12} tickFormatter={formatAxisMYR} />
+                <YAxis stroke={chart.axis} tick={{ fill: chart.axis }} type="category" dataKey="name" fontSize={12} width={100} />
+                <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle} formatter={(value: number) => formatMYR(value)} />
                 <Bar dataKey="amount" fill="#3b82f6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -387,19 +389,19 @@ export function Dashboard() {
 
       {/* Top merchants */}
       {topMerchants.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white p-5">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Top Merchants</h3>
-          <div className="divide-y divide-gray-100">
+        <div className="rounded-xl border border-line bg-surface p-5">
+          <h3 className="mb-3 text-sm font-semibold text-fg">Top Merchants</h3>
+          <div className="divide-y divide-line-subtle">
             {topMerchants.map((m, idx) => (
               <div key={m.merchant} className="flex items-center justify-between py-2.5">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-medium text-gray-500">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-hover text-xs font-medium text-fg-subtle">
                     {idx + 1}
                   </span>
-                  <span className="text-sm font-medium text-gray-900 capitalize">{m.merchant}</span>
-                  <span className="text-xs text-gray-400">{m.count} txn{m.count !== 1 ? 's' : ''}</span>
+                  <span className="text-sm font-medium text-fg capitalize">{m.merchant}</span>
+                  <span className="text-xs text-fg-faint">{m.count} txn{m.count !== 1 ? 's' : ''}</span>
                 </div>
-                <span className="text-sm font-semibold text-gray-700">{formatMYR(m.total)}</span>
+                <span className="text-sm font-semibold text-fg-muted">{formatMYR(m.total)}</span>
               </div>
             ))}
           </div>

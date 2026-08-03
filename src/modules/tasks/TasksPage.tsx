@@ -483,8 +483,8 @@ export function TasksPage() {
             title="Welcome to Daybook 👋"
           >
             Daybook keeps your tasks and money in one place. This is the Tasks outliner —
-            press <kbd className="rounded bg-white px-1 text-xs">Enter</kbd> to add an item and{' '}
-            <kbd className="rounded bg-white px-1 text-xs">Tab</kbd> to nest it under the one above.
+            press <kbd className="rounded bg-surface px-1 text-xs">Enter</kbd> to add an item and{' '}
+            <kbd className="rounded bg-surface px-1 text-xs">Tab</kbd> to nest it under the one above.
             Open <span className="font-medium">Wallet</span> from the sidebar to track your accounts
             and spending.
           </WelcomeCard>
@@ -499,8 +499,8 @@ export function TasksPage() {
             onClick={() => setRootId(null)}
             className={`flex shrink-0 items-center justify-center h-7 w-7 rounded-md transition-colors ${
               rootId === null
-                ? 'text-gray-900 bg-gray-100'
-                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
+                ? 'text-fg bg-surface-hover'
+                : 'text-fg-faint hover:text-fg-muted hover:bg-surface-hover'
             }`}
             title="All tasks"
           >
@@ -509,10 +509,10 @@ export function TasksPage() {
 
           {breadcrumb.map((task) => (
             <span key={task.id} className="flex min-w-0 items-center gap-0.5">
-              <ChevronRight className="h-3 w-3 shrink-0 text-gray-300" />
+              <ChevronRight className="h-3 w-3 shrink-0 text-fg-faint" />
               <button
                 onClick={() => setRootId(task.id)}
-                className="max-w-[160px] truncate rounded-md px-1.5 py-0.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800 text-xs"
+                className="max-w-[160px] truncate rounded-md px-1.5 py-0.5 text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg text-xs"
                 title={task.content}
               >
                 {task.content || 'Untitled'}
@@ -525,7 +525,7 @@ export function TasksPage() {
         <div className="flex shrink-0 items-center gap-1.5">
           {selectMode ? (
             <>
-              <span className="px-1 text-xs font-medium text-gray-500">
+              <span className="px-1 text-xs font-medium text-fg-subtle">
                 {selectedIds.size} selected
               </span>
               <Button
@@ -551,7 +551,7 @@ export function TasksPage() {
                   'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
                   sortByDue
                     ? 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800',
+                    : 'text-fg-subtle hover:bg-surface-hover hover:text-fg',
                 )}
               >
                 <CalendarClock className="h-3.5 w-3.5" />
@@ -561,7 +561,7 @@ export function TasksPage() {
               <button
                 onClick={handleToggleHideCompleted}
                 title={hideCompleted ? 'Show completed tasks' : 'Hide completed tasks'}
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
               >
                 {hideCompleted ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 {hideCompleted ? 'Show done' : 'Hide done'}
@@ -570,7 +570,7 @@ export function TasksPage() {
               <button
                 onClick={handleOpenTemplates}
                 title="Apply a saved task template"
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
               >
                 <BookCopy className="h-3.5 w-3.5" />
                 Templates
@@ -580,7 +580,7 @@ export function TasksPage() {
                 <button
                   onClick={toggleSelectMode}
                   title="Select multiple tasks"
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-800"
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-surface-hover hover:text-fg"
                   data-testid="task-select-btn"
                 >
                   <CheckSquare className="h-3.5 w-3.5" />
@@ -599,7 +599,7 @@ export function TasksPage() {
 
       {/* ── Search bar ──────────────────────────────────────── */}
       <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint" />
         <input
           ref={searchInputRef}
           type="text"
@@ -613,16 +613,16 @@ export function TasksPage() {
           }}
           placeholder="Search tasks… (⌘F)"
           className={cn(
-            'w-full rounded-lg border bg-white py-2 pl-9 pr-8 text-sm text-gray-800 placeholder-gray-400 outline-none transition-all',
+            'w-full rounded-lg border bg-surface py-2 pl-9 pr-8 text-sm text-fg placeholder-fg-faint outline-none transition-all',
             isSearching
               ? 'border-brand-400 ring-2 ring-brand-500/20'
-              : 'border-gray-200 hover:border-gray-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20',
+              : 'border-line hover:border-line-strong focus:border-brand-400 focus:ring-2 focus:ring-brand-500/20',
           )}
         />
         {isSearching && (
           <button
             onClick={() => { setSearchQuery(''); searchInputRef.current?.focus() }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-gray-400 hover:text-gray-700"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-fg-faint hover:text-fg-muted"
             aria-label="Clear search"
           >
             <X className="h-3.5 w-3.5" />
@@ -632,29 +632,29 @@ export function TasksPage() {
 
       {/* ── Search results ──────────────────────────────────── */}
       {isSearching ? (
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-xl border border-line bg-surface overflow-hidden">
           {searchResults.length === 0 ? (
-            <div className="py-12 text-center text-sm text-gray-400">
+            <div className="py-12 text-center text-sm text-fg-faint">
               No tasks found matching &ldquo;{searchQuery}&rdquo;
             </div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-line-subtle">
               {searchResults.map((task) => (
                 <button
                   key={task.id}
-                  className="w-full px-4 py-3 text-left transition-colors hover:bg-gray-50 focus:bg-gray-50 focus:outline-none"
+                  className="w-full px-4 py-3 text-left transition-colors hover:bg-surface-sunken focus:bg-surface-sunken focus:outline-none"
                   onClick={() => {
                     setRootId(task.parentId)
                     setFocusId(task.id)
                     setSearchQuery('')
                   }}
                 >
-                  <p className="mb-0.5 text-xs text-gray-400">
+                  <p className="mb-0.5 text-xs text-fg-faint">
                     {getTaskPath(task, tasks)}
                   </p>
                   <p
                     className={cn(
-                      'text-sm text-gray-800',
+                      'text-sm text-fg',
                       task.isCompleted && 'line-through opacity-50',
                     )}
                   >
@@ -662,13 +662,13 @@ export function TasksPage() {
                   </p>
                   {task.note &&
                     task.note.toLowerCase().includes(searchQuery.trim().toLowerCase()) && (
-                      <p className="mt-0.5 text-xs text-gray-400 line-clamp-1">
+                      <p className="mt-0.5 text-xs text-fg-faint line-clamp-1">
                         {highlight(task.note, searchQuery.trim())}
                       </p>
                     )}
                 </button>
               ))}
-              <div className="px-4 py-2 text-xs text-gray-400">
+              <div className="px-4 py-2 text-xs text-fg-faint">
                 {searchResults.length === 50
                   ? '50+ results — refine your search'
                   : `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`}
@@ -755,7 +755,7 @@ export function TasksPage() {
       >
         <div className="flex flex-col gap-3">
           {templates.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">
+            <p className="py-6 text-center text-sm text-fg-faint">
               No templates yet. Save your first template from the task menu.
             </p>
           ) : (
@@ -765,13 +765,13 @@ export function TasksPage() {
                   key={tpl.id}
                   className={cn(
                     'flex items-center justify-between rounded-lg px-3 py-2 cursor-pointer transition-colors',
-                    selectedTemplateId === tpl.id ? 'bg-brand-50 text-brand-700' : 'hover:bg-gray-50',
+                    selectedTemplateId === tpl.id ? 'bg-brand-50 text-brand-700' : 'hover:bg-surface-sunken',
                   )}
                   onClick={() => setSelectedTemplateId(tpl.id)}
                 >
                   <span className="text-sm font-medium truncate">{tpl.name}</span>
                   <button
-                    className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600"
+                    className="ml-2 shrink-0 rounded px-1.5 py-0.5 text-xs text-fg-faint hover:bg-red-50 hover:text-red-600"
                     onClick={(e) => { e.stopPropagation(); handleDeleteTemplate(tpl.id) }}
                     aria-label={`Delete ${tpl.name}`}
                   >

@@ -17,11 +17,11 @@ export function ToastContainer() {
           role="status"
           data-testid="toast"
           className={cn(
-            'flex items-center gap-3 rounded-lg bg-gray-900 px-4 py-2.5 text-sm text-white shadow-xl',
+            'flex items-center gap-3 rounded-lg bg-surface-inverted px-4 py-2.5 text-sm text-fg-inverted shadow-xl',
             'animate-in fade-in-0 slide-in-from-bottom-2 duration-200',
           )}
         >
-          <span className="text-gray-100">{toast.message}</span>
+          <span className="text-fg-inverted">{toast.message}</span>
           {toast.action && (
             <button
               onClick={() => {
@@ -35,7 +35,7 @@ export function ToastContainer() {
           )}
           <button
             onClick={() => removeToast(toast.id)}
-            className="ml-1 text-gray-500 transition-colors hover:text-gray-300"
+            className="ml-1 text-fg-inverted-muted transition-colors hover:text-fg-inverted"
             aria-label="Dismiss"
           >
             <X className="h-3.5 w-3.5" />

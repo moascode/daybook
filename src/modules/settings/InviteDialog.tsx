@@ -68,7 +68,7 @@ export function InviteDialog({ open, onOpenChange, groupId, groupName, onInvited
     <Modal open={open} onOpenChange={handleClose} title={`Invite to ${groupName}`}>
       <div className="space-y-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint" />
           <Input
             className="pl-9"
             placeholder="Search by username…"
@@ -81,13 +81,13 @@ export function InviteDialog({ open, onOpenChange, groupId, groupName, onInvited
           <p className={`text-sm ${message.ok ? 'text-green-600' : 'text-red-600'}`}>{message.text}</p>
         )}
 
-        {loading && <p className="text-sm text-gray-500">Searching…</p>}
+        {loading && <p className="text-sm text-fg-subtle">Searching…</p>}
 
         {results.length > 0 && (
-          <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+          <ul className="divide-y divide-line-subtle rounded-lg border border-line">
             {results.map((u) => (
               <li key={u.id} className="flex items-center justify-between px-4 py-2">
-                <span className="text-sm font-medium text-gray-800">{u.username}</span>
+                <span className="text-sm font-medium text-fg">{u.username}</span>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -103,7 +103,7 @@ export function InviteDialog({ open, onOpenChange, groupId, groupName, onInvited
         )}
 
         {query && !loading && results.length === 0 && (
-          <p className="text-sm text-gray-400">No users found matching "{query}"</p>
+          <p className="text-sm text-fg-faint">No users found matching "{query}"</p>
         )}
 
         <div className="flex justify-end pt-1">

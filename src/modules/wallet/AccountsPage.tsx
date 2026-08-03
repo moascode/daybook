@@ -87,8 +87,8 @@ export function AccountsPage() {
       {/* Page sub-header */}
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Accounts</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Manage your accounts and balances</p>
+          <h2 className="text-base font-semibold text-fg">Accounts</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">Manage your accounts and balances</p>
         </div>
         <Button size="sm" onClick={crud.openCreate}>
           <Plus className="h-3.5 w-3.5" />

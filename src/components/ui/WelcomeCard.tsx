@@ -55,8 +55,8 @@ export function WelcomeCard({ settingKey, icon, title, children, className }: We
       <div className="flex gap-3">
         <div className="mt-0.5 shrink-0 text-brand-600">{icon}</div>
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-          <div className="mt-1 text-sm text-gray-600">{children}</div>
+          <h3 className="text-sm font-semibold text-fg">{title}</h3>
+          <div className="mt-1 text-sm text-fg-muted">{children}</div>
         </div>
       </div>
     </div>

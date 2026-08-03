@@ -3,13 +3,16 @@ import { Palette, Globe, LogOut, User, KeyRound } from 'lucide-react'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/utils'
 import { useAppStore } from '@/stores/app.store'
+import { useThemePreference } from '@/hooks/useThemePreference'
+import { isThemePreference } from '@/lib/theme'
 import { useToastStore } from '@/stores/toast.store'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 
 export function SettingsPage() {
-  const { theme, setTheme } = useAppStore()
+  const { theme, changeTheme } = useThemePreference()
+  const setTheme = useAppStore((s) => s.setTheme)
   const user = useAppStore((s) => s.user)
   const setUser = useAppStore((s) => s.setUser)
   const setDbReady = useAppStore((s) => s.setDbReady)
@@ -66,22 +69,11 @@ export function SettingsPage() {
       .get<{ key: string; value: string }[]>('/settings')
       .then((rows) => {
         for (const row of rows) {
-          if (row.key === 'theme') setTheme(row.value as 'light' | 'dark' | 'system')
+          if (row.key === 'theme' && isThemePreference(row.value)) setTheme(row.value)
         }
       })
       .finally(() => setLoading(false))
   }, [setTheme])
-
-  // U-06: a preference, not a form field — apply and persist immediately so it
-  // never silently reverts on reload after being changed and navigated away.
-  async function handleThemeChange(next: 'light' | 'dark' | 'system') {
-    setTheme(next)
-    try {
-      await api.put('/settings/theme', { value: next })
-    } catch (err: unknown) {
-      addToast({ message: errorMessage(err, 'Could not save your theme — please try again.') })
-    }
-  }
 
   if (loading) {
     return (
@@ -94,20 +86,20 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-lg">
       <div className="mb-6">
-        <h2 className="text-base font-semibold text-gray-900">Settings</h2>
-        <p className="mt-0.5 text-xs text-gray-500">Preferences and API configuration</p>
+        <h2 className="text-base font-semibold text-fg">Settings</h2>
+        <p className="mt-0.5 text-xs text-fg-subtle">Preferences and API configuration</p>
       </div>
 
       <div className="space-y-5">
         {/* Account section */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-line bg-surface p-5">
           <div className="mb-4 flex items-center gap-2">
-            <User className="h-4 w-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Account</h3>
+            <User className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Account</h3>
           </div>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              Signed in as <span className="font-medium text-gray-900">{user?.username}</span>
+            <p className="text-sm text-fg-muted">
+              Signed in as <span className="font-medium text-fg">{user?.username}</span>
             </p>
             <Button variant="secondary" onClick={handleLogout}>
               <LogOut className="h-3.5 w-3.5" />
@@ -117,10 +109,10 @@ export function SettingsPage() {
         </section>
 
         {/* Change password */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-line bg-surface p-5">
           <div className="mb-4 flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Change password</h3>
+            <KeyRound className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Change password</h3>
           </div>
           <form className="space-y-3" onSubmit={handleChangePassword}>
             <Input
@@ -150,7 +142,7 @@ export function SettingsPage() {
               data-testid="confirm-password"
               required
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-fg-subtle">
               At least {MIN_PASSWORD} characters. A long, randomly generated password is
               strongly recommended. Changing it signs out your other devices.
             </p>
@@ -166,37 +158,40 @@ export function SettingsPage() {
         </section>
 
         {/* Preferences section */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-line bg-surface p-5">
           <div className="mb-4 flex items-center gap-2">
-            <Palette className="h-4 w-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Appearance</h3>
+            <Palette className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Appearance</h3>
           </div>
 
           <Select
             label="Theme"
             options={[
               { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
               { value: 'system', label: 'System (follow OS)' },
             ]}
-            value={theme === 'dark' ? 'system' : theme}
-            onChange={(e) => handleThemeChange(e.target.value as 'light' | 'system')}
+            value={theme}
+            onChange={(e) => {
+              if (isThemePreference(e.target.value)) changeTheme(e.target.value)
+            }}
           />
-          <p className="mt-2 text-xs text-gray-400">
-            Your choice is saved instantly. A full dark theme is still in progress, so only
-            Light and System are available for now.
+          <p className="mt-2 text-xs text-fg-faint">
+            Your choice is saved instantly. System follows your device's light or dark setting
+            and updates as it changes.
           </p>
         </section>
 
         {/* Finance section */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
+        <section className="rounded-xl border border-line bg-surface p-5">
           <div className="mb-4 flex items-center gap-2">
-            <Globe className="h-4 w-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900">Finance</h3>
+            <Globe className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Finance</h3>
           </div>
-          <p className="text-sm text-gray-600">
-            Currency <span className="font-medium text-gray-900">Malaysian Ringgit (MYR)</span>
+          <p className="text-sm text-fg-muted">
+            Currency <span className="font-medium text-fg">Malaysian Ringgit (MYR)</span>
           </p>
-          <p className="mt-1 text-xs text-gray-400">Daybook is single-currency for now.</p>
+          <p className="mt-1 text-xs text-fg-faint">Daybook is single-currency for now.</p>
         </section>
       </div>
     </div>

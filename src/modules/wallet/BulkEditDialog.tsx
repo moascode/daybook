@@ -132,7 +132,7 @@ export function BulkEditDialog({
           data-testid="bulk-edit-category"
         />
 
-        <div className="space-y-2 rounded-lg border border-gray-200 p-3">
+        <div className="space-y-2 rounded-lg border border-line p-3">
           <Select
             id="bulk-edit-tag-mode-select"
             label="Tags"

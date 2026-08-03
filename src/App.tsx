@@ -6,6 +6,7 @@ import { useAppStore, type AuthUser } from '@/stores/app.store'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
 import { AuthPage } from '@/components/auth/AuthPage'
+import { applyTheme } from '@/lib/theme'
 
 export default function App() {
   const [error, setError] = useState<string | null>(null)
@@ -14,6 +15,7 @@ export default function App() {
   const setDbReady = useAppStore((s) => s.setDbReady)
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
+  const setResolvedTheme = useAppStore((s) => s.setResolvedTheme)
   const user = useAppStore((s) => s.user)
   const setUser = useAppStore((s) => s.setUser)
 
@@ -107,32 +109,27 @@ export default function App() {
       })
   }, [user, setDbReady, setTheme])
 
-  // Apply dark class based on theme setting
+  // Apply the theme to the document, mirror it to localStorage for the
+  // pre-paint script, and publish the resolved value for chart colours.
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-    } else if (theme === 'light') {
-      root.classList.remove('dark')
-    } else {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)')
-      root.classList.toggle('dark', mq.matches)
-      const handler = (e: MediaQueryListEvent) => {
-        root.classList.toggle('dark', e.matches)
-      }
-      mq.addEventListener('change', handler)
-      return () => mq.removeEventListener('change', handler)
-    }
-  }, [theme])
+    setResolvedTheme(applyTheme(theme))
+    if (theme !== 'system') return
+
+    // Only 'system' needs to follow the OS afterwards.
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => setResolvedTheme(applyTheme('system'))
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [theme, setResolvedTheme])
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
-        <div className="max-w-md rounded-xl bg-white p-8 shadow-lg">
+      <div className="flex h-screen items-center justify-center bg-surface-sunken">
+        <div className="max-w-md rounded-xl bg-surface p-8 shadow-lg">
           <h1 className="text-lg font-bold text-red-600">Database Error</h1>
-          <p className="mt-2 text-sm text-gray-600">{error}</p>
+          <p className="mt-2 text-sm text-fg-muted">{error}</p>
           <button
-            className="mt-4 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+            className="mt-4 rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-fg-on-accent hover:bg-brand-600"
             onClick={() => window.location.reload()}
           >
             Retry
@@ -144,10 +141,10 @@ export default function App() {
 
   if (!authChecked || (user && !dbReady)) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-screen items-center justify-center bg-surface-sunken">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-          <p className="text-sm text-gray-500">Loading Daybook...</p>
+          <p className="text-sm text-fg-subtle">Loading Daybook...</p>
         </div>
       </div>
     )
