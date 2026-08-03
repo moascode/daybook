@@ -747,7 +747,13 @@ wallet.get('/transactions/export', async (c) => {
 })
 
 // Returns the subset of the given hashes that already exist for this user.
-// Batched to stay well under SQLite's bound-parameter limit on large imports.
+// Batched to stay under D1's 100-bound-parameter-per-query cap (this is a
+// Cloudflare D1 platform limit, not SQLite's own — see
+// https://developers.cloudflare.com/d1/platform/limits/). Each chunk is
+// issued as two single-table statements (userId + chunk = chunk+1 params
+// apiece) rather than one UNION query binding userId and the chunk twice —
+// that older shape hit the cap on any import over ~49 rows and D1 rejected
+// the query outright, surfacing as a 500 with no indication of the cause.
 // A hash counts as a duplicate if it is on a live transaction OR was absorbed
 // into a merged transfer (absorbed_import_hashes) — otherwise re-importing a
 // statement would re-create the leg that link-as-transfer deleted.
@@ -758,22 +764,23 @@ wallet.post('/transactions/check-duplicates', async (c) => {
 
   const userId = c.get('userId')
   const found = new Set<string>()
-  const BATCH = 500
+  const BATCH = 90
 
   // The chunks are independent, so they go out as one batch() rather than
-  // sequential awaits — N/500 round trips become one.
+  // sequential awaits — N/BATCH round trips become one.
   const stmts = []
   for (let i = 0; i < hashes.length; i += BATCH) {
     const chunk = hashes.slice(i, i + BATCH)
     const placeholders = chunk.map(() => '?').join(', ')
     stmts.push(
       c.env.DB
-        .prepare(
-          `SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})
-           UNION
-           SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${placeholders})`,
-        )
-        .bind(userId, ...chunk, userId, ...chunk),
+        .prepare(`SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})`)
+        .bind(userId, ...chunk),
+    )
+    stmts.push(
+      c.env.DB
+        .prepare(`SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${placeholders})`)
+        .bind(userId, ...chunk),
     )
   }
 
