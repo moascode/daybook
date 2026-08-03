@@ -1229,11 +1229,21 @@ EOF
                 default white tooltip card was unreadable on a dark canvas.
                 Toasts/tooltips are surface-inverted: they invert in BOTH
                 themes, so they read as chrome rather than as another card.
-                Two test-side fixes: ThemeToggle's aria-label contains the
-                word "theme", which made the pre-existing getByLabel('Theme')
-                in spec 11 ambiguous (now { exact: true }); and AppShell
-                renders both the mobile and desktop bars, so the toggle is in
-                the DOM twice and specs must match visible=true.
+                ARIA-LABEL COLLISION, worth remembering: getByLabel()
+                matches SUBSTRINGS, so a new control's accessible name can
+                silently capture unrelated specs' lookups anywhere in the
+                suite. ThemeToggle first shipped as "Switch to dark theme",
+                which made getByLabel('To') — the date-range inputs in spec
+                03 — AND getByLabel('Theme') in spec 11 resolve to three
+                elements. Fixed in the APP, not by patching specs: the
+                button is now a proper toggle (aria-label "Dark theme" +
+                aria-pressed), checked against every getByLabel string in
+                e2e/ so it collides with nothing but 'Theme', which spec 11
+                and 58 pin with { exact: true }. Name new controls after
+                what they control, not as a sentence.
+                Also: AppShell renders both the mobile and desktop bars, so
+                the toggle is in the DOM twice — specs must match
+                visible=true, not .first().
                 Default stays 'light' — nothing changes for the 2 live users
                 until they choose otherwise. NO MIGRATION: the settings key
                 already accepted 'dark'.

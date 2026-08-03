@@ -51,16 +51,19 @@ test('the top-bar toggle switches to dark', async () => {
 })
 
 test('the toggle reflects the current theme and switches back', async () => {
-  await expect(themeToggle(page)).toHaveAttribute(
-    'aria-label',
-    'Switch to light theme',
-  )
+  // A toggle button: the name is what it controls, aria-pressed is the state.
+  await expect(themeToggle(page)).toHaveAttribute('aria-pressed', 'true')
   await themeToggle(page).click()
   await expect.poll(() => htmlIsDark(page)).toBe(false)
-  await expect(themeToggle(page)).toHaveAttribute(
-    'aria-label',
-    'Switch to dark theme',
-  )
+  await expect(themeToggle(page)).toHaveAttribute('aria-pressed', 'false')
+})
+
+test('the toggle does not capture other specs\' getByLabel lookups', async () => {
+  // Regression: an aria-label of "Switch to dark theme" made getByLabel('To')
+  // (the date-range inputs) and getByLabel('Theme') ambiguous across the suite,
+  // because getByLabel matches substrings. Keep the name collision-free.
+  const label = await themeToggle(page).getAttribute('aria-label')
+  expect(label).toBe('Dark theme')
 })
 
 // ── Persistence ────────────────────────────────────────────────────────

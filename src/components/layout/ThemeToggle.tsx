@@ -14,14 +14,20 @@ import { useThemePreference } from '@/hooks/useThemePreference'
 export function ThemeToggle() {
   const { resolvedTheme, changeTheme } = useThemePreference()
   const goingDark = resolvedTheme === 'light'
-  const label = goingDark ? 'Switch to dark theme' : 'Switch to light theme'
 
+  // The accessible name is the thing being toggled, with the on/off state in
+  // aria-pressed — NOT a sentence like "Switch to dark theme". getByLabel()
+  // matches substrings, so a name containing "to" made every existing
+  // getByLabel('To') in the specs ambiguous (the date-range inputs), and one
+  // containing "theme" did the same to getByLabel('Theme'). The descriptive
+  // wording lives in the tooltip, which is a description, not a name.
   return (
-    <Tooltip label={label}>
+    <Tooltip label={goingDark ? 'Switch to dark theme' : 'Switch to light theme'}>
       <button
         type="button"
         onClick={() => changeTheme(goingDark ? 'dark' : 'light')}
-        aria-label={label}
+        aria-label="Dark theme"
+        aria-pressed={!goingDark}
         data-testid="theme-toggle"
         className="flex h-9 w-9 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
       >
