@@ -47,14 +47,14 @@ function MemberList({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-gray-500">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</span>
+        <span className="text-sm text-fg-subtle">{group.members.length} member{group.members.length !== 1 ? 's' : ''}</span>
         <Button size="sm" onClick={() => setInviteOpen(true)}>
           <UserPlus className="h-3.5 w-3.5 mr-1" />
           Invite
         </Button>
       </div>
 
-      <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+      <ul className="divide-y divide-line-subtle rounded-lg border border-line">
         {group.members.map((m) => (
           <li key={m.userId} className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">
@@ -62,8 +62,8 @@ function MemberList({
                 {m.username[0].toUpperCase()}
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">{m.username}</p>
-                <p className="text-xs text-gray-500 flex items-center gap-1">
+                <p className="text-sm font-medium text-fg">{m.username}</p>
+                <p className="text-xs text-fg-subtle flex items-center gap-1">
                   {m.role === 'owner' && <Crown className="h-3 w-3 text-yellow-500" />}
                   {m.role}
                 </p>
@@ -155,15 +155,15 @@ export function GroupCard({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+    <div className="rounded-xl border border-line bg-surface overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4">
         <button className="flex items-center gap-3 flex-1 text-left" onClick={toggle}>
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100">
             <Users className="h-4 w-4 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">{group.name}</h3>
-            <p className="text-xs text-gray-500 flex items-center gap-1">
+            <h3 className="font-semibold text-fg">{group.name}</h3>
+            <p className="text-xs text-fg-subtle flex items-center gap-1">
               {group.role === 'owner' && <Crown className="h-3 w-3 text-yellow-500" />}
               {group.role}
             </p>
@@ -182,14 +182,14 @@ export function GroupCard({
       </div>
 
       {expanded && (
-        <div className="border-t border-gray-100 px-5 py-4">
+        <div className="border-t border-line-subtle px-5 py-4">
           {detailError && !loading ? (
             <div className="flex items-center gap-3">
-              <p className="text-sm text-gray-500">Couldn&rsquo;t load this group.</p>
+              <p className="text-sm text-fg-subtle">Couldn&rsquo;t load this group.</p>
               <Button size="sm" variant="secondary" onClick={loadDetail}>Retry</Button>
             </div>
           ) : loading || !detail ? (
-            <p className="text-sm text-gray-400">Loading…</p>
+            <p className="text-sm text-fg-faint">Loading…</p>
           ) : (
             <MemberList group={detail} currentUserId={currentUserId} onRefresh={handleRefresh} />
           )}

@@ -160,7 +160,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
               setForm((f) => ({ ...f, openingBalance: parseFloat(e.target.value) || 0 }))
             }
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-fg-subtle">
             Starting balance — included in the computed balance. Can be negative.
           </p>
         </div>
@@ -174,7 +174,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
 
         {/* Color swatches */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Color</label>
+          <label className="text-sm font-medium text-fg-muted">Color</label>
           <div className="flex flex-wrap gap-2">
             {COLOR_PRESETS.map((color) => (
               <button
@@ -182,7 +182,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
                 type="button"
                 className={`h-7 w-7 rounded-full border-2 transition-transform ${
                   form.color === color
-                    ? 'scale-110 border-gray-800'
+                    ? 'scale-110 border-fg'
                     : 'border-transparent hover:scale-105'
                 }`}
                 style={{ backgroundColor: color }}
@@ -195,18 +195,18 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
 
         {/* Sharing section — only when editing an account you own */}
         {isEdit && !account?.isShared && groups.length > 0 && (
-          <div className="border-t border-gray-100 pt-4">
-            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-gray-700">
+          <div className="border-t border-line-subtle pt-4">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-fg-muted">
               <Share2 className="h-4 w-4" />
               Sharing
             </p>
             {shares.length > 0 && (
               <ul className="mb-3 space-y-1.5">
                 {shares.map((s) => (
-                  <li key={s.groupId} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                  <li key={s.groupId} className="flex items-center justify-between rounded-lg bg-surface-sunken px-3 py-2 text-sm">
                     <div>
                       <span className="font-medium">{s.groupName}</span>
-                      <span className="ml-2 text-gray-500 text-xs">{s.canWrite ? 'can add/edit' : 'read-only'}</span>
+                      <span className="ml-2 text-fg-subtle text-xs">{s.canWrite ? 'can add/edit' : 'read-only'}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -249,7 +249,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
                   onChange={(e) => setShareGroupId(e.target.value)}
                 />
               </div>
-              <label className="flex items-center gap-1 text-xs text-gray-600 pb-2">
+              <label className="flex items-center gap-1 text-xs text-fg-muted pb-2">
                 <input
                   type="checkbox"
                   checked={shareCanWrite}

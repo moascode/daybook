@@ -25,7 +25,7 @@ import { cn } from '@/lib/utils'
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5 text-[11px] font-medium text-gray-600">
+    <kbd className="rounded border border-line-strong bg-surface-sunken px-1.5 py-0.5 text-[11px] font-medium text-fg-muted">
       {children}
     </kbd>
   )
@@ -45,11 +45,11 @@ function DeepLink({ to, label }: { to: string; label: string }) {
 }
 
 function P({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm leading-relaxed text-gray-600">{children}</p>
+  return <p className="text-sm leading-relaxed text-fg-muted">{children}</p>
 }
 
 function UL({ children }: { children: React.ReactNode }) {
-  return <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-gray-600">{children}</ul>
+  return <ul className="list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-fg-muted">{children}</ul>
 }
 
 // ── Section definitions ──────────────────────────────────
@@ -235,7 +235,7 @@ const SECTIONS: Section[] = [
       <div className="space-y-3">
         <UL>
           <li><strong>Account</strong> — sign out.</li>
-          <li><strong>Appearance</strong> — choose a theme: Light or System. (A full dark theme is still in progress.)</li>
+          <li><strong>Appearance</strong> — choose a theme: Light, Dark, or System (follows your device). The sun/moon button in the top bar flips between light and dark in one click.</li>
           <li><strong>Finance</strong> — currency is Malaysian Ringgit (MYR); Daybook is single-currency for now.</li>
           <li><strong>Sharing</strong> — the household features above.</li>
         </UL>
@@ -251,12 +251,12 @@ const SECTIONS: Section[] = [
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
+            <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-fg-faint">
               <th className="py-2 pr-4 font-medium">Key</th>
               <th className="py-2 font-medium">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line-subtle">
             {[
               [<Kbd key="k">Enter</Kbd>, 'New sibling task below'],
               [<Kbd key="k">Tab</Kbd>, 'Indent (make child)'],
@@ -267,7 +267,7 @@ const SECTIONS: Section[] = [
             ].map(([key, action], i) => (
               <tr key={i}>
                 <td className="whitespace-nowrap py-2.5 pr-4">{key}</td>
-                <td className="py-2.5 text-gray-600">{action}</td>
+                <td className="py-2.5 text-fg-muted">{action}</td>
               </tr>
             ))}
           </tbody>
@@ -307,12 +307,12 @@ export function HelpPage() {
     <div className="mx-auto max-w-4xl">
       {/* Header */}
       <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-white">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500 text-fg-on-accent">
           <BookOpen className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-lg font-bold text-gray-900">Help &amp; Guide</h1>
-          <p className="text-sm text-gray-500">Everything you can do in Daybook.</p>
+          <h1 className="text-lg font-bold text-fg">Help &amp; Guide</h1>
+          <p className="text-sm text-fg-subtle">Everything you can do in Daybook.</p>
         </div>
       </div>
 
@@ -326,7 +326,7 @@ export function HelpPage() {
               'whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
               activeId === s.id
                 ? 'border-brand-400 bg-brand-50 text-brand-700'
-                : 'border-gray-200 text-gray-500 hover:bg-gray-50',
+                : 'border-line text-fg-subtle hover:bg-surface-sunken',
             )}
           >
             {s.title}
@@ -346,7 +346,7 @@ export function HelpPage() {
                     'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors',
                     activeId === s.id
                       ? 'bg-brand-50 text-brand-700'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+                      : 'text-fg-subtle hover:bg-surface-sunken hover:text-fg',
                   )}
                 >
                   <span className="shrink-0">{s.icon}</span>
@@ -364,9 +364,9 @@ export function HelpPage() {
               key={s.id}
               id={s.id}
               ref={(el) => { sectionRefs.current[s.id] = el }}
-              className="scroll-mt-4 rounded-xl border border-gray-200 bg-white p-5"
+              className="scroll-mt-4 rounded-xl border border-line bg-surface p-5"
             >
-              <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-gray-900">
+              <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-fg">
                 <span className="text-brand-500">{s.icon}</span>
                 {s.title}
               </h2>
@@ -374,7 +374,7 @@ export function HelpPage() {
             </section>
           ))}
 
-          <p className="pb-4 text-center text-xs text-gray-400">
+          <p className="pb-4 text-center text-xs text-fg-faint">
             Daybook — home-network release. AI assistance and cloud hosting are planned for later.
           </p>
         </div>

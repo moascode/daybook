@@ -196,8 +196,8 @@ export function CsvImport() {
       {step === 'upload' && (
         <>
           <div className="mb-5">
-            <h2 className="text-base font-semibold text-gray-900">Import CSV</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Bank statements, transaction exports (.csv)</p>
+            <h2 className="text-base font-semibold text-fg">Import CSV</h2>
+            <p className="text-xs text-fg-subtle mt-0.5">Bank statements, transaction exports (.csv)</p>
           </div>
 
           {/* No-account guard */}
@@ -232,14 +232,14 @@ export function CsvImport() {
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
-                className="flex flex-col items-center rounded-2xl border-2 border-dashed border-gray-200 bg-white p-14 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/30 cursor-pointer"
+                className="flex flex-col items-center rounded-2xl border-2 border-dashed border-line bg-surface p-14 text-center transition-colors hover:border-brand-300 hover:bg-brand-50/30 cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
-                  <Upload className="h-6 w-6 text-gray-400" />
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-hover">
+                  <Upload className="h-6 w-6 text-fg-faint" />
                 </div>
-                <p className="mb-1 text-sm font-semibold text-gray-700">Drop a CSV file here</p>
-                <p className="mb-5 text-xs text-gray-400">or click anywhere in this area to browse</p>
+                <p className="mb-1 text-sm font-semibold text-fg-muted">Drop a CSV file here</p>
+                <p className="mb-5 text-xs text-fg-faint">or click anywhere in this area to browse</p>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -258,19 +258,19 @@ export function CsvImport() {
         <>
           <div className="mb-5 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Map Columns</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Tell us which CSV column maps to which field</p>
+              <h2 className="text-base font-semibold text-fg">Map Columns</h2>
+              <p className="text-xs text-fg-subtle mt-0.5">Tell us which CSV column maps to which field</p>
             </div>
-            <button onClick={resetToUpload} className="text-gray-400 hover:text-gray-600 transition-colors">
+            <button onClick={resetToUpload} className="text-fg-faint hover:text-fg-muted transition-colors">
               <X className="h-4 w-4" />
             </button>
           </div>
 
           {file && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              <FileText className="h-4 w-4 text-gray-400 flex-shrink-0" />
-              <span className="text-sm text-gray-700 font-medium">{file.name}</span>
-              <span className="text-xs text-gray-400 ml-auto">{rawRows.length} rows</span>
+            <div className="mb-4 flex items-center gap-2 rounded-lg bg-surface-sunken border border-line px-3 py-2">
+              <FileText className="h-4 w-4 text-fg-faint flex-shrink-0" />
+              <span className="text-sm text-fg-muted font-medium">{file.name}</span>
+              <span className="text-xs text-fg-faint ml-auto">{rawRows.length} rows</span>
             </div>
           )}
 
@@ -282,23 +282,23 @@ export function CsvImport() {
           )}
 
           {/* Header row toggle */}
-          <div className="mb-3 flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2.5">
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-surface-sunken border border-line px-3 py-2.5">
             <input
               type="checkbox"
               id="firstRowIsHeader"
               checked={firstRowIsHeader}
               onChange={(e) => handleToggleHeader(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-brand-600 cursor-pointer"
+              className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
             />
-            <label htmlFor="firstRowIsHeader" className="text-sm text-gray-700 cursor-pointer select-none">
+            <label htmlFor="firstRowIsHeader" className="text-sm text-fg-muted cursor-pointer select-none">
               First row is a header (column names)
             </label>
-            <span className="ml-auto text-xs text-gray-400">
+            <span className="ml-auto text-xs text-fg-faint">
               {firstRowIsHeader ? 'Header row excluded from import' : 'All rows included as data'}
             </span>
           </div>
 
-          <div className="space-y-3 rounded-xl border border-gray-200 bg-white p-5">
+          <div className="space-y-3 rounded-xl border border-line bg-surface p-5">
             <Select
               label="Date column *"
               options={headerOptions}
@@ -349,8 +349,8 @@ export function CsvImport() {
         <>
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-base font-semibold text-gray-900">Review Import</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <h2 className="text-base font-semibold text-fg">Review Import</h2>
+              <p className="text-xs text-fg-subtle mt-0.5">
                 {includedCount} to import · {duplicateCount} duplicate{duplicateCount !== 1 ? 's' : ''} skipped
               </p>
             </div>
@@ -382,10 +382,10 @@ export function CsvImport() {
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <CheckCircle2 className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-lg font-semibold text-gray-900">Import Complete</h2>
+          <h2 className="text-lg font-semibold text-fg">Import Complete</h2>
           {result && (
-            <div className="mt-3 space-y-1 text-sm text-gray-500">
-              <p><span className="font-semibold text-gray-800">{result.imported}</span> transaction{result.imported !== 1 ? 's' : ''} imported</p>
+            <div className="mt-3 space-y-1 text-sm text-fg-subtle">
+              <p><span className="font-semibold text-fg">{result.imported}</span> transaction{result.imported !== 1 ? 's' : ''} imported</p>
               {result.skipped > 0 && <p>{result.skipped} duplicate{result.skipped !== 1 ? 's' : ''} skipped</p>}
               {result.excluded > 0 && <p>{result.excluded} excluded by you</p>}
             </div>

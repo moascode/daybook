@@ -469,8 +469,8 @@ export function WalletPage() {
       {/* Page sub-header */}
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Transactions</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Track income, expenses, and transfers</p>
+          <h2 className="text-base font-semibold text-fg">Transactions</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">Track income, expenses, and transfers</p>
         </div>
         <div className="flex items-center gap-2">
           {accounts.length > 0 && !selectMode && (
@@ -537,7 +537,7 @@ export function WalletPage() {
           (or a group: members can view shared transactions with no accounts). */}
       {(accounts.length > 0 || hasGroups) && (
       <>
-      <div className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mb-4 rounded-xl border border-line bg-surface p-4">
         {/* Search-first single row: search, date range, Filters toggle, Clear */}
         <div className="flex flex-wrap items-start gap-3">
           <div className="min-w-[14rem] flex-1">
@@ -564,7 +564,7 @@ export function WalletPage() {
               'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
               filtersOpen || activeFilterCount > 0
                 ? 'border-brand-300 bg-brand-50 text-brand-700'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50',
+                : 'border-line text-fg-muted hover:bg-surface-sunken',
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -572,7 +572,7 @@ export function WalletPage() {
             {activeFilterCount > 0 && (
               <span
                 data-testid="filter-count"
-                className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-500 px-1 text-xs font-semibold text-white"
+                className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-500 px-1 text-xs font-semibold text-fg-on-accent"
               >
                 {activeFilterCount}
               </span>
@@ -583,7 +583,7 @@ export function WalletPage() {
               type="button"
               onClick={clearAllFilters}
               data-testid="filter-clear-all"
-              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-fg-subtle hover:bg-surface-sunken hover:text-fg-muted transition-colors"
             >
               <X className="h-3.5 w-3.5" />
               Clear
@@ -616,7 +616,7 @@ export function WalletPage() {
 
         {/* Collapsible occasional filters */}
         {filtersOpen && (
-          <div data-testid="filter-panel" className="mt-3 border-t border-gray-100 pt-3">
+          <div data-testid="filter-panel" className="mt-3 border-t border-line-subtle pt-3">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Select
                 label="Type"
@@ -654,7 +654,7 @@ export function WalletPage() {
             </div>
             {hasGroups && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-xs font-medium text-gray-500">Sharing</span>
+                <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
                 {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
                   <button
                     key={v}
@@ -663,7 +663,7 @@ export function WalletPage() {
                       'rounded-full border px-3 py-1 text-xs transition-colors',
                       filters.view === v
                         ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300',
+                        : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
                     )}
                   >
                     {v === 'shared-with-me'
@@ -697,7 +697,7 @@ export function WalletPage() {
           'rounded-lg border px-4 py-3',
           summary.net >= 0 ? 'border-positive-100 bg-positive-50' : 'border-red-100 bg-red-50',
         )}>
-          <div className="text-xs font-medium text-gray-500">Net</div>
+          <div className="text-xs font-medium text-fg-subtle">Net</div>
           {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
           <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')} data-testid="summary-net">
             {summary.net >= 0 ? '+' : ''}
@@ -718,10 +718,10 @@ export function WalletPage() {
             type="checkbox"
             checked={allSelected}
             onChange={handleSelectAll}
-            className="h-4 w-4 rounded border-gray-300 text-brand-600 cursor-pointer"
+            className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
             aria-label="Select all transactions"
           />
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-fg-muted">
             {selectedIds.size > 0
               ? `${selectedIds.size} selected`
               : 'Select transactions'}
@@ -766,7 +766,7 @@ export function WalletPage() {
       )}
 
       {/* Transaction list */}
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-line bg-surface overflow-hidden">
         {/* "Create an account first" is onboarding advice, and it is only true
             for a user who has nothing at all. A group member with no account of
             their own still has other people's splits to read, so for them the
@@ -783,16 +783,16 @@ export function WalletPage() {
             }
           />
         ) : transactions.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-400" data-testid="transactions-empty">
+          <div className="py-16 text-center text-sm text-fg-faint" data-testid="transactions-empty">
             {dateRangeLabel || viewLabel ? (
               <>
                 <p>
                   No transactions
                   {viewLabel && (
-                    <> under <span className="font-medium text-gray-500">{viewLabel}</span></>
+                    <> under <span className="font-medium text-fg-subtle">{viewLabel}</span></>
                   )}
                   {dateRangeLabel && (
-                    <> in <span className="font-medium text-gray-500">{dateRangeLabel}</span></>
+                    <> in <span className="font-medium text-fg-subtle">{dateRangeLabel}</span></>
                   )}
                   .
                 </p>

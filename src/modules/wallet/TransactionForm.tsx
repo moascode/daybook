@@ -188,7 +188,7 @@ export function TransactionForm({
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Type selector */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Type</label>
+          <label className="text-sm font-medium text-fg-muted">Type</label>
           <div className="flex gap-2">
             {TYPE_OPTIONS.map((opt) => (
               <button
@@ -198,7 +198,7 @@ export function TransactionForm({
                   'flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   form.type === opt.value
                     ? opt.color
-                    : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    : 'border-line text-fg-subtle hover:bg-surface-sunken'
                 )}
                 onClick={() => setForm((f) => ({ ...f, type: opt.value }))}
               >
@@ -209,7 +209,7 @@ export function TransactionForm({
           {/* Imported rows between own accounts are often really one transfer —
               point at the fix without changing any behaviour. */}
           {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
-            <p className="text-xs text-gray-400" data-testid="transfer-hint">
+            <p className="text-xs text-fg-faint" data-testid="transfer-hint">
               Moved money between your own accounts? Switch Type to Transfer
               {onLinkTransfer
                 ? ', or use "Link as transfer" to pair it with the other side.'

@@ -223,7 +223,7 @@ export function SharedPage() {
   if (loadError) {
     return (
       <div className="mx-auto max-w-2xl py-10 text-center">
-        <p className="text-sm text-gray-600">Couldn&rsquo;t load your shared balances.</p>
+        <p className="text-sm text-fg-muted">Couldn&rsquo;t load your shared balances.</p>
         <Button size="sm" variant="secondary" className="mt-3" onClick={() => { setLoading(true); loadAll() }}>
           Retry
         </Button>
@@ -252,8 +252,8 @@ export function SharedPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Shared</h2>
-          <p className="mt-0.5 text-xs text-gray-500">Balances and settlements across your groups</p>
+          <h2 className="text-base font-semibold text-fg">Shared</h2>
+          <p className="mt-0.5 text-xs text-fg-subtle">Balances and settlements across your groups</p>
         </div>
         {/* range=all is not optional decoration: the balances above are
             all-time, but Transactions defaults to the current month. Without it
@@ -275,28 +275,28 @@ export function SharedPage() {
 
           The per-state breakdown lives inside each person card, where the date
           filter that scopes it also lives. */}
-      <div className="flex flex-wrap gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4" data-testid="shared-headline">
+      <div className="flex flex-wrap gap-4 rounded-xl border border-line bg-surface px-5 py-4" data-testid="shared-headline">
         <div className="min-w-[7rem] flex-1">
-          <p className="text-xs text-gray-500">Owed to you</p>
+          <p className="text-xs text-fg-subtle">Owed to you</p>
           <p className="text-lg font-bold text-positive-700" data-testid="headline-owed-to-me">
             {formatMYR(grossOwedToMe)}
           </p>
         </div>
         <div className="min-w-[7rem] flex-1">
-          <p className="text-xs text-gray-500">You owe</p>
+          <p className="text-xs text-fg-subtle">You owe</p>
           <p className="text-lg font-bold text-red-700" data-testid="headline-i-owe">
             {formatMYR(grossIOwe)}
           </p>
         </div>
         {/* The rule separates Net from the two gross figures, but only while it
             is beside them — once it wraps to its own line it is a stray mark. */}
-        <div className="min-w-[7rem] flex-1 sm:border-l sm:border-gray-100 sm:pl-4">
-          <p className="text-xs text-gray-500">Net</p>
+        <div className="min-w-[7rem] flex-1 sm:border-l sm:border-line-subtle sm:pl-4">
+          <p className="text-xs text-fg-subtle">Net</p>
           <p
             className={cn(
               'text-lg font-bold',
               Math.abs(grossOwedToMe - grossIOwe) < 0.005
-                ? 'text-gray-500'
+                ? 'text-fg-subtle'
                 : grossOwedToMe > grossIOwe
                   ? 'text-positive-700'
                   : 'text-red-700',
@@ -314,24 +314,24 @@ export function SharedPage() {
       </div>
 
       {awaitingMyConfirmation.length > 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white" data-testid="awaiting-confirmation">
-          <div className="border-b border-gray-100 px-5 py-3">
-            <h3 className="text-sm font-semibold text-gray-900">
+        <div className="rounded-xl border border-line bg-surface" data-testid="awaiting-confirmation">
+          <div className="border-b border-line-subtle px-5 py-3">
+            <h3 className="text-sm font-semibold text-fg">
               Payments to confirm
               <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
                 {awaitingMyConfirmation.length}
               </span>
             </h3>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="mt-0.5 text-xs text-fg-subtle">
               Someone says they have paid you. Confirming books it into your account and clears the balance.
             </p>
           </div>
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-line-subtle">
             {awaitingMyConfirmation.map((sx) => (
               <li key={sx.id} className="flex items-center gap-3 px-5 py-3" data-testid="awaiting-row">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">{sx.fromUsername} paid you</p>
-                  {sx.note && <p className="mt-0.5 truncate text-xs text-gray-500">{sx.note}</p>}
+                  <p className="truncate text-sm font-medium text-fg">{sx.fromUsername} paid you</p>
+                  {sx.note && <p className="mt-0.5 truncate text-xs text-fg-subtle">{sx.note}</p>}
                 </div>
                 <span className="text-sm font-semibold text-positive-700">{formatMYR(sx.amount)}</span>
                 <Button size="sm" onClick={() => setConfirmTarget(sx)} data-testid="open-confirm">
@@ -344,12 +344,12 @@ export function SharedPage() {
       )}
 
       {allSettled && (
-        <p className="py-2 text-center text-sm text-gray-500" data-testid="all-settled">
+        <p className="py-2 text-center text-sm text-fg-subtle" data-testid="all-settled">
           All settled up! 🎉
         </p>
       )}
       {pairings.length === 0 && !allSettled && (
-        <p className="py-2 text-center text-sm text-gray-500">
+        <p className="py-2 text-center text-sm text-fg-subtle">
           No splits yet — split your first expense from Transactions
         </p>
       )}
@@ -377,14 +377,14 @@ export function SharedPage() {
         if (history.length === 0) return null
         return (
           <div key={group.id} data-testid="settlement-history">
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Recent settlements{groups.length > 1 ? ` · ${group.name}` : ''}
             </h4>
             <div className="space-y-2">
               {history.slice(0, 10).map((s) => (
                 <div
                   key={s.id}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm"
+                  className="flex items-start justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm"
                   data-testid="settlement-row"
                 >
                   <div className="min-w-0 flex-1 overflow-hidden">
@@ -395,24 +395,24 @@ export function SharedPage() {
                           below its content and the clip takes the difference. */}
                       <span className="min-w-0 break-words">
                         <span className="font-medium">{s.fromUsername}</span>
-                        <span className="mx-1 text-gray-500">→</span>
+                        <span className="mx-1 text-fg-subtle">→</span>
                         <span className="font-medium">{s.toUsername}</span>
                       </span>
-                      <span className="font-semibold text-gray-900">{formatMYR(s.amount)}</span>
+                      <span className="font-semibold text-fg">{formatMYR(s.amount)}</span>
                       <SettlementStatus status={s.status} />
                     </div>
                     {/* When it happened. A settlement history with no dates is a
                         list of amounts you have to take on trust — and with the
                         undo window now a week rather than a day, the date is
                         also what says whether Undo is still on the table. */}
-                    <p className="mt-0.5 text-xs text-gray-500" data-testid="settlement-row-date">
+                    <p className="mt-0.5 text-xs text-fg-subtle" data-testid="settlement-row-date">
                       {settlementDate(s.settledAt)}
                     </p>
                     {/* The note the payer wrote, and — when the creditor said the
                         money never arrived — their reason. Both were being
                         stored and shown in a dim parenthetical or not at all. */}
                     {s.note && (
-                      <p className="mt-1 break-words text-xs italic text-gray-600" data-testid="settlement-row-note">
+                      <p className="mt-1 break-words text-xs italic text-fg-muted" data-testid="settlement-row-note">
                         &ldquo;{s.note}&rdquo;
                       </p>
                     )}
@@ -443,7 +443,7 @@ export function SharedPage() {
       {/* U-10: Undo settlement confirmation modal */}
       <Modal open={!!undoTarget} onOpenChange={() => setUndoTarget(null)} title="Undo Settlement?">
         <div className="space-y-4">
-          <p className="text-sm text-gray-700">Undo this settlement? Balances will be restored.</p>
+          <p className="text-sm text-fg-muted">Undo this settlement? Balances will be restored.</p>
           {undoError && <p className="text-sm text-red-600">{undoError}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setUndoTarget(null)}>Cancel</Button>
@@ -511,7 +511,7 @@ function SettlementStatus({ status }: { status: Settlement['status'] }) {
     awaiting_confirmation: { label: 'Awaiting confirmation', cls: 'bg-amber-50 text-amber-700' },
     confirmed: { label: 'Confirmed', cls: 'bg-positive-50 text-positive-700' },
     rejected: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
-  }[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600' }
+  }[status] ?? { label: status, cls: 'bg-surface-hover text-fg-muted' }
   return (
     <span
       className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style.cls}`}

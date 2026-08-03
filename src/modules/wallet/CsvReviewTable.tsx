@@ -44,7 +44,7 @@ export function CsvReviewTable({
 
   if (rows.length === 0) {
     return (
-      <div className="py-8 text-center text-sm text-gray-400">
+      <div className="py-8 text-center text-sm text-fg-faint">
         No rows to import.
       </div>
     )
@@ -54,25 +54,25 @@ export function CsvReviewTable({
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left">
-            <th className="px-3 py-2 font-medium text-gray-500 w-10">
+          <tr className="border-b border-line text-left">
+            <th className="px-3 py-2 font-medium text-fg-subtle w-10">
               <span className="sr-only">Include</span>
             </th>
-            <th className="px-3 py-2 font-medium text-gray-500">Date</th>
-            <th className="px-3 py-2 font-medium text-gray-500">Merchant</th>
-            <th className="px-3 py-2 font-medium text-gray-500 w-28">Amount</th>
-            <th className="px-3 py-2 font-medium text-gray-500 w-24">Type</th>
-            <th className="px-3 py-2 font-medium text-gray-500 w-36">Category</th>
-            <th className="px-3 py-2 font-medium text-gray-500 w-20">Status</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle w-24">Type</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle w-36">Category</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle w-20">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line-subtle">
           {rows.map((row, index) => (
             <tr
               key={index}
               className={cn(
                 'transition-colors',
-                !row.included && 'bg-gray-50 opacity-60',
+                !row.included && 'bg-surface-sunken opacity-60',
                 row.isDuplicate && 'bg-amber-50/50'
               )}
             >
@@ -82,7 +82,7 @@ export function CsvReviewTable({
                   type="checkbox"
                   checked={row.included}
                   onChange={() => onToggleInclude(index)}
-                  className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                  className="h-4 w-4 rounded border-line-strong text-brand-500 focus:ring-brand-500"
                 />
               </td>
 
@@ -202,7 +202,7 @@ export function CsvReviewTable({
       </table>
 
       {/* Summary */}
-      <div className="mt-3 flex items-center gap-4 border-t border-gray-200 px-3 py-3 text-xs text-gray-500">
+      <div className="mt-3 flex items-center gap-4 border-t border-line px-3 py-3 text-xs text-fg-subtle">
         <span>
           Total rows: {rows.length}
         </span>
@@ -215,7 +215,7 @@ export function CsvReviewTable({
         <span>
           Excluded: {rows.filter((r) => !r.included && !r.isDuplicate).length}
         </span>
-        <span className="ml-auto font-medium text-gray-700">
+        <span className="ml-auto font-medium text-fg-muted">
           Total amount: {formatMYR(
             rows
               .filter((r) => r.included)

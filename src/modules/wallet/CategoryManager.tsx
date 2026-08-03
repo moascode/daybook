@@ -89,9 +89,9 @@ export function CategoryManager({
     <Modal open={open} onOpenChange={onOpenChange} title="Manage Categories" className="max-w-md">
       <div className="space-y-4">
         {/* Category list */}
-        <div className="max-h-64 overflow-y-auto space-y-1 rounded-lg border border-gray-100 bg-gray-50 p-2">
+        <div className="max-h-64 overflow-y-auto space-y-1 rounded-lg border border-line-subtle bg-surface-sunken p-2">
           {categories.length === 0 && (
-            <p className="py-4 text-center text-sm text-gray-400">No categories yet.</p>
+            <p className="py-4 text-center text-sm text-fg-faint">No categories yet.</p>
           )}
           {categories.map((cat) => (
             <div key={cat.id}>
@@ -113,19 +113,19 @@ export function CategoryManager({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-white transition-colors">
+                <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-surface transition-colors">
                   <span
                     className="h-3 w-3 flex-shrink-0 rounded-full"
                     style={{ backgroundColor: cat.color }}
                   />
-                  <span className="flex-1 text-sm text-gray-800">{cat.name}</span>
+                  <span className="flex-1 text-sm text-fg">{cat.name}</span>
                   <Badge variant="default" className="text-[10px]">
                     {typeLabel[cat.type] ?? cat.type}
                   </Badge>
                   <button
                     type="button"
                     onClick={() => handleDeleteClick(cat.id)}
-                    className="rounded p-0.5 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="rounded p-0.5 text-fg-faint hover:text-red-500 hover:bg-red-50 transition-colors"
                     aria-label={`Delete ${cat.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -137,8 +137,8 @@ export function CategoryManager({
         </div>
 
         {/* Add form */}
-        <form onSubmit={handleAdd} className="space-y-3 rounded-lg border border-gray-200 p-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Add Category</p>
+        <form onSubmit={handleAdd} className="space-y-3 rounded-lg border border-line p-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">Add Category</p>
           <Input
             label="Name"
             placeholder="e.g. Subscriptions"
@@ -153,7 +153,7 @@ export function CategoryManager({
             onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as CategoryInput['type'] }))}
           />
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-700">Color</label>
+            <label className="text-sm font-medium text-fg-muted">Color</label>
             <div className="flex gap-2">
               {COLOR_SWATCHES.map((color) => (
                 <button
@@ -162,7 +162,7 @@ export function CategoryManager({
                   onClick={() => setForm((f) => ({ ...f, color }))}
                   className={cn(
                     'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
-                    form.color === color ? 'border-gray-800 scale-110' : 'border-transparent',
+                    form.color === color ? 'border-fg scale-110' : 'border-transparent',
                   )}
                   style={{ backgroundColor: color }}
                   aria-label={color}

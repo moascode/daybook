@@ -249,10 +249,10 @@ export function BulletEditor({
       role="textbox"
       aria-label="Task content"
       className={cn(
-        'flex-1 outline-none text-sm text-gray-900 leading-6 min-w-0 break-words cursor-text',
+        'flex-1 outline-none text-sm text-fg leading-6 min-w-0 break-words cursor-text',
         'px-1 -mx-1 rounded',
         'focus:bg-blue-50/40',
-        isCompleted && 'line-through text-gray-400',
+        isCompleted && 'line-through text-fg-faint',
       )}
       onInput={handleInput}
       onBlur={handleBlur}

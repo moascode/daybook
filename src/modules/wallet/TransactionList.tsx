@@ -143,7 +143,7 @@ function TransactionRow({
         'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
         interactive && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
-        selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-gray-50',
+        selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-surface-sunken',
         highlighted && 'ring-2 ring-inset ring-brand-400 bg-brand-50/40',
       )}
       onClick={interactive ? handleRowClick : undefined}
@@ -156,7 +156,7 @@ function TransactionRow({
           checked={isSelected ?? false}
           onChange={() => onToggleSelect?.(transaction.id)}
           onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-brand-600 cursor-pointer"
+          className="h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
           aria-label="Select transaction"
         />
       ) : (
@@ -183,7 +183,7 @@ function TransactionRow({
       {/* Details */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-gray-900">
+          <span className="truncate text-sm font-medium text-fg">
             {transaction.merchant || transaction.description || 'Untitled'}
           </span>
           {transaction.hasSplits && (
@@ -198,7 +198,7 @@ function TransactionRow({
             </Badge>
           )}
         </div>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+        <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-subtle">
           {account && <span>{account.name}</span>}
           {isOnSharedAccount && account?.sharedByUsername && (
             <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
@@ -229,7 +229,7 @@ function TransactionRow({
       <span className={cn('flex-shrink-0 text-right text-sm font-semibold', amountColor)}>
         {amountPrefix}{formatMYR(transaction.amount)}
         {showsShare && (
-          <span className="block text-[11px] font-normal text-gray-400" data-testid="effective-amount">
+          <span className="block text-[11px] font-normal text-fg-faint" data-testid="effective-amount">
             your share {formatMYR(transaction.effectiveAmount)}
           </span>
         )}
@@ -238,7 +238,7 @@ function TransactionRow({
       {/* Row actions — hidden in select mode and on read-only shared rows */}
       {!selectMode && !readOnly && (
         <div
-          className="flex flex-shrink-0 items-center gap-0.5 text-gray-400 transition-colors group-hover:text-gray-600"
+          className="flex flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
           onClick={(e) => e.stopPropagation()}
         >
           {/* U-6: hide split button on transfers. U-07: and hide it entirely when
@@ -296,7 +296,7 @@ export function TransactionList({
 
   if (dailyGroups.length === 0) {
     return (
-      <div className="py-12 text-center text-sm text-gray-400">
+      <div className="py-12 text-center text-sm text-fg-faint">
         No transactions found for the selected filters.
       </div>
     )
@@ -308,7 +308,7 @@ export function TransactionList({
           <div key={group.date}>
             {/* Day header */}
             <div className="flex items-center justify-between px-3 py-2">
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <span className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 {format(parseISO(group.date), 'EEE, dd MMM yyyy')}
               </span>
               <div className="flex items-center gap-3 text-xs">
@@ -326,7 +326,7 @@ export function TransactionList({
             </div>
 
             {/* Transactions in this day */}
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-line-subtle">
               {group.transactions.map((t) => (
                 <TransactionRow
                   key={t.id}

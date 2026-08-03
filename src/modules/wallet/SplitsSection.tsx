@@ -246,15 +246,15 @@ export function SplitsSection({
 
   return (
     <section
-      className="rounded-xl border border-gray-200 bg-white"
+      className="rounded-xl border border-line bg-surface"
       data-testid="splits-section"
       data-counterparty={counterpartyUsername}
     >
-      <header className="border-b border-gray-100 px-4 py-3">
+      <header className="border-b border-line-subtle px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900">{counterpartyUsername}</h3>
-            {showGroupName && <p className="mt-0.5 text-xs text-gray-400">{groupName}</p>}
+            <h3 className="text-sm font-semibold text-fg">{counterpartyUsername}</h3>
+            {showGroupName && <p className="mt-0.5 text-xs text-fg-faint">{groupName}</p>}
           </div>
           {balance && netAmount > 0.005 && (
             <Button size="sm" variant={iAmNetCreditor ? 'secondary' : 'primary'} onClick={() => onSettle(range)}>
@@ -279,24 +279,24 @@ export function SplitsSection({
             missing from this card. */}
         <dl className="mt-2 space-y-1 text-xs" data-testid="section-totals">
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-gray-500">{counterpartyUsername} owes you</dt>
-            <dd className="font-medium tabular-nums text-gray-900" data-testid="total-owed-to-me">
+            <dt className="text-fg-subtle">{counterpartyUsername} owes you</dt>
+            <dd className="font-medium tabular-nums text-fg" data-testid="total-owed-to-me">
               {formatMYR(theyOweYou)}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-3">
-            <dt className="text-gray-500">You owe {counterpartyUsername}</dt>
-            <dd className="font-medium tabular-nums text-gray-900" data-testid="total-i-owe">
+            <dt className="text-fg-subtle">You owe {counterpartyUsername}</dt>
+            <dd className="font-medium tabular-nums text-fg" data-testid="total-i-owe">
               {formatMYR(youOweThem)}
             </dd>
           </div>
-          <div className="flex items-baseline justify-between gap-3 border-t border-gray-100 pt-1">
-            <dt className="text-gray-500">Net</dt>
+          <div className="flex items-baseline justify-between gap-3 border-t border-line-subtle pt-1">
+            <dt className="text-fg-subtle">Net</dt>
             <dd
               className={cn(
                 'text-sm font-semibold',
                 Math.abs(net) < 0.005
-                  ? 'text-gray-500'
+                  ? 'text-fg-subtle'
                   : net > 0
                     ? 'text-positive-700'
                     : 'text-red-700',
@@ -316,7 +316,7 @@ export function SplitsSection({
       {/* Opt-in, and starting at All time. A claim is outstanding until it is
           resolved, so defaulting to the current month here would recreate the
           original bug — a debt on screen with an empty list under it. */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle px-4 py-2">
         <DateRangeControl value={range} onChange={setRange} />
         {canBulk && visible.length > 1 && (
           <button
@@ -336,9 +336,9 @@ export function SplitsSection({
         )}
       </div>
 
-      <div className="border-b border-gray-100 px-4 py-2">
+      <div className="border-b border-line-subtle px-4 py-2">
         <div
-          className="flex w-full rounded-lg bg-gray-100 p-0.5"
+          className="flex w-full rounded-lg bg-surface-hover p-0.5"
           role="tablist"
           aria-label="Direction"
         >
@@ -356,8 +356,8 @@ export function SplitsSection({
               className={cn(
                 'min-w-0 flex-1 truncate rounded-md px-2 py-1 text-xs font-medium transition-colors',
                 direction === value
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-900',
+                  ? 'bg-surface text-fg shadow-sm'
+                  : 'text-fg-subtle hover:text-fg',
               )}
             >
               {label}
@@ -377,7 +377,7 @@ export function SplitsSection({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-gray-100 px-2 py-2" role="tablist">
+      <div className="flex flex-wrap gap-1 border-b border-line-subtle px-2 py-2" role="tablist">
         {visibleTabs.map((t) => (
           <button
             key={t.state}
@@ -390,7 +390,7 @@ export function SplitsSection({
               'rounded-lg px-2.5 py-1 text-xs font-medium transition-colors',
               tab === t.state
                 ? 'bg-brand-50 text-brand-700'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+                : 'text-fg-subtle hover:bg-surface-sunken hover:text-fg',
             )}
           >
             {t.label}
@@ -405,10 +405,10 @@ export function SplitsSection({
 
       {selectedHere.length > 0 && (
         <div
-          className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-brand-50/60 px-4 py-2"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-line-subtle bg-brand-50/60 px-4 py-2"
           data-testid="split-bulk-bar"
         >
-          <span className="text-xs font-medium text-gray-700">
+          <span className="text-xs font-medium text-fg-muted">
             {selectedHere.length} selected · {formatMYR(selectedTotal)}
           </span>
           {/* Agree in bulk, but never reject in bulk: rejecting is a message to
@@ -422,7 +422,7 @@ export function SplitsSection({
       )}
 
       {loading ? (
-        <p className="px-4 py-6 text-center text-xs text-gray-400">Loading…</p>
+        <p className="px-4 py-6 text-center text-xs text-fg-faint">Loading…</p>
       ) : (
         <SplitList
           claims={visible}
@@ -442,7 +442,7 @@ export function SplitsSection({
         title="Reject this split?"
       >
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-fg-muted">
             {rejecting && (
               <>
                 {formatMYR(rejecting.outstanding)} from {rejecting.ownerUsername} for{' '}
@@ -450,12 +450,12 @@ export function SplitsSection({
               </>
             )}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-fg-subtle">
             No money moves. The whole amount goes back to {rejecting?.ownerUsername}, who can
             split it again with a different figure.
           </p>
           <div>
-            <label htmlFor="reject-reason" className="mb-1 block text-xs font-medium text-gray-700">
+            <label htmlFor="reject-reason" className="mb-1 block text-xs font-medium text-fg-muted">
               Reason (optional)
             </label>
             <textarea
@@ -465,7 +465,7 @@ export function SplitsSection({
               rows={2}
               maxLength={500}
               placeholder="e.g. this one was mine alone"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -491,7 +491,7 @@ export function SplitsSection({
         title="Cancel this split?"
       >
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-fg-muted">
             {cancelling && (
               <>
                 {formatMYR(cancelling.outstanding)} you claimed from{' '}
@@ -500,7 +500,7 @@ export function SplitsSection({
               </>
             )}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-fg-subtle">
             No money moves. The claim disappears from {cancelling?.debtorUsername}&rsquo;s review
             queue and the transaction goes back to costing you the full amount. You can split it
             again at any time.

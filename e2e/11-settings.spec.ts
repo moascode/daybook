@@ -37,10 +37,11 @@ test('settings page heading is visible', async () => {
   await expect(page.getByRole('heading', { name: 'Settings', level: 2 })).toBeVisible()
 })
 
-test('Theme selector offers Light and System (dark theme not yet shipped)', async () => {
-  const select = page.getByLabel('Theme')
+test('Theme selector offers Light, Dark and System', async () => {
+  const select = page.getByLabel('Theme', { exact: true })
   await expect(select).toBeVisible()
   await expect(select.locator('option[value="light"]')).toBeAttached()
+  await expect(select.locator('option[value="dark"]')).toBeAttached()
   await expect(select.locator('option[value="system"]')).toBeAttached()
 })
 
@@ -52,10 +53,10 @@ test('currency is shown as MYR (single-currency app, no picker)', async () => {
 
 test('changing the theme persists immediately after reload (no Save button)', async () => {
   // U-06: theme is applied and saved on change — there is no batch "Save" step.
-  await page.getByLabel('Theme').selectOption('system')
+  await page.getByLabel('Theme', { exact: true }).selectOption('system')
   await page.reload()
   await waitForApp(page)
-  await expect(page.getByLabel('Theme')).toHaveValue('system', { timeout: 8000 })
+  await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('system', { timeout: 8000 })
 })
 
 // ── Sidebar navigation from settings ──────────────────────────────────

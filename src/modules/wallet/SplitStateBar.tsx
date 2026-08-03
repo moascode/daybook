@@ -151,7 +151,7 @@ export function SplitStateBar({ claims, personOf, onSelectState, testId }: Split
                     backgroundColor: seg.color,
                     color: inkOn(seg.color),
                   }}
-                  className="flex items-center justify-center whitespace-nowrap px-2 text-[11px] font-medium first:rounded-l-md last:rounded-r-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-1"
+                  className="flex items-center justify-center whitespace-nowrap px-2 text-[11px] font-medium first:rounded-l-md last:rounded-r-md focus:outline-none focus-visible:ring-2 focus-visible:ring-fg focus-visible:ring-offset-1"
                   onMouseEnter={() => setHovered(i)}
                   onFocus={() => setHovered(i)}
                   onBlur={() => setHovered(null)}
@@ -166,7 +166,7 @@ export function SplitStateBar({ claims, personOf, onSelectState, testId }: Split
 
           {hovered !== null && segments[hovered] && (
             <div
-              className="pointer-events-none absolute -top-1 z-10 w-max max-w-full -translate-y-full rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-lg"
+              className="pointer-events-none absolute -top-1 z-10 w-max max-w-full -translate-y-full rounded-lg bg-surface-inverted px-3 py-2 text-xs text-fg-inverted shadow-lg"
               style={{ left: `${tooltipLeft(segments, hovered, segmentTotal)}%` }}
               data-testid="split-state-tooltip"
               aria-hidden="true"
@@ -175,7 +175,7 @@ export function SplitStateBar({ claims, personOf, onSelectState, testId }: Split
                 {segments[hovered].label} · {formatMYR(segments[hovered].amount)}
               </p>
               {segments[hovered].byPerson.map((p) => (
-                <p key={p.name} className="mt-0.5 text-gray-300">
+                <p key={p.name} className="mt-0.5 text-fg-faint">
                   {p.name} {formatMYR(p.amount)}
                 </p>
               ))}
@@ -190,21 +190,21 @@ export function SplitStateBar({ claims, personOf, onSelectState, testId }: Split
       {segments.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1" data-testid="split-state-legend">
           {segments.map((seg) => (
-            <li key={seg.state} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+            <li key={seg.state} className="flex items-center gap-1.5 text-[11px] text-fg-muted">
               <span
                 className="h-2 w-2 shrink-0 rounded-sm"
                 style={{ backgroundColor: seg.color }}
                 aria-hidden="true"
               />
               {seg.label}
-              <span className="font-medium tabular-nums text-gray-900">{formatMYR(seg.amount)}</span>
+              <span className="font-medium tabular-nums text-fg">{formatMYR(seg.amount)}</span>
             </li>
           ))}
         </ul>
       )}
 
       {settled > 0.005 && (
-        <p className="mt-1.5 text-[11px] text-gray-400" data-testid="split-state-settled">
+        <p className="mt-1.5 text-[11px] text-fg-faint" data-testid="split-state-settled">
           {formatMYR(settled)} already settled
         </p>
       )}

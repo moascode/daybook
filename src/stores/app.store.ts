@@ -1,4 +1,10 @@
 import { create } from 'zustand'
+import {
+  type ResolvedTheme,
+  type ThemePreference,
+  resolveTheme,
+  storedThemePreference,
+} from '@/lib/theme'
 
 export interface AuthUser {
   id: string
@@ -6,7 +12,13 @@ export interface AuthUser {
 }
 
 interface AppState {
-  theme: 'light' | 'dark' | 'system'
+  theme: ThemePreference
+  /**
+   * What is actually on screen, with 'system' already resolved. Components that
+   * need to branch on the theme in JS rather than CSS — the Recharts axes and
+   * grids, which take colours as props — read this, not `theme`.
+   */
+  resolvedTheme: ResolvedTheme
   sidebarOpen: boolean
   claudePanelOpen: boolean
   dbReady: boolean
@@ -15,7 +27,8 @@ interface AppState {
   // 'onboarding_dismissed_*' settings key. Loaded once at boot from /settings.
   onboardingDismissed: Record<string, boolean>
 
-  setTheme: (theme: 'light' | 'dark' | 'system') => void
+  setTheme: (theme: ThemePreference) => void
+  setResolvedTheme: (resolved: ResolvedTheme) => void
   toggleSidebar: () => void
   setClaudePanelOpen: (open: boolean) => void
   setDbReady: (ready: boolean) => void
@@ -24,8 +37,15 @@ interface AppState {
   markOnboardingDismissed: (key: string) => void
 }
 
+// Seeded from the localStorage mirror so the store agrees with the class the
+// pre-paint script already put on <html>. The server's value still wins once
+// /settings resolves; this only avoids a light->dark jump on the way there.
+// Default stays 'light' when nothing has been saved.
+const initialTheme: ThemePreference = storedThemePreference() ?? 'light'
+
 export const useAppStore = create<AppState>((set) => ({
-  theme: 'light',
+  theme: initialTheme,
+  resolvedTheme: resolveTheme(initialTheme),
   sidebarOpen: true,
   claudePanelOpen: false,
   dbReady: false,
@@ -33,6 +53,7 @@ export const useAppStore = create<AppState>((set) => ({
   onboardingDismissed: {},
 
   setTheme: (theme) => set({ theme }),
+  setResolvedTheme: (resolved) => set({ resolvedTheme: resolved }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setClaudePanelOpen: (open) => set({ claudePanelOpen: open }),
   setDbReady: (ready) => set({ dbReady: ready }),

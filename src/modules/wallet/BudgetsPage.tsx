@@ -92,8 +92,8 @@ export function BudgetsPage() {
       {/* Header */}
       <div className="mb-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Budgets</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Monthly spend limits per category</p>
+          <h2 className="text-base font-semibold text-fg">Budgets</h2>
+          <p className="text-xs text-fg-subtle mt-0.5">Monthly spend limits per category</p>
         </div>
         <Button
           size="sm"
@@ -130,12 +130,12 @@ export function BudgetsPage() {
               <div
                 key={budget.id}
                 data-testid="budget-row"
-                className="rounded-xl border border-gray-200 bg-white p-4"
+                className="rounded-xl border border-line bg-surface p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-gray-900 text-sm">
+                      <span className="font-medium text-fg text-sm">
                         {category?.name ?? 'Unknown'}
                       </span>
                       {isOver && (
@@ -145,19 +145,19 @@ export function BudgetsPage() {
                         </Badge>
                       )}
                     </div>
-                    <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
+                    <div className="flex items-center justify-between text-xs text-fg-subtle mb-2">
                       <span>
                         {formatMYR(spent)} spent of{' '}
-                        <span className="font-medium text-gray-700">{formatMYR(budget.limitAmount)}</span>
+                        <span className="font-medium text-fg-muted">{formatMYR(budget.limitAmount)}</span>
                       </span>
-                      <span className={cn(isOver ? 'text-red-600 font-medium' : 'text-gray-400')}>
+                      <span className={cn(isOver ? 'text-red-600 font-medium' : 'text-fg-faint')}>
                         {Math.round(pct)}%
                       </span>
                     </div>
                     {/* Progress bar */}
                     <div
                       data-testid="budget-progress"
-                      className="h-2 w-full overflow-hidden rounded-full bg-gray-100"
+                      className="h-2 w-full overflow-hidden rounded-full bg-surface-hover"
                     >
                       <div
                         className={cn(
@@ -182,7 +182,7 @@ export function BudgetsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-gray-500 hover:text-red-600"
+                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-fg-subtle hover:text-red-600"
                       onClick={() => crud.openDelete(budget.id)}
                       aria-label={`Delete ${category?.name ?? 'budget'} budget`}
                     >
@@ -222,8 +222,8 @@ export function BudgetsPage() {
             value={form.limitAmount}
             onChange={(e) => setForm((f) => ({ ...f, limitAmount: e.target.value }))}
           />
-          <p className="-mt-1 text-xs text-gray-500">
-            Budgets reset <span className="font-medium text-gray-700">monthly</span>.
+          <p className="-mt-1 text-xs text-fg-subtle">
+            Budgets reset <span className="font-medium text-fg-muted">monthly</span>.
           </p>
           {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
           <div className="flex justify-end gap-2 pt-1">

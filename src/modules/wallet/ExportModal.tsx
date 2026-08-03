@@ -70,22 +70,22 @@ export function ExportModal({
     >
       <div className="space-y-3">
         {transactions.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">
+          <p className="py-6 text-center text-sm text-fg-faint">
             No transactions match the current filters.
           </p>
         ) : (
           <>
             {/* Header row with select-all */}
-            <div className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+            <div className="flex items-center gap-3 rounded-lg border border-line-subtle bg-surface-sunken px-3 py-2">
               <input
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleAll}
-                className="h-4 w-4 rounded border-gray-300 text-brand-600 cursor-pointer"
+                className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
                 aria-label="Select all transactions for export"
                 data-testid="export-select-all"
               />
-              <span className="flex-1 text-sm font-medium text-gray-700">
+              <span className="flex-1 text-sm font-medium text-fg-muted">
                 {selectedIds.size} of {transactions.length} selected
               </span>
             </div>
@@ -93,7 +93,7 @@ export function ExportModal({
             {/* Transaction list */}
             <div
               data-testid="export-transaction-list"
-              className="max-h-72 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100"
+              className="max-h-72 overflow-y-auto rounded-lg border border-line divide-y divide-line-subtle"
             >
               {transactions.map((t) => {
                 const account = accounts.find((a) => a.id === t.accountId)
@@ -105,28 +105,28 @@ export function ExportModal({
                     data-testid="export-transaction-row"
                     className={cn(
                       'flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors',
-                      checked ? 'bg-brand-50' : 'hover:bg-gray-50',
+                      checked ? 'bg-brand-50' : 'hover:bg-surface-sunken',
                     )}
                   >
                     <input
                       type="checkbox"
                       checked={checked}
                       onChange={() => toggle(t.id)}
-                      className="h-4 w-4 flex-shrink-0 rounded border-gray-300 text-brand-600 cursor-pointer"
+                      className="h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
                       aria-label={`Select ${t.merchant || t.description || 'transaction'}`}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-gray-900">
+                        <span className="truncate text-sm font-medium text-fg">
                           {t.merchant || t.description || 'Untitled'}
                         </span>
                         {category && (
-                          <span className="flex-shrink-0 text-xs text-gray-400">
+                          <span className="flex-shrink-0 text-xs text-fg-faint">
                             {category.name}
                           </span>
                         )}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-400">
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-faint">
                         {account && <span>{account.name}</span>}
                         <span>{format(parseISO(t.date), 'dd MMM yyyy')}</span>
                       </div>

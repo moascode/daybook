@@ -92,7 +92,7 @@ export function BulletTree({
         {/* Vertical guide line for nested items */}
         {depth > 0 && (
           <div
-            className="pointer-events-none absolute top-1 bottom-2 w-px bg-gray-200"
+            className="pointer-events-none absolute top-1 bottom-2 w-px bg-line"
             style={{ left: guideLeft - 22 }}  /* shift left to align with parent chevron */
             aria-hidden
           />

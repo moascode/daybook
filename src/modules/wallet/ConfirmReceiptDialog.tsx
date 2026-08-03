@@ -64,7 +64,7 @@ export function ConfirmReceiptDialog({
     <Modal open={!!settlement} onOpenChange={(next) => { if (!next) onClose() }} title="Confirm payment received">
       {settlement && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-fg-muted">
             {settlement.amount > 0.005 ? (
               <>
                 <span className="font-semibold">{settlement.fromUsername}</span> recorded a payment of{' '}
@@ -81,13 +81,13 @@ export function ConfirmReceiptDialog({
               BOTH directions, and half of them are yours; agreeing to that
               without being told is not agreeing. */}
           {settlement.offsetTotal > 0.005 && (
-            <p className="text-xs text-gray-600" data-testid="confirm-netting">
+            <p className="text-xs text-fg-muted" data-testid="confirm-netting">
               It also nets off <span className="font-medium">{formatMYR(settlement.offsetTotal)}</span>{' '}
               each way — what you owed {settlement.fromUsername} cancels the same amount they owed
               you, so no cash moves for that part.
             </p>
           )}
-          {settlement.note && <p className="text-xs text-gray-500">Note: {settlement.note}</p>}
+          {settlement.note && <p className="text-xs text-fg-subtle">Note: {settlement.note}</p>}
 
           {!rejecting ? (
             <>
@@ -101,14 +101,14 @@ export function ConfirmReceiptDialog({
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
               />
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-fg-faint">
                 Confirming books the money into that account and clears the balance. It is recorded
                 as a repayment, so it does not count as income.
               </p>
             </>
           ) : (
             <div>
-              <label htmlFor="confirm-reject-reason" className="mb-1 block text-xs font-medium text-gray-700">
+              <label htmlFor="confirm-reject-reason" className="mb-1 block text-xs font-medium text-fg-muted">
                 Reason (optional)
               </label>
               <textarea
@@ -118,9 +118,9 @@ export function ConfirmReceiptDialog({
                 rows={2}
                 maxLength={500}
                 placeholder="e.g. nothing has arrived yet"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
+                className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-fg-faint">
                 The debt goes back to outstanding and {settlement.fromUsername}&rsquo;s payment entry
                 is removed.
               </p>

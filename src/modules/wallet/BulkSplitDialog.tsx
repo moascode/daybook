@@ -162,14 +162,14 @@ export function BulkSplitDialog({
     >
       <div className="space-y-4">
         {loadingMembers ? (
-          <p className="text-sm text-gray-400 text-center py-2">Loading members…</p>
+          <p className="text-sm text-fg-faint text-center py-2">Loading members…</p>
         ) : groupMembers.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-2">
+          <p className="text-sm text-fg-subtle text-center py-2">
             <Users className="h-4 w-4 inline mr-1" />
             No group members yet. Invite people in Settings → Sharing first.
           </p>
         ) : cards.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-2">No transactions to split</p>
+          <p className="text-sm text-fg-subtle text-center py-2">No transactions to split</p>
         ) : (
           <div className="space-y-4 max-h-96 overflow-y-auto">
             {cards.map((c) => {
@@ -179,10 +179,10 @@ export function BulkSplitDialog({
 
               return (
                 <div key={c.transaction.id} className="border rounded-lg p-4 space-y-3" data-testid="bulk-split-card">
-                  <div className="rounded-lg bg-gray-50 px-4 py-3">
-                    <p className="font-semibold text-gray-900">{c.transaction.merchant || 'Transaction'}</p>
-                    <p className="text-xs text-gray-500">{format(parseISO(c.transaction.date), 'dd MMM yyyy')}</p>
-                    <p className="text-lg font-bold text-gray-900">{formatMYR(amount)}</p>
+                  <div className="rounded-lg bg-surface-sunken px-4 py-3">
+                    <p className="font-semibold text-fg">{c.transaction.merchant || 'Transaction'}</p>
+                    <p className="text-xs text-fg-subtle">{format(parseISO(c.transaction.date), 'dd MMM yyyy')}</p>
+                    <p className="text-lg font-bold text-fg">{formatMYR(amount)}</p>
                   </div>
 
                   {/* §2.2: existing split lines + overwrite warning */}
@@ -190,7 +190,7 @@ export function BulkSplitDialog({
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1" data-testid="existing-splits">
                       <p className="text-xs font-medium text-amber-800">Currently split</p>
                       {c.existingShares.map((s) => (
-                        <div key={s.id} className="flex items-center justify-between text-sm text-gray-700">
+                        <div key={s.id} className="flex items-center justify-between text-sm text-fg-muted">
                           <span>{s.userId === currentUserId ? 'You' : s.username}</span>
                           <span>
                             {formatMYR(s.shareAmount)}
@@ -203,10 +203,10 @@ export function BulkSplitDialog({
                   )}
 
                   <div>
-                    <p className="text-xs font-medium text-gray-700 mb-2">Split with</p>
+                    <p className="text-xs font-medium text-fg-muted mb-2">Split with</p>
                     <div className="flex flex-wrap gap-2">
                       {groupMembers.map((m) => (
-                        <label key={m.userId} className="flex items-center gap-1.5 text-sm text-gray-700">
+                        <label key={m.userId} className="flex items-center gap-1.5 text-sm text-fg-muted">
                           <input
                             type="checkbox"
                             className="rounded"
@@ -222,7 +222,7 @@ export function BulkSplitDialog({
 
                   {c.recipientIds.length > 0 && (
                     <div>
-                      <p className="text-xs font-medium text-gray-700 mb-2">How to split</p>
+                      <p className="text-xs font-medium text-fg-muted mb-2">How to split</p>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant={c.mode === 'none' ? 'primary' : 'secondary'}
@@ -254,7 +254,7 @@ export function BulkSplitDialog({
                       {c.mode === 'equal' && (
                         <div className="mt-3 space-y-1">
                           {participants.map((userId, i) => (
-                            <div key={userId} className="flex items-center justify-between text-sm text-gray-700" data-testid="equal-split-row">
+                            <div key={userId} className="flex items-center justify-between text-sm text-fg-muted" data-testid="equal-split-row">
                               <span>{participantName(userId)}</span>
                               <span>{formatMYR(equalAmounts[i])}</span>
                             </div>
@@ -266,7 +266,7 @@ export function BulkSplitDialog({
                         <div className="mt-3 space-y-2">
                           {participants.map((userId) => (
                             <div key={userId} className="flex items-center gap-3">
-                              <span className="flex-1 text-sm text-gray-700">{participantName(userId)}</span>
+                              <span className="flex-1 text-sm text-fg-muted">{participantName(userId)}</span>
                               <Input
                                 type="number"
                                 step="0.01"
@@ -282,7 +282,7 @@ export function BulkSplitDialog({
                               />
                             </div>
                           ))}
-                          <div className="text-right text-xs text-gray-500">
+                          <div className="text-right text-xs text-fg-subtle">
                             Total: {formatMYR(participants.reduce((acc, id) => acc + (parseFloat(c.customAmounts[id]) || 0), 0))} / {formatMYR(amount)}
                           </div>
                         </div>

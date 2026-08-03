@@ -36,7 +36,7 @@ export function BulletNote({ taskId, note, depth, onSave }: BulletNoteProps) {
         onChange={(e) => setValue(e.target.value)}
         onBlur={handleBlur}
         placeholder="Add a note..."
-        className="min-h-[60px] bg-gray-50 text-xs text-gray-600 border-gray-200 focus:bg-white"
+        className="min-h-[60px] bg-surface-sunken text-xs text-fg-muted border-line focus:bg-surface"
         onKeyDown={(e) => {
           // Prevent Enter from bubbling up to create a new task
           e.stopPropagation()

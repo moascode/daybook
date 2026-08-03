@@ -16,7 +16,7 @@ export function PendingClaimsBadge() {
     <span
       data-testid="pending-claims-badge"
       aria-label={`${count} split${count === 1 ? '' : 's'} to review`}
-      className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none"
+      className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-fg-on-accent leading-none"
     >
       {count > 9 ? '9+' : count}
     </span>

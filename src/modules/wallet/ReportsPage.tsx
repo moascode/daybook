@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
+import { useChartTheme } from '@/hooks/useChartTheme'
 import { format, parseISO } from 'date-fns'
 import {
   BarChart,
@@ -52,6 +53,7 @@ function buildYoYData(transactions: Transaction[]) {
 }
 
 export function ReportsPage() {
+  const chart = useChartTheme()
   const { loadTransactions } = useWallet()
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([])
   const [customFrom, setCustomFrom] = useState('')
@@ -94,18 +96,18 @@ export function ReportsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="mb-5 flex items-center gap-2">
-        <BarChart2 className="h-5 w-5 text-gray-400" />
-        <h2 className="text-base font-semibold text-gray-900">Reports</h2>
+        <BarChart2 className="h-5 w-5 text-fg-faint" />
+        <h2 className="text-base font-semibold text-fg">Reports</h2>
       </div>
 
       {/* Year-on-year */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 mb-6">
-        <h3 className="mb-1 text-sm font-semibold text-gray-900">Year-on-year comparison</h3>
-        <p className="mb-4 text-xs text-gray-500">{lastYear} vs {thisYear}</p>
+      <div className="rounded-xl border border-line bg-surface p-5 mb-6">
+        <h3 className="mb-1 text-sm font-semibold text-fg">Year-on-year comparison</h3>
+        <p className="mb-4 text-xs text-fg-subtle">{lastYear} vs {thisYear}</p>
         <div data-testid="yoy-chart">
-          <div className="mb-2 flex gap-4 text-xs text-gray-500">
-            <span className="font-medium text-gray-700">{lastYear}</span>
-            <span className="font-medium text-gray-700">{thisYear}</span>
+          <div className="mb-2 flex gap-4 text-xs text-fg-subtle">
+            <span className="font-medium text-fg-muted">{lastYear}</span>
+            <span className="font-medium text-fg-muted">{thisYear}</span>
           </div>
           <div
             role="img"
@@ -113,10 +115,10 @@ export function ReportsPage() {
           >
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={yoyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" fontSize={11} tickLine={false} />
-              <YAxis fontSize={11} tickLine={false} tickFormatter={formatAxisMYR} />
-              <Tooltip formatter={(value: number) => formatMYR(value)} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} />
+              <XAxis stroke={chart.axis} tick={{ fill: chart.axis }} dataKey="month" fontSize={11} tickLine={false} />
+              <YAxis stroke={chart.axis} tick={{ fill: chart.axis }} fontSize={11} tickLine={false} tickFormatter={formatAxisMYR} />
+              <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle} formatter={(value: number) => formatMYR(value)} />
               <Legend />
               <Bar dataKey={`${lastYear} expense`} fill="#fca5a5" radius={[3, 3, 0, 0]} />
               <Bar dataKey={`${thisYear} expense`} fill="#ef4444" radius={[3, 3, 0, 0]} />
@@ -129,8 +131,8 @@ export function ReportsPage() {
       </div>
 
       {/* Custom date range */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5" data-testid="custom-date-range">
-        <h3 className="mb-4 text-sm font-semibold text-gray-900">Custom date range</h3>
+      <div className="rounded-xl border border-line bg-surface p-5" data-testid="custom-date-range">
+        <h3 className="mb-4 text-sm font-semibold text-fg">Custom date range</h3>
         <div className="flex flex-wrap items-end gap-3">
           {/* Shared date-range widgets (§6.4); the range only loads on Apply. */}
           <DateRangeControl
@@ -146,25 +148,25 @@ export function ReportsPage() {
 
         {hasRangeData && (
           <div className="mt-5">
-            <p className="text-xs text-gray-500 mb-3">
+            <p className="text-xs text-fg-subtle mb-3">
               {format(parseISO(appliedFrom), 'dd MMM yyyy')} – {format(parseISO(appliedTo), 'dd MMM yyyy')}
               {' '}
-              <span className="font-medium text-gray-700">
+              <span className="font-medium text-fg-muted">
                 ({format(parseISO(appliedFrom), 'MMM yyyy')} – {format(parseISO(appliedTo), 'MMM yyyy')})
               </span>
             </p>
 
             {rangeTransactions.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No transactions in this period</p>
+              <p className="text-sm text-fg-faint text-center py-4">No transactions in this period</p>
             ) : (
-              <div className="divide-y divide-gray-100 max-h-64 overflow-y-auto rounded-lg border border-gray-100">
+              <div className="divide-y divide-line-subtle max-h-64 overflow-y-auto rounded-lg border border-line-subtle">
                 {rangeTransactions.map((t) => (
                   <div key={t.id} className="flex items-center justify-between px-3 py-2 text-sm">
                     <div>
-                      <span className="font-medium text-gray-800">{t.merchant || '(no merchant)'}</span>
-                      <span className="ml-2 text-xs text-gray-400">{t.date}</span>
+                      <span className="font-medium text-fg">{t.merchant || '(no merchant)'}</span>
+                      <span className="ml-2 text-xs text-fg-faint">{t.date}</span>
                     </div>
-                    <span className={t.type === 'income' ? 'text-positive-600 font-medium' : t.type === 'transfer' ? 'text-gray-500 font-medium' : 'text-red-600 font-medium'}>
+                    <span className={t.type === 'income' ? 'text-positive-600 font-medium' : t.type === 'transfer' ? 'text-fg-subtle font-medium' : 'text-red-600 font-medium'}>
                       {t.type === 'income' ? '+' : t.type === 'transfer' ? '↔' : '-'}{formatMYR(t.amount)}
                     </span>
                   </div>

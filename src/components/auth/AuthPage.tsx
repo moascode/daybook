@@ -64,11 +64,11 @@ export function AuthPage() {
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+    <div className="flex h-screen items-center justify-center bg-surface-sunken px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-8 shadow-sm">
         <div className="mb-6 text-center">
-          <h1 className="text-xl font-bold text-gray-900">Daybook</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-xl font-bold text-fg">Daybook</h1>
+          <p className="mt-1 text-sm text-fg-subtle">
             {mode === 'login' ? 'Sign in to your account' : 'Create your account'}
           </p>
         </div>
@@ -91,7 +91,7 @@ export function AuthPage() {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-[30px] text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-[30px] text-fg-faint hover:text-fg-muted"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -118,7 +118,7 @@ export function AuthPage() {
           </Button>
         </form>
 
-        <p className="mt-5 text-center text-sm text-gray-500">
+        <p className="mt-5 text-center text-sm text-fg-subtle">
           {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
           <button
             type="button"

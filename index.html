@@ -9,6 +9,28 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Daybook</title>
+    <script>
+      // Pre-paint theme. The real preference lives on the server and is not
+      // readable until after the session check and /settings, so a dark-themed
+      // app would flash full white on every load. src/lib/theme.ts mirrors the
+      // preference here; this replays it before the first paint.
+      // Keep the storage key and the class in step with src/lib/theme.ts.
+      (function () {
+        try {
+          var pref = localStorage.getItem('daybook.theme') || 'light'
+          var dark =
+            pref === 'dark' ||
+            (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) {
+            document.documentElement.classList.add('dark')
+            var meta = document.querySelector('meta[name="theme-color"]')
+            if (meta) meta.setAttribute('content', '#0d1117')
+          }
+        } catch (e) {
+          // Storage unavailable — fall through to the light default.
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
