@@ -1745,17 +1745,56 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      IN FLIGHT: PR #104, dark mode (branch
-                claude/dark-mode-r2ihp9). No migration, no server or Worker
-                change — a client-only diff, but a WIDE one (72 files). The
-                useful review is the token layer
-                (scripts/gen-theme-tokens.mjs + tailwind.config.js), the
-                pre-paint path (src/lib/theme.ts + the inline script in
-                index.html), and a click through both themes; the per-file
-                churn is a codemod. Deploy is `npm run deploy:worker`
-                alone — there is no D1 migration to apply.
-                PR #95 merged; #96/#97/#98 merged and released as v2.2.0 on
-                2026-08-02.
+Next task:      *** MERGED BUT NOT DEPLOYED: the dashboard rebuild (PR #106). ***
+                main is AHEAD of production. Deploy is ONE step —
+                `npm run deploy:worker`, no D1 migration, client-only diff —
+                and it could not be run from the session that merged it: the
+                container had no Cloudflare credentials (no
+                CLOUDFLARE_API_TOKEN, no OAuth config, and `wrangler login`
+                is interactive). Same blocker as release.yml. Anyone with an
+                authenticated machine can ship it in one command.
+                PR #104 (dark mode) merged 2026-08-03; #106 stacked on it and
+                was rebased onto main after.
+
+                What #106 changed: /wallet/dashboard is now a COMPARISON
+                view — every figure sits next to its baseline. Aggregation
+                moved into one pure module (modules/wallet/dashboard/
+                insights.ts) with the panels as thin components.
+                Two real bugs fixed with it:
+                • The charts and the summary tiles disagreed about splits.
+                  Tiles used countableAmount; the cash-flow chart, pie,
+                  account chart and merchant list used raw t.amount, so a
+                  split RM100 expense read RM50 in a tile and RM100 in the
+                  chart directly beneath it. This ALSO closes the open
+                  question below about TransactionList's day headers —
+                  everything on the dashboard now goes through one module
+                  that only ever uses the effective figure. The day headers
+                  themselves are still unaudited.
+                • Uncategorised spending was skipped by the pie, so it never
+                  summed to the expense total and the one bucket worth
+                  acting on was the only invisible one. Now a real row.
+                Three traps worth remembering:
+                • committedSplit needs the TRAILING months to decide what
+                  recurs, not just the period's rows — handed only the
+                  period, every merchant appears in exactly one month and
+                  nothing is ever committed. Hence its separate
+                  historyTxns argument.
+                • DO NOT write dark: variants. The #104 token layer mirrors
+                  accent ramps (50<->950), so bg-amber-50 ALREADY resolves
+                  to a dark tint; pairing it with dark:bg-amber-950 inverts
+                  a second time and lands on near-white. Eight of these
+                  shipped into review before being caught by looking at the
+                  rendered page — the type checker cannot see it.
+                • A linear run-rate is meaningless in the first days of a
+                  month: on day 4 it turned RM2,940 into a RM22,785
+                  projection and its y-range flattened the real line into
+                  the axis. Withheld below MIN_PROJECTION_DAYS (7).
+                Spending by account was DROPPED (a bookkeeping fact, not a
+                behaviour) and the pie replaced by bars. The proposal's
+                household/shared summary panel was deliberately NOT built —
+                it needs group-balance data the dashboard does not otherwise
+                load, and the Shared nav badge already carries it.
+
                 Worth doing next, in rough order of value:
                 • Rate limiting (blocker 4.3) — the URL is public and this
                   is the only open risk on a live money app.
@@ -1763,10 +1802,11 @@ Next task:      IN FLIGHT: PR #104, dark mode (branch
                   defaults to 0 and one-directional debt takes the old
                   code path exactly, so nothing changes until you and
                   Tumpa genuinely owe each other both ways.
-                • The day-header totals in TransactionList.tsx were NOT
-                  audited when the summary tiles moved to countableAmount
-                  (#98) — check whether they double-count splits the same
-                  way the tiles did.
+                • The day-header totals in TransactionList.tsx are STILL
+                  unaudited — #106 fixed the same class of bug across the
+                  whole dashboard but did not touch the transaction list.
+                  Check whether they double-count splits the way the
+                  dashboard charts did.
                 • manifest.json background_color is still #ffffff, so the
                   PWA splash is white for dark-theme users (from #104).
                 Deferred from the plan, needing no sign-off: §4.4 the
