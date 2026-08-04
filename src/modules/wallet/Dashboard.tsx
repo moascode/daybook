@@ -13,6 +13,7 @@ import type { Transaction } from '@/types/wallet.types'
 
 import {
   BASELINE_MONTHS,
+  MIN_PROJECTION_DAYS,
   TREND_MONTHS,
   baselineCurve,
   categoryDeltas,
@@ -169,9 +170,10 @@ export function Dashboard() {
       baseline,
       usual,
       monthAverage: usualMonthTotal(transactions, period.baselineMonths),
-      projected: period.inProgress
-        ? projectMonthEnd(summary.expense, period.day, period.length)
-        : undefined,
+      projected:
+        period.inProgress && period.day >= MIN_PROJECTION_DAYS
+          ? projectMonthEnd(summary.expense, period.day, period.length)
+          : undefined,
     }
   }, [transactions, period, summary.expense])
 

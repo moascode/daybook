@@ -110,8 +110,18 @@ test('hero compares the spend against the usual, not against nothing', async () 
   await expect(delta).toContainText(/RM\s*200\.00\s*more than usual/i)
 })
 
-test('an in-progress month projects where it lands', async () => {
-  await expect(page.getByTestId('pace-projection')).toContainText(/closes at about/i)
+test('an in-progress month projects where it lands, once enough of it has passed', async () => {
+  // The projection is withheld for the first week: a run-rate off three days
+  // describes one purchase, not the month. Which branch shows depends on the
+  // day the suite runs, so assert the correct one rather than pinning a date.
+  const day = Number(businessToday().slice(8, 10))
+  if (day >= 7) {
+    await expect(page.getByTestId('pace-projection')).toContainText(/closes at about/i)
+    await expect(page.getByTestId('pace-too-early')).toHaveCount(0)
+  } else {
+    await expect(page.getByTestId('pace-too-early')).toContainText(/too early/i)
+    await expect(page.getByTestId('pace-projection')).toHaveCount(0)
+  }
 })
 
 test('pace chart exposes an accessible summary', async () => {

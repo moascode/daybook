@@ -162,9 +162,22 @@ export function baselineCurve(txns: Transaction[], months: string[], length: num
 }
 
 /**
+ * Days that must have elapsed before a month-end projection is shown at all.
+ *
+ * The projection is a flat linear run-rate, and early in the month that is
+ * dominated by whichever day happened to contain a big purchase: RM 2,940 over
+ * four days extrapolates to RM 22,785, which is not a forecast, it is one
+ * grocery run multiplied by eight. Below this threshold the dashboard shows the
+ * comparison and says nothing about the total — an honest silence beats a
+ * confident wrong number, and it also stops the projection's y-range from
+ * flattening the actual spend line into the axis.
+ */
+export const MIN_PROJECTION_DAYS = 7
+
+/**
  * Where the month lands if the rest of it looks like the part already spent.
- * A flat linear extrapolation, deliberately: anything cleverer would imply a
- * confidence the data does not support at day 3.
+ * Deliberately a flat extrapolation — anything cleverer would imply a
+ * confidence the data does not support. Guard with MIN_PROJECTION_DAYS.
  */
 export function projectMonthEnd(spentToDate: number, day: number, length: number): number {
   if (day <= 0) return 0
