@@ -191,7 +191,11 @@ test('dashboard reflows without horizontal scroll at 390 px with chart data', as
 
   await page.goto('/wallet/dashboard')
   await waitForApp(page)
-  await expect(page.getByText('Cash Flow by Week')).toBeVisible()
+  // Wait for the dashboard to have actually rendered its data before measuring:
+  // the hero is the last thing to settle, and measuring an empty page would
+  // pass no matter how badly a populated one overflows.
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+  await expect(page.getByTestId('merchant-table')).toBeVisible()
 
   const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
   const clientWidth = await page.evaluate(() => document.documentElement.clientWidth)
