@@ -62,7 +62,7 @@ export function MerchantTable({ rows, trendMonths }: MerchantTableProps) {
                 <td className="py-2.5 pr-3">
                   <span className="font-medium capitalize text-fg">{row.merchant}</span>
                   {row.isNew ? (
-                    <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
                       new
                     </span>
                   ) : row.isRegular ? (

@@ -59,7 +59,7 @@ export function WeekRhythm({ averages, months }: WeekRhythmProps) {
       </div>
 
       {total > 0 && (
-        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg dark:bg-brand-950">
+        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
           <span className="font-semibold">
             Fri–Sun is {weekendShare.toFixed(0)}%
           </span>{' '}

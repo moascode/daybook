@@ -86,8 +86,8 @@ export function SpendPace({
                 data-testid="spend-delta"
                 className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                   over
-                    ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
-                    : 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                    ? 'bg-red-50 text-red-700'
+                    : 'bg-blue-50 text-blue-700'
                 }`}
               >
                 {over ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
