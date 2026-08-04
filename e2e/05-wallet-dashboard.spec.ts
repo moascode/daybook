@@ -1,151 +1,247 @@
 /**
  * Wallet — Dashboard end-to-end tests.
- * Verifies charts render, date range selector works, and key metrics are displayed.
- * Creates its own transactions so this file is fully self-contained.
+ *
+ * The dashboard is a COMPARISON view: every figure is shown against a baseline
+ * built from the preceding months. So the fixture seeds three prior months as
+ * well as the current one — without history there is nothing to compare and the
+ * comparison panels correctly hide themselves.
+ *
+ * Every seeded row is dated the 1st. The baseline cuts prior months to the same
+ * day of the month as today (comparing 4 days against 31 would be meaningless),
+ * so day-01 rows are the only ones guaranteed to count no matter which day the
+ * suite happens to run on.
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, accountCardFor, fillAccountForm, fillTransactionForm } from './helpers'
+import {
+  newAppPage,
+  accountCardFor,
+  fillAccountForm,
+  fillTransactionForm,
+  businessToday,
+} from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
 
+/** 'YYYY-MM' shifted by whole months from the current business month. */
+function monthOffset(offset: number): string {
+  const today = businessToday()
+  const d = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 1 + offset, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
-  // Create an account and add several transactions for the charts
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Dashboard Bank', type: 'bank' })
   await expect(accountCardFor(page, 'Dashboard Bank')).toBeVisible()
 
   await page.getByRole('link', { name: 'Transactions' }).click()
-  // Wait for the Add Transaction button to confirm accounts are loaded in the form
   await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
 
-  // Add a mix of income and expenses across multiple days this month
-  const thisMonth = new Date()
-  const yyyy = thisMonth.getFullYear()
-  const mm = String(thisMonth.getMonth() + 1).padStart(2, '0')
+  const thisMonth = monthOffset(0)
 
-  for (const [day, type, amount, merchant, category] of [
-    ['01', 'Income',  '6000', 'Salary Corp',      'Salary'],
-    ['03', 'Expense', '80',   'Grab Food',         'Food & Drink'],
-    ['05', 'Expense', '150',  'Petronas',          'Transport'],
-    ['07', 'Expense', '60',   'Netflix',           'Entertainment'],
-    ['10', 'Income',  '500',  'Freelance Client',  'Freelance'],
-    ['15', 'Expense', '200',  'Giant Mall',        'Shopping'],
+  // Baseline: the same two categories in each of the three prior months, so
+  // Food & Drink averages 30 and Transport averages 300.
+  const baseline: [string, string, string, string][] = []
+  for (const back of [1, 2, 3]) {
+    const m = monthOffset(-back)
+    baseline.push([`${m}-01`, '30', 'Kopitiam', 'Food & Drink'])
+    baseline.push([`${m}-01`, '300', 'Petronas', 'Transport'])
+  }
+
+  // Current month. Against the baseline above this makes Food & Drink and
+  // Shopping run OVER and Transport run UNDER, so both directions of the
+  // "what changed" chart are exercised. The last row is deliberately left
+  // uncategorised — it has to show up as its own row rather than vanishing.
+  const current: [string, string, string, string | undefined][] = [
+    [`${thisMonth}-01`, '80', 'Grab Food', 'Food & Drink'],
+    [`${thisMonth}-01`, '150', 'Petronas', 'Transport'],
+    [`${thisMonth}-01`, '60', 'Netflix', 'Entertainment'],
+    [`${thisMonth}-01`, '200', 'Giant Mall', 'Shopping'],
+    [`${thisMonth}-01`, '40', 'Mystery Shop', undefined],
+  ]
+
+  for (const [date, amount, merchant, category] of [...baseline, ...current]) {
+    await page.getByRole('button', { name: 'Add Transaction' }).click()
+    await fillTransactionForm(page, { type: 'Expense', date, amount, account: 'Dashboard Bank', merchant, category })
+  }
+
+  for (const [date, amount, merchant, category] of [
+    [`${thisMonth}-01`, '6000', 'Salary Corp', 'Salary'],
+    [`${thisMonth}-01`, '500', 'Freelance Client', 'Freelance'],
   ] as const) {
     await page.getByRole('button', { name: 'Add Transaction' }).click()
-    await fillTransactionForm(page, {
-      type,
-      date: `${yyyy}-${mm}-${day}`,
-      amount,
-      account: 'Dashboard Bank',
-      merchant,
-      category: type === 'Expense' || type === 'Income' ? category : undefined,
-    })
+    await fillTransactionForm(page, { type: 'Income', date, amount, account: 'Dashboard Bank', merchant, category })
   }
+
+  await page.getByRole('link', { name: 'Dashboard' }).click()
+  await expect(page).toHaveURL(/\/wallet\/dashboard$/)
 })
 
 test.afterAll(async () => {
   await page.context().close()
 })
 
-// ── Navigate to Dashboard ───────────────────────────────────────────────
-
-test('navigate to Dashboard tab', async () => {
-  await page.getByRole('link', { name: 'Dashboard' }).click()
-  await expect(page).toHaveURL(/\/wallet\/dashboard$/)
-  // Use the role-scoped nav link: once charts render, the account name
-  // "Dashboard Bank" makes a plain getByText('Dashboard') ambiguous.
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-})
-
-// ── Date range selector ─────────────────────────────────────────────────
+// ── Shell ───────────────────────────────────────────────────────────────
 
 test('shows "This Month" as the default date range', async () => {
   await expect(page.getByRole('button', { name: 'This Month' })).toBeVisible()
 })
 
-test('summary cards show Income, Expense, Net for this month', async () => {
-  // Income = 6000 + 500 = 6500, Expense = 80+150+60+200 = 490, Net = 6010
-  await expect(page.getByText(/6,500|6500/)).toBeVisible()
-  await expect(page.getByText(/490/)).toBeVisible()
+test('dashboard links to Reports for custom ranges (no inline custom picker)', async () => {
+  await expect(page.getByRole('button', { name: 'Custom' })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /Custom range.*history/i })).toBeVisible()
 })
 
-// ── Charts ──────────────────────────────────────────────────────────────
+// ── Hero: spend against its baseline ────────────────────────────────────
 
-test('cash flow bar chart is rendered as SVG', async () => {
-  // Recharts renders charts as <svg> inside a <div>
-  const svgCharts = page.locator('.recharts-wrapper svg')
-  await expect(svgCharts.first()).toBeVisible()
+test('hero shows the period spend', async () => {
+  // 80 + 150 + 60 + 200 + 40 = 530
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
 })
 
-test('chart container exists for cash flow (bar chart)', async () => {
-  // Look for Recharts bar chart container
-  await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible()
+test('hero compares the spend against the usual, not against nothing', async () => {
+  // Baseline per month is 30 + 300 = 330. 530 − 330 = 200 over.
+  const delta = page.getByTestId('spend-delta')
+  await expect(delta).toBeVisible()
+  await expect(delta).toContainText(/RM\s*200\.00\s*more than usual/i)
 })
 
-test('chart container exists for spending by category (pie chart)', async () => {
-  await expect(page.locator('.recharts-pie').first()).toBeVisible()
+test('an in-progress month projects where it lands, once enough of it has passed', async () => {
+  // The projection is withheld for the first week: a run-rate off three days
+  // describes one purchase, not the month. Which branch shows depends on the
+  // day the suite runs, so assert the correct one rather than pinning a date.
+  const day = Number(businessToday().slice(8, 10))
+  if (day >= 7) {
+    await expect(page.getByTestId('pace-projection')).toContainText(/closes at about/i)
+    await expect(page.getByTestId('pace-too-early')).toHaveCount(0)
+  } else {
+    await expect(page.getByTestId('pace-too-early')).toContainText(/too early/i)
+    await expect(page.getByTestId('pace-projection')).toHaveCount(0)
+  }
 })
 
-test('top merchants section lists merchants', async () => {
-  await expect(page.getByText('Top Merchants')).toBeVisible()
-  await expect(page.getByText('Petronas')).toBeVisible()
+test('pace chart exposes an accessible summary', async () => {
+  await expect(page.getByRole('img', { name: /cumulative spending through/i })).toBeVisible()
+})
+
+// ── Stat tiles ──────────────────────────────────────────────────────────
+
+test('stat tiles show income and net', async () => {
+  await expect(page.getByTestId('tile-income')).toContainText(/6,500\.00/)
+  // Net = 6,500 − 530 = 5,970, with an explicit + so the sign is not colour-only.
+  await expect(page.getByTestId('tile-net')).toContainText(/\+\s*RM\s*5,970\.00/)
+})
+
+test('committed and discretionary tiles split the spending', async () => {
+  // Petronas is the one merchant present in 3+ trailing months, so it is the
+  // committed half (150); everything else this month is discretionary (380).
+  await expect(page.getByTestId('tile-committed')).toContainText(/RM\s*150\.00/)
+  await expect(page.getByTestId('tile-discretionary')).toContainText(/RM\s*380\.00/)
+})
+
+// ── What changed ────────────────────────────────────────────────────────
+
+test('what changed ranks categories against their own baseline', async () => {
+  const panel = page.getByTestId('what-changed')
+  await expect(panel).toBeVisible()
+  // Shopping had no baseline at all → +200, the biggest mover, so it sorts first.
+  await expect(panel.locator('li').first()).toContainText('Shopping')
+  await expect(panel.locator('li').first()).toContainText(/▲ \+200\.00/)
+})
+
+test('what changed reports categories that fell as well as rose', async () => {
+  // Transport: 150 against a 300 baseline → 150 under.
+  const transport = page.getByTestId('what-changed').locator('li', { hasText: 'Transport' })
+  await expect(transport).toContainText(/▼ −150\.00/)
+})
+
+test('the movers sum to the headline difference', async () => {
+  // +200 Shopping, +60 Entertainment, +50 Food & Drink, +40 Uncategorised,
+  // −150 Transport = +200, which is exactly the headline difference. The panel
+  // states the total so the arithmetic is checkable against the hero.
+  await expect(page.getByText(/The bars add up to \+RM\s*200\.00/)).toBeVisible()
+})
+
+// ── Where it goes ───────────────────────────────────────────────────────
+
+test('category breakdown lists every category with a bar', async () => {
+  const rows = page.getByTestId('category-breakdown').locator('li')
+  await expect(rows.filter({ hasText: 'Shopping' })).toContainText(/RM\s*200\.00/)
+  await expect(rows.filter({ hasText: 'Transport' })).toContainText(/RM\s*150\.00/)
+})
+
+test('uncategorised spending is a visible row, not a silent omission', async () => {
+  // The old pie dropped these rows, so it never summed to the expense total.
+  const uncategorised = page
+    .getByTestId('category-breakdown')
+    .locator('li', { hasText: 'Uncategorised' })
+  await expect(uncategorised).toContainText(/RM\s*40\.00/)
+})
+
+test('the breakdown reconciles to the headline figure', async () => {
+  await expect(page.getByText(/Totals to\s*RM\s*530\.00/)).toBeVisible()
+})
+
+test('a category row opens the transactions behind it', async () => {
+  await page
+    .getByTestId('category-breakdown')
+    .locator('li', { hasText: 'Shopping' })
+    .getByRole('link')
+    .click()
+  await expect(page).toHaveURL(/\/wallet\?.*category=/)
+  await expect(page.getByText('Giant Mall')).toBeVisible()
+  await page.goBack()
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+})
+
+// ── Pattern panels ──────────────────────────────────────────────────────
+
+test('weekday rhythm renders with an accessible summary', async () => {
+  await expect(page.getByTestId('week-rhythm')).toBeVisible()
+  await expect(page.getByRole('img', { name: /average spend by weekday/i })).toBeVisible()
+})
+
+test('committed vs discretionary split is shown', async () => {
+  await expect(page.getByTestId('committed-split')).toBeVisible()
+  await expect(page.getByRole('img', { name: /committed .* discretionary/i })).toBeVisible()
+})
+
+test('merchant table reports count and average, not just total', async () => {
+  const row = page.getByTestId('merchant-table').locator('tr', { hasText: 'Giant Mall' })
+  await expect(row).toContainText(/RM\s*200\.00/)
+  await expect(page.getByTestId('merchant-table')).toContainText('Times')
+  await expect(page.getByTestId('merchant-table')).toContainText('Average')
+})
+
+test('a merchant seen every month is labelled as such', async () => {
+  const petronas = page.getByTestId('merchant-table').locator('tr', { hasText: 'Petronas' })
+  await expect(petronas).toContainText(/every month/i)
+})
+
+// ── Removed panels stay removed ─────────────────────────────────────────
+
+test('the pie chart and the account chart are gone', async () => {
+  // Bars rank accurately past three slices where a pie cannot, and spending by
+  // account is a bookkeeping fact rather than a behaviour.
+  await expect(page.locator('.recharts-pie')).toHaveCount(0)
+  await expect(page.getByText('Spending by Account')).toHaveCount(0)
 })
 
 // ── Date range switching ────────────────────────────────────────────────
 
-test('switch to Last Month shows zero or different data', async () => {
+test('switching to Last Month re-scopes every panel', async () => {
   await page.getByRole('button', { name: 'Last Month' }).click()
-  await expect(page.getByRole('button', { name: 'Last Month' })).toHaveClass(/border-brand|text-brand|bg-brand/)
-  // No transactions last month — income and expense should be 0
-  await expect(page.getByText(/RM\s*0\.00/).first()).toBeVisible()
+  // Last month's seeded spend is 30 + 300 = 330.
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*330\.00/)
+  // A finished month has nothing left to project.
+  await expect(page.getByTestId('pace-projection')).toHaveCount(0)
 })
 
-test('switch back to This Month shows data again', async () => {
+test('switching back to This Month restores the current figures', async () => {
   await page.getByRole('button', { name: 'This Month' }).click()
-  await expect(page.getByText(/6,500|6500/)).toBeVisible()
-})
-
-test('dashboard links to Reports for custom ranges (no inline custom picker)', async () => {
-  // Custom/historical analysis lives on the Reports page now — the dashboard
-  // stays an at-a-glance current-period view.
-  await expect(page.getByRole('button', { name: 'Custom' })).toHaveCount(0)
-  await expect(
-    page.getByRole('link', { name: /Custom range.*history/i }),
-  ).toBeVisible()
-})
-
-// ── Spending by account chart ───────────────────────────────────────────
-
-test('account bar chart renders for Dashboard Bank', async () => {
-  await page.getByRole('button', { name: 'This Month' }).click()
-  await expect(page.getByText('Spending by Account')).toBeVisible()
-  await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible()
-})
-
-// ── Axis formatting (Phase 5c C10) ──────────────────────────────────────
-
-test('cash flow axis shows plain-ringgit ticks, not "k", for sub-10k data', async () => {
-  const cashFlow = page.getByRole('img', { name: /cash flow by week/i })
-  await expect(cashFlow).toBeVisible()
-  const ticks = cashFlow.locator('.recharts-cartesian-axis-tick-value')
-  // Max weekly figure is 6,000 → plain numeric ticks like "1500", never "1.5k"/"0k"
-  await expect(ticks.filter({ hasText: /^\d+$/ }).first()).toBeVisible()
-  await expect(ticks.filter({ hasText: /k$/ })).toHaveCount(0)
-})
-
-// ── Chart accessibility (Phase 5c C13) ──────────────────────────────────
-
-test('charts expose accessible data summaries', async () => {
-  await expect(page.getByRole('img', { name: /cash flow by week.*income/i })).toBeVisible()
-  await expect(page.getByRole('img', { name: /spending by category/i })).toBeVisible()
-  await expect(page.getByRole('img', { name: /spending by account/i })).toBeVisible()
-})
-
-test('positive net figure carries an explicit + glyph', async () => {
-  // Net = 6,500 − 490 = 6,010 → rendered with a "+" so the sign isn't colour-only
-  await expect(page.getByText(/\+\s*RM\s*6,010\.00/)).toBeVisible()
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
 })
