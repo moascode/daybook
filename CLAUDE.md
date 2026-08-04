@@ -1187,8 +1187,12 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
-                *** DARK MODE — IN REVIEW ***
-                Branch claude/dark-mode-r2ihp9. New spec 58 (10 tests).
+                *** DARK MODE — MERGED, TAG PENDING (v2.4.0) ***
+                PR #104, merged to main 2026-08-05; tag not yet pushed at
+                the time of writing. New spec 58 (10 tests).
+                Client-only diff (72 files) — no D1 migration, no server or
+                Worker change. The default stays Light, so nothing changed
+                for either user until they picked otherwise in Settings.
                 See §18 for the token vocabulary and the rules.
                 The plumbing already existed (darkMode:'class', a tri-state
                 theme setting, App.tsx toggling the class); what was missing
@@ -1247,12 +1251,20 @@ EOF
                 Default stays 'light' — nothing changes for the 2 live users
                 until they choose otherwise. NO MIGRATION: the settings key
                 already accepted 'dark'.
-                Known gap: manifest.json background_color is still #ffffff,
-                so the PWA splash is white for dark users. Static file, needs
-                its own call.
+                manifest.json background_color STAYS #ffffff — decided
+                2026-08-05, do not "fix" it again. The manifest spec gives
+                background_color a single colour with no media-query form,
+                and the OS caches the manifest at install time, so unlike
+                <meta name="theme-color"> (which index.html already swaps
+                pre-paint) it CANNOT follow the theme. The only choice is
+                which single colour to commit to, and #ffffff matches the
+                default Light theme that both users are on. A dark-theme
+                user gets a brief white splash; the alternative is a dark
+                splash in front of a white app for everyone else.
 
-                *** BULK CATEGORIES + TAGS — IN REVIEW ***
-                Branch feat/bulk-category-tags. New spec 57 (13 tests).
+                *** BULK CATEGORIES + TAGS — SHIPPED v2.3.0 ***
+                PR #102, merged and released 2026-08-03. New spec 57 (13
+                tests).
                 Select mode gains "Categorise N" alongside Split/Delete:
                 one dialog sets a category and/or changes tags across the
                 whole selection.
@@ -1317,10 +1329,22 @@ EOF
                 agree, so the first such row would have split them.
 
 Current phase:  LIVE on Cloudflare Workers + D1.
-                https://daybook.moascode.workers.dev — v2.2.0 released
-                2026-08-02 by tag, D1 migration 0012 applied to remote
-                BEFORE the deploy, smoke test green. Production holds 2
+                https://daybook.moascode.workers.dev — Production holds 2
                 real users (kakon, tumpa).
+                Release history (tag-triggered, release.yml runs end to
+                end since CLOUDFLARE_API_TOKEN was set on 2026-07-31):
+                • v2.2.0  2026-08-02  settling nets (PRs #96/#97/#98);
+                          D1 migration 0012 applied to remote BEFORE the
+                          deploy, smoke test green.
+                • v2.3.0  2026-08-03  bulk categories + tags (PR #102).
+                • v2.3.1  2026-08-03  CSV import D1 100-bound-param cap
+                          (PR #103).
+                • v2.4.0  PENDING — dark mode (PR #104), merged to main,
+                          tag to push from main. No migration: the diff is
+                          client-only, so deploy is the Worker alone.
+                KEEP THIS LIST IN STEP WITH `git tag`. It went stale at
+                v2.2.0 across three releases because the status block was
+                only ever updated by the PR that happened to touch it.
 
                 *** v2.2.0 — SETTLING NOW NETS (PRs #96, #97, #98) ***
                 Settling reads BOTH directions between two people,
@@ -1370,8 +1394,8 @@ Current phase:  LIVE on Cloudflare Workers + D1.
                    target); server/ stays only as the schema reference that
                    scripts/schema-diff.mjs gates CI against.
 
-                *** SHARED REVIEW FLOW R1-R3 — IN REVIEW, NOT DEPLOYED ***
-                PR #95, branch claude/shared-to-review-improvements-of1zu7.
+                *** SHARED REVIEW FLOW R1-R3 — SHIPPED in v2.2.0 ***
+                PR #95, merged and deployed 2026-08-02.
                 docs/shared-review-implementation-plan.md. 500/500 e2e under
                 CI settings; schema-diff clean at 28 objects.
                 R1 One SplitList + person-first SplitsSection replace the
@@ -1692,7 +1716,7 @@ Phase status
                 specs (02, 03, 13, 14, 16, 28, 29, 32) all pass — 126/126.
                 This was the final wave of the Phase 5c plan — all 5 waves
                 (PRs #29–#33) are now merged. Phase 5c is COMPLETE.
-Last session:   2026-08-03
+Last session:   2026-08-05
 Last completed: - CSV transfer import + twin-linking implemented (PRs #60 + #61,
                   awaiting owner merge — #61 is stacked on #60).
                 - Phase 5b fully implemented and merged (PR #18 + follow-ups):
@@ -1745,16 +1769,16 @@ Deferred items (2026-07-25): the three owner-sign-off items from
                 Verified: client tsc, typecheck:server, lint all clean;
                 affected e2e (01, 27, 33, 34, 35, 36, 39, 40, 41, 42, 43,
                 46, 47) all pass — 92/92.
-Next task:      *** MERGED BUT NOT DEPLOYED: the dashboard rebuild (PR #106). ***
-                main is AHEAD of production. Deploy is ONE step —
-                `npm run deploy:worker`, no D1 migration, client-only diff —
-                and it could not be run from the session that merged it: the
-                container had no Cloudflare credentials (no
-                CLOUDFLARE_API_TOKEN, no OAuth config, and `wrangler login`
-                is interactive). Same blocker as release.yml. Anyone with an
-                authenticated machine can ship it in one command.
-                PR #104 (dark mode) merged 2026-08-03; #106 stacked on it and
-                was rebased onto main after.
+Next task:      TAG v2.4.0 from main — it now carries BOTH dark mode
+                (PR #104) and the dashboard rebuild (PR #106), and neither
+                is released. main is AHEAD of production.
+                THE TAG *IS* THE DEPLOY: release.yml holds the Cloudflare
+                credentials and runs end to end (v2.2.0 was the first such
+                release). Neither PR has a D1 migration — both are
+                client-only diffs — so there is nothing to apply first.
+                A session without those credentials cannot deploy by hand:
+                `wrangler login` is interactive and the container carries no
+                CLOUDFLARE_API_TOKEN. Tagging is the supported path.
 
                 What #106 changed: /wallet/dashboard is now a COMPARISON
                 view — every figure sits next to its baseline. Aggregation
