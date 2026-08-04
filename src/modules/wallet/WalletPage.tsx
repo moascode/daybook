@@ -150,6 +150,22 @@ export function WalletPage() {
     if (searchParams.get('range') === 'all') {
       setFilters({ dateFrom: '', dateTo: '' })
     }
+    // ?dateFrom=&dateTo= pin an explicit window. The dashboard links here for a
+    // month that is not necessarily the current one, so it states the range
+    // rather than relying on the default.
+    const from = searchParams.get('dateFrom')
+    const to = searchParams.get('dateTo')
+    if (from && to) {
+      setFilters({ dateFrom: from, dateTo: to })
+    }
+    // ?category=<id> narrows to one category, from a dashboard breakdown row.
+    // Like ?account= it lives in the collapsed panel, so open it — otherwise
+    // the list is filtered with no visible reason why.
+    const categoryParam = searchParams.get('category')
+    if (categoryParam) {
+      setFilters({ categoryId: categoryParam })
+      setFiltersOpen(true)
+    }
     // ?txn=<id> rings and scrolls to one row (see TransactionList). It is a
     // highlight, not a filter: links that use it pair it with view=all&range=all
     // so the row is inside the result set to begin with.
