@@ -1,4 +1,5 @@
 import { formatMYR } from '@/lib/utils'
+import { useAppStore } from '@/stores/app.store'
 import { DashboardCard } from './DashboardCard'
 import { WEEKDAY_LABELS } from './insights'
 
@@ -12,8 +13,21 @@ interface WeekRhythmProps {
 // already dark-mode-safe (mirrored through the CSS token layer — see
 // tailwind.config.js), so plain classes here need no `dark:` variant.
 const HEAT_STEPS = ['bg-blue-100', 'bg-blue-200', 'bg-blue-300', 'bg-blue-400', 'bg-blue-500', 'bg-blue-600']
-// Text flips to white once the fill is dark enough that dark text stops reading.
+// Text flips to white once the fill is dark enough that dark text stops
+// reading. The mirror pairs each step with its opposite lightness (100<->900,
+// 600<->400, ...), so step 4-5 are the darkest fills in LIGHT mode but among
+// the LIGHTEST in DARK mode (measured: white-on-step5-dark contrast is
+// ~2.5:1, well under the 4.5:1 minimum). The pass/fail boundary lands at the
+// same step index in both themes — only which side wants white flips — so the
+// comparison direction inverts with resolvedTheme rather than the threshold
+// itself. `text-fg` can't stand in for the non-white side in dark mode either:
+// it's the theme's normal (light-coloured) text, which is exactly as unreadable
+// on a pale dark-mode fill as white is. Both sides need a theme-invariant
+// literal here — `text-white` was already one; INK is its dark counterpart,
+// deliberately not a semantic token, for the same reason `text-white` isn't.
 const LIGHT_TEXT_FROM_STEP = 4
+const INK = 'text-slate-900'
+const INK_MUTED = 'text-slate-900/70'
 
 /**
  * Average spend by weekday, as a small heatmap strip — the timing axis nothing
@@ -23,6 +37,7 @@ const LIGHT_TEXT_FROM_STEP = 4
  * heights against no fixed scale.
  */
 export function WeekRhythm({ averages, months }: WeekRhythmProps) {
+  const resolvedTheme = useAppStore((s) => s.resolvedTheme)
   const max = Math.max(...averages)
   const min = Math.min(...averages)
   const span = max - min || 1
@@ -52,7 +67,7 @@ export function WeekRhythm({ averages, months }: WeekRhythmProps) {
       >
         {averages.map((value, i) => {
           const step = stepFor(value)
-          const light = step >= LIGHT_TEXT_FROM_STEP
+          const white = resolvedTheme === 'dark' ? step < LIGHT_TEXT_FROM_STEP : step >= LIGHT_TEXT_FROM_STEP
           return (
             <div
               key={WEEKDAY_LABELS[i]}
@@ -60,12 +75,10 @@ export function WeekRhythm({ averages, months }: WeekRhythmProps) {
                 i === busiest ? 'ring-2 ring-inset ring-brand-500' : ''
               }`}
             >
-              <span className={`text-[11px] font-semibold ${light ? 'text-white' : 'text-fg'}`}>
+              <span className={`text-[11px] font-semibold ${white ? 'text-white' : INK}`}>
                 {WEEKDAY_LABELS[i]}
               </span>
-              <span
-                className={`text-[11px] font-medium tabular-nums ${light ? 'text-white/85' : 'text-fg-muted'}`}
-              >
+              <span className={`text-[11px] font-medium tabular-nums ${white ? 'text-white/85' : INK_MUTED}`}>
                 {Math.round(value)}
               </span>
             </div>
