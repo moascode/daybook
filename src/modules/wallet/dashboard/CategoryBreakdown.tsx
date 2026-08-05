@@ -3,7 +3,7 @@ import { formatMYR } from '@/lib/utils'
 import { DashboardCard } from './DashboardCard'
 import { transactionsLink } from './links'
 import { useDashboardChartColors } from './chartColors'
-import { UNCATEGORISED, type CategorySpend } from './insights'
+import type { CategorySpend } from './insights'
 
 interface CategoryBreakdownProps {
   rows: CategorySpend[]
@@ -46,11 +46,7 @@ export function CategoryBreakdown({
           return (
             <li key={row.id}>
               <Link
-                to={transactionsLink({
-                  categoryId: row.id === UNCATEGORISED ? undefined : row.id,
-                  dateFrom,
-                  dateTo,
-                })}
+                to={transactionsLink({ categoryId: row.id, dateFrom, dateTo })}
                 className="grid min-h-[2.25rem] grid-cols-[minmax(5rem,7rem)_minmax(0,1fr)_minmax(4.5rem,auto)] items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 sm:gap-3"
                 aria-label={`${row.name}: ${formatMYR(row.amount)} this period, ${formatMYR(
                   prior,

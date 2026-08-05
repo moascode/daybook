@@ -91,9 +91,20 @@ test('shows "This Month" as the default date range', async () => {
   await expect(page.getByRole('button', { name: 'This Month' })).toBeVisible()
 })
 
-test('dashboard links to Reports for custom ranges (no inline custom picker)', async () => {
-  await expect(page.getByRole('button', { name: 'Custom' })).toHaveCount(0)
-  await expect(page.getByRole('link', { name: /Custom range.*history/i })).toBeVisible()
+test('every date-range preset is offered, and Custom reveals inline pickers', async () => {
+  for (const label of ['This month', 'Last month', 'Last 3 months', 'Last 12 months', 'All time', 'Custom…']) {
+    await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible()
+  }
+  await page.getByRole('button', { name: 'Custom…' }).click()
+  // Scoped by role, not bare getByLabel: the pace chart's aria-label prose
+  // ("...usual total.") contains "to" as a substring and collides otherwise.
+  await expect(page.getByRole('textbox', { name: 'From' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'To' })).toBeVisible()
+  // Custom stays on the dashboard now — Reports is offered separately for the
+  // one thing it does that this page doesn't: year-on-year monthly bars.
+  await expect(page.getByRole('link', { name: /Year-on-year comparison/i })).toBeVisible()
+  // Leave the control the way the rest of the suite expects it.
+  await page.getByRole('button', { name: 'This month', exact: true }).click()
 })
 
 // ── Hero: spend against its baseline ────────────────────────────────────
@@ -198,6 +209,33 @@ test('a category row opens the transactions behind it', async () => {
   await expect(page.getByTestId('spend-hero')).toBeVisible()
 })
 
+test('the Uncategorised row filters to only unfiled transactions, not everything', async () => {
+  await page
+    .getByTestId('category-breakdown')
+    .locator('li', { hasText: 'Uncategorised' })
+    .getByRole('link')
+    .click()
+  await expect(page).toHaveURL(/category=__uncategorised__/)
+  await expect(page.getByText('Mystery Shop')).toBeVisible()
+  // A categorised row from the same period must NOT show up under this filter —
+  // this is the bug: the filter used to resolve to "no category filter at all".
+  await expect(page.getByText('Giant Mall')).toHaveCount(0)
+  await page.goBack()
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+})
+
+test('a What-changed row opens a window wide enough to show its baseline, not just the current period', async () => {
+  // Transport has one current-month row (Petronas, 150) and three baseline-month
+  // rows (Petronas, 300 each) — the delta shown is computed across all four, so
+  // the destination must show all four or the number on screen is unverifiable.
+  await page.getByTestId('what-changed').locator('li', { hasText: 'Transport' }).click()
+  await expect(page).toHaveURL(/\/wallet\?.*category=/)
+  await expect(page.getByText('Petronas').first()).toBeVisible()
+  await expect(page.getByText('Petronas')).toHaveCount(4)
+  await page.goBack()
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+})
+
 // ── Pattern panels ──────────────────────────────────────────────────────
 
 test('weekday rhythm renders with an accessible summary', async () => {
@@ -244,4 +282,31 @@ test('switching to Last Month re-scopes every panel', async () => {
 test('switching back to This Month restores the current figures', async () => {
   await page.getByRole('button', { name: 'This Month' }).click()
   await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
+})
+
+test('Last 3 months re-scopes the dashboard without a pace notch', async () => {
+  await page.getByRole('button', { name: 'Last 3 months', exact: true }).click()
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+  // A multi-month range has no single "day of the month" to race against —
+  // the budget meters drop the pace notch and its wording entirely.
+  await expect(page.getByText(/% of the month gone/)).toHaveCount(0)
+  await expect(page.getByTestId('category-breakdown')).toBeVisible()
+  await expect(page.getByTestId('week-rhythm')).toBeVisible()
+})
+
+test('All time re-scopes the dashboard with no crash and no baseline claimed', async () => {
+  await page.getByRole('button', { name: 'All time', exact: true }).click()
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+  // There is nothing before "all time" to compare against.
+  await expect(page.getByTestId('what-changed')).toHaveCount(0)
+  await page.getByRole('button', { name: 'This month', exact: true }).click()
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
+})
+
+// ── Goals ──────────────────────────────────────────────────────────────
+
+test('the Goals panel is always visible, even with none set', async () => {
+  await expect(page.getByRole('heading', { name: 'Goals', exact: true })).toBeVisible()
+  await expect(page.getByText('No goals set yet.')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Manage' }).last()).toBeVisible()
 })

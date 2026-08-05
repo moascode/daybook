@@ -2,11 +2,36 @@ import { formatMYR } from '@/lib/utils'
 import { DashboardCard } from './DashboardCard'
 import { Sparkline } from './Sparkline'
 import { useDashboardChartColors } from './chartColors'
+import { transactionsLink } from './links'
 import type { MerchantSpend } from './insights'
 
 interface MerchantTableProps {
   rows: MerchantSpend[]
   trendMonths: number
+  /** Period bounds for the "All merchants" action link. Omit either to skip the link. */
+  dateFrom?: string
+  dateTo?: string
+}
+
+/** A single visit isn't a "frequent, easy to miss" pattern. */
+const MIN_FREQUENT_COUNT = 2
+
+/**
+ * The highest-count merchant that ISN'T already #1 by total.
+ *
+ * The #1-by-total row is already obviously visible at the top of the table —
+ * there's nothing to reveal about it. What's easy to miss is the merchant
+ * that never shows up as a big single transaction but adds up through sheer
+ * frequency.
+ */
+function findFrequentButSmallCandidate(rows: MerchantSpend[]): MerchantSpend | null {
+  if (rows.length < 2) return null
+  const candidate = rows.slice(1).reduce<MerchantSpend | null>(
+    (best, r) => (r.count > (best?.count ?? 0) ? r : best),
+    null,
+  )
+  if (!candidate || candidate.count < MIN_FREQUENT_COUNT) return null
+  return candidate
 }
 
 /**
@@ -17,7 +42,7 @@ interface MerchantTableProps {
  * completely different responses. The average column is what separates them,
  * and the small-and-frequent case is the one the old list made invisible.
  */
-export function MerchantTable({ rows, trendMonths }: MerchantTableProps) {
+export function MerchantTable({ rows, trendMonths, dateFrom, dateTo }: MerchantTableProps) {
   const colors = useDashboardChartColors()
 
   if (rows.length === 0) {
@@ -30,10 +55,13 @@ export function MerchantTable({ rows, trendMonths }: MerchantTableProps) {
     )
   }
 
+  const candidate = findFrequentButSmallCandidate(rows)
+
   return (
     <DashboardCard
       title="Who you paid"
       subtitle="Sorted by total — read the count column too: a small amount paid often is a different problem from one big purchase."
+      action={dateFrom && dateTo ? { label: 'All merchants', to: transactionsLink({ dateFrom, dateTo }) } : undefined}
     >
       <div className="-mx-1 overflow-x-auto px-1">
         <table className="w-full min-w-[30rem] text-[13px]" data-testid="merchant-table">
@@ -86,6 +114,14 @@ export function MerchantTable({ rows, trendMonths }: MerchantTableProps) {
           </tbody>
         </table>
       </div>
+
+      {candidate && (
+        <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
+          <span className="font-semibold capitalize">{candidate.merchant}</span>: {candidate.count} visits,{' '}
+          {formatMYR(candidate.average)} each, {formatMYR(candidate.total)} this period. It never shows up as a
+          big transaction, which is exactly why it’s easy to miss.
+        </p>
+      )}
     </DashboardCard>
   )
 }

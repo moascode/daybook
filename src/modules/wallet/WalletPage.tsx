@@ -25,6 +25,7 @@ import { useToastStore } from '@/stores/toast.store'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { api } from '@/lib/api'
 import { cn, formatMYR, errorMessage, monthRange, dateRangePreset } from '@/lib/utils'
+import { UNCATEGORISED } from '@/modules/wallet/dashboard/insights'
 import type { Transaction } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
@@ -394,6 +395,7 @@ export function WalletPage() {
   const MANAGE_CATEGORIES = '__manage__'
   const categoryOptions = [
     { value: '', label: 'All Categories' },
+    { value: UNCATEGORISED, label: 'Uncategorised' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
     { value: MANAGE_CATEGORIES, label: 'Manage categories…' },
   ]
@@ -442,7 +444,10 @@ export function WalletPage() {
       chips.push({ key: 'account', label: `Account: ${name}`, onClear: () => setFilters({ accountId: null }) })
     }
     if (filters.categoryId) {
-      const name = categories.find((c) => c.id === filters.categoryId)?.name ?? 'Category'
+      const name =
+        filters.categoryId === UNCATEGORISED
+          ? 'Uncategorised'
+          : (categories.find((c) => c.id === filters.categoryId)?.name ?? 'Category')
       chips.push({ key: 'category', label: `Category: ${name}`, onClear: () => setFilters({ categoryId: null }) })
     }
     for (const tag of filters.tags) {
