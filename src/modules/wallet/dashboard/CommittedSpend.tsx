@@ -1,3 +1,4 @@
+import { format, parseISO } from 'date-fns'
 import { formatMYR } from '@/lib/utils'
 import { DashboardCard } from './DashboardCard'
 import { useDashboardChartColors } from './chartColors'
@@ -75,13 +76,18 @@ export function CommittedSpend({ split }: CommittedSpendProps) {
           <ul className="divide-y divide-line-subtle">
             {split.items.slice(0, 8).map((item) => (
               <li key={item.merchant} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0 truncate text-[13px] capitalize text-fg">
-                  {item.merchant}
-                  {item.fromRule && (
-                    <span className="ml-2 rounded-full border border-line bg-surface-sunken px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
-                      rule
-                    </span>
-                  )}
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] capitalize text-fg">
+                    {item.merchant}
+                    {item.fromRule && (
+                      <span className="ml-2 rounded-full border border-line bg-surface-sunken px-1.5 py-0.5 align-middle text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+                        rule
+                      </span>
+                    )}
+                  </span>
+                  <span className="block text-[11px] text-fg-faint">
+                    Paid {format(parseISO(item.date), 'd MMM')}
+                  </span>
                 </span>
                 <span className="shrink-0 text-[13px] font-semibold tabular-nums text-fg-muted">
                   {formatMYR(item.amount)}

@@ -5,7 +5,7 @@ import { differenceInDays, format, parseISO } from 'date-fns'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
-import { formatMYR, monthRange, todayISO } from '@/lib/utils'
+import { formatMYR, monthRange, todayISO, dateRangePreset } from '@/lib/utils'
 import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
@@ -15,24 +15,33 @@ import {
   BASELINE_MONTHS,
   MIN_PROJECTION_DAYS,
   TREND_MONTHS,
+  addDaysISO,
   baselineCurve,
   categoryDeltas,
+  categoryDeltasBetween,
   categorySpend,
   committedSplit,
+  committedSplitInRange,
   cumulativeByDay,
+  cumulativeByDayOffset,
   dayOfMonth,
   daysInMonth,
+  inRange,
   merchantSpend,
+  merchantSpendInRange,
   monthBounds,
   monthKey,
+  precedingRange,
   priorMonths,
   projectMonthEnd,
   shiftMonth,
   spendThroughDay,
   summarise,
+  trailingMonthsEndingAt,
   usualMonthTotal,
   usualThroughDay,
   weekdayAverages,
+  weekdayAveragesInRange,
 } from './dashboard/insights'
 import { SpendPace } from './dashboard/SpendPace'
 import { StatTiles, type StatTile } from './dashboard/StatTiles'
@@ -43,9 +52,10 @@ import { CommittedSpend } from './dashboard/CommittedSpend'
 import { BudgetPace } from './dashboard/BudgetPace'
 import { MerchantTable } from './dashboard/MerchantTable'
 import { DashboardCard } from './dashboard/DashboardCard'
+import { SharedSummary } from './dashboard/SharedSummary'
 import { UpcomingBills, type UpcomingBill } from './dashboard/UpcomingBills'
 
-/** Months of history behind the stat-tile sparklines. */
+/** Months of history behind the stat-tile sparklines, regardless of mode. */
 const TILE_TREND_MONTHS = 12
 
 // U-15: namespace dismissals per user so one account's dismissed reminders
@@ -67,6 +77,16 @@ function saveDismissed(userId: string, ids: Set<string>) {
   localStorage.setItem(dismissedKey(userId), JSON.stringify(Array.from(ids)))
 }
 
+/** How many calendar months a date range touches — used to scale monthly budget limits and to describe the weekday panel's window in range mode. */
+function calendarMonthSpan(dateFrom: string, dateTo: string): number {
+  const fromKey = monthKey(dateFrom)
+  const toKey = monthKey(dateTo)
+  const from = new Date(Number(fromKey.slice(0, 4)), Number(fromKey.slice(5, 7)) - 1, 1)
+  const to = new Date(Number(toKey.slice(0, 4)), Number(toKey.slice(5, 7)) - 1, 1)
+  const months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth()) + 1
+  return Math.max(1, months)
+}
+
 export function Dashboard() {
   const {
     loadTransactions,
@@ -75,7 +95,6 @@ export function Dashboard() {
     loadRecurringTransactions,
     loadBudgets,
     loadGoals,
-    getBudgetSpending,
     getAccountBalances,
     accounts,
     categories,
@@ -87,22 +106,23 @@ export function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [range, setRange] = useState<DateRangeValue>(() => monthRange(0))
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => getDismissed(userId))
-  const [budgetSpending, setBudgetSpending] = useState<Map<string, number>>(() => new Map())
   const [balances, setBalances] = useState<Record<string, number>>({})
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
   const { dateFrom, dateTo } = range
+  const preset = dateRangePreset(range)
+  const isMonthMode = preset === 'this-month' || preset === 'last-month'
+  const isAllTime = preset === 'all-time'
 
-  // ── Where in the month are we ────────────────────────────────────
-  const period = useMemo(() => {
-    const month = dateFrom ? monthKey(dateFrom) : monthKey(todayISO())
+  // ── MONTH-MODE period — the original single-calendar-month model,
+  // completely unchanged. "This month" / "Last month" keep exactly the
+  // behaviour they had before ranges existed. ──
+  const monthPeriod = useMemo(() => {
+    if (!isMonthMode || !dateFrom) return null
+    const month = monthKey(dateFrom)
     const length = daysInMonth(month)
     const today = todayISO()
     const isCurrentMonth = month === monthKey(today)
-    // A finished month is measured over all of itself; the month in progress
-    // stops at today, and every baseline is cut to the same day, so both sides
-    // of every comparison cover the same span. Measuring 18 days against 31
-    // would report an improvement that isn't there.
     const day = isCurrentMonth ? Math.min(dayOfMonth(today), length) : length
     return {
       month,
@@ -111,10 +131,9 @@ export function Dashboard() {
       inProgress: isCurrentMonth,
       label: format(parseISO(`${month}-01`), 'MMMM'),
       baselineMonths: priorMonths(month, BASELINE_MONTHS),
-      trendMonths: [...priorMonths(month, TREND_MONTHS - 1), month],
-      tileMonths: [...priorMonths(month, TILE_TREND_MONTHS - 1), month],
+      trendMonths: trailingMonthsEndingAt(`${month}-01`, TREND_MONTHS),
     }
-  }, [dateFrom])
+  }, [isMonthMode, dateFrom])
 
   useEffect(() => {
     loadAccounts()
@@ -133,96 +152,270 @@ export function Dashboard() {
     dataVersion,
   ])
 
-  // One wide fetch rather than one per panel: the comparisons need a trailing
-  // year, and at this app's volume that is a few hundred rows — cheaper in
-  // round trips than asking the server to aggregate, and it keeps every panel
-  // reading from exactly the same slice.
+  // One wide fetch rather than one per panel. Month mode keeps its original
+  // trailing-12-month window; range mode fetches enough to cover the
+  // comparison window AND the trend lookback the merchant/committed panels
+  // need, whichever starts earlier. All-time asks for everything.
   useEffect(() => {
-    if (!dateFrom || !dateTo) return
-    const from = monthBounds(shiftMonth(period.month, -(TILE_TREND_MONTHS - 1))).from
-    const to = monthBounds(period.month).to
-    loadTransactions({ dateFrom: from, dateTo: to }).then(setTransactions)
-  }, [dateFrom, dateTo, period.month, loadTransactions, dataVersion])
+    if (isMonthMode) {
+      if (!dateFrom) return
+      const month = monthKey(dateFrom)
+      const from = monthBounds(shiftMonth(month, -(TILE_TREND_MONTHS - 1))).from
+      const to = monthBounds(month).to
+      loadTransactions({ dateFrom: from, dateTo: to }).then(setTransactions)
+      return
+    }
+    if (isAllTime) {
+      loadTransactions({ dateFrom: '', dateTo: '' }).then(setTransactions)
+      return
+    }
+    if (!dateFrom || !dateTo || dateFrom > dateTo) return // custom, still mid-edit or inverted
+    const comparison = precedingRange(dateFrom, dateTo)
+    const trendStart = monthBounds(trailingMonthsEndingAt(dateTo, TREND_MONTHS)[0]).from
+    const fetchFrom = comparison.dateFrom < trendStart ? comparison.dateFrom : trendStart
+    loadTransactions({ dateFrom: fetchFrom, dateTo }).then(setTransactions)
+  }, [isMonthMode, isAllTime, dateFrom, dateTo, loadTransactions, dataVersion])
 
-  useEffect(() => {
-    getBudgetSpending(period.month)
-      .then(setBudgetSpending)
-      .catch(() => setBudgetSpending(new Map()))
-  }, [getBudgetSpending, period.month, dataVersion])
+  // ── RANGE-MODE period: Last 3/12 months, All time, Custom. ──
+  const effectiveRange = useMemo(() => {
+    if (isMonthMode) return null
+    if (isAllTime) {
+      // Resolved from the fetched data itself once it arrives, rather than
+      // from the (empty) dateFrom the "all time" preset stores — that keeps
+      // the fetch effect above free of a circular dependency on its own result.
+      if (transactions.length === 0) return null
+      const earliest = transactions.reduce((min, t) => (t.date < min ? t.date : min), transactions[0].date)
+      return { dateFrom: earliest, dateTo: todayISO(), hasComparison: false }
+    }
+    if (!dateFrom || !dateTo || dateFrom > dateTo) return null
+    return { dateFrom, dateTo, hasComparison: true }
+  }, [isMonthMode, isAllTime, dateFrom, dateTo, transactions])
 
-  // ── The selected period's own rows ───────────────────────────────
-  const periodTxns = useMemo(
-    () =>
-      transactions.filter(
-        (t) => monthKey(t.date) === period.month && dayOfMonth(t.date) <= period.day,
-      ),
-    [transactions, period.month, period.day],
-  )
+  const rangeComparison = useMemo(() => {
+    if (!effectiveRange || !effectiveRange.hasComparison) return null
+    return precedingRange(effectiveRange.dateFrom, effectiveRange.dateTo)
+  }, [effectiveRange])
+
+  const rangeTrendMonths = useMemo(() => {
+    if (!effectiveRange) return []
+    return trailingMonthsEndingAt(effectiveRange.dateTo, TREND_MONTHS)
+  }, [effectiveRange])
+
+  const rangeMonthSpan = useMemo(() => {
+    if (!effectiveRange) return TREND_MONTHS
+    return calendarMonthSpan(effectiveRange.dateFrom, effectiveRange.dateTo)
+  }, [effectiveRange])
+
+  const rangeLabel = useMemo(() => {
+    if (!effectiveRange) return '…'
+    if (isAllTime) return 'all time'
+    return `${format(parseISO(effectiveRange.dateFrom), 'd MMM yyyy')} – ${format(
+      parseISO(effectiveRange.dateTo),
+      'd MMM yyyy',
+    )}`
+  }, [effectiveRange, isAllTime])
+
+  // ── The selected period's own rows, and its comparison window's rows —
+  // mode-agnostic from here on. Every panel below reads one or both of these
+  // rather than re-deriving its own filter. ──
+  const periodTxns = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return transactions.filter(
+        (t) => monthKey(t.date) === monthPeriod.month && dayOfMonth(t.date) <= monthPeriod.day,
+      )
+    }
+    if (effectiveRange) {
+      return transactions.filter((t) => inRange(t.date, effectiveRange.dateFrom, effectiveRange.dateTo))
+    }
+    return []
+  }, [transactions, isMonthMode, monthPeriod, effectiveRange])
+
+  const comparisonTxns = useMemo(() => {
+    if (!rangeComparison) return []
+    return transactions.filter((t) => inRange(t.date, rangeComparison.dateFrom, rangeComparison.dateTo))
+  }, [transactions, rangeComparison])
 
   const summary = useMemo(() => summarise(periodTxns), [periodTxns])
 
-  const pace = useMemo(() => {
-    const curve = cumulativeByDay(transactions, period.month, period.day)
-    const baseline = baselineCurve(transactions, period.baselineMonths, period.length)
-    const usual = usualThroughDay(transactions, period.baselineMonths, period.day)
-    return {
-      curve,
-      baseline,
-      usual,
-      monthAverage: usualMonthTotal(transactions, period.baselineMonths),
-      projected:
-        period.inProgress && period.day >= MIN_PROJECTION_DAYS
-          ? projectMonthEnd(summary.expense, period.day, period.length)
-          : undefined,
-    }
-  }, [transactions, period, summary.expense])
+  const periodBounds = useMemo(() => {
+    if (isMonthMode && monthPeriod) return monthBounds(monthPeriod.month)
+    if (effectiveRange) return { from: effectiveRange.dateFrom, to: effectiveRange.dateTo }
+    return { from: '', to: '' }
+  }, [isMonthMode, monthPeriod, effectiveRange])
 
-  const deltas = useMemo(
-    () => categoryDeltas(transactions, categories, period.month, period.day, period.baselineMonths),
-    [transactions, categories, period],
-  )
+  // A comparison genuinely worth showing — there's a window AND it has some
+  // spend in it, not just an empty stretch before the account existed.
+  const hasBaseline = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return monthPeriod.baselineMonths.some((m) => spendThroughDay(transactions, m, daysInMonth(m)) > 0)
+    }
+    if (rangeComparison) {
+      return summarise(comparisonTxns).expense > 0
+    }
+    return false
+  }, [isMonthMode, monthPeriod, transactions, rangeComparison, comparisonTxns])
+
+  // ── Hero / pace ──
+  const pace = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return {
+        curve: cumulativeByDay(transactions, monthPeriod.month, monthPeriod.day),
+        baseline: baselineCurve(transactions, monthPeriod.baselineMonths, monthPeriod.length),
+        usual: usualThroughDay(transactions, monthPeriod.baselineMonths, monthPeriod.day),
+        comparisonTotal: usualMonthTotal(transactions, monthPeriod.baselineMonths),
+        projected:
+          monthPeriod.inProgress && monthPeriod.day >= MIN_PROJECTION_DAYS
+            ? projectMonthEnd(summary.expense, monthPeriod.day, monthPeriod.length)
+            : undefined,
+      }
+    }
+    if (effectiveRange) {
+      const usual = rangeComparison ? summarise(comparisonTxns).expense : 0
+      return {
+        curve: cumulativeByDayOffset(transactions, effectiveRange.dateFrom, effectiveRange.dateTo),
+        baseline: rangeComparison
+          ? cumulativeByDayOffset(transactions, rangeComparison.dateFrom, rangeComparison.dateTo)
+          : [],
+        usual,
+        comparisonTotal: usual,
+        projected: undefined,
+      }
+    }
+    return { curve: [], baseline: [], usual: 0, comparisonTotal: 0, projected: undefined }
+  }, [isMonthMode, monthPeriod, effectiveRange, rangeComparison, transactions, comparisonTxns, summary.expense])
+
+  const spendPaceComparisonClause = isMonthMode && monthPeriod
+    ? monthPeriod.inProgress
+      ? `usual by day ${monthPeriod.day}`
+      : 'your usual month'
+    : 'the same length before this period'
+
+  const spendPaceComparisonDescription = isMonthMode && monthPeriod
+    ? `${monthPeriod.baselineMonths.length}-month average`
+    : 'same length before'
+
+  const spendPaceFormatDay =
+    !isMonthMode && effectiveRange
+      ? (offset: number) => format(parseISO(addDaysISO(effectiveRange.dateFrom, offset)), 'd MMM')
+      : undefined
+  const spendPaceFormatDayTooltipLabel = !isMonthMode ? (label: string | number) => String(label) : undefined
+
+  // ── What changed ──
+  const deltas = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return categoryDeltas(transactions, categories, monthPeriod.month, monthPeriod.day, monthPeriod.baselineMonths)
+    }
+    if (effectiveRange) {
+      return categoryDeltasBetween(periodTxns, effectiveRange.hasComparison ? comparisonTxns : null, categories)
+    }
+    return []
+  }, [isMonthMode, monthPeriod, effectiveRange, transactions, categories, periodTxns, comparisonTxns])
+
+  const netDelta = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return summary.expense - usualThroughDay(transactions, monthPeriod.baselineMonths, monthPeriod.day)
+    }
+    if (effectiveRange) {
+      return summary.expense - (effectiveRange.hasComparison ? summarise(comparisonTxns).expense : 0)
+    }
+    return 0
+  }, [isMonthMode, monthPeriod, effectiveRange, transactions, summary.expense, comparisonTxns])
+
+  // The FULL window behind a What-changed row — from the start of the
+  // earliest comparison period through the end of the current one. A link
+  // scoped to only the current period would land on a total that matches
+  // neither the delta shown nor the baseline it was compared against.
+  const whatChangedBounds = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      const earliestBaseline = monthPeriod.baselineMonths[0]
+      const from = earliestBaseline ? monthBounds(earliestBaseline).from : monthBounds(monthPeriod.month).from
+      return { from, to: monthBounds(monthPeriod.month).to }
+    }
+    if (effectiveRange) {
+      const from =
+        effectiveRange.hasComparison && rangeComparison ? rangeComparison.dateFrom : effectiveRange.dateFrom
+      return { from, to: effectiveRange.dateTo }
+    }
+    return { from: '', to: '' }
+  }, [isMonthMode, monthPeriod, effectiveRange, rangeComparison])
+
+  const comparisonDescription = isMonthMode && monthPeriod
+    ? monthPeriod.inProgress
+      ? `its own ${monthPeriod.baselineMonths.length}-month average for the first ${monthPeriod.day} days of a month`
+      : `its own ${monthPeriod.baselineMonths.length}-month average over a full month`
+    : 'the same length immediately before it'
 
   const breakdown = useMemo(() => categorySpend(periodTxns, categories), [periodTxns, categories])
 
   const previousByCategory = useMemo(() => {
-    const prev = shiftMonth(period.month, -1)
-    const rows = categorySpend(
-      transactions.filter((t) => monthKey(t.date) === prev && dayOfMonth(t.date) <= period.day),
-      categories,
-    )
-    return new Map(rows.map((r) => [r.id, r.amount]))
-  }, [transactions, categories, period.month, period.day])
+    if (isMonthMode && monthPeriod) {
+      const prev = shiftMonth(monthPeriod.month, -1)
+      const rows = categorySpend(
+        transactions.filter((t) => monthKey(t.date) === prev && dayOfMonth(t.date) <= monthPeriod.day),
+        categories,
+      )
+      return new Map(rows.map((r) => [r.id, r.amount]))
+    }
+    return new Map(categorySpend(comparisonTxns, categories).map((r) => [r.id, r.amount]))
+  }, [isMonthMode, monthPeriod, transactions, categories, comparisonTxns])
 
-  const weekday = useMemo(
-    () => weekdayAverages(transactions, priorMonths(period.month, BASELINE_MONTHS)),
-    [transactions, period.month],
-  )
+  const weekday = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return weekdayAverages(transactions, priorMonths(monthPeriod.month, BASELINE_MONTHS))
+    }
+    if (effectiveRange) {
+      return weekdayAveragesInRange(transactions, effectiveRange.dateFrom, effectiveRange.dateTo)
+    }
+    return new Array(7).fill(0)
+  }, [isMonthMode, monthPeriod, effectiveRange, transactions])
 
-  const committed = useMemo(
-    () =>
-      committedSplit(
-        periodTxns,
-        period.month,
-        recurringTransactions,
-        period.trendMonths,
+  const committed = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return committedSplit(periodTxns, monthPeriod.month, recurringTransactions, monthPeriod.trendMonths, transactions)
+    }
+    if (effectiveRange) {
+      return committedSplitInRange(
         transactions,
-      ),
-    [periodTxns, transactions, period.month, period.trendMonths, recurringTransactions],
-  )
+        effectiveRange.dateFrom,
+        effectiveRange.dateTo,
+        recurringTransactions,
+        transactions,
+        rangeTrendMonths,
+      )
+    }
+    return { committed: 0, discretionary: 0, items: [] }
+  }, [isMonthMode, monthPeriod, effectiveRange, periodTxns, transactions, recurringTransactions, rangeTrendMonths])
 
-  const merchants = useMemo(
-    () => merchantSpend(transactions, period.month, period.trendMonths),
-    [transactions, period.month, period.trendMonths],
+  const merchants = useMemo(() => {
+    if (isMonthMode && monthPeriod) {
+      return merchantSpend(transactions, monthPeriod.month, monthPeriod.trendMonths)
+    }
+    if (effectiveRange) {
+      return merchantSpendInRange(transactions, effectiveRange.dateFrom, effectiveRange.dateTo, rangeTrendMonths)
+    }
+    return []
+  }, [isMonthMode, monthPeriod, effectiveRange, transactions, rangeTrendMonths])
+
+  // ── Budgets ──
+  const budgetSpendingMap = useMemo(
+    () => new Map(categorySpend(periodTxns, categories).map((r) => [r.id, r.amount])),
+    [periodTxns, categories],
   )
+  const budgetElapsed = isMonthMode && monthPeriod ? monthPeriod.day / monthPeriod.length : 1
+  const budgetElapsedLabel = isMonthMode && monthPeriod ? `day ${monthPeriod.day} of ${monthPeriod.length}` : ''
+  const budgetDaysLeft = isMonthMode && monthPeriod ? monthPeriod.length - monthPeriod.day : undefined
 
   // ── Stat tiles ───────────────────────────────────────────────────
   const tiles = useMemo((): StatTile[] => {
+    const tileDateTo = isMonthMode && monthPeriod ? monthBounds(monthPeriod.month).to : (effectiveRange?.dateTo ?? todayISO())
+    const tileMonths = trailingMonthsEndingAt(tileDateTo, TILE_TREND_MONTHS)
+
     const incomeTrend: number[] = []
     const netTrend: number[] = []
     const committedTrend: number[] = []
     const discretionaryTrend: number[] = []
 
-    for (const m of period.tileMonths) {
+    for (const m of tileMonths) {
       const rows = transactions.filter((t) => monthKey(t.date) === m)
       const s = summarise(rows)
       incomeTrend.push(s.income)
@@ -231,50 +424,54 @@ export function Dashboard() {
         rows,
         m,
         recurringTransactions,
-        [...priorMonths(m, TREND_MONTHS - 1), m],
+        trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS),
         transactions,
       )
       committedTrend.push(split.committed)
       discretionaryTrend.push(split.discretionary)
     }
 
-    const baselineAvg = (pick: (rows: Transaction[], month: string) => number): number => {
-      if (period.baselineMonths.length === 0) return 0
-      const total = period.baselineMonths.reduce((sum, m) => {
-        const rows = transactions.filter(
-          (t) => monthKey(t.date) === m && dayOfMonth(t.date) <= period.day,
-        )
-        return sum + pick(rows, m)
-      }, 0)
-      return total / period.baselineMonths.length
-    }
+    let usualNet = 0
+    let usualDiscretionary = 0
+    const periodLabel = isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel
 
-    const usualNet = baselineAvg((rows) => summarise(rows).net)
-    const usualDiscretionary = baselineAvg(
-      (rows, m) =>
-        committedSplit(
-          rows,
-          m,
-          recurringTransactions,
-          [...priorMonths(m, TREND_MONTHS - 1), m],
-          transactions,
-        ).discretionary,
-    )
+    if (isMonthMode && monthPeriod && monthPeriod.baselineMonths.length > 0) {
+      const n = monthPeriod.baselineMonths.length
+      usualNet =
+        monthPeriod.baselineMonths.reduce((sum, m) => {
+          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
+          return sum + summarise(rows).net
+        }, 0) / n
+      usualDiscretionary =
+        monthPeriod.baselineMonths.reduce((sum, m) => {
+          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
+          return (
+            sum +
+            committedSplit(rows, m, recurringTransactions, trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS), transactions)
+              .discretionary
+          )
+        }, 0) / n
+    } else if (effectiveRange?.hasComparison) {
+      usualNet = summarise(comparisonTxns).net
+      // usualDiscretionary intentionally left 0 for range mode — falls back
+      // to the generic "spending you chose in the moment" note below.
+    }
 
     const total = committed.committed + committed.discretionary
     const committedShare = total > 0 ? Math.round((committed.committed / total) * 100) : 0
     const discretionaryDelta = committed.discretionary - usualDiscretionary
+    const inProgress = isMonthMode && !!monthPeriod?.inProgress
 
     return [
       {
         label: 'Income',
         value: summary.income,
-        note: period.inProgress ? `so far in ${period.label}` : `in ${period.label}`,
+        note: inProgress ? `so far in ${periodLabel}` : `in ${periodLabel}`,
         trend: incomeTrend,
         testId: 'tile-income',
       },
       {
-        label: period.inProgress ? 'Net so far' : 'Net',
+        label: inProgress ? 'Net so far' : 'Net',
         value: summary.net,
         signed: true,
         note: usualNet !== 0 ? `usually ${formatMYR(usualNet)} by now` : 'income minus spending',
@@ -301,7 +498,17 @@ export function Dashboard() {
         testId: 'tile-discretionary',
       },
     ]
-  }, [transactions, period, recurringTransactions, summary, committed])
+  }, [
+    isMonthMode,
+    monthPeriod,
+    effectiveRange,
+    rangeLabel,
+    transactions,
+    recurringTransactions,
+    summary,
+    committed,
+    comparisonTxns,
+  ])
 
   // ── Bill reminders ───────────────────────────────────────────────
   const upcomingBills = useMemo((): UpcomingBill[] => {
@@ -322,19 +529,6 @@ export function Dashboard() {
     saveDismissed(userId, next)
   }
 
-  const netDelta = useMemo(
-    () => summary.expense - usualThroughDay(transactions, period.baselineMonths, period.day),
-    [summary.expense, transactions, period],
-  )
-
-  // Comparison panels only mean something once there is history to compare
-  // against. A brand-new user gets the totals and the breakdown, and the
-  // baseline appears on its own after their first full month.
-  const hasBaseline = useMemo(
-    () => period.baselineMonths.some((m) => spendThroughDay(transactions, m, daysInMonth(m)) > 0),
-    [transactions, period.baselineMonths],
-  )
-
   if (transactions.length === 0 && accounts.length === 0) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -352,28 +546,23 @@ export function Dashboard() {
     )
   }
 
-  const bounds = monthBounds(period.month)
-  const dayLabel = period.inProgress
-    ? `for the first ${period.day} days of a month`
-    : 'over a full month'
-
   return (
     <div className="mx-auto max-w-5xl">
       <div className="flex flex-col gap-4">
-        {/* One filter row, scoping every panel below it. Custom ranges and
-            year-on-year history stay on Reports so the two pages don't
-            duplicate each other. */}
-        <div className="flex items-center justify-between gap-3">
+        {/* One filter row, scoping every panel below it. Year-on-year history
+            stays on Reports — a genuinely different lens (monthly bars, two
+            calendar years side by side) the dashboard doesn't replicate. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <DateRangeControl
             value={range}
             onChange={setRange}
-            presets={['this-month', 'last-month']}
+            presets={['this-month', 'last-month', 'last-3-months', 'last-12-months', 'all-time', 'custom']}
           />
           <Link
             to="/wallet/reports"
             className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
           >
-            Custom range &amp; history →
+            Year-on-year comparison →
           </Link>
         </div>
 
@@ -383,11 +572,15 @@ export function Dashboard() {
           curve={pace.curve}
           baseline={pace.baseline}
           projected={pace.projected}
-          usualMonthTotal={pace.monthAverage}
-          day={period.day}
-          monthLabel={period.label}
-          inProgress={period.inProgress}
-          baselineMonths={hasBaseline ? period.baselineMonths.length : 0}
+          comparisonTotal={pace.comparisonTotal}
+          elapsedDays={isMonthMode && monthPeriod ? monthPeriod.day : pace.curve.length}
+          periodLabel={isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel}
+          inProgress={isMonthMode && !!monthPeriod?.inProgress}
+          comparisonCount={hasBaseline ? (isMonthMode && monthPeriod ? monthPeriod.baselineMonths.length : 1) : 0}
+          comparisonDescription={spendPaceComparisonDescription}
+          comparisonClause={spendPaceComparisonClause}
+          formatDay={spendPaceFormatDay}
+          formatDayTooltipLabel={spendPaceFormatDayTooltipLabel}
         />
 
         <StatTiles tiles={tiles} />
@@ -398,10 +591,9 @@ export function Dashboard() {
           <WhatChanged
             rows={deltas}
             netDelta={netDelta}
-            baselineMonths={period.baselineMonths.length}
-            dateFrom={bounds.from}
-            dateTo={bounds.to}
-            dayLabel={dayLabel}
+            comparisonDescription={comparisonDescription}
+            dateFrom={whatChangedBounds.from}
+            dateTo={whatChangedBounds.to}
           />
         )}
 
@@ -411,32 +603,40 @@ export function Dashboard() {
               rows={breakdown}
               previous={previousByCategory}
               total={summary.expense}
-              dateFrom={bounds.from}
-              dateTo={bounds.to}
+              dateFrom={periodBounds.from}
+              dateTo={periodBounds.to}
             />
           )}
-          <WeekRhythm averages={weekday} months={BASELINE_MONTHS} />
+          <WeekRhythm averages={weekday} months={isMonthMode ? BASELINE_MONTHS : rangeMonthSpan} />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <CommittedSpend split={committed} />
           <BudgetPace
             budgets={budgets}
-            spending={budgetSpending}
+            spending={budgetSpendingMap}
             categories={categories}
-            elapsed={period.day / period.length}
-            elapsedLabel={`day ${period.day} of ${period.length}`}
+            elapsed={budgetElapsed}
+            elapsedLabel={budgetElapsedLabel}
+            showPaceNotch={isMonthMode}
+            limitMultiplier={isMonthMode ? 1 : rangeMonthSpan}
+            daysLeft={budgetDaysLeft}
           />
         </div>
 
-        <MerchantTable rows={merchants} trendMonths={TREND_MONTHS} />
+        <MerchantTable
+          rows={merchants}
+          trendMonths={TREND_MONTHS}
+          dateFrom={periodBounds.from}
+          dateTo={periodBounds.to}
+        />
 
-        {goals.length > 0 && (
-          <DashboardCard
-            title="Goals"
-            subtitle="Progress against target."
-            action={{ label: 'Manage', to: '/wallet/goals' }}
-          >
+        <SharedSummary />
+
+        <DashboardCard title="Goals" subtitle="Progress against target." action={{ label: 'Manage', to: '/wallet/goals' }}>
+          {goals.length === 0 ? (
+            <p className="py-6 text-center text-sm text-fg-subtle">No goals set yet.</p>
+          ) : (
             <div data-testid="dashboard-goals">
               {goals.map((goal) => {
                 const balance = balances[goal.accountId] ?? 0
@@ -468,8 +668,8 @@ export function Dashboard() {
                 )
               })}
             </div>
-          </DashboardCard>
-        )}
+          )}
+        </DashboardCard>
       </div>
     </div>
   )

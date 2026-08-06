@@ -56,13 +56,36 @@ export function monthRange(offset: number): { dateFrom: string; dateTo: string }
 // §6.4: which date-range preset matches a from/to pair. Lets the filter bar
 // show the active segment and tell "default this-month" apart from a narrowed
 // range (clear-all visibility) without storing a separate preset state.
-export type DateRangePreset = 'this-month' | 'last-month' | 'all-time' | 'custom'
+export type DateRangePreset =
+  | 'this-month'
+  | 'last-month'
+  | 'last-3-months'
+  | 'last-12-months'
+  | 'all-time'
+  | 'custom'
+
+// Trailing window of `months` calendar months INCLUDING the current one,
+// ending today — not ending on the last day of the current month, since the
+// window is meant to read as "up to right now." E.g. trailingRange(3) on
+// 4 Aug 2026 → 1 Jun 2026 through 4 Aug 2026. Local Date arithmetic only, for
+// the same §1.1 reason monthRange avoids toISOString().
+export function trailingRange(months: number): { dateFrom: string; dateTo: string } {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1)
+  const y = start.getFullYear()
+  const m = String(start.getMonth() + 1).padStart(2, '0')
+  return { dateFrom: `${y}-${m}-01`, dateTo: todayISO() }
+}
 
 export function dateRangePreset({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }): DateRangePreset {
   const thisMonth = monthRange(0)
   if (dateFrom === thisMonth.dateFrom && dateTo === thisMonth.dateTo) return 'this-month'
   const lastMonth = monthRange(-1)
   if (dateFrom === lastMonth.dateFrom && dateTo === lastMonth.dateTo) return 'last-month'
+  const last3 = trailingRange(3)
+  if (dateFrom === last3.dateFrom && dateTo === last3.dateTo) return 'last-3-months'
+  const last12 = trailingRange(12)
+  if (dateFrom === last12.dateFrom && dateTo === last12.dateTo) return 'last-12-months'
   if (!dateFrom && !dateTo) return 'all-time'
   return 'custom'
 }

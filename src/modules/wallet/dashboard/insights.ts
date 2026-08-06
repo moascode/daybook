@@ -65,9 +65,84 @@ export function priorMonths(month: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) => shiftMonth(month, i - count))
 }
 
+/** The `count` trailing months ENDING at (and including) `monthKey(dateTo)`. */
+export function trailingMonthsEndingAt(dateTo: string, count: number): string[] {
+  const end = monthKey(dateTo)
+  return [...priorMonths(end, count - 1), end]
+}
+
 /** First and last ISO dates of a 'YYYY-MM'. */
 export function monthBounds(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: `${month}-${String(daysInMonth(month)).padStart(2, '0')}` }
+}
+
+// ── Arbitrary date ranges (multi-month / custom periods) ───────────
+//
+// The month-based functions above assume a single calendar month with a
+// same-day-of-month baseline, which is a deliberately different (and more
+// precise) comparison than "the N days before." These range functions back
+// the "Last 3 months" / "Last 12 months" / "All time" / "Custom" presets,
+// where the period itself spans many months and the fair comparison is
+// simply the immediately preceding window of equal length.
+
+/** Day count of an ISO date, local-midnight based (no DST drift at this app's fixed-offset timezone). */
+function dayIndex(isoDate: string): number {
+  const d = new Date(Number(isoDate.slice(0, 4)), Number(isoDate.slice(5, 7)) - 1, Number(isoDate.slice(8, 10)))
+  return Math.round(d.getTime() / 86_400_000)
+}
+
+/** `iso` shifted by `n` days (negative goes back). Date's own overflow handling does the month/year rollover. */
+export function addDaysISO(isoDate: string, n: number): string {
+  const d = new Date(
+    Number(isoDate.slice(0, 4)),
+    Number(isoDate.slice(5, 7)) - 1,
+    Number(isoDate.slice(8, 10)) + n,
+  )
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Inclusive day count between two ISO dates. */
+export function daysBetween(dateFrom: string, dateTo: string): number {
+  return dayIndex(dateTo) - dayIndex(dateFrom) + 1
+}
+
+/** Whether `isoDate` falls within [dateFrom, dateTo] inclusive. 'YYYY-MM-DD' sorts lexicographically, so plain string comparison is exact. */
+export function inRange(isoDate: string, dateFrom: string, dateTo: string): boolean {
+  return isoDate >= dateFrom && isoDate <= dateTo
+}
+
+/**
+ * The comparison window: the same number of days, immediately before
+ * `dateFrom`. This is the "range mode" equivalent of `priorMonths` — the one
+ * fair baseline when the period itself isn't a calendar month.
+ */
+export function precedingRange(dateFrom: string, dateTo: string): { dateFrom: string; dateTo: string } {
+  const days = daysBetween(dateFrom, dateTo)
+  const to = addDaysISO(dateFrom, -1)
+  const from = addDaysISO(to, -(days - 1))
+  return { dateFrom: from, dateTo: to }
+}
+
+/**
+ * Running total for each day of [dateFrom, dateTo], index 0 = dateFrom. The
+ * range-mode equivalent of `cumulativeByDay` — same monotonic-fill behaviour,
+ * generalised from "day of a named month" to "day offset in an arbitrary span."
+ */
+export function cumulativeByDayOffset(txns: Transaction[], dateFrom: string, dateTo: string): number[] {
+  const length = daysBetween(dateFrom, dateTo)
+  const daily = new Array<number>(length).fill(0)
+  for (const t of txns) {
+    if (!inRange(t.date, dateFrom, dateTo)) continue
+    const offset = daysBetween(dateFrom, t.date) - 1
+    daily[offset] += expenseOf(t)
+  }
+  const out = new Array<number>(length)
+  let running = 0
+  for (let i = 0; i < length; i++) {
+    running += daily[i]
+    out[i] = running
+  }
+  return out
 }
 
 // ── Money helpers ─────────────────────────────────────────────────
@@ -235,37 +310,32 @@ export interface CategoryDelta extends CategorySpend {
 }
 
 /**
- * Every category's spend against its own baseline, largest overspend first.
+ * Shared arithmetic behind every "category vs its own baseline" view. Takes
+ * pre-filtered transaction buckets so it has no opinion on WHAT the period or
+ * the comparison window are — `categoryDeltas` (month mode) and
+ * `categoryDeltasBetween` (range mode) each build the buckets their own way
+ * and delegate here, so the two can never disagree on the merge/sort logic.
  *
- * Categories that were active in the baseline but not this month are included
- * with a negative delta — "you stopped spending on this" is exactly as much a
- * change as "you started".
+ * `comparisonBuckets` is averaged: one bucket per baseline month (month mode)
+ * or a single bucket holding the whole comparison range (range mode) — either
+ * way, dividing by `comparisonBuckets.length` produces the right average.
  */
-export function categoryDeltas(
-  txns: Transaction[],
+function categoryDeltasCore(
+  currentTxns: Transaction[],
+  comparisonBuckets: Transaction[][],
   categories: Category[],
-  month: string,
-  day: number,
-  baselineMonths: string[],
 ): CategoryDelta[] {
-  const current = categorySpend(
-    txns.filter((t) => monthKey(t.date) === month && dayOfMonth(t.date) <= day),
-    categories,
-  )
+  const current = categorySpend(currentTxns, categories)
 
   const usualByCategory = new Map<string, number>()
-  if (baselineMonths.length > 0) {
-    for (const m of baselineMonths) {
-      const rows = categorySpend(
-        txns.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= day),
-        categories,
-      )
-      for (const r of rows) {
+  if (comparisonBuckets.length > 0) {
+    for (const bucket of comparisonBuckets) {
+      for (const r of categorySpend(bucket, categories)) {
         usualByCategory.set(r.id, (usualByCategory.get(r.id) ?? 0) + r.amount)
       }
     }
     for (const [id, total] of usualByCategory) {
-      usualByCategory.set(id, total / baselineMonths.length)
+      usualByCategory.set(id, total / comparisonBuckets.length)
     }
   }
 
@@ -289,6 +359,42 @@ export function categoryDeltas(
   }
 
   return Array.from(seen.values()).sort((a, b) => b.delta - a.delta)
+}
+
+/**
+ * Every category's spend against its own baseline, largest overspend first.
+ *
+ * Categories that were active in the baseline but not this month are included
+ * with a negative delta — "you stopped spending on this" is exactly as much a
+ * change as "you started".
+ */
+export function categoryDeltas(
+  txns: Transaction[],
+  categories: Category[],
+  month: string,
+  day: number,
+  baselineMonths: string[],
+): CategoryDelta[] {
+  const currentTxns = txns.filter((t) => monthKey(t.date) === month && dayOfMonth(t.date) <= day)
+  const comparisonBuckets = baselineMonths.map((m) =>
+    txns.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= day),
+  )
+  return categoryDeltasCore(currentTxns, comparisonBuckets, categories)
+}
+
+/**
+ * The range-mode equivalent of `categoryDeltas`: the period against a single
+ * arbitrary comparison window instead of an averaged set of baseline months.
+ * `comparisonTxns: null` means no comparison window exists at all (the
+ * all-time preset with nothing before it) — distinct from an empty array,
+ * which means the window exists but had no spending in it.
+ */
+export function categoryDeltasBetween(
+  periodTxns: Transaction[],
+  comparisonTxns: Transaction[] | null,
+  categories: Category[],
+): CategoryDelta[] {
+  return categoryDeltasCore(periodTxns, comparisonTxns === null ? [] : [comparisonTxns], categories)
 }
 
 // ── Weekday rhythm ────────────────────────────────────────────────
@@ -328,6 +434,30 @@ function mondayFirstIndex(isoDate: string): number {
   return (parseISO(isoDate).getDay() + 6) % 7
 }
 
+/**
+ * Range-mode equivalent of `weekdayAverages`: occurrence counts come from
+ * iterating the day span directly instead of a list of whole months. Kept as
+ * a near-duplicate rather than unified behind one abstraction — "a list of
+ * whole calendar months" and "an arbitrary day range" don't share enough
+ * shape to be worth threading through a common iterator.
+ */
+export function weekdayAveragesInRange(txns: Transaction[], dateFrom: string, dateTo: string): number[] {
+  const totals = new Array<number>(7).fill(0)
+  const occurrences = new Array<number>(7).fill(0)
+  const length = daysBetween(dateFrom, dateTo)
+
+  for (let i = 0; i < length; i++) {
+    occurrences[mondayFirstIndex(addDaysISO(dateFrom, i))] += 1
+  }
+  for (const t of txns) {
+    const amount = expenseOf(t)
+    if (amount === 0 || !inRange(t.date, dateFrom, dateTo)) continue
+    totals[mondayFirstIndex(t.date)] += amount
+  }
+
+  return totals.map((total, i) => (occurrences[i] > 0 ? total / occurrences[i] : 0))
+}
+
 // ── Merchants ─────────────────────────────────────────────────────
 
 export interface MerchantSpend {
@@ -343,14 +473,14 @@ export interface MerchantSpend {
   isRegular: boolean
 }
 
-export function merchantSpend(
-  txns: Transaction[],
-  month: string,
+/** Shared arithmetic behind `merchantSpend` and `merchantSpendInRange`. */
+function merchantSpendCore(
+  periodTxns: Transaction[],
+  history: Map<string, Map<string, number>>,
   trendMonths: string[],
 ): MerchantSpend[] {
   const current = new Map<string, { total: number; count: number; label: string }>()
-  for (const t of txns) {
-    if (monthKey(t.date) !== month) continue
+  for (const t of periodTxns) {
     const amount = expenseOf(t)
     if (amount === 0 || !t.merchant) continue
     const key = t.merchant.trim().toLowerCase()
@@ -358,8 +488,6 @@ export function merchantSpend(
     const row = current.get(key) ?? { total: 0, count: 0, label: t.merchant.trim() }
     current.set(key, { total: row.total + amount, count: row.count + 1, label: row.label })
   }
-
-  const history = monthlyTotalsByMerchant(txns, trendMonths)
 
   return Array.from(current.entries())
     .map(([key, row]) => {
@@ -377,6 +505,28 @@ export function merchantSpend(
       }
     })
     .sort((a, b) => b.total - a.total)
+}
+
+export function merchantSpend(
+  txns: Transaction[],
+  month: string,
+  trendMonths: string[],
+): MerchantSpend[] {
+  const periodTxns = txns.filter((t) => monthKey(t.date) === month)
+  const history = monthlyTotalsByMerchant(txns, trendMonths)
+  return merchantSpendCore(periodTxns, history, trendMonths)
+}
+
+/** Range-mode equivalent of `merchantSpend`. `trendMonths` still buckets the sparkline by calendar month regardless of the period's own granularity — a monthly trend reads the same whether the period itself is one month or twelve. */
+export function merchantSpendInRange(
+  txns: Transaction[],
+  dateFrom: string,
+  dateTo: string,
+  trendMonths: string[],
+): MerchantSpend[] {
+  const periodTxns = txns.filter((t) => inRange(t.date, dateFrom, dateTo))
+  const history = monthlyTotalsByMerchant(txns, trendMonths)
+  return merchantSpendCore(periodTxns, history, trendMonths)
 }
 
 function monthlyTotalsByMerchant(
@@ -404,19 +554,72 @@ function monthlyTotalsByMerchant(
 export interface CommittedSplit {
   committed: number
   discretionary: number
-  /** The committed merchants this month, largest first. */
-  items: { merchant: string; amount: number; fromRule: boolean }[]
+  /** The committed merchants this period, largest first. */
+  items: { merchant: string; amount: number; fromRule: boolean; date: string }[]
+}
+
+/**
+ * Shared arithmetic behind `committedSplit` and `committedSplitInRange`. Takes
+ * the period's rows pre-filtered so it has no opinion on whether "the period"
+ * is a calendar month or an arbitrary range.
+ *
+ * A merchant counts as committed when it either matches an existing recurring
+ * rule, or turned up in at least `REGULAR_THRESHOLD` of `historyBuckets` — the
+ * second test catches the standing costs that were never entered as a rule,
+ * which in practice is most of them. `date` on each item is the most recent
+ * transaction date for that merchant within the period, for "Paid <date>".
+ */
+function committedSplitCore(
+  periodTxns: Transaction[],
+  rules: RecurringTransaction[],
+  history: Map<string, Map<string, number>>,
+  historyBuckets: string[],
+): CommittedSplit {
+  const ruleMerchants = new Set(
+    rules.map((r) => r.merchant.trim().toLowerCase()).filter(Boolean),
+  )
+
+  const items: CommittedSplit['items'] = []
+  let committed = 0
+  let discretionary = 0
+
+  const thisPeriod = new Map<string, { total: number; label: string; lastDate: string }>()
+  for (const t of periodTxns) {
+    const amount = expenseOf(t)
+    if (amount === 0) continue
+    const key = t.merchant.trim().toLowerCase()
+    if (!key) {
+      discretionary += amount
+      continue
+    }
+    const row = thisPeriod.get(key) ?? { total: 0, label: t.merchant.trim(), lastDate: t.date }
+    thisPeriod.set(key, {
+      total: row.total + amount,
+      label: row.label,
+      lastDate: t.date > row.lastDate ? t.date : row.lastDate,
+    })
+  }
+
+  for (const [key, row] of thisPeriod) {
+    const fromRule = ruleMerchants.has(key)
+    const months = history.get(key)
+    const recurring = fromRule || (months ? countActive(months, historyBuckets) >= REGULAR_THRESHOLD : false)
+    if (recurring) {
+      committed += row.total
+      items.push({ merchant: row.label, amount: row.total, fromRule, date: row.lastDate })
+    } else {
+      discretionary += row.total
+    }
+  }
+
+  items.sort((a, b) => b.amount - a.amount)
+  return { committed, discretionary, items }
 }
 
 /**
  * Split the month into spending that was decided once and spending decided in
- * the moment. A merchant counts as committed when it either matches an
- * existing recurring rule, or turned up in at least three of the trailing
- * months — the second test catches the standing costs that were never entered
- * as a rule, which in practice is most of them.
- *
- * No classifier and no new table: this is the `recurring_transactions` the app
- * already has, plus a count.
+ * the moment. No classifier and no new table: this is the
+ * `recurring_transactions` the app already has, plus a count.
  */
 export function committedSplit(
   txns: Transaction[],
@@ -431,43 +634,23 @@ export function committedSplit(
    */
   historyTxns: Transaction[] = txns,
 ): CommittedSplit {
-  const ruleMerchants = new Set(
-    rules.map((r) => r.merchant.trim().toLowerCase()).filter(Boolean),
-  )
+  const periodTxns = txns.filter((t) => monthKey(t.date) === month)
   const history = monthlyTotalsByMerchant(historyTxns, trendMonths)
+  return committedSplitCore(periodTxns, rules, history, trendMonths)
+}
 
-  const items: CommittedSplit['items'] = []
-  let committed = 0
-  let discretionary = 0
-
-  const thisMonth = new Map<string, { total: number; label: string }>()
-  for (const t of txns) {
-    if (monthKey(t.date) !== month) continue
-    const amount = expenseOf(t)
-    if (amount === 0) continue
-    const key = t.merchant.trim().toLowerCase()
-    if (!key) {
-      discretionary += amount
-      continue
-    }
-    const row = thisMonth.get(key) ?? { total: 0, label: t.merchant.trim() }
-    thisMonth.set(key, { total: row.total + amount, label: row.label })
-  }
-
-  for (const [key, row] of thisMonth) {
-    const fromRule = ruleMerchants.has(key)
-    const months = history.get(key)
-    const recurring = fromRule || (months ? countActive(months, trendMonths) >= REGULAR_THRESHOLD : false)
-    if (recurring) {
-      committed += row.total
-      items.push({ merchant: row.label, amount: row.total, fromRule })
-    } else {
-      discretionary += row.total
-    }
-  }
-
-  items.sort((a, b) => b.amount - a.amount)
-  return { committed, discretionary, items }
+/** Range-mode equivalent of `committedSplit`. */
+export function committedSplitInRange(
+  txns: Transaction[],
+  dateFrom: string,
+  dateTo: string,
+  rules: RecurringTransaction[],
+  historyTxns: Transaction[],
+  historyMonths: string[],
+): CommittedSplit {
+  const periodTxns = txns.filter((t) => inRange(t.date, dateFrom, dateTo))
+  const history = monthlyTotalsByMerchant(historyTxns, historyMonths)
+  return committedSplitCore(periodTxns, rules, history, historyMonths)
 }
 
 function countActive(perMonth: Map<string, number>, months: string[]): number {

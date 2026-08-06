@@ -646,7 +646,11 @@ function applyFilters(
   if (type && type !== 'all') { conditions.push(`${col('type')} = ?`); binds.push(type) }
 
   const categoryId = str(c.req.query('categoryId'))
-  if (categoryId) { conditions.push(`${col('category_id')} = ?`); binds.push(categoryId) }
+  // Sentinel for "no category set" — must match UNCATEGORISED in
+  // src/modules/wallet/dashboard/insights.ts. category_id has no real row with
+  // this value, so `= ?` can't express it; needs its own clause.
+  if (categoryId === '__uncategorised__') { conditions.push(`${col('category_id')} IS NULL`) }
+  else if (categoryId) { conditions.push(`${col('category_id')} = ?`); binds.push(categoryId) }
 
   const accountId = str(c.req.query('accountId'))
   if (accountId) {

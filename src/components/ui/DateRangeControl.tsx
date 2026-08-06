@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { DatePicker } from './DatePicker'
-import { cn, monthRange, dateRangePreset, type DateRangePreset } from '@/lib/utils'
+import { cn, monthRange, trailingRange, dateRangePreset, type DateRangePreset } from '@/lib/utils'
 
 export interface DateRangeValue {
   dateFrom: string
@@ -12,6 +12,8 @@ export interface DateRangeValue {
 const PRESET_META: Record<DateRangePreset, { label: string; testId: string }> = {
   'this-month': { label: 'This month', testId: 'filter-this-month' },
   'last-month': { label: 'Last month', testId: 'filter-last-month' },
+  'last-3-months': { label: 'Last 3 months', testId: 'filter-last-3-months' },
+  'last-12-months': { label: 'Last 12 months', testId: 'filter-last-12-months' },
   'all-time': { label: 'All time', testId: 'filter-clear-dates' },
   custom: { label: 'Custom…', testId: 'filter-custom-range' },
 }
@@ -46,13 +48,19 @@ export function DateRangeControl({
     }
     setCustomOpen(false)
     if (preset === 'all-time') onChange({ dateFrom: '', dateTo: '' })
+    else if (preset === 'last-3-months') onChange(trailingRange(3))
+    else if (preset === 'last-12-months') onChange(trailingRange(12))
     else onChange(monthRange(preset === 'this-month' ? 0 : -1))
   }
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       {!customOnly && (
-        <div className="flex rounded-lg border border-line bg-surface" role="group" aria-label="Date range">
+        <div
+          className="flex flex-wrap rounded-lg border border-line bg-surface"
+          role="group"
+          aria-label="Date range"
+        >
           {presets.map((preset) => (
             <button
               key={preset}
