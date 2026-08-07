@@ -202,9 +202,9 @@ Implementation:
 3. Canonicalise each returned `merchant` in the Worker, folding the raw variants
    into canonical buckets and summing `n` per `(canonical, category_id)`.
 4. For each requested canonical name, take the highest-count category. Emit it
-   only if `matchCount >= MIN_MATCHES` (2) **and** it holds a majority
-   (`matchCount * 2 > totalCount`). One prior sighting is not a pattern; a 4–3
-   split is not a suggestion.
+   only if `matchCount >= MIN_MATCHES` (**1** since 2026-08-07, was 2) **and**
+   it holds a majority (`matchCount * 2 > totalCount`). A 4–3 split is not a
+   suggestion.
 5. Resolve `categoryName` from the caller's `categories`, and drop any row whose
    category has since been deleted.
 
@@ -384,7 +384,7 @@ dressed up as personal history is the one way this feature loses trust.
 
 | Name | Value | Why |
 |---|---|---|
-| `MIN_MATCHES` | 2 | One sighting is a coincidence. |
+| `MIN_MATCHES` | 1 | Lowered from 2 on 2026-08-07: with two users and a young history, nearly every merchant sat at exactly one sighting and the feature stayed silent. Raise it back once there is enough history for it to bite. |
 | `LOOKBACK_DAYS` | 730 | Long enough that annual bills contribute; bounds the scan. |
 | `MAX_MERCHANTS` | 500 | Matches the existing bulk-update ceiling. |
 
@@ -580,7 +580,9 @@ learning is moot per §3.1).
    describes. No separate confirm step — the review table *is* the
    confirmation, and a gate in front of it only teaches the user to click
    through without reading.
-2. **`MIN_MATCHES = 2`.** The majority rule does the real filtering.
+2. **`MIN_MATCHES`.** The majority rule does the real filtering. Shipped at 2;
+   lowered to 1 on 2026-08-07 once it was clear the threshold, not the majority
+   rule, was what kept the feature quiet at this data volume.
 3. **Ship the builtin map, at ~115 entries rather than ~40**, and treat it as a
    list that grows. Hence `scripts/merchant-map-gaps.mjs` (§3.4) — without a
    repeatable way to find what is missing, the list decays into whatever was

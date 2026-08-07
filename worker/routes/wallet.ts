@@ -799,7 +799,12 @@ wallet.post('/transactions/check-duplicates', async (c) => {
 
 // docs/auto-categorisation-plan.md. Nothing is persisted — the user's own
 // transaction history *is* the rule table (principle 1). §3.5 constants.
-const MIN_MATCHES = 2
+// Lowered 2 -> 1 (2026-08-07): with only two users and a young history, almost
+// every merchant sat at exactly one sighting and the whole feature stayed
+// silent. The majority rule below is the real filter and still applies — a
+// single sighting is only suggested because it is trivially a majority of one.
+// Raise this back to 2 once there is enough history for it to bite.
+const MIN_MATCHES = 1
 const LOOKBACK_DAYS = 730
 const MAX_MERCHANTS = 500
 
@@ -906,7 +911,8 @@ wallet.post('/transactions/suggest-categories', async (c) => {
           bestCount = count
         }
       }
-      // MIN_MATCHES: one prior sighting is a coincidence, not a pattern.
+      // MIN_MATCHES is 1 today, so this clause only rejects a canonical with
+      // no usable history at all; the majority rule is what does the filtering.
       // Majority rule: the top category must hold more than half of this
       // canonical's categorised history, or a genuine split (e.g. WATSONS
       // between Health and Personal Care) would confidently pick a side.
