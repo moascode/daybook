@@ -25,6 +25,7 @@ interface Suggestion {
   canonical: string
   categoryId: string
   categoryName: string
+  categoryType: string
   matchCount: number
   totalCount: number
 }
@@ -201,6 +202,50 @@ test('INDAH WATER 26 GRACE WONG hits the map by word-prefix', async ({ browser }
   await ctx.close()
 })
 
+test('an internal separator does not truncate the name to nothing (7-ELEVEN)', async ({ browser }) => {
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  await page.request.post(`${API}/auth/signup`, { data: { username: `e2e_seven_${Date.now()}`, password: 'test-password' } })
+  const shopping = await categoryId(page, 'Shopping')
+
+  // Splitting on '-' leaves "7", which is not a usable name — the canonicaliser
+  // falls back to the whole string rather than giving up, or no history and no
+  // map entry could ever match one of the most common merchants in the country.
+  const [hit] = await suggest(page, ['7-ELEVEN MY TOWN 4471102'])
+  expect(hit.canonical).toBe('7 ELEVEN MY TOWN')
+  expect(hit.categoryId).toBe(shopping)
+
+  await ctx.close()
+})
+
+test('a generic map key matches the whole name only, never as a prefix', async ({ browser }) => {
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  await page.request.post(`${API}/auth/signup`, { data: { username: `e2e_generic_${Date.now()}`, password: 'test-password' } })
+  const transport = await categoryId(page, 'Transport')
+
+  // PLUS is the highway operator, but it is also an ordinary English word.
+  const [toll] = await suggest(page, ['PLUS 1234'])
+  expect(toll.categoryId).toBe(transport)
+  expect(await suggest(page, ['PLUS SIZE STORE'])).toEqual([])
+
+  await ctx.close()
+})
+
+test('a suggestion reports its category direction', async ({ browser }) => {
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  await page.request.post(`${API}/auth/signup`, { data: { username: `e2e_dir_${Date.now()}`, password: 'test-password' } })
+
+  // The map is all expense categories and history is read across both
+  // directions, so the caller needs the direction to decide whether a
+  // suggestion may be applied to a given row.
+  const [hit] = await suggest(page, ['KFC 4471102'])
+  expect(hit.categoryType).toBe('expense')
+
+  await ctx.close()
+})
+
 // ── CSV import review UI ────────────────────────────────────────────────────
 
 async function uploadCsv(page: Page, csv: string, filename: string) {
@@ -317,6 +362,29 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
 
   await page.getByRole('button', { name: /Import 1 Transaction/ }).click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
+
+  await page.context().close()
+})
+
+test('a money-in row is not pre-filled with an expense suggestion', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  const { fillAccountForm } = await import('./helpers')
+  await fillAccountForm(page, { name: 'Card', type: 'bank' })
+
+  await page.getByRole('link', { name: 'Import CSV' }).click()
+  // A refund from a shop the builtin map covers: the row is income, the
+  // suggestion is an expense category. Applying it would set a value the row's
+  // own Category select does not offer — the select renders blank while the
+  // value is still set, so it would import invisibly.
+  await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,12.00,KFC 4471102\n', 'refund.csv')
+  await page.getByRole('button', { name: /Review Rows/ }).click()
+  await expect(page.getByText('Review Import')).toBeVisible()
+
+  await expect(page.locator('tbody tr').first().locator('select').first()).toHaveValue('income')
+  await expect(page.getByText('KFC · common merchant')).not.toBeVisible()
+  await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
+  await expect(page.locator('tbody tr').first().locator('select').last()).toHaveValue('')
 
   await page.context().close()
 })

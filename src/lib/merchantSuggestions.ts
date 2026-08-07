@@ -10,8 +10,26 @@ export interface MerchantSuggestion {
   canonical: string
   categoryId: string
   categoryName: string
+  categoryType: 'income' | 'expense' | 'both'
   matchCount: number // how many of the caller's own past rows; 0 = builtin map, not history
   totalCount: number // …out of how many categorised rows for this canonical name
+}
+
+/**
+ * Whether a suggested category may be applied to a row of this direction.
+ *
+ * The route reads history across both directions and its builtin map is all
+ * expense categories, so a money-in row can come back with an expense
+ * suggestion. Applying it would set a category the row's own Category select
+ * does not offer — the select renders blank while the value is still set, so
+ * the mismatch is invisible right up until it is saved. Same rule the Category
+ * selects use (TransactionForm, CsvReviewTable, BulkEditDialog).
+ */
+export function suggestionFitsType(
+  suggestion: MerchantSuggestion,
+  type: 'income' | 'expense',
+): boolean {
+  return suggestion.categoryType === type || suggestion.categoryType === 'both'
 }
 
 /**

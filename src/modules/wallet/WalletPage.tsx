@@ -353,10 +353,19 @@ export function WalletPage() {
     async (groups: Array<{ categoryId: string; transactionIds: string[] }>) => {
       let updated = 0
       let skippedTransfers = 0
+      let failedGroups = 0
+      // Each group is its own request, so a failure part-way through leaves the
+      // earlier groups already written. Never rethrow: the refresh below has to
+      // run either way, or the list keeps showing rows that HAVE been
+      // categorised as though nothing happened.
       for (const g of groups) {
-        const res = await bulkUpdateTransactions(g.transactionIds, { categoryId: g.categoryId })
-        updated += res.updated
-        skippedTransfers += res.skippedTransfers
+        try {
+          const res = await bulkUpdateTransactions(g.transactionIds, { categoryId: g.categoryId })
+          updated += res.updated
+          skippedTransfers += res.skippedTransfers
+        } catch {
+          failedGroups += 1
+        }
       }
 
       setSelectedIds(new Set())
@@ -369,6 +378,9 @@ export function WalletPage() {
           `Updated ${updated} transaction${updated !== 1 ? 's' : ''}` +
           (skippedTransfers > 0
             ? ` — ${skippedTransfers} transfer${skippedTransfers !== 1 ? 's' : ''} skipped`
+            : '') +
+          (failedGroups > 0
+            ? ` — ${failedGroups} merchant group${failedGroups !== 1 ? 's' : ''} failed`
             : ''),
         duration: 4000,
       })

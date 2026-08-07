@@ -9,7 +9,8 @@
 // the ten seed expense categories — nothing else is guaranteed to exist for a
 // given user (docs/auto-categorisation-plan.md G5).
 //
-// Growing the map: node scripts/merchant-map-gaps.mjs export.csv (§3.4).
+// Growing the map: npm run merchant-map:gaps -- export.csv (§3.4). It runs via
+// tsx, not plain node — it imports this module directly.
 
 export type SeedCategoryName =
   | 'Food & Drink'
@@ -89,6 +90,7 @@ export const MERCHANT_MAP: Record<string, SeedCategoryName> = {
   'KK SUPERMART': 'Shopping',
   FAMILYMART: 'Shopping',
   MYNEWS: 'Shopping',
+  '7 ELEVEN': 'Shopping',
   IKEA: 'Shopping',
   'MR DIY': 'Shopping',
   DAISO: 'Shopping',
@@ -156,6 +158,13 @@ export const MERCHANT_MAP: Record<string, SeedCategoryName> = {
   TRAVELOKA: 'Travel',
 }
 
+// Keys that are ordinary English words as well as merchants: matched only when
+// they are the WHOLE canonical name, never as a prefix. "PLUS" is the highway
+// operator and "TRIP"/"BOOKING" are the travel sites (trip.com and booking.com
+// both canonicalise to a bare word once DOMAIN_TAIL is stripped) — but a
+// prefix match would also claim "PLUS SIZE STORE" or "BOOKING FEE".
+const EXACT_ONLY = new Set(['PLUS', 'TRIP', 'BOOKING'])
+
 /**
  * Look up a canonical merchant name by progressively shorter word-boundary
  * prefixes, longest first (at most 4 lookups). Word-boundary matching is what
@@ -165,7 +174,9 @@ export const MERCHANT_MAP: Record<string, SeedCategoryName> = {
 export function builtinCategory(canonical: string): SeedCategoryName | null {
   const words = canonical.split(' ')
   for (let n = Math.min(words.length, 4); n > 0; n--) {
-    const hit = MERCHANT_MAP[words.slice(0, n).join(' ')]
+    const key = words.slice(0, n).join(' ')
+    if (n < words.length && EXACT_ONLY.has(key)) continue
+    const hit = MERCHANT_MAP[key]
     if (hit) return hit
   }
   return null

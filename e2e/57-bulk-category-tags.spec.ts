@@ -312,6 +312,39 @@ test.describe('suggestions in the bulk edit dialog', () => {
     await page.context().close()
   })
 
+  test('a money-in row is excluded from an expense suggestion', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const acct = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Refund Suggest Acct', type: 'cash', openingBalance: 0 },
+    })).json() as { id: string }
+
+    // Same builtin-covered merchant twice: an expense (suggestible) and a
+    // refund booked as income. An expense category must not land on the
+    // money-in row — the Category select in this very dialog does not offer it.
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'KFC REFUND CASE', amount: 12, type: 'expense' },
+    })
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'KFC REFUND CASE', amount: 12, type: 'income' },
+    })
+
+    await page.reload()
+    await expect(page.getByText('KFC REFUND CASE').first()).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click() // select all
+    await page.getByTestId('bulk-edit-btn').click()
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await expect(suggestions).toContainText('Food & Drink')
+    await expect(suggestions).toContainText('1 transaction ·')
+    await expect(suggestions).toContainText('1 transaction has no suggestion')
+
+    await page.getByTestId('bulk-edit-apply-suggestions').click()
+    await expect(page.getByText('Updated 1 transaction')).toBeVisible({ timeout: 10_000 })
+
+    await page.context().close()
+  })
+
   test('the manual Category select overrides suggestions when Apply is used instead', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
     const acct = await (await page.request.post(`${API}/accounts`, {
