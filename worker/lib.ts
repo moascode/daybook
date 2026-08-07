@@ -130,6 +130,16 @@ export function todayStr(): string {
 }
 
 /**
+ * `days` from today (YYYY-MM-DD), in the business timezone. Negative goes
+ * back — e.g. a lookback bound for a history query. Mirrors e2e/helpers.ts'
+ * test-side helper of the same name; kept separate because that one is
+ * Playwright-only and must not import from worker/.
+ */
+export function businessDatePlus(days: number): string {
+  return dateFmt.format(new Date(Date.now() + days * 86_400_000))
+}
+
+/**
  * Convert a SQLite `datetime('now')` value (always UTC, 'YYYY-MM-DD HH:MM:SS')
  * to a calendar date in the business timezone.
  *

@@ -13,6 +13,8 @@ interface CsvReviewTableProps {
   destinationAccounts: Account[]
   onRowChange: (index: number, updates: Partial<ImportRow>) => void
   onToggleInclude: (index: number) => void
+  /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
+  onClearSuggestions: () => void
 }
 
 export function CsvReviewTable({
@@ -21,6 +23,7 @@ export function CsvReviewTable({
   destinationAccounts,
   onRowChange,
   onToggleInclude,
+  onClearSuggestions,
 }: CsvReviewTableProps) {
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
@@ -50,7 +53,28 @@ export function CsvReviewTable({
     )
   }
 
+  const suggestedCount = rows.filter((r) => r.suggestionApplied).length
+
   return (
+    <div>
+      {suggestedCount > 0 && (
+        <div
+          data-testid="csv-suggestions-banner"
+          className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
+        >
+          <span>
+            Suggested a category for {suggestedCount} of {rows.length} row{rows.length !== 1 ? 's' : ''} — check the
+            Category column before importing.
+          </span>
+          <button
+            type="button"
+            onClick={onClearSuggestions}
+            className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700"
+          >
+            Clear suggestions
+          </button>
+        </div>
+      )}
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
@@ -73,6 +97,7 @@ export function CsvReviewTable({
               className={cn(
                 'transition-colors',
                 !row.included && 'bg-surface-sunken opacity-60',
+                row.included && row.suggestionApplied && 'bg-surface-sunken',
                 row.isDuplicate && 'bg-amber-50/50'
               )}
             >
@@ -102,7 +127,17 @@ export function CsvReviewTable({
               <td className="px-3 py-2">
                 <Input
                   value={row.merchant}
-                  onChange={(e) => onRowChange(index, { merchant: e.target.value })}
+                  onChange={(e) =>
+                    // A merchant edit invalidates the suggestion's provenance
+                    // (G11: it is never re-run under the cursor), so the
+                    // caption/tint drop even though the pre-filled category
+                    // itself is left alone.
+                    onRowChange(index, {
+                      merchant: e.target.value,
+                      suggestedFrom: undefined,
+                      suggestionApplied: false,
+                    })
+                  }
                   className="w-40 text-xs"
                   placeholder="—"
                   disabled={!row.included}
@@ -136,7 +171,12 @@ export function CsvReviewTable({
                     const type = e.target.value as ImportRow['type']
                     if (type === 'transfer') {
                       // Transfers are uncategorised; the destination is chosen next.
-                      onRowChange(index, { type, categoryId: null })
+                      onRowChange(index, {
+                        type,
+                        categoryId: null,
+                        suggestedFrom: undefined,
+                        suggestionApplied: false,
+                      })
                       return
                     }
                     // Drop a now-invalid category when the direction flips, so an
@@ -148,6 +188,7 @@ export function CsvReviewTable({
                       type,
                       categoryId: stillValid ? row.categoryId : null,
                       destinationAccountId: null,
+                      ...(stillValid ? {} : { suggestedFrom: undefined, suggestionApplied: false }),
                     })
                   }}
                   className="text-xs"
@@ -172,17 +213,31 @@ export function CsvReviewTable({
                     aria-label={`Destination account for row ${index + 1}`}
                   />
                 ) : (
-                  <Select
-                    options={categoryOptionsFor(row.type)}
-                    value={row.categoryId ?? ''}
-                    onChange={(e) =>
-                      onRowChange(index, {
-                        categoryId: e.target.value || null,
-                      })
-                    }
-                    className="text-xs"
-                    disabled={!row.included}
-                  />
+                  <>
+                    <Select
+                      options={categoryOptionsFor(row.type)}
+                      value={row.categoryId ?? ''}
+                      onChange={(e) =>
+                        // A hand-picked category overrides the suggestion —
+                        // clear its provenance so the caption/tint drop too.
+                        onRowChange(index, {
+                          categoryId: e.target.value || null,
+                          suggestedFrom: undefined,
+                          suggestionApplied: false,
+                        })
+                      }
+                      className="text-xs"
+                      disabled={!row.included}
+                    />
+                    {row.suggestionApplied && row.suggestedFrom && (
+                      <p className="mt-1 text-[11px] text-fg-subtle">
+                        {row.suggestedFrom.canonical} ·{' '}
+                        {row.suggestedFrom.matchCount > 0
+                          ? `you categorised this ${row.suggestedFrom.matchCount}×`
+                          : 'common merchant'}
+                      </p>
+                    )}
+                  </>
                 )}
               </td>
 
@@ -223,6 +278,7 @@ export function CsvReviewTable({
           )}
         </span>
       </div>
+    </div>
     </div>
   )
 }
