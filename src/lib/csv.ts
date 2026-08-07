@@ -28,6 +28,40 @@ export interface ImportRow {
   isDuplicate: boolean
   included: boolean
   originalRow: Record<string, string>
+  /** Set only by the suggestion pass (CsvImport.tsx); never sent to the server. matchCount 0 = builtin map, not history. */
+  suggestedFrom?: { canonical: string; matchCount: number }
+  /** True while the pre-filled categoryId is still the suggestion, unedited — for "Clear suggestions". */
+  suggestionApplied?: boolean
+}
+
+// ── Category suggestions (docs/auto-categorisation-plan.md) ────────
+
+export interface MerchantSuggestion {
+  raw: string
+  canonical: string
+  categoryId: string
+  categoryName: string
+  matchCount: number
+  totalCount: number
+}
+
+/**
+ * Fetch a category suggestion per distinct merchant string, derived from the
+ * caller's own categorised history (plus a builtin cold-start map). Never
+ * throws — a failed call must degrade to today's manual import, not to an
+ * error screen, so the caller always gets an (possibly empty) array back.
+ */
+export async function suggestCategories(merchants: string[]): Promise<MerchantSuggestion[]> {
+  if (merchants.length === 0) return []
+  try {
+    const { suggestions } = await api.post<{ suggestions: MerchantSuggestion[] }>(
+      '/transactions/suggest-categories',
+      { merchants },
+    )
+    return suggestions
+  } catch {
+    return []
+  }
 }
 
 // ── Date patterns for auto-detection ────────────────

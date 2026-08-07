@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
-import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
+import { parseCSV, detectColumns, buildImportRows, suggestCategories } from '@/lib/csv'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
@@ -111,12 +111,43 @@ export function CsvImport() {
     if (!mapping.date || !mapping.amount) return
     try {
       const rows = await buildImportRows(rawRows, mapping)
+
+      // Pre-fill a category per row from the caller's own history / the
+      // builtin cold-start map (docs/auto-categorisation-plan.md §4.1).
+      // suggestCategories() never throws — a failed call degrades silently to
+      // today's manual import rather than blocking the review step.
+      const merchants = [...new Set(rows.filter((r) => r.merchant).map((r) => r.merchant))]
+      const suggestions = await suggestCategories(merchants)
+      if (suggestions.length > 0) {
+        const byRaw = new Map(suggestions.map((s) => [s.raw, s]))
+        for (const row of rows) {
+          if (row.categoryId !== null || row.type === 'transfer') continue
+          const hit = byRaw.get(row.merchant)
+          if (!hit) continue
+          row.categoryId = hit.categoryId
+          row.suggestedFrom = { canonical: hit.canonical, matchCount: hit.matchCount }
+          row.suggestionApplied = true
+        }
+      }
+
       setImportRows(rows)
       setStep('review')
     } catch {
       addToast({ message: 'Could not prepare the import — please try again.', duration: 4000 })
     }
   }, [rawRows, mapping, addToast])
+
+  // Nulls every pre-filled category (and only those — a category the user
+  // chose by hand is untouched).
+  const clearSuggestions = useCallback(() => {
+    setImportRows((prev) =>
+      prev.map((row) =>
+        row.suggestionApplied
+          ? { ...row, categoryId: null, suggestedFrom: undefined, suggestionApplied: false }
+          : row,
+      ),
+    )
+  }, [])
 
   const handleImport = useCallback(async () => {
     if (!selectedAccountId) return
@@ -372,6 +403,7 @@ export function CsvImport() {
             destinationAccounts={importableAccounts.filter((a) => a.id !== selectedAccountId)}
             onRowChange={updateRow}
             onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
+            onClearSuggestions={clearSuggestions}
           />
         </>
       )}

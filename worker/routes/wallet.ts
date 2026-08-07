@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
 import {
+  businessDatePlus,
   normalizeBind,
   ownedIdSet,
   ownsAllRefs,
@@ -17,6 +18,8 @@ import {
   visibleAccountIds,
   writableAccountIds,
 } from '../lib/sharing.ts'
+import { canonicalMerchant } from '../lib/merchant.ts'
+import { builtinCategory } from '../lib/merchant-map.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
 // (1,461 lines, 68 .prepare() sites), it lands in increments:
@@ -792,6 +795,139 @@ wallet.post('/transactions/check-duplicates', async (c) => {
   for (const r of results) for (const row of r.results) found.add(row.hash)
 
   return c.json([...found])
+})
+
+// docs/auto-categorisation-plan.md. Nothing is persisted — the user's own
+// transaction history *is* the rule table (principle 1). §3.5 constants.
+const MIN_MATCHES = 2
+const LOOKBACK_DAYS = 730
+const MAX_MERCHANTS = 500
+
+interface MerchantSuggestion {
+  raw: string
+  canonical: string
+  categoryId: string
+  categoryName: string
+  matchCount: number // how many of the caller's own past rows; 0 = builtin map, not history
+  totalCount: number // …out of how many categorised rows for this canonical name
+}
+
+// Suggests a category per requested merchant string: Stage 2 (§3.3) derives
+// it from the caller's own categorised history with a single grouped read —
+// two bound parameters regardless of how many merchants were asked about, so
+// the D1 100-bound-parameter cap (G6) cannot be reached. Stage 3 (§3.4) is a
+// builtin cold-start map, consulted only when history has nothing. Suggestions
+// are shown, never applied — nothing here writes to the database.
+wallet.post('/transactions/suggest-categories', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const input: unknown[] = Array.isArray(b.merchants) ? b.merchants : []
+  if (input.length === 0) return c.json({ suggestions: [] })
+  if (input.length > MAX_MERCHANTS) {
+    return c.json({ error: `cannot request more than ${MAX_MERCHANTS} merchants at once` }, 400)
+  }
+
+  // Every raw string the caller asked about, resolved to its canonical key.
+  // Kept as raw -> canonical (not deduped to one raw per canonical) so the
+  // response can echo one entry per raw string sent — the client cannot
+  // canonicalise merchant strings itself (G12: canonicalMerchant is
+  // Worker-owned, and worker/ and src/ share no code).
+  const rawToCanonical = new Map<string, string>()
+  const wanted = new Set<string>()
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue
+    const key = canonicalMerchant(raw)
+    if (!key) continue
+    rawToCanonical.set(raw, key)
+    wanted.add(key)
+  }
+  if (wanted.size === 0) return c.json({ suggestions: [] })
+
+  const since = businessDatePlus(-LOOKBACK_DAYS)
+  const [historyResult, categoriesResult] = await c.env.DB.batch<
+    { merchant: string; category_id: string; n: number } | { id: string; name: string; type: string }
+  >([
+    c.env.DB
+      .prepare(
+        `SELECT merchant, category_id, COUNT(*) AS n FROM transactions
+          WHERE user_id = ? AND type != 'transfer' AND category_id IS NOT NULL
+            AND merchant != '' AND date >= ?
+          GROUP BY merchant, category_id`,
+      )
+      .bind(userId, since),
+    c.env.DB.prepare('SELECT id, name, type FROM categories WHERE user_id = ?').bind(userId),
+  ])
+  const history = historyResult.results as { merchant: string; category_id: string; n: number }[]
+  const cats = categoriesResult.results as { id: string; name: string; type: string }[]
+
+  // Fold raw history variants into canonical buckets, summing counts per
+  // (canonical, category). This is what makes principle 2 work: existing rows
+  // spelled "MCDONALDS-PAVILION" and "MCDONALDS-MY TOWN00368" already
+  // contribute to one MCDONALDS bucket on day one, with no backfill.
+  const buckets = new Map<string, { total: number; byCategory: Map<string, number> }>()
+  for (const row of history) {
+    const key = canonicalMerchant(row.merchant)
+    if (!key || !wanted.has(key)) continue
+    const bucket = buckets.get(key) ?? { total: 0, byCategory: new Map<string, number>() }
+    bucket.total += row.n
+    bucket.byCategory.set(row.category_id, (bucket.byCategory.get(row.category_id) ?? 0) + row.n)
+    buckets.set(key, bucket)
+  }
+
+  const categoryNameById = new Map(cats.map((cat) => [cat.id, cat.name]))
+  const categoryIdByName = new Map(cats.map((cat) => [cat.name, cat.id]))
+
+  // Resolve one suggestion per canonical: history first (a real count), then
+  // the builtin map when history has nothing usable.
+  const resolved = new Map<
+    string,
+    { categoryId: string; categoryName: string; matchCount: number; totalCount: number }
+  >()
+  for (const key of wanted) {
+    const bucket = buckets.get(key)
+    if (bucket) {
+      let bestCategoryId: string | null = null
+      let bestCount = 0
+      for (const [categoryId, count] of bucket.byCategory) {
+        if (count > bestCount) {
+          bestCategoryId = categoryId
+          bestCount = count
+        }
+      }
+      // MIN_MATCHES: one prior sighting is a coincidence, not a pattern.
+      // Majority rule: the top category must hold more than half of this
+      // canonical's categorised history, or a genuine split (e.g. WATSONS
+      // between Health and Personal Care) would confidently pick a side.
+      if (bestCategoryId && bestCount >= MIN_MATCHES && bestCount * 2 > bucket.total) {
+        const categoryName = categoryNameById.get(bestCategoryId)
+        // A category that has since been renamed or deleted resolves to
+        // nothing here — falls through to the builtin map below rather than
+        // showing a suggestion for a category the user can no longer see.
+        if (categoryName) {
+          resolved.set(key, {
+            categoryId: bestCategoryId,
+            categoryName,
+            matchCount: bestCount,
+            totalCount: bucket.total,
+          })
+          continue
+        }
+      }
+    }
+    const seedName = builtinCategory(key)
+    const builtinCategoryId = seedName ? categoryIdByName.get(seedName) : undefined
+    if (builtinCategoryId && seedName) {
+      resolved.set(key, { categoryId: builtinCategoryId, categoryName: seedName, matchCount: 0, totalCount: 0 })
+    }
+  }
+
+  const suggestions: MerchantSuggestion[] = []
+  for (const [raw, canonical] of rawToCanonical) {
+    const hit = resolved.get(canonical)
+    if (hit) suggestions.push({ raw, canonical, ...hit })
+  }
+
+  return c.json({ suggestions })
 })
 
 // Bulk insert (CSV import). Returns the created rows.

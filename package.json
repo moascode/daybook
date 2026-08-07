@@ -16,6 +16,7 @@
     "d1:export": "node scripts/export-to-d1.mjs",
     "d1:verify": "node scripts/verify-import.mjs",
     "gen:tokens": "node scripts/gen-theme-tokens.mjs",
+    "merchant-map:gaps": "tsx scripts/merchant-map-gaps.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
