@@ -364,7 +364,7 @@ new regulars appear. The growth loop needs no infrastructure and no D1 access
 
 1. Export transactions from the app (Wallet → Export, the existing
    `GET /transactions/export` route).
-2. `node scripts/merchant-map-gaps.mjs export.csv` — canonicalises every row with
+2. `npm run merchant-map:gaps -- export.csv` — canonicalises every row with
    the **same** `canonicalMerchant()` the Worker uses, then prints canonical
    names that (a) appear ≥ 3 times, (b) are consistently categorised, and (c) are
    **not** covered by `builtinCategory()`, alongside the category the user picked.

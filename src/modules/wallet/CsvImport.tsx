@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
-import { parseCSV, detectColumns, buildImportRows, suggestCategories } from '@/lib/csv'
+import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
+import { suggestCategories, suggestionFitsType } from '@/lib/merchantSuggestions'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
@@ -123,7 +124,10 @@ export function CsvImport() {
         for (const row of rows) {
           if (row.categoryId !== null || row.type === 'transfer') continue
           const hit = byRaw.get(row.merchant)
-          if (!hit) continue
+          // A suggestion of the wrong direction is skipped, not applied: the
+          // Category select for this row does not offer it, so it would sit in
+          // the row invisibly (blank select) and import anyway.
+          if (!hit || !suggestionFitsType(hit, row.type)) continue
           row.categoryId = hit.categoryId
           row.suggestedFrom = { canonical: hit.canonical, matchCount: hit.matchCount }
           row.suggestionApplied = true

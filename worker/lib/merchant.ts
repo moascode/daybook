@@ -15,8 +15,20 @@ const RAIL_PREFIX =
   /^(?:DUITNOW\s+QR|DUITNOW|TRANSFER\s+(?:DEBIT|CREDIT)|MEPS\s+PAYMENT\s+FROM|MEPS|IBG|FPX|POS\s+DEBIT)\s+/
 const DOMAIN_TAIL = /\.(?:COM\.MY|COM|NET|CO|MY)\b.*$/
 const SEPARATOR = /\s{2,}|[-*/|]/
+const SEPARATOR_ALL = /\s{2,}|[-*/|]/g
 const ENTITY_TAIL = /\s+(?:SDN\s+BHD|SDN|BHD|PLT|ENTERPRISE|TRADING|HOLDINGS|GROUP)\s*$/
 const DIGIT_TAIL = /\s*\d{3,}\s*$/
+
+/** Trailing noise off, then the usability test. `null` = not a usable name. */
+function trimTails(s: string): string | null {
+  const out = s
+    .replace(ENTITY_TAIL, '')
+    .replace(DIGIT_TAIL, '')
+    .replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '')
+    .trim()
+  if (out.length < 3 || /^\d+$/.test(out)) return null
+  return out
+}
 
 /**
  * Collapse a bank-written merchant string to a stable matching key.
@@ -30,9 +42,16 @@ export function canonicalMerchant(raw: string): string | null {
   s = s.replace(CARD_MASK, '').replace(DATE_TAIL, '').replace(COUNTRY, '')
   s = s.replace(RAIL_PREFIX, '')
   s = s.replace(DOMAIN_TAIL, '').replace(/[.']/g, '')
-  s = s.split(SEPARATOR)[0]
-  s = s.replace(ENTITY_TAIL, '').replace(DIGIT_TAIL, '')
-  s = s.replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '').trim()
-  if (s.length < 3 || /^\d+$/.test(s)) return null
-  return s
+
+  // Split on the first separator: the head is the merchant, the tail is the
+  // outlet/location the bank appended.
+  const head = trimTails(s.split(SEPARATOR)[0])
+  if (head) return head
+
+  // A head that is not usable on its own means the separator was INTERNAL to
+  // the name, not an outlet suffix — "7-ELEVEN" splits to "7", which used to
+  // canonicalise to null, so no history and no map entry could ever match one
+  // of the most common merchants in the country. Fall back to the whole
+  // string with separators normalised to spaces.
+  return trimTails(s.replace(SEPARATOR_ALL, ' ').replace(/\s+/g, ' ').trim())
 }

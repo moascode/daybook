@@ -34,36 +34,6 @@ export interface ImportRow {
   suggestionApplied?: boolean
 }
 
-// ── Category suggestions (docs/auto-categorisation-plan.md) ────────
-
-export interface MerchantSuggestion {
-  raw: string
-  canonical: string
-  categoryId: string
-  categoryName: string
-  matchCount: number
-  totalCount: number
-}
-
-/**
- * Fetch a category suggestion per distinct merchant string, derived from the
- * caller's own categorised history (plus a builtin cold-start map). Never
- * throws — a failed call must degrade to today's manual import, not to an
- * error screen, so the caller always gets an (possibly empty) array back.
- */
-export async function suggestCategories(merchants: string[]): Promise<MerchantSuggestion[]> {
-  if (merchants.length === 0) return []
-  try {
-    const { suggestions } = await api.post<{ suggestions: MerchantSuggestion[] }>(
-      '/transactions/suggest-categories',
-      { merchants },
-    )
-    return suggestions
-  } catch {
-    return []
-  }
-}
-
 // ── Date patterns for auto-detection ────────────────
 
 const DATE_KEYWORDS = ['date', 'transaction date', 'trans date', 'posting date', 'value date', 'txn date']

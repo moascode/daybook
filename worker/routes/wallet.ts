@@ -808,6 +808,12 @@ interface MerchantSuggestion {
   canonical: string
   categoryId: string
   categoryName: string
+  // 'income' | 'expense' | 'both'. Returned so the caller can refuse to apply a
+  // suggestion to a row of the opposite direction: history is read across both
+  // directions and the builtin map is all expense categories, so a money-in row
+  // (a refund from a shop, say) would otherwise be pre-filled with an expense
+  // category that its own Category select does not even offer.
+  categoryType: string
   matchCount: number // how many of the caller's own past rows; 0 = builtin map, not history
   totalCount: number // …out of how many categorised rows for this canonical name
 }
@@ -874,14 +880,20 @@ wallet.post('/transactions/suggest-categories', async (c) => {
     buckets.set(key, bucket)
   }
 
-  const categoryNameById = new Map(cats.map((cat) => [cat.id, cat.name]))
+  const categoryById = new Map(cats.map((cat) => [cat.id, cat]))
   const categoryIdByName = new Map(cats.map((cat) => [cat.name, cat.id]))
 
   // Resolve one suggestion per canonical: history first (a real count), then
   // the builtin map when history has nothing usable.
   const resolved = new Map<
     string,
-    { categoryId: string; categoryName: string; matchCount: number; totalCount: number }
+    {
+      categoryId: string
+      categoryName: string
+      categoryType: string
+      matchCount: number
+      totalCount: number
+    }
   >()
   for (const key of wanted) {
     const bucket = buckets.get(key)
@@ -899,14 +911,15 @@ wallet.post('/transactions/suggest-categories', async (c) => {
       // canonical's categorised history, or a genuine split (e.g. WATSONS
       // between Health and Personal Care) would confidently pick a side.
       if (bestCategoryId && bestCount >= MIN_MATCHES && bestCount * 2 > bucket.total) {
-        const categoryName = categoryNameById.get(bestCategoryId)
+        const category = categoryById.get(bestCategoryId)
         // A category that has since been renamed or deleted resolves to
         // nothing here — falls through to the builtin map below rather than
         // showing a suggestion for a category the user can no longer see.
-        if (categoryName) {
+        if (category) {
           resolved.set(key, {
             categoryId: bestCategoryId,
-            categoryName,
+            categoryName: category.name,
+            categoryType: category.type,
             matchCount: bestCount,
             totalCount: bucket.total,
           })
@@ -916,8 +929,15 @@ wallet.post('/transactions/suggest-categories', async (c) => {
     }
     const seedName = builtinCategory(key)
     const builtinCategoryId = seedName ? categoryIdByName.get(seedName) : undefined
-    if (builtinCategoryId && seedName) {
-      resolved.set(key, { categoryId: builtinCategoryId, categoryName: seedName, matchCount: 0, totalCount: 0 })
+    const builtin = builtinCategoryId ? categoryById.get(builtinCategoryId) : undefined
+    if (builtin) {
+      resolved.set(key, {
+        categoryId: builtin.id,
+        categoryName: builtin.name,
+        categoryType: builtin.type,
+        matchCount: 0,
+        totalCount: 0,
+      })
     }
   }
 

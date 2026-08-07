@@ -215,3 +215,163 @@ test.describe('bulk-update endpoint', () => {
     await other.context().close()
   })
 })
+
+// ── Suggestions in the bulk edit dialog (docs/auto-categorisation-plan.md §4.2) ──
+
+test.describe('suggestions in the bulk edit dialog', () => {
+  async function categoryIdByName(page: Page, name: string): Promise<string> {
+    const cats = await (await page.request.get(`${API}/categories`)).json() as { id: string; name: string }[]
+    return cats.find((c) => c.name === name)!.id
+  }
+
+  async function selectRow(page: Page, merchant: string) {
+    await page.getByRole('button', { name: `Select transaction ${merchant}` }).click()
+  }
+
+  test('suggestions appear for a mixed selection and Apply suggestions applies only the matched rows', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const acct = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Suggest Acct', type: 'cash', openingBalance: 0 },
+    })).json() as { id: string }
+    const foodDrink = await categoryIdByName(page, 'Food & Drink')
+
+    // History: three spellings of one merchant, already categorised.
+    for (const merchant of ['MCDONALDS-ONE', 'MCDONALDS-TWO', 'MCDONALDS-THREE']) {
+      await page.request.post(`${API}/transactions`, {
+        data: { accountId: acct.id, date: businessToday(), merchant, amount: 9.5, type: 'expense', categoryId: foodDrink },
+      })
+    }
+    // Two uncategorised rows to select: one folds to the same canonical, one matches nothing.
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'MCDONALDS-FOUR', amount: 9.5, type: 'expense' },
+    })
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'FRESH MERCHANT NOPE', amount: 20, type: 'expense' },
+    })
+
+    await page.reload()
+    await expect(page.getByText('MCDONALDS-FOUR')).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+    await selectRow(page, 'MCDONALDS-FOUR')
+    await selectRow(page, 'FRESH MERCHANT NOPE')
+    await page.getByTestId('bulk-edit-btn').click()
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await expect(suggestions).toBeVisible()
+    await expect(suggestions).toContainText('MCDONALDS')
+    await expect(suggestions).toContainText('Food & Drink')
+    await expect(suggestions).toContainText('you categorised this 3×')
+    await expect(suggestions).toContainText('1 transaction has no suggestion')
+
+    await page.getByTestId('bulk-edit-apply-suggestions').click()
+    await expect(page.getByText('Updated 1 transaction')).toBeVisible({ timeout: 10_000 })
+
+    const suggestedRow = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'MCDONALDS-FOUR' })
+    await expect(suggestedRow).toContainText('Food & Drink')
+    const noSuggestionRow = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'FRESH MERCHANT NOPE' })
+    await expect(noSuggestionRow).not.toContainText('Food & Drink')
+
+    await page.context().close()
+  })
+
+  test('a transfer in the selection is excluded from suggestions and reported separately', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const acct = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Transfer Suggest Acct', type: 'cash', openingBalance: 0 },
+    })).json() as { id: string }
+    const other = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Transfer Suggest Acct 2', type: 'bank', openingBalance: 0 },
+    })).json() as { id: string }
+
+    // Builtin-covered merchant name, once as an expense (suggestible) and once
+    // as a transfer (must never surface a suggestion, however it is spelled).
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'SHELL STATION', amount: 80, type: 'expense' },
+    })
+    await page.request.post(`${API}/transactions`, {
+      data: {
+        accountId: acct.id, destinationAccountId: other.id, date: businessToday(),
+        merchant: 'SHELL STATION', amount: 5, type: 'transfer',
+      },
+    })
+
+    await page.reload()
+    await expect(page.getByText('SHELL STATION').first()).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click() // select all
+    await page.getByTestId('bulk-edit-btn').click()
+
+    await expect(page.getByTestId('bulk-edit-transfer-note')).toContainText('1 transfer')
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await expect(suggestions).toContainText('1 transaction')
+    await expect(suggestions).not.toContainText('2 transaction')
+
+    await page.getByTestId('bulk-edit-apply-suggestions').click()
+    await expect(page.getByText('Updated 1 transaction')).toBeVisible({ timeout: 10_000 })
+
+    await page.context().close()
+  })
+
+  test('a money-in row is excluded from an expense suggestion', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const acct = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Refund Suggest Acct', type: 'cash', openingBalance: 0 },
+    })).json() as { id: string }
+
+    // Same builtin-covered merchant twice: an expense (suggestible) and a
+    // refund booked as income. An expense category must not land on the
+    // money-in row — the Category select in this very dialog does not offer it.
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'KFC REFUND CASE', amount: 12, type: 'expense' },
+    })
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'KFC REFUND CASE', amount: 12, type: 'income' },
+    })
+
+    await page.reload()
+    await expect(page.getByText('KFC REFUND CASE').first()).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click() // select all
+    await page.getByTestId('bulk-edit-btn').click()
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await expect(suggestions).toContainText('Food & Drink')
+    await expect(suggestions).toContainText('1 transaction ·')
+    await expect(suggestions).toContainText('1 transaction has no suggestion')
+
+    await page.getByTestId('bulk-edit-apply-suggestions').click()
+    await expect(page.getByText('Updated 1 transaction')).toBeVisible({ timeout: 10_000 })
+
+    await page.context().close()
+  })
+
+  test('the manual Category select overrides suggestions when Apply is used instead', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const acct = await (await page.request.post(`${API}/accounts`, {
+      data: { name: 'Override Acct', type: 'cash', openingBalance: 0 },
+    })).json() as { id: string }
+    // Builtin-covered merchant (KFC -> Food & Drink), left uncategorised.
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: businessToday(), merchant: 'KFC', amount: 12, type: 'expense' },
+    })
+
+    await page.reload()
+    await expect(page.getByText('KFC')).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+    await selectRow(page, 'KFC')
+    await page.getByTestId('bulk-edit-btn').click()
+
+    await expect(page.getByTestId('bulk-edit-suggestions')).toContainText('Food & Drink')
+    // Hand-pick a different category and use the normal Apply button, not
+    // Apply suggestions — the manual choice must win.
+    await page.getByTestId('bulk-edit-category').selectOption({ label: 'Other' })
+    await page.getByTestId('bulk-edit-apply').click()
+    await expect(page.getByText('Updated 1 transaction')).toBeVisible({ timeout: 10_000 })
+
+    const row = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'KFC' })
+    await expect(row).toContainText('Other')
+    await expect(row).not.toContainText('Food & Drink')
+
+    await page.context().close()
+  })
+})
