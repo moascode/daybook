@@ -81,7 +81,12 @@ test('canonical folding: three spellings of one merchant suggest for a fourth', 
   await ctx.close()
 })
 
-test('MIN_MATCHES: one sighting is withheld, a second produces a suggestion', async ({ browser }) => {
+// MIN_MATCHES was lowered 2 -> 1 on 2026-08-07 (worker/routes/wallet.ts): a
+// single sighting now suggests, because with two users and a young history
+// almost every merchant sat at exactly one and nothing was ever suggested.
+// A merchant with NO history still falls through to the builtin map or
+// nothing — covered by the builtin/no-suggestion tests below.
+test('MIN_MATCHES: a single sighting produces a suggestion', async ({ browser }) => {
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   await page.request.post(`${API}/auth/signup`, { data: { username: `e2e_min_${Date.now()}`, password: 'test-password' } })
@@ -89,7 +94,9 @@ test('MIN_MATCHES: one sighting is withheld, a second produces a suggestion', as
   const transport = await categoryId(page, 'Transport')
 
   await mkTxn(page, { accountId: account, amount: 20, type: 'expense', merchant: 'SOLO MERCHANT XY', categoryId: transport })
-  expect(await suggest(page, ['SOLO MERCHANT XY'])).toEqual([])
+  const [first] = await suggest(page, ['SOLO MERCHANT XY'])
+  expect(first.categoryId).toBe(transport)
+  expect(first.matchCount).toBe(1)
 
   await mkTxn(page, { accountId: account, amount: 22, type: 'expense', merchant: 'SOLO MERCHANT XY', categoryId: transport })
   const [hit] = await suggest(page, ['SOLO MERCHANT XY'])
