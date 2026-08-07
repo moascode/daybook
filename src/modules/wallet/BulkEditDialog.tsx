@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { TagInput } from '@/components/ui/TagInput'
+import { suggestCategories, type MerchantSuggestion } from '@/lib/merchantSuggestions'
 import type { Category, Transaction } from '@/types/wallet.types'
 
 type TagMode = 'add' | 'replace' | 'remove'
@@ -24,6 +25,12 @@ interface BulkEditDialogProps {
     categoryId?: string | null
     tags?: { mode: TagMode; values: string[] }
   }) => Promise<void>
+  /**
+   * One bulk-update call per distinct suggested category
+   * (docs/auto-categorisation-plan.md §4.2) — reuses the same route, its
+   * permission model, and its transfer-skipping behaviour, unchanged.
+   */
+  onApplySuggestions: (groups: Array<{ categoryId: string; transactionIds: string[] }>) => Promise<void>
 }
 
 // '' means "leave the category alone" — distinct from CLEAR, which writes null.
@@ -46,6 +53,7 @@ export function BulkEditDialog({
   categories,
   availableTags,
   onApply,
+  onApplySuggestions,
 }: BulkEditDialogProps) {
   const [categoryChoice, setCategoryChoice] = useState<string>(KEEP)
   const [tagMode, setTagMode] = useState<TagMode>('add')
@@ -53,6 +61,8 @@ export function BulkEditDialog({
   const [touchedTags, setTouchedTags] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<MerchantSuggestion[]>([])
+  const [applyingSuggestions, setApplyingSuggestions] = useState(false)
 
   const selected = useMemo(
     () => transactions.filter((t) => selectedTransactionIds.includes(t.id)),
@@ -63,6 +73,65 @@ export function BulkEditDialog({
   // count come back smaller than expected with no explanation.
   const transferCount = selected.filter((t) => t.type === 'transfer').length
   const affected = selected.length - transferCount
+
+  // Fetched once per selection — this component is mounted only while open
+  // (see WalletPage), so there is no stale-selection case to guard against.
+  useEffect(() => {
+    const merchants = [...new Set(
+      selected.filter((t) => t.type !== 'transfer' && t.merchant).map((t) => t.merchant),
+    )]
+    let cancelled = false
+    suggestCategories(merchants).then((result) => {
+      if (!cancelled) setSuggestions(result)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
+  // Group the SELECTED transactions by canonical merchant name, keeping only
+  // groups a suggestion actually resolved. A canonical maps to at most one
+  // category (the route resolves one winner per name), so grouping by
+  // canonical and by category agree.
+  const suggestionGroups = useMemo(() => {
+    const byRaw = new Map(suggestions.map((s) => [s.raw, s]))
+    const groups = new Map<
+      string,
+      { canonical: string; categoryId: string; categoryName: string; matchCount: number; ids: string[] }
+    >()
+    for (const t of selected) {
+      if (t.type === 'transfer' || !t.merchant) continue
+      const hit = byRaw.get(t.merchant)
+      if (!hit) continue
+      const g = groups.get(hit.canonical) ?? {
+        canonical: hit.canonical,
+        categoryId: hit.categoryId,
+        categoryName: hit.categoryName,
+        matchCount: hit.matchCount,
+        ids: [],
+      }
+      g.ids.push(t.id)
+      groups.set(hit.canonical, g)
+    }
+    return [...groups.values()].sort((a, b) => b.ids.length - a.ids.length)
+  }, [selected, suggestions])
+
+  const suggestedCount = suggestionGroups.reduce((sum, g) => sum + g.ids.length, 0)
+  const noSuggestionCount = affected - suggestedCount
+
+  async function handleApplySuggestions() {
+    if (suggestionGroups.length === 0) return
+    setApplyingSuggestions(true)
+    setError(null)
+    try {
+      await onApplySuggestions(suggestionGroups.map((g) => ({ categoryId: g.categoryId, transactionIds: g.ids })))
+      onOpenChange(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not apply suggestions — please try again.')
+    } finally {
+      setApplyingSuggestions(false)
+    }
+  }
 
   // Only offer categories that suit what is actually selected: an income-only
   // selection should not be offered expense categories.
@@ -118,6 +187,45 @@ export function BulkEditDialog({
             {transferCount} transfer{transferCount !== 1 ? 's' : ''} will be skipped — transfers are not
             categorised or tagged. {affected} transaction{affected !== 1 ? 's' : ''} will change.
           </p>
+        )}
+
+        {suggestionGroups.length > 0 && (
+          <div
+            data-testid="bulk-edit-suggestions"
+            className="space-y-2 rounded-lg border border-line bg-surface-sunken p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-fg-muted">Suggested from your history</span>
+              <button
+                type="button"
+                onClick={handleApplySuggestions}
+                disabled={applyingSuggestions}
+                data-testid="bulk-edit-apply-suggestions"
+                className="flex-shrink-0 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+              >
+                {applyingSuggestions ? 'Applying…' : 'Apply suggestions'}
+              </button>
+            </div>
+            <ul className="space-y-1 text-xs text-fg-subtle">
+              {suggestionGroups.map((g) => (
+                <li key={g.canonical} className="flex items-center justify-between gap-3">
+                  <span className="text-fg-muted">
+                    {g.canonical} <span className="text-fg-faint">→</span> {g.categoryName}
+                  </span>
+                  <span className="flex-shrink-0">
+                    {g.ids.length} transaction{g.ids.length !== 1 ? 's' : ''} ·{' '}
+                    {g.matchCount > 0 ? `you categorised this ${g.matchCount}×` : 'common merchant'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {noSuggestionCount > 0 && (
+              <p className="text-xs text-fg-faint">
+                {noSuggestionCount} transaction{noSuggestionCount !== 1 ? 's' : ''}{' '}
+                {noSuggestionCount !== 1 ? 'have' : 'has'} no suggestion
+              </p>
+            )}
+          </div>
         )}
 
         {/* Explicit ids: Select derives one from the label, and the filter bar

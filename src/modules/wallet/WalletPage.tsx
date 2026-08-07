@@ -347,6 +347,35 @@ export function WalletPage() {
     [selectedIds, bulkUpdateTransactions, loadTransactions, loadTags, addToast],
   )
 
+  // One bulk-update call per distinct suggested category (typically 2-5
+  // requests, not one per row) — docs/auto-categorisation-plan.md §4.2.
+  const handleApplySuggestions = useCallback(
+    async (groups: Array<{ categoryId: string; transactionIds: string[] }>) => {
+      let updated = 0
+      let skippedTransfers = 0
+      for (const g of groups) {
+        const res = await bulkUpdateTransactions(g.transactionIds, { categoryId: g.categoryId })
+        updated += res.updated
+        skippedTransfers += res.skippedTransfers
+      }
+
+      setSelectedIds(new Set())
+      setSelectMode(false)
+      await loadTransactions(filtersRef.current)
+      await loadTags()
+
+      addToast({
+        message:
+          `Updated ${updated} transaction${updated !== 1 ? 's' : ''}` +
+          (skippedTransfers > 0
+            ? ` — ${skippedTransfers} transfer${skippedTransfers !== 1 ? 's' : ''} skipped`
+            : ''),
+        duration: 4000,
+      })
+    },
+    [bulkUpdateTransactions, loadTransactions, loadTags, addToast],
+  )
+
   function openSplitDialog(transaction: Transaction) {
     setSplitTarget(transaction)
   }
@@ -932,6 +961,7 @@ export function WalletPage() {
           categories={categories}
           availableTags={tags}
           onApply={handleBulkEdit}
+          onApplySuggestions={handleApplySuggestions}
         />
       )}
 
