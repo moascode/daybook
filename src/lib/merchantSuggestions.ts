@@ -50,3 +50,23 @@ export async function suggestCategories(merchants: string[]): Promise<MerchantSu
     return []
   }
 }
+
+/**
+ * Ask Claude for a category suggestion per merchant string, for the leftover
+ * the rule-based pass above found nothing for (docs/ai-bulk-categorize-feature.md).
+ * Same never-throws contract as suggestCategories() — a failed call degrades
+ * to no suggestions, never an error screen. `matchCount: -1` on the returned
+ * rows marks them as AI-sourced.
+ */
+export async function suggestCategoriesAI(merchants: string[]): Promise<MerchantSuggestion[]> {
+  if (merchants.length === 0) return []
+  try {
+    const { suggestions } = await api.post<{ suggestions: MerchantSuggestion[] }>(
+      '/transactions/suggest-categories-ai',
+      { merchants },
+    )
+    return suggestions
+  } catch {
+    return []
+  }
+}

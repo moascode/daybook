@@ -67,6 +67,11 @@ export default function App() {
           }
         }
         useAppStore.getState().setOnboardingDismissed(dismissed)
+        // GET /settings masks the key itself to 'set'/'' — this is only ever
+        // a presence flag, gating the bulk-edit "Ask AI" button.
+        useAppStore
+          .getState()
+          .setHasAnthropicKey(settings.some((s) => s.key === 'anthropic_api_key' && s.value === 'set'))
         setDbReady(true)
         // Post any recurring rules that have come due since the last visit.
         // Fire-and-forget: a failure here must never block the app. When it

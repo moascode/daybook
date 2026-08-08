@@ -26,6 +26,12 @@ interface AppState {
   // U-16: which first-run WelcomeCards the user has dismissed, keyed by their
   // 'onboarding_dismissed_*' settings key. Loaded once at boot from /settings.
   onboardingDismissed: Record<string, boolean>
+  // Whether an anthropic_api_key is saved for this user — GET /settings masks
+  // the value itself to 'set'/'', so this is the presence flag, not the key.
+  // Loaded at boot alongside onboardingDismissed; SettingsPage updates it
+  // directly on save/clear so the bulk-edit "Ask AI" button reacts without a
+  // reload (docs/ai-bulk-categorize-feature.md §3).
+  hasAnthropicKey: boolean
 
   setTheme: (theme: ThemePreference) => void
   setResolvedTheme: (resolved: ResolvedTheme) => void
@@ -35,6 +41,7 @@ interface AppState {
   setUser: (user: AuthUser | null) => void
   setOnboardingDismissed: (dismissed: Record<string, boolean>) => void
   markOnboardingDismissed: (key: string) => void
+  setHasAnthropicKey: (hasKey: boolean) => void
 }
 
 // Seeded from the localStorage mirror so the store agrees with the class the
@@ -51,6 +58,7 @@ export const useAppStore = create<AppState>((set) => ({
   dbReady: false,
   user: null,
   onboardingDismissed: {},
+  hasAnthropicKey: false,
 
   setTheme: (theme) => set({ theme }),
   setResolvedTheme: (resolved) => set({ resolvedTheme: resolved }),
@@ -61,4 +69,5 @@ export const useAppStore = create<AppState>((set) => ({
   setOnboardingDismissed: (dismissed) => set({ onboardingDismissed: dismissed }),
   markOnboardingDismissed: (key) =>
     set((s) => ({ onboardingDismissed: { ...s.onboardingDismissed, [key]: true } })),
+  setHasAnthropicKey: (hasKey) => set({ hasAnthropicKey: hasKey }),
 }))

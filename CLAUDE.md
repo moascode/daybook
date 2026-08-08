@@ -1187,6 +1187,73 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
+                *** AI BULK-CATEGORISATION FALLBACK — IMPLEMENTED, IN REVIEW ***
+                Branch claude/ai-bulk-categorize-feature-varl0e, built from
+                docs/ai-bulk-categorize-feature.md in one PR (not the doc's
+                3-PR split — small enough to review as one diff). New spec
+                e2e/60-ai-bulk-categorize.spec.ts, 12 tests; full affected-spec
+                run (60 + 57 + 59) 46/46 green. tsc -b, typecheck:worker, lint
+                all clean.
+                What it is: for the transactions the existing rule-based
+                suggest-categories pass has NO suggestion for, an explicit
+                "Ask AI" button in the bulk edit dialog asks Claude — never the
+                whole selection, only the leftover. §2's prerequisite (no API
+                key infra existed anywhere) is now built: worker-only, nothing
+                touches server/ — production has run on the Worker since
+                Phase 6, so server/ is schema-reference-only and out of scope.
+                No migration: anthropic_api_key lives in the existing settings
+                KV table (already reserved in §6), and so does the rate
+                limiter and the e2e mock hook below — all three are just rows
+                under reserved key prefixes, so this shipped with zero schema
+                change.
+                GET /api/settings now masks anthropic_api_key to 'set'/'' and
+                drops two internal prefixes entirely (ai_rate_limit_*,
+                _test_*) rather than leaking Worker bookkeeping into the
+                client; PUT rejects writes to either prefix (a user resetting
+                their own rate-limit row via the generic settings endpoint
+                would defeat the point of having one).
+                Rate limiting (worker/routes/wallet.ts overAiRateLimit): 20
+                calls/hour/user, a JSON blob in one settings row, checked
+                before any tokens are spent. Not atomic against a concurrent
+                request from the same user — accepted for a two-user app where
+                the goal is capping a runaway UI loop, not defending a
+                compromised session. This is the CLAUDE.md-flagged "one open
+                production risk" closed for this endpoint specifically; the
+                general public-URL rate-limit gap is unchanged.
+                THE TESTING TRAP, worth remembering for any future
+                Worker-originated outbound call: Playwright intercepts
+                requests the BROWSER makes; it has no route into a
+                Worker-to-third-party fetch, because `wrangler dev` runs that
+                call from a separate process. worker/lib/anthropic.ts resolves
+                this by branching on DAYBOOK_TEST (already the flag that gates
+                worker/routes/test.ts) — under test it reads a canned response
+                from a settings row instead of calling api.anthropic.com,
+                stashed by a new POST /test/mock-ai-response. Production never
+                sets DAYBOOK_TEST, so the mock path is unreachable there. This
+                is the pattern to reuse, not a one-off — an env-var-configurable
+                base URL pointing at a second webServer would also have worked
+                but needed real infra; this needed none.
+                Model claude-haiku-4-5, max_tokens 2000, temperature 0, per
+                the doc's §5 cost analysis (~$0.003-0.008/click). Post-
+                processing is defensive at every step (§4): malformed JSON,
+                an invented category name, or a merchant Claude wasn't asked
+                about all degrade to dropping that entry, never a 500 — same
+                silent-failure contract suggestCategories() already has.
+                Client: BulkEditDialog's suggestion panel used to be gated on
+                `suggestionGroups.length > 0`, which meant a selection with
+                ZERO rule-based suggestions never showed the "N have no
+                suggestion" line at all — fixed to gate on
+                `suggestionGroups.length > 0 || noSuggestionCount > 0` so the
+                Ask AI button (or the no-key Settings link) is reachable even
+                then.
+                Open per the doc's §8: owner sign-off on Phase discipline
+                (Phase 5a is nominally deferred; this carves one slice out)
+                was implicit in "implement this feature" — flagging here since
+                the doc listed it as an explicit open question. Also open: the
+                doc's question 1 (whether MIN_MATCHES 2->1 on 2026-08-07
+                already closed most of the gap this fixes) was not measured
+                before building, per the same instruction.
+
                 *** DARK MODE — MERGED, TAG PENDING (v2.4.0) ***
                 PR #104, merged to main 2026-08-05; tag not yet pushed at
                 the time of writing. New spec 58 (10 tests).

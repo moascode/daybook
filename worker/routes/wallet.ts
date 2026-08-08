@@ -20,6 +20,7 @@ import {
 } from '../lib/sharing.ts'
 import { canonicalMerchant } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
+import { suggestCategoriesWithAI } from '../lib/anthropic.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
 // (1,461 lines, 68 .prepare() sites), it lands in increments:
@@ -951,6 +952,138 @@ wallet.post('/transactions/suggest-categories', async (c) => {
   for (const [raw, canonical] of rawToCanonical) {
     const hit = resolved.get(canonical)
     if (hit) suggestions.push({ raw, canonical, ...hit })
+  }
+
+  return c.json({ suggestions })
+})
+
+// docs/ai-bulk-categorize-feature.md. Fallback for whatever the rule pass
+// above found NO suggestion for — never the whole selection, only the
+// leftover the client already computed as noSuggestionCount. Reuses the
+// MerchantSuggestion shape above so the client merges both result sets
+// through the one suggestionGroups path; matchCount: -1 marks an AI-sourced
+// entry (0 = builtin, >0 = history).
+const MAX_AI_MERCHANTS = 100
+const AI_RATE_LIMIT_KEY = 'ai_rate_limit_suggest_categories'
+const AI_RATE_LIMIT_MAX = 20
+const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
+
+interface AiRateLimitState {
+  windowStart: number
+  count: number
+}
+
+// A crude per-user sliding window stored in the settings key/value table —
+// the app owns no queue, KV namespace, or Durable Object today, and rate
+// limiting a paid endpoint is worth having even in this cheap a form
+// (CLAUDE.md §13 lists it as the one open production risk). Not atomic
+// against a concurrent request from the same user; acceptable for a
+// two-user personal app where the goal is capping a runaway UI loop, not
+// defending against an attacker who already holds a valid session.
+async function overAiRateLimit(db: D1Database, userId: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT value FROM settings WHERE user_id = ? AND key = ?`)
+    .bind(userId, AI_RATE_LIMIT_KEY)
+    .first<{ value: string }>()
+
+  const now = Date.now()
+  let state: AiRateLimitState = { windowStart: now, count: 0 }
+  if (row?.value) {
+    try {
+      const parsed = JSON.parse(row.value) as Partial<AiRateLimitState>
+      if (typeof parsed.windowStart === 'number' && typeof parsed.count === 'number') {
+        state = { windowStart: parsed.windowStart, count: parsed.count }
+      }
+    } catch {
+      // corrupt value — treat as a fresh window
+    }
+  }
+  if (now - state.windowStart > AI_RATE_LIMIT_WINDOW_MS) state = { windowStart: now, count: 0 }
+  if (state.count >= AI_RATE_LIMIT_MAX) return true
+
+  state.count += 1
+  await db
+    .prepare(
+      `INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)
+       ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value`,
+    )
+    .bind(userId, AI_RATE_LIMIT_KEY, JSON.stringify(state))
+    .run()
+  return false
+}
+
+wallet.post('/transactions/suggest-categories-ai', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const input: unknown[] = Array.isArray(b.merchants) ? b.merchants : []
+  if (input.length === 0) return c.json({ suggestions: [] })
+  if (input.length > MAX_AI_MERCHANTS) {
+    return c.json({ error: `cannot request more than ${MAX_AI_MERCHANTS} merchants at once` }, 400)
+  }
+
+  // Key is per user and read per request — the Worker has no module scope to
+  // cache it in, and it is not the same key for both users.
+  const keyRow = await c.env.DB.prepare(
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'anthropic_api_key'`,
+  )
+    .bind(userId)
+    .first<{ value: string }>()
+  const apiKey = keyRow?.value?.trim()
+  if (!apiKey) return c.json({ error: 'no API key configured' }, 400)
+
+  if (await overAiRateLimit(c.env.DB, userId)) {
+    return c.json({ error: 'AI suggestion rate limit reached — try again later' }, 429)
+  }
+
+  // Dedupe to one representative raw string per canonical merchant before
+  // spending tokens — 70 selected rows are routinely ~20 distinct merchants.
+  const rawToCanonical = new Map<string, string>()
+  const canonicalReps = new Map<string, string>()
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue
+    const key = canonicalMerchant(raw)
+    if (!key) continue
+    rawToCanonical.set(raw, key)
+    if (!canonicalReps.has(key)) canonicalReps.set(key, raw)
+  }
+  if (canonicalReps.size === 0) return c.json({ suggestions: [] })
+
+  // The user's OWN categories, not the seed list — they can rename and add.
+  const catsResult = await c.env.DB.prepare('SELECT id, name, type FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .all<{ id: string; name: string; type: string }>()
+  const categoryByName = new Map(catsResult.results.map((cat) => [cat.name, cat]))
+  if (categoryByName.size === 0) return c.json({ suggestions: [] })
+
+  const aiResults = await suggestCategoriesWithAI(
+    c.env,
+    userId,
+    apiKey,
+    [...categoryByName.keys()],
+    [...canonicalReps.values()],
+  )
+
+  // Drop any category name Claude invented and any merchant it wasn't asked
+  // about — exact match only, never fuzzy (a near-miss name resolving
+  // fuzzily is how a wrong category lands).
+  const sentReps = new Set(canonicalReps.values())
+  const byRep = new Map<string, { categoryId: string; categoryName: string; categoryType: string }>()
+  for (const item of aiResults) {
+    if (!sentReps.has(item.merchant)) continue
+    const cat = categoryByName.get(item.category)
+    if (!cat) continue
+    byRep.set(item.merchant, { categoryId: cat.id, categoryName: cat.name, categoryType: cat.type })
+  }
+
+  // Echo one entry per raw input string whose canonical resolved — same
+  // contract as the rule-based route above; the client cannot canonicalise.
+  const suggestions: MerchantSuggestion[] = []
+  for (const [raw, canonical] of rawToCanonical) {
+    const rep = canonicalReps.get(canonical)
+    const hit = rep ? byRep.get(rep) : undefined
+    if (hit) {
+      suggestions.push({ raw, canonical, ...hit, matchCount: -1, totalCount: 0 })
+    }
   }
 
   return c.json({ suggestions })

@@ -31,6 +31,7 @@ import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
 export function WalletPage() {
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
+  const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
   const {
     accounts,
     transactions,
@@ -972,6 +973,7 @@ export function WalletPage() {
           transactions={transactions}
           categories={categories}
           availableTags={tags}
+          hasAiKey={hasAnthropicKey}
           onApply={handleBulkEdit}
           onApplySuggestions={handleApplySuggestions}
         />
