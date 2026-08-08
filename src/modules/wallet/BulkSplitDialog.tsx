@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
-import { formatMYR, splitEqually, splitByPercents } from '@/lib/utils'
+import { formatMYR, formatPercent, equalPercents, splitEqually, splitByPercents } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
@@ -89,13 +89,27 @@ export function BulkSplitDialog({
     setCards((prev) => prev.map((c) => (c.transaction.id === txnId ? patch(c) : c)))
   }
 
+  // Percentages are per-participant, so the seed has to be recomputed whenever
+  // the participant list changes — otherwise adding a third person leaves two
+  // boxes at 50/50 and the newcomer at an implicit 0.
+  const seedPercents = (recipientIds: string[]): Record<string, string> => {
+    const ids = [currentUserId, ...recipientIds]
+    const pcts = equalPercents(ids.length)
+    return Object.fromEntries(ids.map((id, i) => [id, pcts[i]]))
+  }
+
   const toggleRecipient = (txnId: string, userId: string) => {
     updateCard(txnId, (c) => {
       const selected = c.recipientIds.includes(userId)
       const recipientIds = selected ? c.recipientIds.filter((id) => id !== userId) : [...c.recipientIds, userId]
       // "Keep as-is" only fits a single recipient — fall back to equal split.
       const mode = c.mode === 'none' && recipientIds.length > 1 ? 'equal' : c.mode
-      return { ...c, recipientIds, mode }
+      return {
+        ...c,
+        recipientIds,
+        mode,
+        customPercents: mode === 'percent' ? seedPercents(recipientIds) : c.customPercents,
+      }
     })
   }
 
@@ -117,12 +131,14 @@ export function BulkSplitDialog({
       const participants = [currentUserId, ...c.recipientIds]
       const pctSum = participants.reduce((acc, id) => acc + (parseFloat(c.customPercents[id]) || 0), 0)
       if (Math.abs(pctSum - 100) > 0.1) {
-        return `Percentages must sum to 100% — got ${pctSum}%`
+        return `Percentages must sum to 100% — got ${formatPercent(pctSum)}%`
       }
       const amounts = splitByPercents(
         c.transaction.amount,
         participants.map((id) => parseFloat(c.customPercents[id]) || 0),
       )
+      // Also the negative guard: these boxes aren't clamped, so a pair like
+      // 150/-50 sums to 100 and is only caught by the resulting share.
       if (amounts.some((a) => a <= 0)) {
         return 'Each person needs a share above 0% — use Keep as-is or remove them instead'
       }
@@ -276,7 +292,12 @@ export function BulkSplitDialog({
                         <Button
                           variant={c.mode === 'percent' ? 'primary' : 'secondary'}
                           size="sm"
-                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'percent', customAmounts: {} }))}
+                          onClick={() => updateCard(c.transaction.id, (card) => ({
+                            ...card,
+                            mode: 'percent',
+                            customAmounts: {},
+                            customPercents: seedPercents(card.recipientIds),
+                          }))}
                           disabled={saving}
                         >
                           By %
@@ -320,42 +341,57 @@ export function BulkSplitDialog({
                         </div>
                       )}
 
-                      {c.mode === 'percent' && (
-                        <div className="mt-3 space-y-2">
-                          {participants.map((userId) => (
-                            <div key={userId} className="flex items-center gap-3">
-                              <span className="flex-1 text-sm text-fg-muted">{participantName(userId)}</span>
-                              <div className="flex items-center gap-1">
-                                <Input
-                                  type="number"
-                                  step="0.1"
-                                  className="w-24"
-                                  value={c.customPercents[userId] ?? ''}
-                                  onChange={(e) =>
-                                    updateCard(c.transaction.id, (card) => ({
-                                      ...card,
-                                      customPercents: { ...card.customPercents, [userId]: e.target.value },
-                                    }))
-                                  }
-                                  placeholder={(100 / participants.length).toFixed(1)}
-                                />
-                                <span className="text-sm text-fg-subtle">%</span>
+                      {c.mode === 'percent' && (() => {
+                        const pctValues = participants.map((id) => parseFloat(c.customPercents[id]) || 0)
+                        const pctSum = pctValues.reduce((acc, p) => acc + p, 0)
+                        const pctSumValid = Math.abs(pctSum - 100) <= 0.1
+                        const pctAmounts = splitByPercents(amount, pctValues)
+                        const pctSharesPositive = pctAmounts.every((a) => a > 0)
+                        return (
+                          <div className="mt-3 space-y-2">
+                            {participants.map((userId, i) => (
+                              <div key={userId} className="flex items-center gap-3">
+                                <span className="flex-1 text-sm text-fg-muted">{participantName(userId)}</span>
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    max="100"
+                                    className="w-24"
+                                    value={c.customPercents[userId] ?? ''}
+                                    onChange={(e) =>
+                                      updateCard(c.transaction.id, (card) => ({
+                                        ...card,
+                                        customPercents: { ...card.customPercents, [userId]: e.target.value },
+                                      }))
+                                    }
+                                    data-testid={userId === currentUserId ? 'percent-payer' : 'percent-recipient'}
+                                  />
+                                  <span className="text-sm text-fg-subtle">%</span>
+                                </div>
+                                {/* Blank until the percentages add up: the payer
+                                    absorbs whatever the others leave unclaimed,
+                                    so a half-filled form would show them an
+                                    amount nobody typed. */}
+                                <span className="w-20 text-right text-xs text-fg-faint">
+                                  {pctSumValid ? formatMYR(pctAmounts[i]) : '—'}
+                                </span>
                               </div>
-                              <span className="w-20 text-right text-xs text-fg-faint">
-                                {formatMYR(
-                                  splitByPercents(
-                                    amount,
-                                    participants.map((id) => parseFloat(c.customPercents[id]) || 0),
-                                  )[participants.indexOf(userId)],
-                                )}
-                              </span>
+                            ))}
+                            <div className="text-right text-xs text-fg-subtle">
+                              Total: {formatPercent(pctSum)}% / 100%
                             </div>
-                          ))}
-                          <div className="text-right text-xs text-fg-subtle">
-                            Total: {participants.reduce((acc, id) => acc + (parseFloat(c.customPercents[id]) || 0), 0)}% / 100%
+                            {/* Save is disabled on this case, so it has to say
+                                why here rather than only on click. */}
+                            {pctSumValid && !pctSharesPositive && (
+                              <p className="text-right text-xs text-red-600">
+                                Each person needs a share above 0% — use Keep as-is or remove them instead.
+                              </p>
+                            )}
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
                     </div>
                   )}
                 </div>

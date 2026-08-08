@@ -204,8 +204,10 @@ test.describe('27 — Bulk share with group members', () => {
   test('Split by percentage blocks Save until 100%, then computes cent-exact shares', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
+    // RM10.05 at 30% is 3.015 — lands exactly on a rounding boundary, so the
+    // owner-absorbs rule is actually exercised (a round RM100 would not be).
     const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
-      data: { accountId: acct.id, date: today, merchant: 'Percent Bill', amount: 100, type: 'expense', tag: '[]' },
+      data: { accountId: acct.id, date: today, merchant: 'Percent Bill', amount: 10.05, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
     await alicePage.goto('/wallet')
@@ -221,12 +223,20 @@ test.describe('27 — Bulk share with group members', () => {
     await card.getByRole('button', { name: 'By %' }).click()
 
     const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
-    const pctInputs = card.locator('input[type="number"][step="0.1"]')
-    // Only Bob's percentage filled in — total is short of 100%, Save stays disabled
-    await pctInputs.nth(1).fill('30')
+    const payerPct = card.getByTestId('percent-payer')
+    const recipientPct = card.getByTestId('percent-recipient')
+
+    // The boxes open on a real even split, not a placeholder an empty box would
+    // silently score as 0.
+    await expect(payerPct).toHaveValue('50')
+    await expect(recipientPct).toHaveValue('50')
+
+    // Knock the total off 100% and Save must close: 50 + 30 is 80.
+    await recipientPct.fill('30')
+    await expect(card.getByText('Total: 80% / 100%')).toBeVisible()
     await expect(saveBtn).toBeDisabled()
 
-    await pctInputs.nth(0).fill('70')
+    await payerPct.fill('70')
     await expect(saveBtn).toBeEnabled()
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
@@ -234,7 +244,9 @@ test.describe('27 — Bulk share with group members', () => {
     const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
       .then((r) => r.json()) as Array<{ share_amount: number }>
     const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
-    expect(amounts).toEqual([30, 70])
+    // 30% of RM10.05 rounds up to 3.02, and the payer absorbs the rest — the
+    // pair still totals RM10.05 exactly.
+    expect(amounts).toEqual([3.02, 7.03])
 
     await aliceCtx.close()
     await bobCtx.close()

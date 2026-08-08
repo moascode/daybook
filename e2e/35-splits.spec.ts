@@ -153,8 +153,11 @@ test.describe('35 — Transaction splits', () => {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     }).then((r) => r.json()) as { id: string }
     const today = businessToday()
+    // RM10.05 at 64.1% is 6.44205 — an amount and a percentage chosen so the
+    // cent rounding actually engages. A round 30/70 of RM100 divides exactly and
+    // would pass even if splitByPercents got the remainder rule wrong.
     const txn = await alicePage.request.post(`${API}/transactions`, {
-      data: { accountId: acct.id, date: today, merchant: 'Utilities', amount: 100, type: 'expense', tag: '[]' },
+      data: { accountId: acct.id, date: today, merchant: 'Utilities', amount: 10.05, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
     await alicePage.goto('/wallet')
@@ -167,11 +170,11 @@ test.describe('35 — Transaction splits', () => {
     await dialog.locator('select').selectOption({ label: bobName })
 
     await dialog.getByRole('button', { name: 'By %' }).click()
-    const pctInputs = dialog.locator('input[type="number"][step="0.1"]')
-    await pctInputs.nth(1).fill('30')
+    await dialog.getByTestId('percent-recipient').fill('64.1')
 
-    // Auto-complement: the owner's box updates to the remainder automatically
-    await expect(pctInputs.nth(0)).toHaveValue('70')
+    // Auto-complement: the owner's box updates to the remainder automatically,
+    // and prints it rounded — 100 - 64.1 is 35.900000000000006 in binary float.
+    await expect(dialog.getByTestId('percent-you')).toHaveValue('35.9')
 
     await dialog.getByRole('button', { name: 'Split', exact: true }).click()
     await expect(dialog).not.toBeVisible()
@@ -179,7 +182,8 @@ test.describe('35 — Transaction splits', () => {
     const splits = await alicePage.request.get(`${API}/transactions/${txn.id}/splits`)
       .then((r) => r.json()) as Array<{ share_amount: number }>
     const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
-    expect(amounts).toEqual([30, 70])
+    // Owner absorbs the rounding remainder, and the pair still totals RM10.05.
+    expect(amounts).toEqual([3.61, 6.44])
 
     await aliceCtx.close()
     await bobCtx.close()

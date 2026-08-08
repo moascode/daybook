@@ -105,9 +105,34 @@ export function splitEqually(amount: number, n: number): number[] {
   return [(base + remainder) / 100, ...Array<number>(n - 1).fill(base / 100)]
 }
 
+// Percentages are user-typed floats, so every sum and complement carries binary
+// noise: 100 - 64.1 is 35.900000000000006, and 0.1 + 64.1 + 35.8 is
+// 99.99999999999999. Nothing user-visible may print a raw percentage — route it
+// through here. 2 dp is finer than the ±0.1 tolerance the dialogs validate on,
+// so this rounds away the noise without ever hiding a real mismatch.
+export function formatPercent(pct: number): string {
+  return String(Math.round(pct * 100) / 100)
+}
+
+// Equal percentages for n participants that sum to exactly 100, index 0 (owner)
+// absorbing the remainder — the percentage twin of splitEqually. Used to seed
+// the inputs so the boxes open on a real, visible split: an empty box counts as
+// 0, so a placeholder-only default would promise shares nobody actually typed.
+export function equalPercents(n: number): string[] {
+  if (n <= 0) return []
+  const other = Math.round((100 / n) * 10) / 10
+  const owner = Math.round((100 - other * (n - 1)) * 10) / 10
+  return [String(owner), ...Array<string>(n - 1).fill(String(other))]
+}
+
 // Converts percentages (expected to sum to 100) into cent-exact amounts.
 // Index 0 (owner) absorbs the rounding remainder — mirrors splitEqually above.
 // Client-only: the server never sees percentages, only the resulting amounts.
+//
+// It does NOT validate the sum: the owner absorbs whatever the others leave, so
+// percentages totalling 40 quietly hand the owner 60. Callers must check the sum
+// before showing or saving the result — a preview rendered from an incomplete
+// form otherwise shows the owner an amount nobody typed.
 export function splitByPercents(amount: number, percents: number[]): number[] {
   if (percents.length === 0) return []
   const cents = Math.round(amount * 100)
