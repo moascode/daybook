@@ -35,6 +35,18 @@
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
 11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npx playwright test` to confirm no regressions. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
 12. **Branch before you touch anything.** Never commit directly to `main`. Every task — no matter how small — starts with `git checkout -b <branch>`. When done, open a PR. See Section 11 for naming and PR conventions.
+13. **Never fail silently.** Every failed operation must say something the user
+    can act on — a toast, an inline message, an error state. This applies to
+    *every* feature, not just the obviously critical ones, and it explicitly
+    overrides the tempting "degrade quietly so nothing breaks" pattern.
+    Degrading the feature is right; degrading it invisibly is not, because a
+    broken service and a service with nothing to return render identically and
+    the user is given no reason to retry. A `catch {}` that returns `[]`, `null`
+    or a no-op is a bug unless the caller surfaces the failure. If a helper must
+    stay total, it returns the failure as *data* the caller reports (see
+    `suggestCategoriesAI`'s `failedMerchants`) — it does not swallow it.
+    Applies to buttons above all: a click that changes nothing on screen and
+    explains nothing is the single worst outcome any handler can produce.
 
 ---
 
@@ -158,7 +170,16 @@ function before any public deploy.
 #### AI
 | Package | Version | Purpose |
 |---|---|---|
-| `@anthropic-ai/sdk` | ^0.39 | Anthropic API client |
+| `@anthropic-ai/sdk` | — | **REMOVED (PR #112).** Never imported in three years of the project. Do not add it back. |
+
+> **Call Claude with plain `fetch`, not the SDK.** The only Claude call in the
+> app runs *in the Worker* (`worker/lib/anthropic.ts`), and the SDK targets Node
+> — it has never been proven to bundle for the Workers runtime, and pulling it
+> in to find out costs 24 transitive packages. The API is one POST to
+> `https://api.anthropic.com/v1/messages` with `x-api-key` and
+> `anthropic-version` headers. If a future feature genuinely needs streaming or
+> tool use, re-evaluate then; until then the dependency was dead weight and a
+> trap for whoever assumed it was the sanctioned path.
 
 #### Backend (Phase 4 — Home Network + Multi-User)
 | Package | Version | Purpose |
@@ -900,18 +921,36 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 
 ### 9.3 Claude AI Layer
 
-> ⛔ **STATUS: NOT IMPLEMENTED — Phase 5a is deferred.** Nothing in this section
-> is wired into the app today. There is no Claude panel, daily briefing, natural-
-> language task/transaction entry, CSV auto-categorisation, or model routing, and
-> no Anthropic API calls are made anywhere. The `src/components/claude/*`,
-> `src/hooks/useClaude.ts`, `src/lib/claude.ts`, and `src/lib/claude-prompts.ts`
-> files referenced below do **not exist**. This entire subsection is a forward
-> spec for when Phase 5a is picked up — treat it as design intent, not current behaviour.
+> 🟡 **STATUS: MOSTLY NOT IMPLEMENTED — one slice shipped (PR #112).**
+> **What exists:** the API-key infrastructure below, and exactly one Claude
+> feature — the "Ask AI" fallback in the bulk edit dialog, which categorises
+> only the merchants the rule-based pass missed
+> (`docs/ai-bulk-categorize-feature.md`, `worker/lib/anthropic.ts`,
+> `POST /api/transactions/suggest-categories-ai`).
+> **What does not exist:** everything else here — no Claude panel, daily
+> briefing, natural-language task/transaction entry, CSV auto-categorisation, or
+> model routing. `src/components/claude/*`, `src/hooks/useClaude.ts`,
+> `src/lib/claude.ts` and `src/lib/claude-prompts.ts` still do **not exist**;
+> the one shipped feature needed none of them. Treat the rest of this
+> subsection as design intent, not current behaviour, and get owner sign-off
+> per rule 10 before building any more of it.
 
 #### API setup
-- On first launch (or if no key set): show ApiKeySetup component
+> **Shipped in PR #112, with one deviation.** There is no `ApiKeySetup`
+> first-run screen: the key lives in an "AI categorisation" section on the
+> Settings page (enter / replace / clear), which states plainly that it is
+> stored as plain text. A first-run gate would have been wrong for a feature
+> that is optional — the app must stay fully usable with no key, and every AI
+> entry point is hidden or linked to Settings when none is set.
+> `GET /api/settings` masks the value to `'set'`/`''` so the key never
+> round-trips to the browser; `app.store`'s `hasAnthropicKey` is that presence
+> flag, never the key itself.
+
+- ~~On first launch (or if no key set): show ApiKeySetup component~~ → Settings page section
 - User enters their Anthropic API key → stored in `settings` table under key `anthropic_api_key`
 - Key is read at runtime from the DB, not from env vars (env var is a fallback for dev convenience only)
+- Per-user, per-hour rate limit on any route that spends the key
+  (`ai_rate_limit_*` in `settings`; one unit per request, not per Claude call)
 
 #### Model routing (cost optimisation)
 ```typescript
@@ -1187,6 +1226,123 @@ EOF
 **Update this section at the end of every Claude Code session.**
 
 ```
+                *** AI BULK-CATEGORISATION FALLBACK — PR #112, REVIEWED ***
+                Branch claude/ai-bulk-categorize-feature-varl0e, built from
+                docs/ai-bulk-categorize-feature.md in one PR (not the doc's
+                3-PR split — small enough to review as one diff). New spec
+                e2e/60-ai-bulk-categorize.spec.ts, 18 tests. tsc -b,
+                typecheck:worker, lint all clean.
+
+                REVIEW ROUND (2026-08-08) changed four things worth knowing,
+                all of them because a silent failure was hiding behind them.
+                RULE 13 CAME OUT OF THIS — never fail silently, anywhere.
+                • THE 100-MERCHANT CAP WAS COUNTING THE WRONG THING. It
+                  measured RAW strings, but raw strings carry per-row noise
+                  (`GRAB *ABC123` vs `GRAB *DEF456` = two raws, one
+                  merchant), so it refused selections nowhere near the real
+                  limit — and the client swallowed the 400, leaving a button
+                  that spun and did nothing in exactly the case the feature
+                  exists for (select-all after an import). Now: chunked
+                  server-side (50/call, 4 in flight) with the ceiling at 500
+                  DISTINCT CANONICAL merchants, checked after
+                  canonicalisation. Raising max_tokens was the wrong lever —
+                  one call is all-or-nothing, so a truncated response loses
+                  every answer in it, not just the ones past the limit.
+                • DEDUPE STAYS, and it costs nothing: the answer is echoed
+                  back per raw string, so all 400 selected rows still get a
+                  suggestion. Claude is just not asked the same question 40
+                  times. This was queried in review and is worth re-reading
+                  before anyone "fixes" it.
+                • suggestCategoriesWithAI() NOW THROWS instead of returning
+                  []. A failed chunk costs only its own merchants and comes
+                  back as failedMerchants, so the dialog can say "N of M
+                  could not be categorised" rather than showing an empty
+                  panel identical to "nothing to suggest".
+                • THE RULE-BASED suggestCategories() WAS SWALLOWING ERRORS
+                  TOO (pre-existing, both callers) — now throws, and both
+                  BulkEditDialog and CsvImport surface it.
+                Rate limiter is now ATOMIC: the whole window-expiry +
+                increment happens inside one INSERT … ON CONFLICT …
+                RETURNING guarded by json_valid(), because a single SQLite
+                statement cannot interleave. It also moved AFTER the key and
+                category checks, so a request that spends nothing no longer
+                costs a slot — a user with no key could previously burn
+                their whole hour on 400s. One unit PER REQUEST, not per
+                Claude call: the cap exists to stop a runaway loop, and one
+                click should not spend eight units because the selection was
+                large.
+                @anthropic-ai/sdk REMOVED from package.json — never imported,
+                24 transitive packages, and a trap for anyone assuming it was
+                the sanctioned path. The Worker calls Claude with plain
+                fetch. See §4.
+                What it is: for the transactions the existing rule-based
+                suggest-categories pass has NO suggestion for, an explicit
+                "Ask AI" button in the bulk edit dialog asks Claude — never the
+                whole selection, only the leftover. §2's prerequisite (no API
+                key infra existed anywhere) is now built: worker-only, nothing
+                touches server/ — production has run on the Worker since
+                Phase 6, so server/ is schema-reference-only and out of scope.
+                No migration: anthropic_api_key lives in the existing settings
+                KV table (already reserved in §6), and so does the rate
+                limiter and the e2e mock hook below — all three are just rows
+                under reserved key prefixes, so this shipped with zero schema
+                change.
+                GET /api/settings now masks anthropic_api_key to 'set'/'' and
+                drops two internal prefixes entirely (ai_rate_limit_*,
+                _test_*) rather than leaking Worker bookkeeping into the
+                client; PUT rejects writes to either prefix (a user resetting
+                their own rate-limit row via the generic settings endpoint
+                would defeat the point of having one).
+                Rate limiting (worker/routes/wallet.ts overAiRateLimit): 20
+                calls/hour/user, a JSON blob in one settings row, checked
+                before any tokens are spent. Not atomic against a concurrent
+                request from the same user — accepted for a two-user app where
+                the goal is capping a runaway UI loop, not defending a
+                compromised session. This is the CLAUDE.md-flagged "one open
+                production risk" closed for this endpoint specifically; the
+                general public-URL rate-limit gap is unchanged.
+                THE TESTING TRAP, worth remembering for any future
+                Worker-originated outbound call: Playwright intercepts
+                requests the BROWSER makes; it has no route into a
+                Worker-to-third-party fetch, because `wrangler dev` runs that
+                call from a separate process. worker/lib/anthropic.ts resolves
+                this by branching on DAYBOOK_TEST (already the flag that gates
+                worker/routes/test.ts) — under test it reads a canned response
+                from a settings row instead of calling api.anthropic.com,
+                stashed by a new POST /test/mock-ai-response. Production never
+                sets DAYBOOK_TEST, so the mock path is unreachable there. This
+                is the pattern to reuse, not a one-off — an env-var-configurable
+                base URL pointing at a second webServer would also have worked
+                but needed real infra; this needed none.
+                Model claude-haiku-4-5, max_tokens 2000, temperature 0, per
+                the doc's §5 cost analysis (~$0.003-0.008/click). Post-
+                processing is defensive at every step (§4): malformed JSON,
+                an invented category name, or a merchant Claude wasn't asked
+                about all degrade to dropping that entry, never a 500 — same
+                silent-failure contract suggestCategories() already has.
+                Client: BulkEditDialog's suggestion panel used to be gated on
+                `suggestionGroups.length > 0`, which meant a selection with
+                ZERO rule-based suggestions never showed the "N have no
+                suggestion" line at all — fixed to gate on
+                `suggestionGroups.length > 0 || noSuggestionCount > 0` so the
+                Ask AI button (or the no-key Settings link) is reachable even
+                then.
+                THE DOC'S §8 OPEN QUESTIONS ARE ALL CLOSED (owner,
+                2026-08-08) — see docs/ai-bulk-categorize-feature.md §8.
+                • Worth building? YES. The gap is real and already observed:
+                  coverage was poor because most merchants had exactly ONE
+                  previously categorised row, which is why MIN_MATCHES went
+                  2->1 on 2026-08-07. The owner intends to RAISE that
+                  threshold back gradually as history builds, which WIDENS
+                  this gap rather than closing it. No measurement period.
+                • Whose key? Per user, as built.
+                • Phase discipline: approved. Nothing in §9.3 was a
+                  prerequisite — this feature brought its own key storage,
+                  Settings UI, model choice and prompt. Phase 5a is now
+                  "partially started" in §14, and the key infrastructure is
+                  the foundation later 5a items must REUSE, not rebuild.
+                  Each remaining §9.3 item still needs its own sign-off.
+
                 *** DARK MODE — MERGED, TAG PENDING (v2.4.0) ***
                 PR #104, merged to main 2026-08-05; tag not yet pushed at
                 the time of writing. New spec 58 (10 tests).
@@ -1963,14 +2119,23 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 | 2 | Tasks Module | Dev | Full Workflowy-style bullet tree | ✅ v1.0 |
 | 3 | Wallet Module | Dev | Accounts + transactions + CSV + dashboard | ✅ v1.0 |
 | 4 | Home Network + Multi-User | Architecture | Node backend, SQLite file, auth, per-user data | ✅ v1.0 |
-| 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🔄 Deferred |
+| 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🟡 Partially started |
 | 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
 | 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | ✅ v1.0.1 |
 | 6 | Cloud Migration | Cloud | Supabase + Vercel + RLS + Edge Function for AI key | Planned |
 | 7 | Advanced Features | v2+ | Recurring rules, budgets, goals, new modules | Planned |
 
 **Note**: Phase 5 has been split into three subtasks:
-- **Phase 5a (AI)** is deferred — requires API key proxying + model routing
+- **Phase 5a (AI)** — no longer wholly deferred. Owner approved one slice on
+  2026-08-08 (PR #112, AI fallback for bulk categorisation), which brought the
+  API-key infrastructure §9.3 always assumed: per-user `anthropic_api_key` in
+  `settings`, a Settings UI, masked reads, per-user rate limiting, and the first
+  outbound Worker call (`worker/lib/anthropic.ts`).
+  **Any later 5a item reuses that foundation — do not rebuild it.** What is
+  still deferred is everything else in §9.3: the Claude panel, daily briefing,
+  natural-language task/transaction entry, CSV auto-categorisation, prompt
+  caching, and the `ApiKeySetup` first-run screen (Settings now covers the key).
+  Each remaining item still needs its own owner sign-off under rule 10.
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
 - **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/phase-5c-implementation-plan.md
 

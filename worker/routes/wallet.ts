@@ -20,6 +20,7 @@ import {
 } from '../lib/sharing.ts'
 import { canonicalMerchant } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
+import { suggestCategoriesWithAI, type CategorySuggestion } from '../lib/anthropic.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
 // (1,461 lines, 68 .prepare() sites), it lands in increments:
@@ -954,6 +955,183 @@ wallet.post('/transactions/suggest-categories', async (c) => {
   }
 
   return c.json({ suggestions })
+})
+
+// docs/ai-bulk-categorize-feature.md. Fallback for whatever the rule pass
+// above found NO suggestion for — never the whole selection, only the
+// leftover the client already computed as noSuggestionCount. Reuses the
+// MerchantSuggestion shape above so the client merges both result sets
+// through the one suggestionGroups path; matchCount: -1 marks an AI-sourced
+// entry (0 = builtin, >0 = history).
+// Ceiling on DISTINCT CANONICAL merchants, checked after canonicalisation
+// rather than on the raw input: raw strings carry per-transaction noise (dates,
+// terminal ids), so `GRAB *ABC123` and `GRAB *DEF456` are two raws and one
+// merchant. Counting raws would refuse selections that are nowhere near the
+// real limit. High enough that no realistic selection reaches it; it exists so
+// a select-all over years of history cannot turn one click into a hundred
+// Claude calls. Over it, the caller gets a message naming the number — never a
+// button that quietly does nothing.
+const MAX_AI_MERCHANTS = 500
+// One Claude call per chunk. Small batches keep each response well inside
+// MAX_TOKENS, and cap what a single truncated response can lose.
+const AI_CHUNK_SIZE = 50
+// Chunks run in waves rather than all at once: 500 merchants is 10 calls, and
+// firing them serially would leave the user watching a spinner for a minute.
+const AI_CHUNK_CONCURRENCY = 4
+
+const AI_RATE_LIMIT_KEY = 'ai_rate_limit_suggest_categories'
+const AI_RATE_LIMIT_MAX = 20
+const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
+
+// Per-user hourly cap, stored as a JSON blob in the settings key/value table —
+// the app owns no queue, KV namespace, or Durable Object today.
+//
+// ONE UNIT PER REQUEST, not per Claude call: a request may fan out to several
+// chunks, but the cap exists to stop a runaway UI loop, and a user who clicked
+// once should not find they have spent half their hour's budget because the
+// selection was large.
+//
+// Atomic. The whole read-modify-write — window expiry, increment, and the
+// fresh-window reset — happens inside one INSERT … ON CONFLICT … RETURNING,
+// and a single SQLite statement cannot interleave with another. json_valid()
+// guards the CASE so a corrupt row resets the window instead of throwing.
+// Note the counter still increments on a rejected request; that is harmless
+// (it is already over the cap) and the window start is preserved either way,
+// so it self-heals on the hour rather than sliding forward forever.
+async function overAiRateLimit(db: D1Database, userId: string): Promise<boolean> {
+  const now = Date.now()
+  const row = await db
+    .prepare(
+      `INSERT INTO settings (user_id, key, value)
+       VALUES (?, ?, json_object('windowStart', ?, 'count', 1))
+       ON CONFLICT (user_id, key) DO UPDATE SET value =
+         CASE
+           WHEN json_valid(settings.value)
+            AND json_extract(settings.value, '$.windowStart') IS NOT NULL
+            AND ? - json_extract(settings.value, '$.windowStart') <= ?
+           THEN json_object(
+             'windowStart', json_extract(settings.value, '$.windowStart'),
+             'count', COALESCE(json_extract(settings.value, '$.count'), 0) + 1)
+           ELSE json_object('windowStart', ?, 'count', 1)
+         END
+       RETURNING value`,
+    )
+    .bind(userId, AI_RATE_LIMIT_KEY, now, now, AI_RATE_LIMIT_WINDOW_MS, now)
+    .first<{ value: string }>()
+
+  const count = Number(JSON.parse(row?.value ?? '{}')?.count ?? 1)
+  return count > AI_RATE_LIMIT_MAX
+}
+
+wallet.post('/transactions/suggest-categories-ai', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const input: unknown[] = Array.isArray(b.merchants) ? b.merchants : []
+  if (input.length === 0) return c.json({ suggestions: [], askedMerchants: 0, failedMerchants: 0 })
+
+  // Dedupe to one representative raw string per canonical merchant before
+  // spending tokens. This does NOT drop any caller row: the answer is echoed
+  // back per raw string below, so all 400 selected transactions still get a
+  // suggestion — Claude is just not asked the same question 40 times.
+  const rawToCanonical = new Map<string, string>()
+  const canonicalReps = new Map<string, string>()
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue
+    const key = canonicalMerchant(raw)
+    if (!key) continue
+    rawToCanonical.set(raw, key)
+    if (!canonicalReps.has(key)) canonicalReps.set(key, raw)
+  }
+  if (canonicalReps.size === 0) {
+    return c.json({ suggestions: [], askedMerchants: 0, failedMerchants: 0 })
+  }
+  if (canonicalReps.size > MAX_AI_MERCHANTS) {
+    return c.json(
+      {
+        error: `too many merchants to categorise at once — the selection covers ${canonicalReps.size} distinct merchants and the limit is ${MAX_AI_MERCHANTS}. Narrow the selection and try again.`,
+      },
+      400,
+    )
+  }
+
+  // Key is per user and read per request — the Worker has no module scope to
+  // cache it in, and it is not the same key for both users.
+  const keyRow = await c.env.DB.prepare(
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'anthropic_api_key'`,
+  )
+    .bind(userId)
+    .first<{ value: string }>()
+  const apiKey = keyRow?.value?.trim()
+  if (!apiKey) return c.json({ error: 'no API key configured' }, 400)
+
+  // The user's OWN categories, not the seed list — they can rename and add.
+  const catsResult = await c.env.DB.prepare('SELECT id, name, type FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .all<{ id: string; name: string; type: string }>()
+  const categoryByName = new Map(catsResult.results.map((cat) => [cat.name, cat]))
+  if (categoryByName.size === 0) {
+    return c.json({ error: 'no categories to choose from — add a category first' }, 400)
+  }
+
+  // Last, so that a request rejected above for a reason that spends nothing
+  // does not cost the caller a slot in their hourly budget.
+  if (await overAiRateLimit(c.env.DB, userId)) {
+    return c.json(
+      { error: `AI suggestion limit reached (${AI_RATE_LIMIT_MAX} per hour) — try again later` },
+      429,
+    )
+  }
+
+  const categoryNames = [...categoryByName.keys()]
+  const reps = [...canonicalReps.values()]
+  const chunks: string[][] = []
+  for (let i = 0; i < reps.length; i += AI_CHUNK_SIZE) chunks.push(reps.slice(i, i + AI_CHUNK_SIZE))
+
+  // A failed chunk costs only its own merchants: the successful ones are kept
+  // and returned, and failedMerchants tells the caller how much to say is
+  // missing. Throwing the whole request away would discard answers already
+  // paid for.
+  const aiResults: CategorySuggestion[] = []
+  let failedMerchants = 0
+  for (let i = 0; i < chunks.length; i += AI_CHUNK_CONCURRENCY) {
+    const wave = chunks.slice(i, i + AI_CHUNK_CONCURRENCY)
+    const settled = await Promise.allSettled(
+      wave.map((chunk) => suggestCategoriesWithAI(c.env, userId, apiKey, categoryNames, chunk)),
+    )
+    settled.forEach((outcome, idx) => {
+      if (outcome.status === 'fulfilled') {
+        aiResults.push(...outcome.value)
+      } else {
+        failedMerchants += wave[idx].length
+        console.error('AI category suggestion chunk failed', outcome.reason)
+      }
+    })
+  }
+
+  // Drop any category name Claude invented and any merchant it wasn't asked
+  // about — exact match only, never fuzzy (a near-miss name resolving
+  // fuzzily is how a wrong category lands).
+  const sentReps = new Set(reps)
+  const byRep = new Map<string, { categoryId: string; categoryName: string; categoryType: string }>()
+  for (const item of aiResults) {
+    if (!sentReps.has(item.merchant)) continue
+    const cat = categoryByName.get(item.category)
+    if (!cat) continue
+    byRep.set(item.merchant, { categoryId: cat.id, categoryName: cat.name, categoryType: cat.type })
+  }
+
+  // Echo one entry per raw input string whose canonical resolved — same
+  // contract as the rule-based route above; the client cannot canonicalise.
+  const suggestions: MerchantSuggestion[] = []
+  for (const [raw, canonical] of rawToCanonical) {
+    const rep = canonicalReps.get(canonical)
+    const hit = rep ? byRep.get(rep) : undefined
+    if (hit) {
+      suggestions.push({ raw, canonical, ...hit, matchCount: -1, totalCount: 0 })
+    }
+  }
+
+  return c.json({ suggestions, askedMerchants: reps.length, failedMerchants })
 })
 
 // Bulk insert (CSV import). Returns the created rows.

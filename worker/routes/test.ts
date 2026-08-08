@@ -93,3 +93,27 @@ test.post('/test/inject-legacy-tag-row', async (c) => {
 
   return c.json({ status: 'injected' })
 })
+
+// Stashes a canned Claude response body for the requesting user, consumed by
+// worker/lib/anthropic.ts in place of the real network call — see its
+// comment for why e2e cannot intercept a Worker-to-Anthropic fetch the way
+// Playwright intercepts browser requests. `text` is whatever the real
+// response's text content would have been (typically the raw
+// {"suggestions":[...]} JSON string, but deliberately unvalidated here so a
+// spec can also stash malformed JSON to exercise the defensive parse).
+test.post('/test/mock-ai-response', async (c) => {
+  const userId = await readSession(c)
+  if (!userId) return c.json({ error: 'not authenticated' }, 401)
+
+  const b: { text?: unknown } = await c.req.json().catch(() => ({}))
+  if (typeof b.text !== 'string') return c.json({ error: 'text is required' }, 400)
+
+  await c.env.DB.prepare(
+    `INSERT INTO settings (user_id, key, value) VALUES (?, '_test_ai_mock_response', ?)
+     ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value`,
+  )
+    .bind(userId, b.text)
+    .run()
+
+  return c.json({ status: 'mocked' })
+})

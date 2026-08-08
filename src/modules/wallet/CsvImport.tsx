@@ -115,10 +115,20 @@ export function CsvImport() {
 
       // Pre-fill a category per row from the caller's own history / the
       // builtin cold-start map (docs/auto-categorisation-plan.md §4.1).
-      // suggestCategories() never throws — a failed call degrades silently to
-      // today's manual import rather than blocking the review step.
+      // Caught separately from the parse above: suggestions are a convenience,
+      // so losing them must still let the import proceed — but it is said out
+      // loud rather than leaving the reviewer to wonder why every row came
+      // back blank this time.
       const merchants = [...new Set(rows.filter((r) => r.merchant).map((r) => r.merchant))]
-      const suggestions = await suggestCategories(merchants)
+      let suggestions: Awaited<ReturnType<typeof suggestCategories>> = []
+      try {
+        suggestions = await suggestCategories(merchants)
+      } catch {
+        addToast({
+          message: 'Could not load category suggestions — import rows are uncategorised.',
+          duration: 4000,
+        })
+      }
       if (suggestions.length > 0) {
         const byRaw = new Map(suggestions.map((s) => [s.raw, s]))
         for (const row of rows) {

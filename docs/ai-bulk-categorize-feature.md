@@ -89,8 +89,19 @@ other Phase 5a item equally.
 6. **Apply suggestions** applies rule and AI suggestions together, through the
    existing `onApplySuggestions` → `POST /transactions/bulk-update` path.
    Unchanged permission model, unchanged transfer skipping.
-7. On failure: no suggestions, no error toast. Consistent with
-   `suggestCategories()`, which already swallows errors and returns `[]`.
+7. On failure: **always a message**, never a silent no-op. A click on a paid
+   button that changes nothing on screen and explains nothing is the one
+   outcome this must not produce. Three cases, all rendered in the suggestion
+   panel: the whole call failed ("Could not reach Claude"), some batches failed
+   ("N of M merchants could not be categorised — ask AI again to retry those"),
+   or Claude answered but had no confident suggestion (said as much). The
+   rate-limit 429 and the over-ceiling 400 surface the same way.
+
+   > **Revised during implementation (PR #112).** This originally said "no
+   > suggestions, no error toast", matching `suggestCategories()`, which
+   > swallowed errors and returned `[]`. Both now throw and both are surfaced —
+   > a broken service and a service with nothing to say were rendering
+   > identically, which left the user no reason to retry. See CLAUDE.md rule 13.
 
 ### Why click-to-fetch, not a toggle
 
@@ -111,10 +122,19 @@ An explicit button removes the class of bug entirely: one click, one call.
 Mirrors the shape of the existing rule-based route so the client can merge the
 two result sets without a second code path.
 
-**Request** — `{ merchants: string[] }`, distinct raw strings, max 100.
-**Response** — `{ suggestions: MerchantSuggestion[] }`, the same interface the
-rule route returns (`raw`, `canonical`, `categoryId`, `categoryName`,
-`categoryType`, `matchCount`, `totalCount`).
+**Request** — `{ merchants: string[] }`, distinct raw strings.
+**Response** — `{ suggestions: MerchantSuggestion[], askedMerchants, failedMerchants }`.
+`suggestions` uses the same interface the rule route returns (`raw`,
+`canonical`, `categoryId`, `categoryName`, `categoryType`, `matchCount`,
+`totalCount`); the two counts let the caller report a partial result.
+
+> **Revised during implementation (PR #112).** The original 100-merchant cap
+> returned a 400 the client swallowed, so a large selection produced a button
+> that did nothing. Replaced with: chunk server-side (`AI_CHUNK_SIZE` 50, four
+> chunks in flight), and a ceiling of **500 distinct canonical merchants**
+> measured *after* canonicalisation — raw strings carry per-transaction noise,
+> so counting them refused selections nowhere near the real limit. A failed
+> chunk costs only its own merchants and is reported through `failedMerchants`.
 
 Returning the *same* type is the point: `categoryType` is what lets
 `suggestionFitsType()` keep an expense category off a money-in row — the guard
@@ -190,7 +210,8 @@ wrote. Sending less is both cheaper and a smaller disclosure.
 
 ### Post-processing (all of it mandatory)
 
-1. Parse defensively. Any throw → `{ suggestions: [] }`, log, 200.
+1. Parse defensively. A throw fails **that chunk only**, is logged, and is
+   counted into `failedMerchants` — never silently folded into "no suggestions".
 2. Drop any `category` not matching a real category name for this user
    (exact match — no fuzzy resolution, that is how a wrong category lands).
 3. Drop any `merchant` not in the request.
@@ -263,20 +284,28 @@ without a click.
 | `max_tokens` | 2000 | 500 truncates at ~25 merchants and fails silently. |
 | Category list | The user's own, sent in the prompt | Categories are per-user and editable; the seed 10 are not the whole set. |
 | Unknown category name | Dropped | A near-miss name resolving fuzzily is how a wrong category gets applied. |
-| On error | Silent, no suggestions | Matches `suggestCategories()`. Never block the dialog. |
+| On error | ~~Silent, no suggestions~~ **Always a message** | Revised in PR #112. Degrade the feature, never the screen — but say so. A silent failure is indistinguishable from "nothing to suggest". |
+| Batch size | 50 per Claude call, 4 in flight | One call is all-or-nothing on truncation; chunking bounds what a failure costs and keeps the wait short. |
+| Ceiling | 500 distinct **canonical** merchants | Revised in PR #112. Counting raw strings refused selections nowhere near the limit. Over it, the caller is told the number. |
+| Quota accounting | One unit per request | The cap stops a runaway loop; one click should not spend several units because the selection was large. |
 | Key storage | Per user, `settings`, masked on read | CLAUDE.md §9.3. |
 | Transfers | Excluded | §9.2 — they carry neither category nor tags. |
 
 ---
 
-## 8. Open questions for the owner
+## 8. Open questions — all closed by the owner, 2026-08-08
 
-1. **Is this worth building now?** `MIN_MATCHES` dropped 2 → 1 on 2026-08-07,
-   which should raise rule-based coverage noticeably. Worth measuring the real
-   `noSuggestionCount` for a week before adding a paid dependency to fix a gap
-   that may have just closed.
-2. **Whose key?** Two users, two keys, two bills — or one shared key in a Worker
-   secret. The per-user design above is the safer default, but it means both
-   users have to get a key from console.anthropic.com.
-3. **Phase discipline (CLAUDE.md rule 10).** Phase 5a is deferred. This carves
-   one slice out of it. Explicit sign-off, or defer with it.
+1. **Is this worth building now?** ~~Measure `noSuggestionCount` for a week
+   first.~~ **Closed: yes.** The gap is real and already observed — coverage was
+   poor because most merchants had exactly one previously categorised row, which
+   is *why* `MIN_MATCHES` went 2 → 1 on 2026-08-07. The owner intends to raise
+   the threshold back gradually as history accumulates, which widens the gap
+   this fills rather than closing it. No measurement period needed.
+2. **Whose key?** **Closed: per user**, as designed here. Two keys, two bills,
+   and one user's spend can never land on the other's account.
+3. **Phase discipline (CLAUDE.md rule 10).** **Closed: approved.** Nothing in
+   §9.3 is a technical prerequisite — this feature brought its own key storage,
+   Settings UI, model choice, and prompt, and depends on no other Phase 5a
+   component. Phase 5a is no longer wholly deferred; the key infrastructure it
+   adds is the shared foundation any later 5a item (daily briefing, natural
+   language entry) should reuse rather than rebuild. Recorded in CLAUDE.md §14.
