@@ -231,12 +231,11 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(payerPct).toHaveValue('50')
     await expect(recipientPct).toHaveValue('50')
 
-    // Knock the total off 100% and Save must close: 50 + 30 is 80.
+    // Auto-adjust: with a single other participant, editing one box rebalances
+    // the other to the complement automatically — always sums to 100%.
     await recipientPct.fill('30')
-    await expect(card.getByText('Total: 80% / 100%')).toBeVisible()
-    await expect(saveBtn).toBeDisabled()
-
-    await payerPct.fill('70')
+    await expect(payerPct).toHaveValue('70')
+    await expect(card.getByText('Total: 100% / 100%')).toBeVisible()
     await expect(saveBtn).toBeEnabled()
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
@@ -284,6 +283,265 @@ test.describe('27 — Bulk share with group members', () => {
     // Keep as-is wrote a single recipient-owes-100% row
     const bobShared = await bobPage.request.get('http://localhost:5173/api/transactions?view=shared-with-me').then((r) => r.json()) as Array<{ merchant: string }>
     expect(bobShared.some((t) => t.merchant === 'Badge Refresh')).toBe(true)
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+})
+
+// Percentage auto-adjust (editing one box rebalances the rest equally) and the
+// "Same split for all" uniform bulk mode — both client-only enhancements on top
+// of the existing per-transaction bulk split and its /transactions/splits route.
+test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
+  async function setupPair(browser: import('@playwright/test').Browser) {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const bobName = `bob_uni_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: `alice_uni_${ts}`, password: 'test-password' } })
+    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'UniGroup' } })
+    const group = await groupRes.json() as { id: string }
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+
+    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    })
+    const acct = await acctRes.json() as { id: string }
+    return { aliceCtx, bobCtx, alicePage, bobPage, bobName, acct }
+  }
+
+  async function setupTrio(browser: import('@playwright/test').Browser) {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const carolCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const carolPage = await carolCtx.newPage()
+    const ts = Date.now()
+    const bobName = `bob_trio_${ts}`
+    const carolName = `carol_trio_${ts}`
+
+    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: `alice_trio_${ts}`, password: 'test-password' } })
+    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await carolPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: carolName, password: 'test-password' } })
+
+    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TrioGroup' } })
+    const group = await groupRes.json() as { id: string }
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: carolName } })
+    const bobInvites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`http://localhost:5173/api/invites/${bobInvites[0].id}/accept`)
+    const carolInvites = await carolPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await carolPage.request.post(`http://localhost:5173/api/invites/${carolInvites[0].id}/accept`)
+
+    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    })
+    const acct = await acctRes.json() as { id: string }
+    return { aliceCtx, bobCtx, carolCtx, alicePage, bobPage, carolPage, bobName, carolName, acct }
+  }
+
+  test('Percent auto-adjust rebalances remaining recipients equally', async ({ browser }) => {
+    const { aliceCtx, bobCtx, carolCtx, alicePage, bobName, carolName, acct } = await setupTrio(browser)
+    const today = businessToday()
+    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Trio Bill', amount: 100, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Trio Bill')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    const card = dialog.getByTestId('bulk-split-card')
+    await card.getByLabel(bobName).check()
+    await card.getByLabel(carolName).check()
+    await card.getByRole('button', { name: 'By %' }).click()
+
+    // Seeded equally across 3 participants: payer absorbs the remainder.
+    const payerPct = card.getByTestId('percent-payer')
+    await expect(payerPct).toHaveValue('33.4')
+
+    // Setting the payer to 70% rebalances both recipients to 15% each.
+    await payerPct.fill('70')
+    const recipientBoxes = card.getByTestId('percent-recipient')
+    await expect(recipientBoxes).toHaveCount(2)
+    await expect(recipientBoxes.nth(0)).toHaveValue('15')
+    await expect(recipientBoxes.nth(1)).toHaveValue('15')
+
+    const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
+      .then((r) => r.json()) as Array<{ share_amount: number }>
+    const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
+    expect(amounts).toEqual([15, 15, 70])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+    await carolCtx.close()
+  })
+
+  test('Same split for all — equal mode applies per transaction total', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    const txnA = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Uniform A', amount: 30, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+    const txnB = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Uniform B', amount: 50, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Uniform B')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await dialog.getByRole('button', { name: 'Same split for all' }).click()
+    const panel = dialog.getByTestId('uniform-split-panel')
+    await expect(panel).toBeVisible()
+    await panel.getByLabel(bobName).check()
+    await panel.getByRole('button', { name: /Split equally/ }).click()
+
+    await dialog.getByRole('button', { name: /Split 2 Transactions/ }).click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splitsA = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsB = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    expect(splitsA.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([15, 15])
+    expect(splitsB.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([25, 25])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
+  test('Same split for all — percent mode scales per transaction total', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    const txnA = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Pct Uniform A', amount: 100, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+    const txnB = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Pct Uniform B', amount: 40, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Pct Uniform B')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await dialog.getByRole('button', { name: 'Same split for all' }).click()
+    const panel = dialog.getByTestId('uniform-split-panel')
+    await panel.getByLabel(bobName).check()
+    await panel.getByRole('button', { name: 'By %' }).click()
+
+    const payerPct = panel.getByTestId('uniform-percent-payer')
+    const recipientPct = panel.getByTestId('uniform-percent-recipient')
+    await recipientPct.fill('25')
+    await expect(payerPct).toHaveValue('75')
+
+    const saveBtn = dialog.getByRole('button', { name: /Split 2 Transactions/ })
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splitsA = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsB = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    expect(splitsA.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([25, 75])
+    expect(splitsB.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([10, 30])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
+  test('Same split for all — a 0% share is reported as a config error, not as unsplittable transactions', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Zero Pct A', amount: 60, type: 'expense', tag: '[]' },
+    })
+    await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Zero Pct B', amount: 20, type: 'expense', tag: '[]' },
+    })
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Zero Pct B')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await dialog.getByRole('button', { name: 'Same split for all' }).click()
+    const panel = dialog.getByTestId('uniform-split-panel')
+    await panel.getByLabel(bobName).check()
+    await panel.getByRole('button', { name: 'By %' }).click()
+
+    // Taking 100% leaves the recipient on 0 — amount-independent, so it must
+    // read as a config problem rather than "both transactions are too small".
+    await panel.getByTestId('uniform-percent-payer').fill('100')
+    await expect(panel.getByTestId('uniform-error')).toContainText('above 0%')
+    await expect(panel.getByTestId('uniform-skip-warning')).toHaveCount(0)
+    await expect(dialog.getByRole('button', { name: /Split \d+ Transaction/ })).toBeDisabled()
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
+  test('Same split for all — fixed amounts: payer absorbs remainder, too-small transactions are skipped', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    const txnBig = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Fixed Big', amount: 100, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+    const txnSmall = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Fixed Small', amount: 10, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Fixed Small')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await dialog.getByRole('button', { name: 'Same split for all' }).click()
+    const panel = dialog.getByTestId('uniform-split-panel')
+    await panel.getByLabel(bobName).check()
+    await panel.getByRole('button', { name: 'Fixed amounts' }).click()
+    await panel.getByTestId('uniform-fixed-amount').fill('20')
+
+    await expect(panel.getByTestId('uniform-skip-warning')).toContainText('1 of 2')
+
+    const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splitsBig = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnBig.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    expect(splitsBig.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([20, 80])
+
+    const splitsSmall = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnSmall.id}/splits`).then((r) => r.json()) as unknown[]
+    expect(splitsSmall.length).toBe(0)
 
     await aliceCtx.close()
     await bobCtx.close()

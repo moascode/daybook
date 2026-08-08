@@ -141,6 +141,17 @@ export function splitByPercents(amount: number, percents: number[]): number[] {
   return [ownerCents / 100, ...others.map((c) => c / 100)]
 }
 
+// Rebalances a percentage list after one box is edited: the edited index keeps its
+// (clamped 0–100) value and the remaining participants split (100 − value) equally.
+// Returns display strings, already routed through formatPercent. n === 1 → ['100'].
+export function redistributePercents(count: number, editedIndex: number, value: number): string[] {
+  const edited = Math.min(100, Math.max(0, value))
+  const others = count - 1
+  if (others <= 0) return ['100']
+  const each = Math.round(((100 - edited) / others) * 10) / 10
+  return Array.from({ length: count }, (_, i) => (i === editedIndex ? formatPercent(edited) : String(each)))
+}
+
 export function todayISO(): string {
   const d = new Date()
   const yyyy = d.getFullYear()
