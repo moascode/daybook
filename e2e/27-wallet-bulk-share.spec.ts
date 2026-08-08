@@ -201,6 +201,45 @@ test.describe('27 — Bulk share with group members', () => {
     await bobCtx.close()
   })
 
+  test('Split by percentage blocks Save until 100%, then computes cent-exact shares', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Percent Bill', amount: 100, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Percent Bill')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    const card = dialog.getByTestId('bulk-split-card')
+    await card.getByLabel(bobName).check()
+    await card.getByRole('button', { name: 'By %' }).click()
+
+    const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
+    const pctInputs = card.locator('input[type="number"][step="0.1"]')
+    // Only Bob's percentage filled in — total is short of 100%, Save stays disabled
+    await pctInputs.nth(1).fill('30')
+    await expect(saveBtn).toBeDisabled()
+
+    await pctInputs.nth(0).fill('70')
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
+      .then((r) => r.json()) as Array<{ share_amount: number }>
+    const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
+    expect(amounts).toEqual([30, 70])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
   test('Keep as-is save refreshes Shared badges and exits select mode', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobPage, bobName, acct } = await setupPair(browser)
     const today = businessToday()

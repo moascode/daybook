@@ -5,7 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
-import { formatMYR, splitEqually } from '@/lib/utils'
+import { formatMYR, splitEqually, splitByPercents } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
@@ -19,7 +19,7 @@ interface BulkSplitDialogProps {
   onSave: () => void
 }
 
-type SplitMode = 'none' | 'equal' | 'custom'
+type SplitMode = 'none' | 'equal' | 'custom' | 'percent'
 
 interface CardState {
   transaction: Transaction
@@ -27,6 +27,8 @@ interface CardState {
   mode: SplitMode
   // Custom amounts keyed by userId; includes the payer under currentUserId.
   customAmounts: Record<string, string>
+  // Percentages keyed by userId, for mode 'percent'; includes the payer.
+  customPercents: Record<string, string>
   // §2.2: shares already on this transaction — shown with an overwrite warning.
   existingShares: TransactionShare[]
 }
@@ -70,6 +72,7 @@ export function BulkSplitDialog({
           recipientIds: [],
           mode: 'none' as SplitMode,
           customAmounts: {},
+          customPercents: {},
           existingShares: shareLists[i],
         })),
       )
@@ -110,6 +113,20 @@ export function BulkSplitDialog({
         return `Amounts must sum to ${formatMYR(c.transaction.amount)} — got ${formatMYR(sum)}`
       }
     }
+    if (c.mode === 'percent') {
+      const participants = [currentUserId, ...c.recipientIds]
+      const pctSum = participants.reduce((acc, id) => acc + (parseFloat(c.customPercents[id]) || 0), 0)
+      if (Math.abs(pctSum - 100) > 0.1) {
+        return `Percentages must sum to 100% — got ${pctSum}%`
+      }
+      const amounts = splitByPercents(
+        c.transaction.amount,
+        participants.map((id) => parseFloat(c.customPercents[id]) || 0),
+      )
+      if (amounts.some((a) => a <= 0)) {
+        return 'Each person needs a share above 0% — use Keep as-is or remove them instead'
+      }
+    }
     return null
   }
 
@@ -133,6 +150,13 @@ export function BulkSplitDialog({
         } else if (c.mode === 'equal') {
           const amounts = splitEqually(c.transaction.amount, c.recipientIds.length + 1)
           shares = [currentUserId, ...c.recipientIds].map((userId, i) => ({ userId, shareAmount: amounts[i] }))
+        } else if (c.mode === 'percent') {
+          const participants = [currentUserId, ...c.recipientIds]
+          const amounts = splitByPercents(
+            c.transaction.amount,
+            participants.map((id) => parseFloat(c.customPercents[id]) || 0),
+          )
+          shares = participants.map((userId, i) => ({ userId, shareAmount: amounts[i] }))
         } else {
           shares = [currentUserId, ...c.recipientIds].map((userId) => ({
             userId,
@@ -227,7 +251,7 @@ export function BulkSplitDialog({
                         <Button
                           variant={c.mode === 'none' ? 'primary' : 'secondary'}
                           size="sm"
-                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'none', customAmounts: {} }))}
+                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'none', customAmounts: {}, customPercents: {} }))}
                           disabled={saving || c.recipientIds.length > 1}
                           title={c.recipientIds.length > 1 ? 'Keep as-is shares the full amount with a single recipient' : undefined}
                         >
@@ -236,7 +260,7 @@ export function BulkSplitDialog({
                         <Button
                           variant={c.mode === 'equal' ? 'primary' : 'secondary'}
                           size="sm"
-                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'equal', customAmounts: {} }))}
+                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'equal', customAmounts: {}, customPercents: {} }))}
                           disabled={saving}
                         >
                           Split equally ({formatMYR(amount / participants.length)} each)
@@ -244,10 +268,18 @@ export function BulkSplitDialog({
                         <Button
                           variant={c.mode === 'custom' ? 'primary' : 'secondary'}
                           size="sm"
-                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'custom' }))}
+                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'custom', customPercents: {} }))}
                           disabled={saving}
                         >
                           Custom amounts
+                        </Button>
+                        <Button
+                          variant={c.mode === 'percent' ? 'primary' : 'secondary'}
+                          size="sm"
+                          onClick={() => updateCard(c.transaction.id, (card) => ({ ...card, mode: 'percent', customAmounts: {} }))}
+                          disabled={saving}
+                        >
+                          By %
                         </Button>
                       </div>
 
@@ -284,6 +316,43 @@ export function BulkSplitDialog({
                           ))}
                           <div className="text-right text-xs text-fg-subtle">
                             Total: {formatMYR(participants.reduce((acc, id) => acc + (parseFloat(c.customAmounts[id]) || 0), 0))} / {formatMYR(amount)}
+                          </div>
+                        </div>
+                      )}
+
+                      {c.mode === 'percent' && (
+                        <div className="mt-3 space-y-2">
+                          {participants.map((userId) => (
+                            <div key={userId} className="flex items-center gap-3">
+                              <span className="flex-1 text-sm text-fg-muted">{participantName(userId)}</span>
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  className="w-24"
+                                  value={c.customPercents[userId] ?? ''}
+                                  onChange={(e) =>
+                                    updateCard(c.transaction.id, (card) => ({
+                                      ...card,
+                                      customPercents: { ...card.customPercents, [userId]: e.target.value },
+                                    }))
+                                  }
+                                  placeholder={(100 / participants.length).toFixed(1)}
+                                />
+                                <span className="text-sm text-fg-subtle">%</span>
+                              </div>
+                              <span className="w-20 text-right text-xs text-fg-faint">
+                                {formatMYR(
+                                  splitByPercents(
+                                    amount,
+                                    participants.map((id) => parseFloat(c.customPercents[id]) || 0),
+                                  )[participants.indexOf(userId)],
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="text-right text-xs text-fg-subtle">
+                            Total: {participants.reduce((acc, id) => acc + (parseFloat(c.customPercents[id]) || 0), 0)}% / 100%
                           </div>
                         </div>
                       )}

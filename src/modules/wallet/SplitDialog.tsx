@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { api } from '@/lib/api'
-import { formatMYR, splitEqually } from '@/lib/utils'
+import { formatMYR, splitEqually, splitByPercents } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
@@ -18,7 +18,7 @@ interface SplitDialogProps {
   onSaved: () => void
 }
 
-type SplitMode = 'none' | 'equal' | 'custom'
+type SplitMode = 'none' | 'equal' | 'custom' | 'percent'
 
 export function SplitDialog({ open, onOpenChange, transaction, currentUserId, onSaved }: SplitDialogProps) {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
@@ -26,6 +26,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [splitMode, setSplitMode] = useState<SplitMode>('none')
   const [customAmounts, setCustomAmounts] = useState<[string, string]>(['', ''])
+  const [percents, setPercents] = useState<[string, string]>(['', ''])
   // Why the recipient is being asked for this. It reaches them in the review
   // queue, where until now they had a merchant, a date and an amount and no way
   // to tell an agreed cost from a mistake.
@@ -87,11 +88,26 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
           return
          }
         shareAmounts = [parseFloat(ownerAmt) || 0, parseFloat(recipientAmt) || 0]
+       } else if (splitMode === 'percent') {
+        const [ownerPct, recipientPct] = percents
+        const pctSum = (parseFloat(ownerPct) || 0) + (parseFloat(recipientPct) || 0)
+        if (Math.abs(pctSum - 100) > 0.1) {
+          setError(`Percentages must sum to 100% — got ${pctSum}%`)
+          return
+         }
+        const amounts = splitByPercents(amount, [parseFloat(ownerPct) || 0, parseFloat(recipientPct) || 0])
+        if (amounts.some((a) => a <= 0)) {
+          setError('Each person needs a share above 0% — use Keep as-is for a 100/0 split')
+          return
+         }
+        shareAmounts = amounts
        }
 
+      // The server only knows none/equal/custom — percent is a client-side
+      // input method that resolves to the same custom-amounts payload.
       await api.post(`/transactions/${transaction.id}/split`, {
         recipientId: selectedRecipient,
-        splitMode,
+        splitMode: splitMode === 'percent' ? 'custom' : splitMode,
         shareAmounts,
         note,
        })
@@ -162,7 +178,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'none' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => { setSplitMode('none'); setCustomAmounts(['', '']) }}
+                onClick={() => { setSplitMode('none'); setCustomAmounts(['', '']); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Keep as-is ({formatMYR(amount)})
@@ -170,7 +186,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'equal' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => { setSplitMode('equal'); setCustomAmounts(['', '']) }}
+                onClick={() => { setSplitMode('equal'); setCustomAmounts(['', '']); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Split equally ({formatMYR(amount / 2)} each)
@@ -178,10 +194,18 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'custom' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => setSplitMode('custom')}
+                onClick={() => { setSplitMode('custom'); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Custom amounts
+               </Button>
+               <Button
+                variant={splitMode === 'percent' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => { setSplitMode('percent'); setCustomAmounts(['', '']) }}
+                disabled={saving}
+               >
+                By %
                </Button>
              </div>
 
@@ -215,6 +239,56 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                  </div>
                </div>
              )}
+
+             {/* Percentage inputs — the two boxes auto-complement to 100%,
+                 since a 2-party split always has exactly one degree of freedom. */}
+             {splitMode === 'percent' && (
+               <div className="mt-3 space-y-2">
+                 <div className="flex items-center gap-3">
+                   <span className="w-40 text-sm text-fg-muted">You</span>
+                   <div className="flex items-center gap-1">
+                     <Input
+                      type="number"
+                      step="0.1"
+                      className="w-24"
+                      value={percents[0]}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setPercents([v, v === '' ? '' : String(Math.min(100, Math.max(0, 100 - (parseFloat(v) || 0))))])
+                       }}
+                      placeholder="50"
+                     />
+                     <span className="text-sm text-fg-subtle">%</span>
+                   </div>
+                   <span className="text-xs text-fg-faint">
+                    {formatMYR(splitByPercents(amount, [parseFloat(percents[0]) || 0, parseFloat(percents[1]) || 0])[0])}
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <span className="w-40 text-sm text-fg-muted">{groupMembers.find((m) => m.userId === selectedRecipient)?.username}</span>
+                   <div className="flex items-center gap-1">
+                     <Input
+                      type="number"
+                      step="0.1"
+                      className="w-24"
+                      value={percents[1]}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setPercents([v === '' ? '' : String(Math.min(100, Math.max(0, 100 - (parseFloat(v) || 0)))), v])
+                       }}
+                      placeholder="50"
+                     />
+                     <span className="text-sm text-fg-subtle">%</span>
+                   </div>
+                   <span className="text-xs text-fg-faint">
+                    {formatMYR(splitByPercents(amount, [parseFloat(percents[0]) || 0, parseFloat(percents[1]) || 0])[1])}
+                   </span>
+                 </div>
+                 <div className="text-right text-xs text-fg-subtle">
+                  Total: {(parseFloat(percents[0]) || 0) + (parseFloat(percents[1]) || 0)}% / 100%
+                 </div>
+               </div>
+             )}
            </div>
          )}
 
@@ -242,7 +316,14 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
            </Button>
            <Button
             onClick={handleSave}
-            disabled={saving || !selectedRecipient || (splitMode === 'custom' && Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015)}
+            disabled={
+             saving ||
+             !selectedRecipient ||
+             (splitMode === 'custom' &&
+              Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015) ||
+             (splitMode === 'percent' &&
+              Math.abs((parseFloat(percents[0]) || 0) + (parseFloat(percents[1]) || 0) - 100) > 0.1)
+            }
            >
              <Users className="h-3.5 w-3.5 mr-1" />
              {saving ? 'Splitting…' : 'Split'}

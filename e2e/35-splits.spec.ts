@@ -131,6 +131,60 @@ test.describe('35 — Transaction splits', () => {
     await bobCtx.close()
   })
 
+  test('Split by percentage auto-complements and computes cent-exact shares', async ({ browser }) => {
+    const aliceCtx = await browser.newContext()
+    const bobCtx = await browser.newContext()
+    const alicePage = await aliceCtx.newPage()
+    const bobPage = await bobCtx.newPage()
+    const ts = Date.now()
+    const aliceName = `alice_pct_${ts}`
+    const bobName = `bob_pct_${ts}`
+    const API = 'http://localhost:5173/api'
+
+    await alicePage.request.post(`${API}/auth/signup`, { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post(`${API}/auth/signup`, { data: { username: bobName, password: 'test-password' } })
+
+    const group = await alicePage.request.post(`${API}/groups`, { data: { name: 'PctGroup' } }).then((r) => r.json()) as { id: string }
+    await alicePage.request.post(`${API}/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get(`${API}/invites`).then((r) => r.json()) as { id: string }[]
+    await bobPage.request.post(`${API}/invites/${invites[0].id}/accept`)
+
+    const acct = await alicePage.request.post(`${API}/accounts`, {
+      data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    }).then((r) => r.json()) as { id: string }
+    const today = businessToday()
+    const txn = await alicePage.request.post(`${API}/transactions`, {
+      data: { accountId: acct.id, date: today, merchant: 'Utilities', amount: 100, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Utilities')).toBeVisible({ timeout: 10_000 })
+    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Utilities' }).getByRole('button', { name: 'Split transaction' }).click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5000 })
+    await expect(dialog.locator('select')).toBeVisible({ timeout: 5000 })
+    await dialog.locator('select').selectOption({ label: bobName })
+
+    await dialog.getByRole('button', { name: 'By %' }).click()
+    const pctInputs = dialog.locator('input[type="number"][step="0.1"]')
+    await pctInputs.nth(1).fill('30')
+
+    // Auto-complement: the owner's box updates to the remainder automatically
+    await expect(pctInputs.nth(0)).toHaveValue('70')
+
+    await dialog.getByRole('button', { name: 'Split', exact: true }).click()
+    await expect(dialog).not.toBeVisible()
+
+    const splits = await alicePage.request.get(`${API}/transactions/${txn.id}/splits`)
+      .then((r) => r.json()) as Array<{ share_amount: number }>
+    const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
+    expect(amounts).toEqual([30, 70])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
   // §2.2: re-opening an already-shared transaction must show the existing
   // shares and warn that saving replaces them (previously a blank form that
   // silently overwrote).

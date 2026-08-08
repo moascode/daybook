@@ -105,6 +105,17 @@ export function splitEqually(amount: number, n: number): number[] {
   return [(base + remainder) / 100, ...Array<number>(n - 1).fill(base / 100)]
 }
 
+// Converts percentages (expected to sum to 100) into cent-exact amounts.
+// Index 0 (owner) absorbs the rounding remainder — mirrors splitEqually above.
+// Client-only: the server never sees percentages, only the resulting amounts.
+export function splitByPercents(amount: number, percents: number[]): number[] {
+  if (percents.length === 0) return []
+  const cents = Math.round(amount * 100)
+  const others = percents.slice(1).map((p) => Math.round((cents * p) / 100))
+  const ownerCents = cents - others.reduce((sum, c) => sum + c, 0)
+  return [ownerCents / 100, ...others.map((c) => c / 100)]
+}
+
 export function todayISO(): string {
   const d = new Date()
   const yyyy = d.getFullYear()
