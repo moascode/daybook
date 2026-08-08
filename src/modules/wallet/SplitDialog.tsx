@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { api } from '@/lib/api'
-import { formatMYR, splitEqually } from '@/lib/utils'
+import { formatMYR, formatPercent, splitEqually, splitByPercents } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
@@ -18,7 +18,7 @@ interface SplitDialogProps {
   onSaved: () => void
 }
 
-type SplitMode = 'none' | 'equal' | 'custom'
+type SplitMode = 'none' | 'equal' | 'custom' | 'percent'
 
 export function SplitDialog({ open, onOpenChange, transaction, currentUserId, onSaved }: SplitDialogProps) {
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
@@ -26,6 +26,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null)
   const [splitMode, setSplitMode] = useState<SplitMode>('none')
   const [customAmounts, setCustomAmounts] = useState<[string, string]>(['', ''])
+  const [percents, setPercents] = useState<[string, string]>(['', ''])
   // Why the recipient is being asked for this. It reaches them in the review
   // queue, where until now they had a merchant, a date and an amount and no way
   // to tell an agreed cost from a mistake.
@@ -35,6 +36,14 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const [error, setError] = useState<string | null>(null)
 
   const amount = transaction?.amount ?? 0
+
+  // Percentage mode is judged in three places — the per-person preview, the
+  // Save button, and handleSave — so derive it once and let them share it.
+  const pctValues: [number, number] = [parseFloat(percents[0]) || 0, parseFloat(percents[1]) || 0]
+  const pctSum = pctValues[0] + pctValues[1]
+  const pctSumValid = Math.abs(pctSum - 100) <= 0.1
+  const pctAmounts = splitByPercents(amount, pctValues)
+  const pctSharesPositive = pctAmounts.every((a) => a > 0)
 
   const loadData = useCallback(async () => {
     if (!transaction) return
@@ -57,9 +66,24 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
    }, [transaction, currentUserId])
 
   useEffect(() => {
-    // Clear the note on open: it belongs to one claim, and carrying the last
-    // one's explanation into the next would attach a wrong reason to a real debt.
-    if (open) { setNote(''); loadData() } // eslint-disable-line react-hooks/set-state-in-effect
+    // Clear the whole form on open. The note belongs to one claim, and carrying
+    // the last one's explanation into the next would attach a wrong reason to a
+    // real debt. The mode and its inputs are worse: WalletPage keeps this dialog
+    // mounted, so without this a 70/30 set up on one transaction is still
+    // selected, still valid and one click from saving on the *next* one —
+    // percentages, unlike custom amounts, are amount-independent, so a stale
+    // pair is never rejected by the sum check that would have caught it.
+    /* eslint-disable react-hooks/set-state-in-effect -- resetting the form when
+       the dialog opens is the whole point; `open` is the external event. */
+    if (open) {
+      setNote('')
+      setSelectedRecipient(null)
+      setSplitMode('none')
+      setCustomAmounts(['', ''])
+      setPercents(['', ''])
+      loadData()
+     }
+    /* eslint-enable react-hooks/set-state-in-effect */
    }, [open, loadData])
 
   const handleSave = async () => {
@@ -87,11 +111,23 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
           return
          }
         shareAmounts = [parseFloat(ownerAmt) || 0, parseFloat(recipientAmt) || 0]
+       } else if (splitMode === 'percent') {
+        if (!pctSumValid) {
+          setError(`Percentages must sum to 100% — got ${formatPercent(pctSum)}%`)
+          return
+         }
+        if (!pctSharesPositive) {
+          setError('Each person needs a share above 0% — use Keep as-is to give them the full amount, or cancel to leave it unsplit')
+          return
+         }
+        shareAmounts = pctAmounts
        }
 
+      // The server only knows none/equal/custom — percent is a client-side
+      // input method that resolves to the same custom-amounts payload.
       await api.post(`/transactions/${transaction.id}/split`, {
         recipientId: selectedRecipient,
-        splitMode,
+        splitMode: splitMode === 'percent' ? 'custom' : splitMode,
         shareAmounts,
         note,
        })
@@ -162,7 +198,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'none' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => { setSplitMode('none'); setCustomAmounts(['', '']) }}
+                onClick={() => { setSplitMode('none'); setCustomAmounts(['', '']); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Keep as-is ({formatMYR(amount)})
@@ -170,7 +206,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'equal' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => { setSplitMode('equal'); setCustomAmounts(['', '']) }}
+                onClick={() => { setSplitMode('equal'); setCustomAmounts(['', '']); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Split equally ({formatMYR(amount / 2)} each)
@@ -178,10 +214,18 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                <Button
                 variant={splitMode === 'custom' ? 'primary' : 'secondary'}
                 size="sm"
-                onClick={() => setSplitMode('custom')}
+                onClick={() => { setSplitMode('custom'); setPercents(['', '']) }}
                 disabled={saving}
                >
                 Custom amounts
+               </Button>
+               <Button
+                variant={splitMode === 'percent' ? 'primary' : 'secondary'}
+                size="sm"
+                onClick={() => { setSplitMode('percent'); setCustomAmounts(['', '']) }}
+                disabled={saving}
+               >
+                By %
                </Button>
              </div>
 
@@ -215,6 +259,74 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
                  </div>
                </div>
              )}
+
+             {/* Percentage inputs — the two boxes auto-complement to 100%,
+                 since a 2-party split always has exactly one degree of freedom.
+                 The complement is rounded: 100 - 64.1 is 35.900000000000006 in
+                 binary float, and that lands in the box the user reads. */}
+             {splitMode === 'percent' && (
+               <div className="mt-3 space-y-2">
+                 <div className="flex items-center gap-3">
+                   <span className="w-40 text-sm text-fg-muted">You</span>
+                   <div className="flex items-center gap-1">
+                     <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      className="w-24"
+                      value={percents[0]}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setPercents([v, v === '' ? '' : formatPercent(Math.min(100, Math.max(0, 100 - (parseFloat(v) || 0))))])
+                       }}
+                      placeholder="50"
+                      data-testid="percent-you"
+                     />
+                     <span className="text-sm text-fg-subtle">%</span>
+                   </div>
+                   {/* Blank until the percentages add up: splitByPercents gives
+                       the owner everything the other side hasn't claimed, so a
+                       half-filled form would show an amount nobody typed. */}
+                   <span className="text-xs text-fg-faint">
+                    {pctSumValid ? formatMYR(pctAmounts[0]) : '—'}
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-3">
+                   <span className="w-40 text-sm text-fg-muted">{groupMembers.find((m) => m.userId === selectedRecipient)?.username}</span>
+                   <div className="flex items-center gap-1">
+                     <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      className="w-24"
+                      value={percents[1]}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setPercents([v === '' ? '' : formatPercent(Math.min(100, Math.max(0, 100 - (parseFloat(v) || 0)))), v])
+                       }}
+                      placeholder="50"
+                      data-testid="percent-recipient"
+                     />
+                     <span className="text-sm text-fg-subtle">%</span>
+                   </div>
+                   <span className="text-xs text-fg-faint">
+                    {pctSumValid ? formatMYR(pctAmounts[1]) : '—'}
+                   </span>
+                 </div>
+                 <div className="text-right text-xs text-fg-subtle">
+                  Total: {formatPercent(pctSum)}% / 100%
+                 </div>
+                 {/* Save is disabled on this case, so it has to say why here —
+                     a dead button that explains nothing is the worst outcome. */}
+                 {pctSumValid && !pctSharesPositive && (
+                   <p className="text-right text-xs text-red-600">
+                    Each person needs a share above 0% — use Keep as-is to give them the full amount.
+                   </p>
+                 )}
+               </div>
+             )}
            </div>
          )}
 
@@ -242,7 +354,13 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
            </Button>
            <Button
             onClick={handleSave}
-            disabled={saving || !selectedRecipient || (splitMode === 'custom' && Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015)}
+            disabled={
+             saving ||
+             !selectedRecipient ||
+             (splitMode === 'custom' &&
+              Math.abs((parseFloat(customAmounts[0]) || 0) + (parseFloat(customAmounts[1]) || 0) - amount) > 0.015) ||
+             (splitMode === 'percent' && !(pctSumValid && pctSharesPositive))
+            }
            >
              <Users className="h-3.5 w-3.5 mr-1" />
              {saving ? 'Splitting…' : 'Split'}

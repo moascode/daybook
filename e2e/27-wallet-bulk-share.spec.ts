@@ -201,6 +201,57 @@ test.describe('27 — Bulk share with group members', () => {
     await bobCtx.close()
   })
 
+  test('Split by percentage blocks Save until 100%, then computes cent-exact shares', async ({ browser }) => {
+    const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
+    const today = businessToday()
+    // RM10.05 at 30% is 3.015 — lands exactly on a rounding boundary, so the
+    // owner-absorbs rule is actually exercised (a round RM100 would not be).
+    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+      data: { accountId: acct.id, date: today, merchant: 'Percent Bill', amount: 10.05, type: 'expense', tag: '[]' },
+    }).then((r) => r.json()) as { id: string }
+
+    await alicePage.goto('/wallet')
+    await expect(alicePage.getByText('Percent Bill')).toBeVisible({ timeout: 10_000 })
+    await alicePage.getByRole('button', { name: /Select/ }).click()
+    await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
+    await alicePage.getByTestId('bulk-split-btn').click()
+
+    const dialog = alicePage.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    const card = dialog.getByTestId('bulk-split-card')
+    await card.getByLabel(bobName).check()
+    await card.getByRole('button', { name: 'By %' }).click()
+
+    const saveBtn = dialog.getByRole('button', { name: 'Split 1 Transaction' })
+    const payerPct = card.getByTestId('percent-payer')
+    const recipientPct = card.getByTestId('percent-recipient')
+
+    // The boxes open on a real even split, not a placeholder an empty box would
+    // silently score as 0.
+    await expect(payerPct).toHaveValue('50')
+    await expect(recipientPct).toHaveValue('50')
+
+    // Knock the total off 100% and Save must close: 50 + 30 is 80.
+    await recipientPct.fill('30')
+    await expect(card.getByText('Total: 80% / 100%')).toBeVisible()
+    await expect(saveBtn).toBeDisabled()
+
+    await payerPct.fill('70')
+    await expect(saveBtn).toBeEnabled()
+    await saveBtn.click()
+    await expect(dialog).not.toBeVisible({ timeout: 5_000 })
+
+    const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
+      .then((r) => r.json()) as Array<{ share_amount: number }>
+    const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
+    // 30% of RM10.05 rounds up to 3.02, and the payer absorbs the rest — the
+    // pair still totals RM10.05 exactly.
+    expect(amounts).toEqual([3.02, 7.03])
+
+    await aliceCtx.close()
+    await bobCtx.close()
+  })
+
   test('Keep as-is save refreshes Shared badges and exits select mode', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobPage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
