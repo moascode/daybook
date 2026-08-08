@@ -20,7 +20,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-08-08. Regenerate with:
+Reconciled against `git tag` on 2026-08-09. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -28,7 +28,12 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
-| v2.7.0 | pending | AI bulk-categorisation fallback (#112) + `MIN_MATCHES` 2→1 (#111). Merged as `5033d9f`; tag not yet pushed. |
+| v2.9.0 | 2026-08-09 | Split percentage auto-adjust + uniform bulk split (#119) |
+| v2.8.0 | 2026-08-08 | Split-by-percentage mode for wallet transactions |
+| v2.7.3 | 2026-08-08 | Surface AI categorisation errors (#115) |
+| v2.7.2 | 2026-08-08 | CLAUDE.md restructure (#114) |
+| v2.7.1 | 2026-08-08 | AI bulk-categorise feature follow-up (#112) |
+| v2.7.0 | 2026-08-08 | AI bulk-categorisation fallback (#112) + `MIN_MATCHES` 2→1 (#111) |
 | v2.6.0 | 2026-08-07 | Merchant categorisation with bulk suggestions (#109, #110) |
 | v2.5.0 | 2026-08-07 | Dashboard dual-mode periods, Shared/Goals panels, dark-mode fixes (#107, #108) |
 | v2.4.0 | 2026-08-05 | Dark mode (#104, #105) |
