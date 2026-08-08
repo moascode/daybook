@@ -24,7 +24,8 @@ const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance a
 For each merchant string, choose exactly one category from the list provided.
 Return JSON: {"suggestions":[{"merchant":"<verbatim input>","category":"<exact name from the list>"}]}
 Omit any merchant you are not reasonably confident about — omission is correct and expected; a wrong category is worse than none.
-Use only the category names given. Do not invent categories.`
+Use only the category names given. Do not invent categories.
+Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
 
 function buildUserMessage(categoryNames: string[], merchants: string[]): string {
   return `Categories: ${categoryNames.join(', ')}\nMerchants:\n${merchants.map((m) => `- ${m}`).join('\n')}`
@@ -87,8 +88,48 @@ async function fetchTestText(env: Env, userId: string): Promise<string> {
   return row.value
 }
 
+/**
+ * Pull the JSON object out of a reply that may not be bare JSON.
+ *
+ * THIS IS THE BUG THAT BROKE EVERY REAL CALL. Claude answers this prompt
+ * correctly but likes to wrap the answer in a ```json fence, and JSON.parse
+ * rejects the leading backtick outright — so a perfectly good set of
+ * suggestions was thrown away on every chunk. The system prompt now asks for
+ * bare JSON, but a prompt is a request, not a guarantee: a model is free to
+ * add a fence or a sentence of preamble on any call, and this must not be one
+ * bad day away from breaking again.
+ *
+ * Order matters — bare JSON is tried first so a well-formed reply never goes
+ * near the salvage paths.
+ */
+function jsonCandidates(raw: string): string[] {
+  const trimmed = raw.trim()
+  const candidates = [trimmed]
+
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed)
+  if (fenced) candidates.push(fenced[1].trim())
+
+  // Last resort for prose either side of the object ("Here are the results: {…}").
+  const first = trimmed.indexOf('{')
+  const last = trimmed.lastIndexOf('}')
+  if (first !== -1 && last > first) candidates.push(trimmed.slice(first, last + 1))
+
+  return candidates
+}
+
 function parseSuggestions(text: string): CategorySuggestion[] {
-  const parsed: unknown = JSON.parse(text)
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) throw lastError
   const suggestions =
     typeof parsed === 'object' && parsed !== null
       ? (parsed as { suggestions?: unknown }).suggestions

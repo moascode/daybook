@@ -297,6 +297,50 @@ test.describe('bulk edit dialog: Ask AI', () => {
     await page.context().close()
   })
 
+  // THE BUG THAT BROKE EVERY REAL CALL, 2026-08-08. Claude answered this
+  // prompt correctly but wrapped the JSON in a markdown fence, and
+  // JSON.parse rejected the leading backtick — so every chunk failed and the
+  // feature had never once worked in production. The mock always fed the
+  // parser clean JSON, which is exactly why 18 green tests missed it.
+  test('a reply wrapped in a markdown code fence still yields suggestions', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'FENCED MERCHANT')
+    const json = JSON.stringify({ suggestions: [{ merchant: 'FENCED MERCHANT', category: 'Shopping' }] })
+    await mockAiResponse(page, '```json\n' + json + '\n```')
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'FENCED MERCHANT')
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    await expect(suggestions).toContainText('suggested by AI')
+    await expect(suggestions).toContainText('Shopping')
+    await expect(suggestions).not.toContainText('AI categorisation failed')
+
+    await page.context().close()
+  })
+
+  test('a reply with prose around the JSON still yields suggestions', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'CHATTY MERCHANT')
+    const json = JSON.stringify({ suggestions: [{ merchant: 'CHATTY MERCHANT', category: 'Transport' }] })
+    await mockAiResponse(page, 'Here are the categories:\n' + json + '\nLet me know if you need more.')
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'CHATTY MERCHANT')
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    await expect(suggestions).toContainText('suggested by AI')
+    await expect(suggestions).toContainText('Transport')
+
+    await page.context().close()
+  })
+
   // docs/ai-bulk-categorize-feature.md §6 PR3. The guard is shared with the
   // rule-based path (suggestionFitsType), but nothing pinned it for AI
   // suggestions, which are merged into suggestionGroups at a different point.
@@ -336,7 +380,7 @@ test.describe('bulk edit dialog: Ask AI', () => {
     await page.getByTestId('bulk-edit-ask-ai').click()
 
     await expect(page.getByTestId('bulk-edit-suggestion-message')).toContainText(
-      'Could not reach Claude',
+      'AI categorisation failed',
     )
     await page.context().close()
   })
