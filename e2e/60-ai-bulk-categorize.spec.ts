@@ -341,6 +341,25 @@ test.describe('bulk edit dialog: Ask AI', () => {
     await page.context().close()
   })
 
+  test('the failure message carries the reason, not just "could not reach"', async ({ browser }) => {
+    // An expired key, an empty credit balance and a network blip all used to
+    // render identically, so the one message the user got never told them
+    // whether retrying was worth anything. The reason has to reach the UI.
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'REASONED FAILURE')
+    await mockAiResponse(page, '{"notSuggestions": []}')
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'REASONED FAILURE')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    await expect(page.getByTestId('bulk-edit-suggestion-message')).toContainText(
+      'malformed suggestions shape',
+    )
+    await page.context().close()
+  })
+
   test('an AI call with no confident answer says that too, rather than nothing', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
     await setApiKey(page, 'sk-ant-test-dummy')

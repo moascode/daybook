@@ -46,7 +46,24 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
       messages: [{ role: 'user', content: buildUserMessage(categoryNames, merchants) }],
     }),
   })
-  if (!res.ok) throw new Error(`Anthropic API responded ${res.status}`)
+  if (!res.ok) {
+    // Anthropic's own message is the only thing that distinguishes an invalid
+    // key from an exhausted credit balance from a bad model id — all of which
+    // are the user's to fix and none of which the caller can guess. The body
+    // is `{error: {type, message}}`; it never echoes the API key back.
+    const detail = await res
+      .text()
+      .then((body) => {
+        const parsed: unknown = JSON.parse(body)
+        const message =
+          typeof parsed === 'object' && parsed !== null
+            ? (parsed as { error?: { message?: unknown } }).error?.message
+            : undefined
+        return typeof message === 'string' ? message : body.slice(0, 200)
+      })
+      .catch(() => '')
+    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const text = data.content?.find((block) => block.type === 'text')?.text
   if (!text) throw new Error('no text content in Anthropic response')

@@ -57,6 +57,13 @@ export interface AiSuggestionResult {
   askedMerchants: number
   /** How many of those were in a batch that failed, so have no answer. */
   failedMerchants: number
+  /**
+   * Why the first failed batch failed, verbatim from Claude where possible.
+   * Absent when nothing failed. "Could not reach Claude" is true of an expired
+   * key, an empty credit balance and a network blip alike, and only one of
+   * those is worth retrying — so the reason has to reach the user.
+   */
+  failureReason?: string
 }
 
 /**
