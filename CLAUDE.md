@@ -1292,9 +1292,14 @@ is in [`docs/project-history.md`](docs/project-history.md#release-record).
 > git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short)' refs/tags
 > ```
 
-**`main` is fully released.** `v2.7.0`–`v2.9.0` were tagged and deployed on
-2026-08-08/09; `v2.9.0` points at the same commit as `main`, so production is
-not lagging. The earlier **HTTP 403 on tag refs** from a container agent proxy no
+**All code on `main` is released**, through `v2.9.0`. Rather than restating a
+commit SHA here — which is what made this section wrong four times — check it:
+
+```
+git log --oneline v2.9.0..main    # empty, or docs-only, means nothing is pending
+```
+
+The earlier **HTTP 403 on tag refs** from a container agent proxy no
 longer reproduces — tags push normally. If it returns, the symptom is that
 branch pushes succeed and only tag refs are rejected, and `release.yml` has no
 `workflow_dispatch`, so the tag must be pushed from a machine with direct git
