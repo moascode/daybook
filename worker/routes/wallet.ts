@@ -1093,6 +1093,7 @@ wallet.post('/transactions/suggest-categories-ai', async (c) => {
   // paid for.
   const aiResults: CategorySuggestion[] = []
   let failedMerchants = 0
+  let failureReason: string | undefined
   for (let i = 0; i < chunks.length; i += AI_CHUNK_CONCURRENCY) {
     const wave = chunks.slice(i, i + AI_CHUNK_CONCURRENCY)
     const settled = await Promise.allSettled(
@@ -1104,6 +1105,10 @@ wallet.post('/transactions/suggest-categories-ai', async (c) => {
       } else {
         failedMerchants += wave[idx].length
         console.error('AI category suggestion chunk failed', outcome.reason)
+        // First reason only: every chunk of one bad request fails identically,
+        // and repeating it N times tells the user nothing extra.
+        failureReason ??=
+          outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
       }
     })
   }
@@ -1131,7 +1136,7 @@ wallet.post('/transactions/suggest-categories-ai', async (c) => {
     }
   }
 
-  return c.json({ suggestions, askedMerchants: reps.length, failedMerchants })
+  return c.json({ suggestions, askedMerchants: reps.length, failedMerchants, failureReason })
 })
 
 // Bulk insert (CSV import). Returns the created rows.
