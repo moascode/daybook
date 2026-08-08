@@ -1279,7 +1279,7 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v2.6.0`** (2026-08-07). The full table with dates and contents
+**Latest tag: `v2.8.0`** (2026-08-08). The full table with dates and contents
 is in [`docs/project-history.md`](docs/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
@@ -1292,24 +1292,23 @@ is in [`docs/project-history.md`](docs/project-history.md#release-record).
 > git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short)' refs/tags
 > ```
 
-**`v2.7.0` IS NOT RELEASED.** PR #112 (AI bulk-categorisation fallback) and
-PR #111 (`MIN_MATCHES` 2→1) are merged to `main` as `5033d9f` with all CI green,
-but the tag was never pushed — a container agent proxy returns **HTTP 403 on tag
-refs** (branch pushes are fine), and `release.yml` triggers only on
-`push: tags: v*.*.*` with no `workflow_dispatch`, so there is no API route
-around it. `main` is therefore AHEAD of production by those two PRs.
+**`main` is fully released.** `v2.7.0`–`v2.8.0` were tagged and deployed on
+2026-08-08; `v2.8.0` points at the same commit as `main`, so production is not
+lagging. The earlier **HTTP 403 on tag refs** from a container agent proxy no
+longer reproduces — tags push normally. If it returns, the symptom is that
+branch pushes succeed and only tag refs are rejected, and `release.yml` has no
+`workflow_dispatch`, so the tag must be pushed from a machine with direct git
+access.
 
-To finish the release from a machine with normal git access:
+**The tag is the deploy** — `release.yml` holds the Cloudflare credentials and
+runs end to end: full suite → D1 migrations → Worker deploy → smoke test →
+GitHub Release.
 
 ```
 git checkout main && git pull
-git tag -a v2.7.0 -m "v2.7.0 — AI fallback for bulk categorisation"
-git push origin v2.7.0
+git tag -a vX.Y.Z -m "vX.Y.Z — summary"
+git push origin vX.Y.Z
 ```
-
-**The tag is the deploy** — `release.yml` holds the Cloudflare credentials and
-runs end to end. There are no pending D1 migrations (verified `v2.6.0..main`),
-so this is a Worker-only deploy.
 
 ### Phase status
 
@@ -1346,17 +1345,16 @@ so this is a Worker-only deploy.
 
 ### Next, in rough order of value
 
-1. **Push the `v2.7.0` tag** (above) — merged, tested, undeployed work.
-2. **Rate limiting** for the public URL (risk 1).
-3. **Audit the day-header totals** (risk 3) — small, and the bug class is known
+1. **Rate limiting** for the public URL (risk 1).
+2. **Audit the day-header totals** (risk 3) — small, and the bug class is known
    to be real.
-4. **Watch the netting paths with real use.** Every new column defaults to 0 and
+3. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-5. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
+4. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
    `docs/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
    already exists).
-6. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
+5. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
    per-group "we trust each other" setting; the parked D-items/C9 in
    `docs/phase-5c-wallet-ux.md` §D.
 
