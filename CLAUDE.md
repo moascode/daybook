@@ -1279,7 +1279,7 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v2.8.0`** (2026-08-08). The full table with dates and contents
+**Latest tag: `v2.9.0`** (2026-08-09). The full table with dates and contents
 is in [`docs/project-history.md`](docs/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
@@ -1292,9 +1292,9 @@ is in [`docs/project-history.md`](docs/project-history.md#release-record).
 > git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short)' refs/tags
 > ```
 
-**`main` is fully released.** `v2.7.0`–`v2.8.0` were tagged and deployed on
-2026-08-08; `v2.8.0` points at the same commit as `main`, so production is not
-lagging. The earlier **HTTP 403 on tag refs** from a container agent proxy no
+**`main` is fully released.** `v2.7.0`–`v2.9.0` were tagged and deployed on
+2026-08-08/09; `v2.9.0` points at the same commit as `main`, so production is
+not lagging. The earlier **HTTP 403 on tag refs** from a container agent proxy no
 longer reproduces — tags push normally. If it returns, the symptom is that
 branch pushes succeed and only tag refs are rejected, and `release.yml` has no
 `workflow_dispatch`, so the tag must be pushed from a machine with direct git
@@ -1362,6 +1362,16 @@ git push origin vX.Y.Z
 
 - Releases are tag-triggered; `release.yml` gates on the full suite, applies D1
   migrations **before** deploying, smoke-tests, then publishes the Release.
+- **`release.yml` gates on a green *CI run for the tagged commit*, not on its
+  own test run.** So the `wrangler dev` broken-pipe flake (documented in
+  `playwright.config.ts`) fails the release indirectly: the shard dies, CI on
+  the merge commit goes red, and the release exits with "CI concluded
+  'failure'". Retries do not save it — once the server is dead every retry in
+  that shard also fails on `ECONNREFUSED ::1:5173`. The fix is
+  `gh run rerun <ci-run-id> --failed`, wait for green, **then**
+  `gh run rerun <release-run-id>`. Re-tagging is not needed. Confirm it is the
+  flake and not a real break by running the failing shard locally
+  (`npx playwright test --shard=N/6`) before re-running anything.
 - A local `wrangler … --remote` still fails from the owner's Mac (account not
   authorised). Only CI holds a token — verify remote D1 from the release log.
 - D1 migrations are additive-only; rename via `ALTER TABLE … RENAME TO` is
