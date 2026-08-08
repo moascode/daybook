@@ -13,8 +13,11 @@ const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 // Classification, not reasoning — cheapest current model (§5 of the doc).
 const MODEL = 'claude-haiku-4-5'
-// 500 truncates the JSON around ~25 merchants and fails the parse silently
-// (§4 "The prompt"); batch above ~100 merchants rather than raising this further.
+// ~20 output tokens per answer, so 2000 covers a batch comfortably. Raising it
+// is the wrong lever: one call is all-or-nothing, and a truncated response
+// loses EVERY answer in it, not just the ones past the limit. The caller
+// chunks instead (AI_CHUNK_SIZE in worker/routes/wallet.ts) so a truncation
+// costs one batch rather than the whole request.
 const MAX_TOKENS = 2000
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
@@ -91,11 +94,14 @@ function parseSuggestions(text: string): CategorySuggestion[] {
 }
 
 /**
- * Ask Claude to categorise a batch of merchant strings against the caller's
- * own category names. Never throws — any failure (network, non-2xx,
- * malformed JSON, unexpected shape) resolves to `[]`, matching
- * suggestCategories()'s existing silent-failure contract so a bad AI call
- * degrades to "no suggestions" rather than an error screen.
+ * Ask Claude to categorise ONE batch of merchant strings against the caller's
+ * own category names.
+ *
+ * THROWS on any failure — network, non-2xx, malformed JSON, unexpected shape.
+ * That is deliberate and is the opposite of the original contract: the caller
+ * batches, and it needs to tell a failed batch apart from a batch Claude
+ * simply had no confident answer for, so it can report "suggested 340 of 400"
+ * instead of leaving the user looking at a button that did nothing.
  */
 export async function suggestCategoriesWithAI(
   env: Env,
@@ -104,14 +110,9 @@ export async function suggestCategoriesWithAI(
   categoryNames: string[],
   merchants: string[],
 ): Promise<CategorySuggestion[]> {
-  try {
-    const text =
-      env.DAYBOOK_TEST === '1'
-        ? await fetchTestText(env, userId)
-        : await fetchClaudeText(apiKey, categoryNames, merchants)
-    return parseSuggestions(text)
-  } catch (err) {
-    console.error('AI category suggestion failed', err)
-    return []
-  }
+  const text =
+    env.DAYBOOK_TEST === '1'
+      ? await fetchTestText(env, userId)
+      : await fetchClaudeText(apiKey, categoryNames, merchants)
+  return parseSuggestions(text)
 }

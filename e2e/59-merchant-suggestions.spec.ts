@@ -367,6 +367,11 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
   await expect(page.getByText('1 to import')).toBeVisible()
   await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
 
+  // …and says why every row came back uncategorised. Proceeding is right;
+  // proceeding without a word is what left the reviewer guessing whether the
+  // suggestions were broken or simply had nothing to offer.
+  await expect(page.getByText('Could not load category suggestions')).toBeVisible()
+
   await page.getByRole('button', { name: /Import 1 Transaction/ }).click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 

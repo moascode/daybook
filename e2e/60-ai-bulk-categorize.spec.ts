@@ -50,13 +50,47 @@ test.describe('POST /transactions/suggest-categories-ai', () => {
     await page.context().close()
   })
 
-  test('over the merchant cap is rejected before any key lookup matters', async ({ browser }) => {
+  // 200 raw strings that canonicalise to a handful of merchants: well past the
+  // old raw-count cap of 100, and accepted now that the ceiling is measured
+  // after canonicalisation. This is the shape a real select-all takes — one
+  // merchant, a different reference number on every row.
+  test('hundreds of raw strings are accepted when they canonicalise to few merchants', async ({
+    browser,
+  }) => {
     const page = await newAppPage(browser, '/wallet')
     await setApiKey(page, 'sk-ant-test-dummy')
-    const merchants = Array.from({ length: 101 }, (_, i) => `MERCHANT ${i}`)
+    await mockAiResponse(page, JSON.stringify({ suggestions: [] }))
+
+    const merchants = Array.from({ length: 200 }, (_, i) => `GRAB RIDE ${i}`)
+    const res = await askAi(page, merchants)
+    expect(res.status()).toBe(200)
+    const bodyJson = (await res.json()) as { askedMerchants: number; failedMerchants: number }
+    expect(bodyJson.failedMerchants).toBe(0)
+    // Deduped before any tokens are spent — fewer questions than rows.
+    expect(bodyJson.askedMerchants).toBeLessThan(200)
+    // …and still past the old raw-count cap of 100, which this request would
+    // have been rejected by. That rejection is what the client swallowed.
+    expect(bodyJson.askedMerchants).toBeGreaterThan(100)
+    await page.context().close()
+  })
+
+  test('past the ceiling the caller is told the number, not silently ignored', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    // Letter suffixes, not numeric ones: canonicalMerchant strips a trailing
+    // run of 3+ digits, so `MERCHANT 500` folds into `MERCHANT` and 501 names
+    // would arrive as a handful of merchants.
+    const merchants = Array.from({ length: 501 }, (_, i) => {
+      const a = String.fromCharCode(65 + Math.floor(i / 676))
+      const b = String.fromCharCode(65 + (Math.floor(i / 26) % 26))
+      const cc = String.fromCharCode(65 + (i % 26))
+      return `MERCHANT ${a}${b}${cc}`
+    })
     const res = await askAi(page, merchants)
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toContain('cannot request more than 100')
+    const { error } = (await res.json()) as { error: string }
+    expect(error).toContain('501 distinct merchants')
+    expect(error).toContain('500')
     await page.context().close()
   })
 
@@ -64,26 +98,42 @@ test.describe('POST /transactions/suggest-categories-ai', () => {
     const page = await newAppPage(browser, '/wallet')
     const res = await askAi(page, [])
     expect(res.status()).toBe(200)
-    expect(await res.json()).toEqual({ suggestions: [] })
+    expect(await res.json()).toEqual({ suggestions: [], askedMerchants: 0, failedMerchants: 0 })
     await page.context().close()
   })
 
-  test('no mock configured degrades to no suggestions, not an error', async ({ browser }) => {
+  // A failed call is REPORTED, not swallowed: failedMerchants is what lets the
+  // dialog say "could not reach Claude" instead of showing an empty panel that
+  // looks identical to "no confident suggestion".
+  test('an unreachable model is reported as failed merchants, not as an empty result', async ({
+    browser,
+  }) => {
     const page = await newAppPage(browser, '/wallet')
     await setApiKey(page, 'sk-ant-test-dummy')
     const res = await askAi(page, ['UNMOCKED MERCHANT'])
     expect(res.status()).toBe(200)
-    expect(await res.json()).toEqual({ suggestions: [] })
+    const bodyJson = (await res.json()) as {
+      suggestions: unknown[]
+      askedMerchants: number
+      failedMerchants: number
+    }
+    expect(bodyJson.suggestions).toHaveLength(0)
+    expect(bodyJson.askedMerchants).toBe(1)
+    expect(bodyJson.failedMerchants).toBe(1)
     await page.context().close()
   })
 
-  test('malformed JSON from the model degrades to no suggestions, not an error', async ({ browser }) => {
+  test('malformed JSON from the model is reported as a failure, not as no suggestions', async ({
+    browser,
+  }) => {
     const page = await newAppPage(browser, '/wallet')
     await setApiKey(page, 'sk-ant-test-dummy')
     await mockAiResponse(page, 'not valid json{{{')
     const res = await askAi(page, ['ANY MERCHANT'])
     expect(res.status()).toBe(200)
-    expect(await res.json()).toEqual({ suggestions: [] })
+    const bodyJson = (await res.json()) as { failedMerchants: number; suggestions: unknown[] }
+    expect(bodyJson.suggestions).toHaveLength(0)
+    expect(bodyJson.failedMerchants).toBe(1)
     await page.context().close()
   })
 
@@ -121,6 +171,9 @@ test.describe('POST /transactions/suggest-categories-ai', () => {
       last = await askAi(page, [`RATE LIMIT MERCHANT ${i}`])
     }
     expect(last!.status()).toBe(429)
+    // The message names the cap — a 429 the user cannot see is the same dead
+    // button as any other silent failure.
+    expect((await last!.json()).error).toContain('20 per hour')
     await page.context().close()
   })
 })
@@ -162,17 +215,37 @@ test.describe('settings: anthropic_api_key', () => {
 
     await page.context().close()
   })
+
+  // The quota exists to cap spend. A request rejected before any token is
+  // spent must not cost a slot, or a user with no key configured could burn
+  // their whole hour on 400s.
+  test('a request rejected before spending anything does not consume quota', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+
+    for (let i = 0; i < 25; i++) {
+      const res = await askAi(page, [`NO KEY MERCHANT ${i}`])
+      expect(res.status()).toBe(400)
+    }
+
+    // Quota untouched: the very next call, once a key exists, still succeeds.
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await mockAiResponse(page, JSON.stringify({ suggestions: [] }))
+    const res = await askAi(page, ['FIRST REAL CALL'])
+    expect(res.status()).toBe(200)
+
+    await page.context().close()
+  })
 })
 
 // ── UI flow ────────────────────────────────────────────────────────────
 
 test.describe('bulk edit dialog: Ask AI', () => {
-  async function seed(page: Page, merchant: string) {
+  async function seed(page: Page, merchant: string, type: 'expense' | 'income' = 'expense') {
     const acct = (await (await page.request.post(`${API}/accounts`, {
       data: { name: 'AI Bulk Acct', type: 'cash', openingBalance: 0 },
     })).json()) as { id: string }
     await page.request.post(`${API}/transactions`, {
-      data: { accountId: acct.id, date: businessToday(), merchant, amount: 12, type: 'expense' },
+      data: { accountId: acct.id, date: businessToday(), merchant, amount: 12, type },
     })
   }
 
@@ -221,6 +294,66 @@ test.describe('bulk edit dialog: Ask AI', () => {
     const row = page.locator('[data-testid="transaction-row"]').filter({ hasText: 'ASKAI MERCHANT' })
     await expect(row).toContainText('Shopping')
 
+    await page.context().close()
+  })
+
+  // docs/ai-bulk-categorize-feature.md §6 PR3. The guard is shared with the
+  // rule-based path (suggestionFitsType), but nothing pinned it for AI
+  // suggestions, which are merged into suggestionGroups at a different point.
+  test('an expense category suggested by AI never lands on a money-in row', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'REFUND MERCHANT', 'income')
+    // 'Food & Drink' is a seeded EXPENSE category — inapplicable to income.
+    await mockAiResponse(
+      page,
+      JSON.stringify({ suggestions: [{ merchant: 'REFUND MERCHANT', category: 'Food & Drink' }] }),
+    )
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'REFUND MERCHANT')
+
+    const suggestions = page.getByTestId('bulk-edit-suggestions')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    // The suggestion is dropped, so the row stays uncategorised and no
+    // Apply button appears for it.
+    await expect(suggestions).toContainText('1 transaction has no suggestion')
+    await expect(suggestions).not.toContainText('Food & Drink')
+    await expect(page.getByTestId('bulk-edit-apply-suggestions')).not.toBeVisible()
+
+    await page.context().close()
+  })
+
+  test('a failed AI call says so instead of leaving the button looking dead', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'FAILING MERCHANT')
+    await mockAiResponse(page, 'not valid json{{{')
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'FAILING MERCHANT')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    await expect(page.getByTestId('bulk-edit-suggestion-message')).toContainText(
+      'Could not reach Claude',
+    )
+    await page.context().close()
+  })
+
+  test('an AI call with no confident answer says that too, rather than nothing', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    await seed(page, 'UNKNOWABLE MERCHANT')
+    await mockAiResponse(page, JSON.stringify({ suggestions: [] }))
+
+    await page.reload()
+    await openBulkEditOnRow(page, 'UNKNOWABLE MERCHANT')
+    await page.getByTestId('bulk-edit-ask-ai').click()
+
+    await expect(page.getByTestId('bulk-edit-suggestion-message')).toContainText(
+      'no confident suggestion',
+    )
     await page.context().close()
   })
 })
