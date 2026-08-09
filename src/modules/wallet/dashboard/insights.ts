@@ -106,6 +106,30 @@ export function daysBetween(dateFrom: string, dateTo: string): number {
   return dayIndex(dateTo) - dayIndex(dateFrom) + 1
 }
 
+/**
+ * How many days a period must span before "per month" is a meaningful rate
+ * rather than a shaky extrapolation. 60 is the exact floor of "Last 3
+ * months" (the shortest a trailing 3-month window can be, when today is the
+ * 1st of the month and the two preceding months are Jan+Feb) — so the
+ * presets this feature targets always qualify, while a short custom range or
+ * a brand-new "All time" account correctly does not.
+ */
+export const MIN_AVERAGE_DAYS = 60
+
+/**
+ * Continuous month count for a date range — days spanned ÷ 30, NOT the
+ * number of distinct calendar months touched. A trailing "Last N months"
+ * window changes length by a day at a time as today advances, then drops by
+ * roughly a full month in one step when it rolls past a month boundary (the
+ * oldest month falls out of the window). Dividing by the exact day count
+ * tracks that same shape, so a steady spend rate reports a steady average;
+ * dividing by "months touched" is a step function that lags the total's own
+ * steps and produces a visible jump on the day the window rolls over.
+ */
+export function monthsSpanned(dateFrom: string, dateTo: string): number {
+  return daysBetween(dateFrom, dateTo) / 30
+}
+
 /** Whether `isoDate` falls within [dateFrom, dateTo] inclusive. 'YYYY-MM-DD' sorts lexicographically, so plain string comparison is exact. */
 export function inRange(isoDate: string, dateFrom: string, dateTo: string): boolean {
   return isoDate >= dateFrom && isoDate <= dateTo

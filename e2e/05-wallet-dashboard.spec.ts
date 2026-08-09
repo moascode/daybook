@@ -32,6 +32,33 @@ function monthOffset(offset: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/**
+ * Inclusive day count between two ISO dates, mirroring insights.ts's
+ * `daysBetween` locally rather than importing app code into the e2e process.
+ * The app's monthly-average divisor is exact days ÷ 30 (not a whole-month
+ * count), so the expected figure below has to be computed from whichever day
+ * the suite happens to run on — a hardcoded value would only be right on one
+ * day of the month and silently wrong every other day.
+ */
+function daysBetweenLocal(dateFrom: string, dateTo: string): number {
+  const toIndex = (iso: string) =>
+    Math.round(
+      new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))).getTime() / 86_400_000,
+    )
+  return toIndex(dateTo) - toIndex(dateFrom) + 1
+}
+
+/** Expected "spend-monthly-average" text for a given total and window, loose on whitespace the same way the rest of this file is. */
+function monthlyAverageRegex(total: number, dateFrom: string, dateTo: string): RegExp {
+  const value = total / (daysBetweenLocal(dateFrom, dateTo) / 30)
+  return new RegExp(`RM\\s*${value.toFixed(2)}/mo average`)
+}
+
+function addDaysLocal(iso: string, n: number): string {
+  const d = new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)) + n)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
@@ -286,10 +313,13 @@ test('switching back to This Month restores the current figures', async () => {
 
 test('Last 3 months re-scopes the dashboard without a pace notch', async () => {
   await page.getByRole('button', { name: 'Last 3 months', exact: true }).click()
-  // Total across the 3 in-window months (this + 2 back) is 530 + 330 + 330 = 1190,
-  // divided by the 3 calendar months the window touches: RM 396.67/mo.
+  // Total across the 3 in-window months (this + 2 back) is 530 + 330 + 330 = 1190.
+  // The monthly average divides by exact days spanned ÷ 30, not by "3 months",
+  // so its expected value depends on which day of the month the suite runs.
+  const from = `${monthOffset(-2)}-01`
+  const today = businessToday()
   await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*1,190\.00/)
-  await expect(page.getByTestId('spend-monthly-average')).toContainText(/RM\s*396\.67\/mo average/)
+  await expect(page.getByTestId('spend-monthly-average')).toContainText(monthlyAverageRegex(1190, from, today))
   // A multi-month range has no single "day of the month" to race against —
   // the budget meters drop the pace notch and its wording entirely.
   await expect(page.getByText(/% of the month gone/)).toHaveCount(0)
@@ -304,14 +334,32 @@ test('All time shows a monthly average alongside the total, with no baseline cla
   await expect(page.getByTestId('what-changed')).toHaveCount(0)
   await expect(page.getByTestId('spend-delta')).toHaveCount(0)
   // Total across all 4 seeded months (this + 3 back): 530 + 330*3 = 1520,
-  // divided by the 4 calendar months the data spans: an exact RM 380.00/mo.
+  // spanning at least 90 days (comfortably past the 60-day floor), so the
+  // average always renders here regardless of which day the suite runs on.
+  const earliest = `${monthOffset(-3)}-01`
+  const today = businessToday()
   await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*1,520\.00/)
-  await expect(page.getByTestId('spend-monthly-average')).toContainText(/RM\s*380\.00\/mo average/)
+  await expect(page.getByTestId('spend-monthly-average')).toContainText(monthlyAverageRegex(1520, earliest, today))
   await page.getByRole('button', { name: 'This month', exact: true }).click()
   await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
   // A single-month period has no separate "average" to show; it would only
   // repeat the total already visible above it.
   await expect(page.getByTestId('spend-monthly-average')).toHaveCount(0)
+})
+
+test('a short custom range shows no monthly average, even across a month boundary', async () => {
+  // Regression test: the average divisor is exact days ÷ 30, not "calendar
+  // months touched". A 5-day custom range can touch two different months
+  // (e.g. the 30th to the 3rd) while spanning nowhere near the 60-day floor —
+  // dividing by "months touched" would have shown one here, off by roughly
+  // 6x, for a window far too short for "per month" to mean anything.
+  await page.getByRole('button', { name: 'Custom…' }).click()
+  const today = businessToday()
+  await page.getByRole('textbox', { name: 'From' }).fill(addDaysLocal(today, -4))
+  await page.getByRole('textbox', { name: 'To' }).fill(today)
+  await expect(page.getByTestId('spend-hero')).toBeVisible()
+  await expect(page.getByTestId('spend-monthly-average')).toHaveCount(0)
+  await page.getByRole('button', { name: 'This month', exact: true }).click()
 })
 
 // ── Goals ──────────────────────────────────────────────────────────────

@@ -24,13 +24,16 @@ import {
   committedSplitInRange,
   cumulativeByDay,
   cumulativeByDayOffset,
+  daysBetween,
   dayOfMonth,
   daysInMonth,
   inRange,
   merchantSpend,
   merchantSpendInRange,
+  MIN_AVERAGE_DAYS,
   monthBounds,
   monthKey,
+  monthsSpanned,
   precedingRange,
   priorMonths,
   projectMonthEnd,
@@ -294,14 +297,17 @@ export function Dashboard() {
     ? `${monthPeriod.baselineMonths.length}-month average`
     : 'same length before'
 
-  // A month-by-month rate only adds information once the period spans more
-  // than one calendar month — for a single-month span it would just repeat
-  // the total already shown, and `effectiveRange` must exist so this doesn't
-  // flash a stale figure off rangeMonthSpan's loading-state fallback.
-  const spendPaceMonthlyAverage =
-    !isMonthMode && effectiveRange && rangeMonthSpan > 1 ? summary.expense / rangeMonthSpan : undefined
-  const spendPaceUsualAverage =
-    !isMonthMode && effectiveRange && rangeMonthSpan > 1 ? pace.usual / rangeMonthSpan : undefined
+  // A month-by-month rate only adds information once the period is long
+  // enough that "per month" isn't a shaky extrapolation (see
+  // MIN_AVERAGE_DAYS). Divides by the exact day count, not by how many
+  // calendar months the range happens to touch — the latter is a step
+  // function that lags a trailing window's own day-by-day growth and jumps
+  // sharply on the day the window rolls past a month boundary, even for
+  // perfectly steady spending.
+  const spendPaceMonthsSpanned =
+    !isMonthMode && effectiveRange && daysBetween(effectiveRange.dateFrom, effectiveRange.dateTo) >= MIN_AVERAGE_DAYS
+      ? monthsSpanned(effectiveRange.dateFrom, effectiveRange.dateTo)
+      : undefined
 
   const spendPaceFormatDay =
     !isMonthMode && effectiveRange
@@ -588,8 +594,7 @@ export function Dashboard() {
           comparisonCount={hasBaseline ? (isMonthMode && monthPeriod ? monthPeriod.baselineMonths.length : 1) : 0}
           comparisonDescription={spendPaceComparisonDescription}
           comparisonClause={spendPaceComparisonClause}
-          spentAverage={spendPaceMonthlyAverage}
-          usualAverage={spendPaceUsualAverage}
+          monthsSpanned={spendPaceMonthsSpanned}
           formatDay={spendPaceFormatDay}
           formatDayTooltipLabel={spendPaceFormatDayTooltipLabel}
         />

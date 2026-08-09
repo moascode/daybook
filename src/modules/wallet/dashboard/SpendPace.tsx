@@ -28,21 +28,15 @@ interface SpendPaceProps {
   /** e.g. "3-month average" or "same length before" — inserted into "Usual ({...})". */
   comparisonDescription: string
   /**
-   * Monthly-rate view of `spent` — spent ÷ months spanned. Shown only for
-   * periods spanning more than one calendar month (Last 3/12 months, All
-   * time, a multi-month custom range), where a per-month figure adds real
-   * information beyond the total already shown; for a single-month span it
-   * would just repeat that total.
+   * Continuous month count behind `spent`/`usual` (days spanned ÷ 30, see
+   * `monthsSpanned` in insights.ts) — undefined when the period is too short
+   * for "per month" to mean anything (see MIN_AVERAGE_DAYS). A single prop
+   * on purpose: `spent` and `usual` cover equal-length windows, so deriving
+   * both averages from the one number here — rather than accepting two
+   * pre-divided averages from the caller — makes it impossible for them to
+   * end up divided by different spans.
    */
-  spentAverage?: number
-  /**
-   * Same monthly-rate treatment for `usual`, divided by the SAME month count
-   * as `spentAverage` — the current and comparison windows are equal length,
-   * so sharing one divisor keeps the average ratio identical to the total
-   * ratio. A second, independently-computed span for the comparison window
-   * could drift by a month at calendar-boundary edges for no benefit.
-   */
-  usualAverage?: number
+  monthsSpanned?: number
   /** Full text for the delta chip and the "usual by ..." aria clause, e.g. "usual by day 18" or "your usual for this period". */
   comparisonClause: string
   /** Maps a 0-based day offset to its axis/tooltip label. Defaults to 1-based day-of-period numbering. */
@@ -64,8 +58,7 @@ export function SpendPace({
   comparisonCount,
   comparisonDescription,
   comparisonClause,
-  spentAverage,
-  usualAverage,
+  monthsSpanned,
   formatDay = (offset) => offset + 1,
   formatDayTooltipLabel = (label) => `Day ${label}`,
 }: SpendPaceProps) {
@@ -93,6 +86,10 @@ export function SpendPace({
   const pct = usual > 0 ? (delta / usual) * 100 : 0
   const hasComparison = comparisonCount > 0 && usual > 0
   const over = delta >= 0
+  // Both derived from the SAME monthsSpanned, so they can never disagree on
+  // what a "month" was for this period — see the prop doc comment.
+  const spentAverage = monthsSpanned !== undefined ? spent / monthsSpanned : undefined
+  const usualAverage = monthsSpanned !== undefined ? usual / monthsSpanned : undefined
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
