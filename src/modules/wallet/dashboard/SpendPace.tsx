@@ -27,6 +27,22 @@ interface SpendPaceProps {
   comparisonCount: number
   /** e.g. "3-month average" or "same length before" — inserted into "Usual ({...})". */
   comparisonDescription: string
+  /**
+   * Monthly-rate view of `spent` — spent ÷ months spanned. Shown only for
+   * periods spanning more than one calendar month (Last 3/12 months, All
+   * time, a multi-month custom range), where a per-month figure adds real
+   * information beyond the total already shown; for a single-month span it
+   * would just repeat that total.
+   */
+  spentAverage?: number
+  /**
+   * Same monthly-rate treatment for `usual`, divided by the SAME month count
+   * as `spentAverage` — the current and comparison windows are equal length,
+   * so sharing one divisor keeps the average ratio identical to the total
+   * ratio. A second, independently-computed span for the comparison window
+   * could drift by a month at calendar-boundary edges for no benefit.
+   */
+  usualAverage?: number
   /** Full text for the delta chip and the "usual by ..." aria clause, e.g. "usual by day 18" or "your usual for this period". */
   comparisonClause: string
   /** Maps a 0-based day offset to its axis/tooltip label. Defaults to 1-based day-of-period numbering. */
@@ -48,6 +64,8 @@ export function SpendPace({
   comparisonCount,
   comparisonDescription,
   comparisonClause,
+  spentAverage,
+  usualAverage,
   formatDay = (offset) => offset + 1,
   formatDayTooltipLabel = (label) => `Day ${label}`,
 }: SpendPaceProps) {
@@ -89,6 +107,11 @@ export function SpendPace({
           >
             {formatMYR(spent)}
           </p>
+          {spentAverage !== undefined && (
+            <p className="mt-0.5 text-xs text-fg-subtle" data-testid="spend-monthly-average">
+              {formatMYR(spentAverage)}/mo average
+            </p>
+          )}
 
           {hasComparison ? (
             <>
@@ -104,7 +127,9 @@ export function SpendPace({
                 {formatMYR(Math.abs(delta))} {over ? 'more' : 'less'} than {comparisonClause}
               </span>
               <p className="mt-2 text-xs text-fg-subtle">
-                Usual by this point: {formatMYR(usual)} · that’s {over ? '+' : '−'}
+                Usual by this point: {formatMYR(usual)}
+                {usualAverage !== undefined && ` (${formatMYR(usualAverage)}/mo)`} · that’s{' '}
+                {over ? '+' : '−'}
                 {Math.abs(pct).toFixed(1)}%
               </p>
             </>

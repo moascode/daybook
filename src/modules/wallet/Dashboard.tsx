@@ -294,6 +294,15 @@ export function Dashboard() {
     ? `${monthPeriod.baselineMonths.length}-month average`
     : 'same length before'
 
+  // A month-by-month rate only adds information once the period spans more
+  // than one calendar month — for a single-month span it would just repeat
+  // the total already shown, and `effectiveRange` must exist so this doesn't
+  // flash a stale figure off rangeMonthSpan's loading-state fallback.
+  const spendPaceMonthlyAverage =
+    !isMonthMode && effectiveRange && rangeMonthSpan > 1 ? summary.expense / rangeMonthSpan : undefined
+  const spendPaceUsualAverage =
+    !isMonthMode && effectiveRange && rangeMonthSpan > 1 ? pace.usual / rangeMonthSpan : undefined
+
   const spendPaceFormatDay =
     !isMonthMode && effectiveRange
       ? (offset: number) => format(parseISO(addDaysISO(effectiveRange.dateFrom, offset)), 'd MMM')
@@ -579,6 +588,8 @@ export function Dashboard() {
           comparisonCount={hasBaseline ? (isMonthMode && monthPeriod ? monthPeriod.baselineMonths.length : 1) : 0}
           comparisonDescription={spendPaceComparisonDescription}
           comparisonClause={spendPaceComparisonClause}
+          spentAverage={spendPaceMonthlyAverage}
+          usualAverage={spendPaceUsualAverage}
           formatDay={spendPaceFormatDay}
           formatDayTooltipLabel={spendPaceFormatDayTooltipLabel}
         />

@@ -286,7 +286,10 @@ test('switching back to This Month restores the current figures', async () => {
 
 test('Last 3 months re-scopes the dashboard without a pace notch', async () => {
   await page.getByRole('button', { name: 'Last 3 months', exact: true }).click()
-  await expect(page.getByTestId('spend-hero')).toBeVisible()
+  // Total across the 3 in-window months (this + 2 back) is 530 + 330 + 330 = 1190,
+  // divided by the 3 calendar months the window touches: RM 396.67/mo.
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*1,190\.00/)
+  await expect(page.getByTestId('spend-monthly-average')).toContainText(/RM\s*396\.67\/mo average/)
   // A multi-month range has no single "day of the month" to race against —
   // the budget meters drop the pace notch and its wording entirely.
   await expect(page.getByText(/% of the month gone/)).toHaveCount(0)
@@ -294,13 +297,21 @@ test('Last 3 months re-scopes the dashboard without a pace notch', async () => {
   await expect(page.getByTestId('week-rhythm')).toBeVisible()
 })
 
-test('All time re-scopes the dashboard with no crash and no baseline claimed', async () => {
+test('All time shows a monthly average alongside the total, with no baseline claimed', async () => {
   await page.getByRole('button', { name: 'All time', exact: true }).click()
-  await expect(page.getByTestId('spend-hero')).toBeVisible()
-  // There is nothing before "all time" to compare against.
+  // There is nothing before "all time" to compare against — no delta chip,
+  // no "usual" line, but the total still gets a monthly average of its own.
   await expect(page.getByTestId('what-changed')).toHaveCount(0)
+  await expect(page.getByTestId('spend-delta')).toHaveCount(0)
+  // Total across all 4 seeded months (this + 3 back): 530 + 330*3 = 1520,
+  // divided by the 4 calendar months the data spans: an exact RM 380.00/mo.
+  await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*1,520\.00/)
+  await expect(page.getByTestId('spend-monthly-average')).toContainText(/RM\s*380\.00\/mo average/)
   await page.getByRole('button', { name: 'This month', exact: true }).click()
   await expect(page.getByTestId('spend-hero')).toHaveText(/RM\s*530\.00/)
+  // A single-month period has no separate "average" to show; it would only
+  // repeat the total already visible above it.
+  await expect(page.getByTestId('spend-monthly-average')).toHaveCount(0)
 })
 
 // ── Goals ──────────────────────────────────────────────────────────────
