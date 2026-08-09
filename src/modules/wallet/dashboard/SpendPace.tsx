@@ -27,6 +27,16 @@ interface SpendPaceProps {
   comparisonCount: number
   /** e.g. "3-month average" or "same length before" — inserted into "Usual ({...})". */
   comparisonDescription: string
+  /**
+   * Continuous month count behind `spent`/`usual` (days spanned ÷ 30, see
+   * `monthsSpanned` in insights.ts) — undefined when the period is too short
+   * for "per month" to mean anything (see MIN_AVERAGE_DAYS). A single prop
+   * on purpose: `spent` and `usual` cover equal-length windows, so deriving
+   * both averages from the one number here — rather than accepting two
+   * pre-divided averages from the caller — makes it impossible for them to
+   * end up divided by different spans.
+   */
+  monthsSpanned?: number
   /** Full text for the delta chip and the "usual by ..." aria clause, e.g. "usual by day 18" or "your usual for this period". */
   comparisonClause: string
   /** Maps a 0-based day offset to its axis/tooltip label. Defaults to 1-based day-of-period numbering. */
@@ -48,6 +58,7 @@ export function SpendPace({
   comparisonCount,
   comparisonDescription,
   comparisonClause,
+  monthsSpanned,
   formatDay = (offset) => offset + 1,
   formatDayTooltipLabel = (label) => `Day ${label}`,
 }: SpendPaceProps) {
@@ -75,6 +86,10 @@ export function SpendPace({
   const pct = usual > 0 ? (delta / usual) * 100 : 0
   const hasComparison = comparisonCount > 0 && usual > 0
   const over = delta >= 0
+  // Both derived from the SAME monthsSpanned, so they can never disagree on
+  // what a "month" was for this period — see the prop doc comment.
+  const spentAverage = monthsSpanned !== undefined ? spent / monthsSpanned : undefined
+  const usualAverage = monthsSpanned !== undefined ? usual / monthsSpanned : undefined
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -89,6 +104,11 @@ export function SpendPace({
           >
             {formatMYR(spent)}
           </p>
+          {spentAverage !== undefined && (
+            <p className="mt-0.5 text-xs text-fg-subtle" data-testid="spend-monthly-average">
+              {formatMYR(spentAverage)}/mo average
+            </p>
+          )}
 
           {hasComparison ? (
             <>
@@ -104,7 +124,9 @@ export function SpendPace({
                 {formatMYR(Math.abs(delta))} {over ? 'more' : 'less'} than {comparisonClause}
               </span>
               <p className="mt-2 text-xs text-fg-subtle">
-                Usual by this point: {formatMYR(usual)} · that’s {over ? '+' : '−'}
+                Usual by this point: {formatMYR(usual)}
+                {usualAverage !== undefined && ` (${formatMYR(usualAverage)}/mo)`} · that’s{' '}
+                {over ? '+' : '−'}
                 {Math.abs(pct).toFixed(1)}%
               </p>
             </>
