@@ -1,0 +1,29 @@
+{
+  "task": "AI-assisted merchant canonicalization: regex-guess -> history validation -> corrections cache -> AI fallback",
+  "task_type": "feature",
+  "mode": "auto",
+  "phase": "implement",
+  "completed_artifacts": [
+    "flow-context-map.md",
+    "flow-plan.md"
+  ],
+  "locked_files": [
+    "server/migrations/0012_merchant_corrections.sql",
+    "worker/migrations/0013_merchant_corrections.sql",
+    "worker/migrations/README.md",
+    "worker/lib/merchant.ts",
+    "worker/lib/anthropic.ts",
+    "worker/routes/wallet.ts",
+    "worker/routes/test.ts",
+    "src/lib/csv.ts",
+    "src/modules/wallet/CsvImport.tsx",
+    "src/modules/wallet/CsvReviewTable.tsx",
+    "src/modules/wallet/CanonicalizeMerchantsPage.tsx",
+    "e2e/64-merchant-ai-resolve.spec.ts",
+    "e2e/fixtures/narrative-unknown-merchants.csv",
+    "e2e/62-canonicalize-merchants.spec.ts"
+  ],
+  "review_loop": 0,
+  "escalations": [],
+  "updated_at": "2026-08-11T15:15:30.568897+00:00"
+}

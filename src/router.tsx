@@ -6,6 +6,7 @@ import { WalletPage } from '@/modules/wallet/WalletPage'
 import { AccountsPage } from '@/modules/wallet/AccountsPage'
 import { Dashboard } from '@/modules/wallet/Dashboard'
 import { CsvImport } from '@/modules/wallet/CsvImport'
+import { CanonicalizeMerchantsPage } from '@/modules/wallet/CanonicalizeMerchantsPage'
 import { BudgetsPage } from '@/modules/wallet/BudgetsPage'
 import { RecurringPage } from '@/modules/wallet/RecurringPage'
 import { GoalsPage } from '@/modules/wallet/GoalsPage'
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
           { path: 'goals', element: <GoalsPage /> },
           { path: 'reports', element: <ReportsPage /> },
           { path: 'import', element: <CsvImport /> },
+          { path: 'canonicalize-merchants', element: <CanonicalizeMerchantsPage /> },
         ],
       },
       // Sharing IA relocation (§3): keep the old URL working for one release
