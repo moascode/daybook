@@ -9,6 +9,11 @@ export interface CategorySuggestion {
   category: string
 }
 
+export interface MerchantResolution {
+  guess: string
+  name: string
+}
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 // Classification, not reasoning — cheapest current model (§5 of the doc).
@@ -29,6 +34,17 @@ Reply with the raw JSON object and nothing else — no markdown code fence, no c
 
 function buildUserMessage(categoryNames: string[], merchants: string[]): string {
   return `Categories: ${categoryNames.join(', ')}\nMerchants:\n${merchants.map((m) => `- ${m}`).join('\n')}`
+}
+
+const MERCHANT_SYSTEM_PROMPT = `You clean up bank transaction narratives for a personal finance app used in Malaysia.
+For each raw bank narrative, return the merchant's clean display name in Title Case (e.g. 'Grab Food', not 'GRABFOOD' or 'grab food').
+Strip card/account numbers, reference codes, dates, country/city codes, and payment-rail prefixes (POS, DUITNOW, IBG, FPX, etc).
+If the raw text gives no better signal than the guess already provided, return the guess unchanged.
+Return JSON: {"resolutions":[{"guess":"<verbatim guess input>","name":"<clean title-case name>"}]}
+Reply with raw JSON only — no markdown fence, no commentary.`
+
+function buildMerchantUserMessage(items: Array<{ raw: string; guess: string }>): string {
+  return `Items:\n${items.map((item) => `- guess: "${item.guess}" | raw: "${item.raw}"`).join('\n')}`
 }
 
 async function fetchClaudeText(apiKey: string, categoryNames: string[], merchants: string[]): Promise<string> {
@@ -71,6 +87,54 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
   return text
 }
 
+async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: string; guess: string }>): Promise<string> {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      temperature: 0,
+      system: MERCHANT_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildMerchantUserMessage(items) }],
+    }),
+  })
+  if (!res.ok) {
+    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
+    // exhausted balance from a bad model id is on Anthropic's error body, and
+    // the caller can't guess which one it is otherwise.
+    const detail = await res
+      .text()
+      .then((body) => {
+        const parsed: unknown = JSON.parse(body)
+        const message =
+          typeof parsed === 'object' && parsed !== null
+            ? (parsed as { error?: { message?: unknown } }).error?.message
+            : undefined
+        return typeof message === 'string' ? message : body.slice(0, 200)
+      })
+      .catch(() => '')
+    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const text = data.content?.find((block) => block.type === 'text')?.text
+  if (!text) throw new Error('no text content in Anthropic response')
+  return text
+}
+
+// Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
+// with worker/routes/test.ts's default.
+const TEST_MOCK_KEY = '_test_ai_mock_response'
+// Separate key for resolveMerchantsWithAI so a spec that needs to mock both
+// AI features in the same test run (e.g. category suggestion AND merchant
+// resolution) doesn't have one clobber the other. In practice each e2e spec
+// only ever exercises one AI feature, so this separation is precautionary.
+const TEST_MOCK_KEY_MERCHANTS = '_test_ai_mock_response_merchants'
+
 // e2e cannot intercept a Worker-to-Anthropic fetch the way Playwright
 // intercepts browser requests — `wrangler dev` makes that call from a
 // separate process with no route the test can see. DAYBOOK_TEST gates a
@@ -78,11 +142,9 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
 // POST /test/mock-ai-response (worker/routes/test.ts), read here instead of
 // calling the network. Production never sets DAYBOOK_TEST, so this branch is
 // unreachable there.
-async function fetchTestText(env: Env, userId: string): Promise<string> {
-  const row = await env.DB.prepare(
-    `SELECT value FROM settings WHERE user_id = ? AND key = '_test_ai_mock_response'`,
-  )
-    .bind(userId)
+async function fetchTestText(env: Env, userId: string, key: string = TEST_MOCK_KEY): Promise<string> {
+  const row = await env.DB.prepare(`SELECT value FROM settings WHERE user_id = ? AND key = ?`)
+    .bind(userId, key)
     .first<{ value: string }>()
   if (!row?.value) throw new Error('no AI mock configured for this test user')
   return row.value
@@ -173,4 +235,60 @@ export async function suggestCategoriesWithAI(
       ? await fetchTestText(env, userId)
       : await fetchClaudeText(apiKey, categoryNames, merchants)
   return parseSuggestions(text)
+}
+
+function parseMerchantResolutions(text: string): MerchantResolution[] {
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) throw lastError
+  const resolutions =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { resolutions?: unknown }).resolutions
+      : undefined
+  if (!Array.isArray(resolutions)) throw new Error('malformed resolutions shape')
+
+  const result: MerchantResolution[] = []
+  for (const item of resolutions) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { guess?: unknown }).guess === 'string' &&
+      typeof (item as { name?: unknown }).name === 'string'
+    ) {
+      const { guess, name } = item as MerchantResolution
+      result.push({ guess, name })
+    }
+  }
+  return result
+}
+
+/**
+ * Ask Claude to clean up ONE batch of raw bank narratives into display-ready
+ * merchant names, keyed back to the caller's rule-based `guess` for each.
+ *
+ * THROWS on any failure — network, non-2xx, malformed JSON, unexpected shape.
+ * Same contract as suggestCategoriesWithAI: the caller is responsible for
+ * catching per-batch failures (e.g. via Promise.allSettled) and reporting
+ * partial results rather than this function swallowing anything.
+ */
+export async function resolveMerchantsWithAI(
+  env: Env,
+  userId: string,
+  apiKey: string,
+  items: Array<{ raw: string; guess: string }>,
+): Promise<MerchantResolution[]> {
+  const text =
+    env.DAYBOOK_TEST === '1'
+      ? await fetchTestText(env, userId, TEST_MOCK_KEY_MERCHANTS)
+      : await fetchClaudeMerchantText(apiKey, items)
+  return parseMerchantResolutions(text)
 }

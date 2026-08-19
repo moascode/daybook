@@ -18,7 +18,7 @@ import {
   visibleAccountIds,
   writableAccountIds,
 } from '../lib/sharing.ts'
-import { canonicalMerchant } from '../lib/merchant.ts'
+import { canonicalMerchant, canonicalizeMerchantForDisplay } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
 import { suggestCategoriesWithAI, type CategorySuggestion } from '../lib/anthropic.ts'
 
@@ -2813,4 +2813,59 @@ wallet.delete('/goals/:id', async (c) => {
     .bind(c.req.param('id'), c.get('userId'))
     .run()
   return c.body(null, 204)
+})
+
+// ── Merchant canonicalisation ───────────────────────────
+
+wallet.post('/merchants/canonicalize', async (c) => {
+  const userId = c.get('userId')
+  const preview = c.req.query('preview') !== 'false'
+  const confirm = c.req.query('confirm') === 'true'
+
+  const { results: merchantRows } = await c.env.DB.prepare(
+    `SELECT merchant, COUNT(*) as count FROM transactions
+     WHERE user_id = ? AND merchant != '' GROUP BY merchant ORDER BY merchant`,
+  )
+    .bind(userId)
+    .all<{ merchant: string; count: number }>()
+
+  const changes = merchantRows
+    .map((row) => ({
+      current: row.merchant,
+      canonical: canonicalizeMerchantForDisplay(row.merchant),
+      transactionCount: row.count,
+    }))
+    .filter(
+      (row): row is { current: string; canonical: string; transactionCount: number } =>
+        !!row.canonical && row.canonical !== row.current,
+    )
+
+  if (!preview && !confirm) {
+    return c.json({ error: 'confirm=true is required to apply changes' }, 400)
+  }
+
+  if (preview || !confirm) {
+    changes.sort((a, b) => b.transactionCount - a.transactionCount)
+    return c.json({ merchants: changes, totalAffected: changes.length })
+  }
+
+  const batch = changes.map(({ current, canonical }) =>
+    c.env.DB.prepare(
+      'UPDATE transactions SET merchant = ?, updated_at = datetime(\'now\') WHERE user_id = ? AND merchant = ?',
+    ).bind(canonical, userId, current),
+  )
+  const batchResults = batch.length > 0 ? await c.env.DB.batch<{ changes?: number }>(batch) : []
+
+  let updated = 0
+  let skipped = 0
+  for (const result of batchResults) {
+    const changesCount = result.meta.changes ?? 0
+    if (changesCount > 0) {
+      updated += changesCount
+    } else {
+      skipped += 1
+    }
+  }
+
+  return c.json({ updated, skipped })
 })

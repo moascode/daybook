@@ -84,6 +84,7 @@ export function CsvReviewTable({
             </th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle">Description</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-24">Type</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-36">Category</th>
@@ -142,6 +143,20 @@ export function CsvReviewTable({
                   placeholder="—"
                   disabled={!row.included}
                   aria-label={`Merchant for row ${index + 1}`}
+                />
+              </td>
+
+              {/* Description — raw bank narrative, editable for clarity */}
+              <td className="px-3 py-2">
+                <Input
+                  value={row.description}
+                  onChange={(e) =>
+                    onRowChange(index, { description: e.target.value })
+                  }
+                  className="w-48 text-xs"
+                  placeholder="—"
+                  disabled={!row.included}
+                  aria-label={`Description for row ${index + 1}`}
                 />
               </td>
 

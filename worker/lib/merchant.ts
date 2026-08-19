@@ -18,10 +18,14 @@ const SEPARATOR = /\s{2,}|[-*/|]/
 const SEPARATOR_ALL = /\s{2,}|[-*/|]/g
 const ENTITY_TAIL = /\s+(?:SDN\s+BHD|SDN|BHD|PLT|ENTERPRISE|TRADING|HOLDINGS|GROUP)\s*$/
 const DIGIT_TAIL = /\s*\d{3,}\s*$/
+const REF_TAIL = /\s+(?:REF|TRANSACTION\s+REF|MY\s+REF)\s*$/
+const LOCATION_TAIL = /\s+(?:STATION|PLAZA|MALL|PAVILION)(?:\s+[A-Z]{2,})?\s*$/i
 
 /** Trailing noise off, then the usability test. `null` = not a usable name. */
 function trimTails(s: string): string | null {
   const out = s
+    .replace(REF_TAIL, '')
+    .replace(LOCATION_TAIL, '')
     .replace(ENTITY_TAIL, '')
     .replace(DIGIT_TAIL, '')
     .replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '')
@@ -54,4 +58,31 @@ export function canonicalMerchant(raw: string): string | null {
   // of the most common merchants in the country. Fall back to the whole
   // string with separators normalised to spaces.
   return trimTails(s.replace(SEPARATOR_ALL, ' ').replace(/\s+/g, ' ').trim())
+}
+
+/**
+ * Canonicalize merchant for display (title-case output, for CSV import and
+ * bulk-update preview). Applies the same cleanup rules as the all-caps version
+ * but outputs readable title case instead, so "GRABFOOD" appears as "Grabfood",
+ * not "GRABFOOD". Returns null if no usable name can be extracted.
+ */
+export function canonicalizeMerchantForDisplay(raw: string): string | null {
+  const allCaps = canonicalMerchant(raw)
+  if (!allCaps) return null
+  return allCaps
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+/**
+ * Normalize a regex-derived merchant guess into a stable lookup key for the
+ * `merchant_corrections` table and for case-insensitive history comparison.
+ * Both the corrections lookup and the history-match step must use this same
+ * normalization, or a trivial case/whitespace difference would cause a cache
+ * miss that re-spends an AI call for something already resolved.
+ */
+export function correctionKey(guess: string): string {
+  return guess.trim().replace(/\s+/g, ' ').toLowerCase()
 }
