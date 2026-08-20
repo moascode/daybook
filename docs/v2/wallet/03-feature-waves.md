@@ -27,9 +27,11 @@ row of typed shortcuts beneath a hairline.
 - **Because the composer is the primary action, the duplicate `Add transaction`
   button leaves the page header.**
 - Absent from read-only pages (Reports) — there is nothing to add there.
-- Parsing strategy is **D-11**. Whichever is chosen, show a **parse preview**
-  before commit: a natural-language field that silently guesses wrong about
-  money is worse than a form.
+- Parsing: **rules-first, Claude Haiku fallback** (D-11, governed by
+  [../cross-cutting/ai-usage.md](../cross-cutting/ai-usage.md) — item A1). Always
+  show a **parse preview** before commit: a natural-language field that silently
+  guesses wrong about money is worse than a form. Works with no API key (falls
+  back to the form).
 
 ### Overview
 

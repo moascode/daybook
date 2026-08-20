@@ -21,6 +21,9 @@ Backend: a new `GET /api/search?q=&scope=`. No search infrastructure exists;
 SQLite `LIKE` over the indexed columns is enough at this data size, and FTS5 is
 available in D1 if it is not.
 
+>  See also **[ai-usage.md](ai-usage.md)** — the API usage register and the
+> standing Haiku-only / warn-before-wiring rule that governs the composer.
+
 ## 2. Command palette (⌘K)
 
 CLAUDE.md §9.1 already reserves `Cmd/Ctrl+K`. `REVIEW.md` calls it *"the cheapest
