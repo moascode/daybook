@@ -59,7 +59,7 @@ Update the row when a release merges. `—` means not started.
 
 | Release | Tag | Scope | Status |
 |---|---|---|---|
-| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | — |
+| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | [PR 125](https://github.com/moascode/daybook/pull/125) — in review |
 | R2 | v2.11.0 | Foundation — app shell | — |
 | R3 | v2.12.0 | Wallet — design adoption (8 pages) | — |
 | R4 | v2.13.0 | Tasks — minimum schema for the designed rows | — |
