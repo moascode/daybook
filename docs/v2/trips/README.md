@@ -13,7 +13,7 @@ repo**, so the mockups plus `REVIEW.md` are the entire specification.
 | [02-design-adoption.md](02-design-adoption.md) | R6 — the tab, the route, the January state |
 | [03-feature-waves.md](03-feature-waves.md) | R12–R14 — the real module |
 
-Blocking: **D-4** (fourth module vs a lens), **D-5** (multi-currency).
+Decisions (both resolved 2026-08-21): **D-4** → module; **D-5** → full multi-currency. See [../open-decisions.md](../open-decisions.md).
 
 ---
 

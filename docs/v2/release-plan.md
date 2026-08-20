@@ -124,7 +124,7 @@ Wallet-touching specs (~25 files) are green.
 
 **Goal.** Make the designed task row renderable. Adoption cost, not features.
 
-Spec: [tasks/01-data-model.md](tasks/01-data-model.md). **Blocking: D-3, D-15.**
+Spec: [tasks/01-data-model.md](tasks/01-data-model.md). **Blocking: none — D-3 (keep outliner) and D-15 (task sharing) both resolved 2026-08-21.**
 
 **Ships** — one additive migration + `worker/routes/tasks.ts`:
 
@@ -164,7 +164,7 @@ their designed empty states.
 
 Specs: [trips/02-design-adoption.md](trips/02-design-adoption.md),
 [day/02-design-adoption.md](day/02-design-adoption.md).
-**Blocking: D-4** (Trips is a module, not a lens).
+D-4 resolved 2026-08-21 — Trips is a module, not a lens.
 
 **Ships**
 
@@ -212,7 +212,7 @@ Spec: [tasks/03-feature-waves.md](tasks/03-feature-waves.md).
 |---|---|---|
 | **R12** | v3.6.0 | `trips` schema · `trip_id` on transactions and tasks (`ON DELETE SET NULL`) · `.tchip` in Wallet/Tasks/Day · `trips.html` and `trip.html` with the **burn-down** |
 | **R13** | v3.7.0 | Itinerary (estimate/actual grammar, deltas, collapsed days) · Prep (phase-aware readiness) · bookings · wishlist · packing from `task_templates` |
-| **R14** | v3.8.0 | **Trip mode** (`day-trip.html`: trip band, scoped composer, reversible) · **multi-currency** — per-transaction rate, local-leads-in-Trips / home-leads-in-Wallet, rate card separating FX overrun from choice overrun. **Blocking: D-5.** |
+| **R14** | v3.8.0 | **Trip mode** (`day-trip.html`: trip band, scoped composer, reversible) · **multi-currency** — per-transaction rate, local-leads-in-Trips / home-leads-in-Wallet, rate card separating FX overrun from choice overrun. D-5 resolved 2026-08-21 — full multi-currency approved; still a one-way door, split before starting. |
 
 Spec: [trips/03-feature-waves.md](trips/03-feature-waves.md).
 

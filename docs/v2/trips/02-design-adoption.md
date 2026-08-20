@@ -3,7 +3,7 @@
 R6's job is to make the fourth tab true without building the module. It ships
 the route, the sidebar, the mobile tab, and **`trips.html`'s first-run state**.
 
-Blocking: **D-4**.
+D-4 resolved 2026-08-21 → module (see [../open-decisions.md](../open-decisions.md)).
 
 ---
 
