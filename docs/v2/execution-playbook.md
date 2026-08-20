@@ -6,6 +6,46 @@ verification. This is the *how*; [release-plan.md](release-plan.md) is the *what
 
 ---
 
+## 0. Operating this — what you actually type
+
+You drive the flow by talking to me in chat. There is no separate command to run;
+I am the orchestrator, and these are the controls.
+
+**Start a flow**
+- `start R1` — begin the next release (I run its flows in order).
+- `start R1-tokens` — begin one specific flow.
+- Add a mode: `start R3 manual` or `start R3 auto-eligible`. Default is manual.
+
+**At Gate 1 (after I show the plan + acceptance criteria + locked file list)**
+- `approved` / `go` — I start implementing.
+- `change: <what>` — adjust the plan; I revise and re-show.
+- `hold` — stop here; nothing is written.
+
+**At Gate 2 (after I show the review verdict + both-theme screenshots)**
+- `merge` / `ship it` — the PR is ready for you to merge (I don't merge to `main`).
+- `fix: <what>` — one more Sonnet fix cycle (cap 2), then re-review.
+
+**At any hard stop** (API use, an unsettled design decision, a file outside the
+locked list, a failed check) I pause and ask. You answer the specific question;
+I don't proceed on a guess.
+
+**Anytime**
+- `status` — I print the current release, flow, phase, and what's blocking.
+- `pause` — checkpoint and stop; safe to close the session.
+- `resume` — reload the last checkpoint from `docs/v2/.flow/…` and continue.
+- `skip to <phase>` / `redo <phase>` — jump within the current flow.
+- `switch to manual` / `switch to auto-eligible` — change mode mid-release.
+- `stop` — abandon the current flow (branch is left for you to inspect or delete).
+
+**What you'll see each phase:** a one-line note when a phase starts and its
+artifact when it ends (context map, plan, diff summary, review). You approve at
+the two gates and at hard stops; everything between is mine to run.
+
+**What you never have to do:** run the agents, pick models, write the PR, or run
+the checks — those are the tables below. You make product calls at the gates.
+
+---
+
 ## 1. The unit of work is a PR, not a release
 
 `feature-flow` runs one task end-to-end. A whole release is too big for one flow
