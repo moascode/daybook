@@ -1,0 +1,233 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   Concern: .datenav, .dayfigs, .ribbon, .tlist/.tl, .tl-note, .tl-now.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+/* AMBIGUOUS CONCERN: .cal/.cal-day originates on the wallet Recurring page but
+   is placed here because Day and Trips both extend it (.cal-day.trip, .cal-day.sel
+   etc.) and Day is the module that owns date-grid navigation conceptually. */
+/* ---- month calendar (recurring) ---- */
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; }
+.cal-dow { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); text-align: center; font-weight: 550; padding-bottom: 2px; }
+.cal-day {
+  aspect-ratio: 1; border-radius: var(--r-sm); border: 1px solid rgb(var(--line-subtle));
+  padding: 5px 6px; display: flex; flex-direction: column; gap: 3px;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease);
+}
+.cal-day:hover { border-color: rgb(var(--line-strong)); background: rgb(var(--surface-hover)); transform: translateY(-2px); }
+.cal-day.muted { opacity: .38; }
+.cal-day.today { border-color: rgb(var(--accent)); box-shadow: inset 0 0 0 1px rgb(var(--accent) / .4); }
+.cal-n { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); font-variant-numeric: tabular-nums; }
+.cal-day.today .cal-n { color: rgb(var(--accent-fg)); font-weight: 700; }
+.cal-amt { font-size: var(--t-micro); font-weight: 600; margin-top: auto; font-variant-numeric: tabular-nums; }
+.cal-dots { display: flex; gap: 3px; flex-wrap: wrap; }
+.cal-dots i { width: 5px; height: 5px; border-radius: var(--r-full); }
+
+@media (max-width: 680px) {
+  .cal { gap: 4px; }
+  .cal-amt { display: none; }
+}
+
+/* calendar cells: fixed rhythm, not a square that grows with the grid */
+.cal-day { aspect-ratio: auto; min-height: 74px; }
+@media (max-width: 680px) { .cal-day { min-height: 52px; } }
+
+.cal-day { border-color: rgb(var(--line)); }
+
+/* =====================================================================
+   v14 — DAY MODULE
+   The cross-module timeline. The one page in Daybook addressed by a
+   *date* rather than by "now", so it needs a date control, a spine that
+   both modules hang off, and a rule that separates record from plan.
+   ===================================================================== */
+
+/* ---- date stepper: prev / today / next, in the page header ---- */
+.datenav {
+  display: flex; align-items: center; gap: 2px;
+  background: rgb(var(--surface-sunk)); border-radius: var(--r-full); padding: 3px;
+}
+.datenav button {
+  height: 28px; min-width: 28px; padding: 0 var(--s2);
+  border: none; background: transparent; border-radius: var(--r-full);
+  color: rgb(var(--fg-muted)); display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-sm); font-weight: 600; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.datenav button:hover { background: rgb(var(--surface)); color: rgb(var(--fg)); }
+.datenav button:active { transform: scale(.94); }
+.datenav .is-today { background: rgb(var(--surface)); color: rgb(var(--fg)); box-shadow: var(--e1); }
+.datenav .icon-sm { width: 15px; height: 15px; }
+
+/* ---- the day's two figures, given equal weight on purpose ---- */
+.dayfigs { display: flex; align-items: flex-start; gap: var(--s6); flex-wrap: wrap; }
+.dayfig .k {
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: rgb(var(--fg-subtle));
+}
+.dayfig .v {
+  font-size: var(--t-2xl); font-weight: 680; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; margin-top: 2px; display: block;
+}
+.dayfig .v small { font-size: var(--t-md); font-weight: 600; color: rgb(var(--fg-subtle)); letter-spacing: -.01em; }
+.dayfig .s { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: var(--s1); }
+.dayfig + .dayfig { padding-left: var(--s6); border-left: 1px solid rgb(var(--line-subtle)); }
+
+/* ---- hour ribbon: the shape of the day, before you read a word of it ---- */
+.ribbon { position: relative; height: 54px; }
+.ribbon-track {
+  position: absolute; left: 0; right: 0; top: 10px; height: 14px;
+  border-radius: var(--r-full); background: rgb(var(--surface-sunk));
+}
+.ribbon-past {
+  position: absolute; top: 10px; height: 14px; left: 0;
+  border-radius: var(--r-full) 0 0 var(--r-full); background: rgb(var(--accent) / .14);
+}
+.ribbon i {
+  position: absolute; top: 7px; width: 6px; height: 20px; margin-left: -3px;
+  border-radius: 3px; background: rgb(var(--fg-faint));
+  transition: transform var(--dur-base) var(--ease), filter var(--dur-fast) var(--ease);
+}
+.ribbon i:hover { transform: scaleY(1.25); filter: saturate(1.3); }
+.ribbon i.pos  { background: rgb(var(--pos)); }
+.ribbon i.neg  { background: rgb(var(--neg)); }
+.ribbon i.warn { background: rgb(var(--warn)); }
+.ribbon i.info { background: rgb(var(--info)); }
+.ribbon i.calm { background: rgb(var(--calm)); }
+.ribbon i.task { background: rgb(var(--accent)); }
+.ribbon i.ahead { background: transparent; border: 1.5px dashed rgb(var(--line-strong)); }
+.ribbon .now {
+  position: absolute; top: 4px; height: 26px; width: 2px; margin-left: -1px;
+  background: rgb(var(--fg)); border-radius: 2px;
+}
+.ribbon .now::after {
+  content: "now"; position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
+  font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: rgb(var(--fg)); white-space: nowrap;
+}
+.ribbon .h {
+  position: absolute; top: 32px; transform: translateX(-50%);
+  font-size: var(--t-micro); color: rgb(var(--fg-subtle)); font-variant-numeric: tabular-nums;
+}
+
+/* ---- the timeline itself ---- */
+.tlist { position: relative; }
+.tlist::before {                                  /* the spine */
+  content: ""; position: absolute; left: 73px; top: 14px; bottom: 14px;
+  width: 2px; border-radius: 2px; background: rgb(var(--line));
+}
+.tl {
+  display: grid; grid-template-columns: 52px 20px 1fr auto;
+  gap: var(--s3); align-items: center;
+  padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
+  border-radius: var(--r-sm); position: relative;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tl:hover { background: rgb(var(--surface-hover)); }
+.tl:hover .trow-actions, .tl:focus-within .trow-actions { opacity: 1; transform: translateX(0); }
+.tl .trow-actions { opacity: 0; transform: translateX(4px); transition: opacity var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease); }
+.tl-time {
+  text-align: right; font-size: var(--t-xs); color: rgb(var(--fg-subtle));
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tl-mark { display: flex; align-items: center; justify-content: center; }
+.tl-dot {
+  width: 11px; height: 11px; border-radius: var(--r-full);
+  background: rgb(var(--fg-faint)); box-shadow: 0 0 0 3.5px rgb(var(--surface));
+  transition: transform var(--dur-base) var(--ease);
+}
+.tl:hover .tl-dot { transform: scale(1.25); }
+.tl-dot.pos  { background: rgb(var(--pos)); }
+.tl-dot.neg  { background: rgb(var(--neg)); }
+.tl-dot.warn { background: rgb(var(--warn)); }
+.tl-dot.info { background: rgb(var(--info)); }
+.tl-dot.calm { background: rgb(var(--calm)); }
+.tl-dot.alt  { background: rgb(var(--alt)); }
+.tl .tcheck { box-shadow: 0 0 0 3.5px rgb(var(--surface)); }
+.tl-body { min-width: 0; }
+.tl-title { font-size: var(--t-base); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-sub {
+  font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 2px;
+  display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap;
+}
+.tl-amt {
+  font-size: var(--t-base); font-weight: 620; letter-spacing: -.01em;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.tl-amt.pos { color: rgb(var(--pos-fg)); }
+.tl-amt.neg { color: rgb(var(--fg)); }
+.tl-amt.plan { color: rgb(var(--fg-subtle)); font-weight: 550; }
+
+/* happened = solid. planned = hollow. one rule, read at a glance. */
+.tl.ahead .tl-dot { background: transparent; border: 1.5px dashed rgb(var(--line-strong)); box-shadow: 0 0 0 3.5px rgb(var(--surface)); }
+.tl.ahead .tl-title { color: rgb(var(--fg-muted)); }
+.tl.done .tl-title { text-decoration: line-through; color: rgb(var(--fg-subtle)); text-decoration-color: rgb(var(--fg-faint)); }
+
+/* a note written into the day — the ledger part of "day ledger" */
+.tl-note {
+  font-size: var(--t-sm); color: rgb(var(--fg-muted)); line-height: 1.5;
+  background: rgb(var(--surface-sunk)); border-left: 2px solid rgb(var(--line-strong));
+  border-radius: 0 var(--r-sm) var(--r-sm) 0; padding: var(--s3) var(--s4);
+}
+
+/* the now rule: everything above is record, everything below is plan */
+.tl-now {
+  display: grid; grid-template-columns: 52px 20px 1fr;
+  gap: var(--s3); align-items: center; padding: var(--s4) var(--s2);
+  margin: 0 calc(var(--s2) * -1);
+}
+.tl-now .t { text-align: right; font-size: var(--t-xs); font-weight: 650; color: rgb(var(--fg)); font-variant-numeric: tabular-nums; }
+.tl-now .pin {
+  justify-self: center; width: 11px; height: 11px; border-radius: var(--r-full);
+  background: rgb(var(--fg)); box-shadow: 0 0 0 3.5px rgb(var(--surface)), 0 0 0 6px rgb(var(--fg) / .12);
+}
+.tl-now .lbl {
+  display: flex; align-items: center; gap: var(--s3);
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: rgb(var(--fg-muted));
+}
+.tl-now .lbl::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgb(var(--fg) / .28), rgb(var(--fg) / 0)); }
+
+/* ---- month strip: Day is also how you get to any other day ---- */
+.cal-day.has-net .cal-amt { color: rgb(var(--fg-muted)); }
+.cal-day.sel { border-color: rgb(var(--accent)); background: rgb(var(--accent-bg)); }
+
+/* ---- responsive ---- */
+@media (max-width: 680px) {
+  .tlist::before { left: 47px; }
+  .tl { grid-template-columns: 34px 20px 1fr auto; gap: var(--s2); }
+  .tl-now { grid-template-columns: 34px 20px 1fr; gap: var(--s2); }
+  .dayfig + .dayfig { padding-left: var(--s4); }
+  .ribbon .h:nth-of-type(even) { display: none; }
+}
+
+/* v14.1 — timeline rows keep one rhythm whether or not they carry an action */
+.tl { min-height: 52px; }
+.tl .trow-actions .icon-btn { width: 28px; height: 28px; }
+.tl .trow-actions { display: flex; align-items: center; }
+.ribbon i { width: 5px; margin-left: -2.5px; height: 18px; top: 8px; }
+.tl.ahead .tl-dot.warn { border-color: rgb(var(--warn)); }
+[data-theme="dark"] .ribbon-past { background: rgb(var(--accent) / .18); }
+@media (max-width: 680px) {
+  .dayfig + .dayfig {
+    padding-left: 0; border-left: none;
+    border-top: 1px solid rgb(var(--line-subtle)); padding-top: var(--s4); margin-top: var(--s1);
+  }
+  .dayfigs { display: block; }
+}
+
+/* v14.2 — a row with both an amount and hover actions was wrapping to a second
+   grid line. Amount and actions get named columns; actions reserve their lane. */
+.tl { grid-template-columns: 52px 20px 1fr auto minmax(32px, auto); }
+.tl-amt { grid-column: 4; }
+.tl .trow-actions { grid-column: 5; justify-self: end; }
+.tl-note { margin: var(--s1) 0; }
+@media (max-width: 680px) {
+  .tl { grid-template-columns: 34px 20px 1fr auto minmax(0, auto); }
+}
+
+
+
+}

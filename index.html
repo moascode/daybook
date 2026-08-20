@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1D9E75" />
+    <meta name="theme-color" content="#10a37a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Daybook</title>
@@ -14,13 +14,17 @@
       // readable until after the session check and /settings, so a dark-themed
       // app would flash full white on every load. src/lib/theme.ts mirrors the
       // preference here; this replays it before the first paint.
-      // Keep the storage key and the class in step with src/lib/theme.ts.
+      // Keep the storage key, the class, the data-theme attribute and the
+      // theme-color hex in step with src/lib/theme.ts.
       (function () {
         try {
           var pref = localStorage.getItem('daybook.theme') || 'light'
           var dark =
             pref === 'dark' ||
             (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+          // Both markers (D-2): `dark` class for Tailwind utilities,
+          // `data-theme` for the ported proposal CSS's [data-theme] selectors.
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
           if (dark) {
             document.documentElement.classList.add('dark')
             var meta = document.querySelector('meta[name="theme-color"]')

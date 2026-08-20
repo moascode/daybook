@@ -1,0 +1,301 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   Concern: .tchip, .fx, .hero-trip, .burn (trip), .itin/.ir, .ready,
+   .tripband, .trip/.trip-cover, .wish, .book, .pack, the four trip palettes.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+/* =====================================================================
+   v15 — TRIPS
+   ---------------------------------------------------------------------
+   A trip is the only object in Daybook with an end. Everything here is
+   built on that: a finite pot depleting against a finite number of days.
+
+   Rule: Trips has no module colour of its own. Day is neutral, Tasks and
+   Wallet share the emerald, and each *trip* carries its own hue via the
+   --trip custom property. Components below read --trip and never name a
+   hue, so one trip can be teal and the next violet without a new class.
+   ===================================================================== */
+
+/* ---- trip palettes -------------------------------------------------
+   The only place a trip hue is named. Dark mode lifts the text role the
+   same way the semantic layer does, so a violet trip is AA on both. ---- */
+.t-violet { --trip: var(--v-500); --trip-d: var(--v-700); --trip-l: var(--v-400); --trip-fg: var(--v-700); }
+.t-teal   { --trip: var(--t-500); --trip-d: var(--t-700); --trip-l: var(--t-400); --trip-fg: var(--t-700); }
+.t-amber  { --trip: var(--a-500); --trip-d: var(--a-700); --trip-l: var(--a-400); --trip-fg: var(--a-700); }
+.t-blue   { --trip: var(--b-500); --trip-d: var(--b-700); --trip-l: var(--b-400); --trip-fg: var(--b-700); }
+[data-theme="dark"] .t-violet { --trip: var(--v-400); --trip-d: var(--v-950); --trip-l: var(--v-500); --trip-fg: 196 178 255; }
+[data-theme="dark"] .t-teal   { --trip: var(--t-400); --trip-d: var(--t-950); --trip-l: var(--t-500); --trip-fg: 130 220 220; }
+[data-theme="dark"] .t-amber  { --trip: var(--a-400); --trip-d: var(--a-950); --trip-l: var(--a-500); --trip-fg: 250 210 130; }
+[data-theme="dark"] .t-blue   { --trip: var(--b-400); --trip-d: var(--b-950); --trip-l: var(--b-500); --trip-fg: 150 190 255; }
+
+/* ---- the cross-module thread -------------------------------------
+   .tchip appears on any row in any module that carries a trip_id. It is
+   the only thing Trips adds to Tasks, Wallet and Day. ----------------- */
+.tchip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 20px; padding: 0 8px 0 6px; border-radius: var(--r-full);
+  font-size: var(--t-xs); font-weight: 550; white-space: nowrap;
+  background: rgb(var(--trip, var(--calm)) / .12);
+  color: rgb(var(--trip-fg, var(--calm-fg)));
+  border: 1px solid rgb(var(--trip, var(--calm)) / .3);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.tchip:hover { background: rgb(var(--trip, var(--calm)) / .2); transform: scale(1.03); }
+.tchip .icon-sm { width: 12px; height: 12px; stroke-width: 2.1; }
+
+/* ---- dual currency -------------------------------------------------
+   Every trip amount is a pair. Local leads inside Trips, home leads in
+   Wallet — whose job is your ledger, not your holiday. Never two
+   currencies in one column. ------------------------------------------ */
+.fx { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.fx .fx-main { font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.fx .fx-sub {
+  font-variant-numeric: tabular-nums; font-size: var(--t-xs);
+  font-weight: 500; color: rgb(var(--fg-subtle)); margin-top: 1px; white-space: nowrap;
+}
+.fx.plan .fx-main { color: rgb(var(--fg-subtle)); font-weight: 550; }
+.fx.neg  .fx-main { color: rgb(var(--neg-fg)); }
+.fx.left { align-items: flex-start; }
+.rate {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: var(--t-micro); color: rgb(var(--fg-faint));
+  font-variant-numeric: tabular-nums;
+}
+.cur-seg { display: inline-flex; }
+
+/* ---- trip hero — the gradient takes the trip's hue ---------------- */
+.hero.hero-trip {
+  background: linear-gradient(135deg,
+    rgb(var(--trip-d, var(--g-700))) 0%,
+    rgb(var(--trip, var(--g-600))) 52%,
+    rgb(var(--trip-l, var(--g-400))) 100%);
+}
+[data-theme="dark"] .hero.hero-trip { filter: saturate(.9) brightness(.82); }
+.hero-where { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-sm); color: rgb(255 255 255 / .84); flex-wrap: wrap; }
+.hero-where .sep { opacity: .5; }
+.countdown {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  padding: 5px 10px; border-radius: var(--r-full);
+  background: rgb(255 255 255 / .2); color: #fff;
+  font-size: var(--t-xs); font-weight: 550;
+}
+.countdown b { font-size: var(--t-base); font-weight: 680; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+
+/* ---- burn-down ----------------------------------------------------
+   Not a budget bar. A budget renews; a trip does not. The dashed line is
+   the even-pace plan, the filled area is what has actually gone, and the
+   gap between them at `now` is the whole story. ----------------------- */
+.burn { position: relative; margin-top: var(--s4); }
+.burn svg { width: 100%; height: 148px; display: block; overflow: visible; }
+.burn .plan-line { fill: none; stroke: rgb(var(--line-strong)); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.burn .act-line  { fill: none; stroke: rgb(var(--trip, var(--accent))); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.burn .act-area  { fill: rgb(var(--trip, var(--accent)) / .13); stroke: none; }
+.burn .proj-line { fill: none; stroke: rgb(var(--warn)); stroke-width: 1.75; stroke-dasharray: 3 4; stroke-linecap: round; }
+.burn .axis      { stroke: rgb(var(--grid)); stroke-width: 1; }
+.burn .nowline   { stroke: rgb(var(--fg-faint)); stroke-width: 1; stroke-dasharray: 2 3; }
+.burn .knot      { fill: rgb(var(--surface)); stroke: rgb(var(--trip, var(--accent))); stroke-width: 2.25; }
+.burn-x { display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--t-micro); color: rgb(var(--fg-faint)); font-variant-numeric: tabular-nums; }
+
+/* ---- the days strip — one column per day of the trip -------------- */
+.daystrip { display: grid; gap: var(--s2); grid-template-columns: repeat(9, minmax(0, 1fr)); }
+.dsday {
+  display: flex; flex-direction: column; gap: 5px; min-width: 0;
+  padding: var(--s2) 6px; border-radius: var(--r-sm);
+  border: 1px solid rgb(var(--line-subtle));
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease);
+}
+.dsday:hover { border-color: rgb(var(--line-strong)); transform: translateY(-2px); }
+.dsday.today { border-color: rgb(var(--trip, var(--accent))); background: rgb(var(--trip, var(--accent)) / .07); }
+.dsday.ahead { border-style: dashed; }
+.dsday .d { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); text-align: center; }
+.dsday .n { font-size: var(--t-sm); font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.dsday.ahead .n { color: rgb(var(--fg-subtle)); font-weight: 550; }
+.dsday .pair { display: flex; align-items: flex-end; gap: 3px; height: 46px; justify-content: center; }
+.dsday .pair i { width: 9px; border-radius: 2px 2px 0 0; display: block; }
+.dsday .pair i.est { background: rgb(var(--track)); }
+.dsday .pair i.act { background: rgb(var(--trip, var(--accent))); }
+.dsday .pair i.over { background: rgb(var(--neg)); }
+.dsday .city { font-size: 10px; color: rgb(var(--fg-faint)); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- itinerary row ------------------------------------------------
+   The v14 rule extended to a second axis: hollow is an estimate, solid
+   is a settled amount. Same grammar, applied to money instead of time. */
+.itin { display: flex; flex-direction: column; }
+.itin-day { display: flex; align-items: center; gap: var(--s2); padding: var(--s5) 0 var(--s2); font-size: var(--t-xs); font-weight: 600; color: rgb(var(--fg-subtle)); }
+.itin-day:first-child { padding-top: 0; }
+.itin-day .line { flex: 1; height: 1px; background: rgb(var(--line-subtle)); }
+.itin-day .tot { font-variant-numeric: tabular-nums; color: rgb(var(--fg-muted)); }
+
+.ir {
+  display: grid; align-items: center; gap: var(--s3);
+  grid-template-columns: 50px 24px minmax(0, 1fr) 88px 96px 30px;
+  padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast) var(--ease);
+}
+.ir:hover { background: rgb(var(--surface-hover)); }
+.ir + .ir { box-shadow: 0 -1px 0 rgb(var(--line-subtle)); }
+.ir-time { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); font-variant-numeric: tabular-nums; }
+.ir-mark {
+  width: 24px; height: 24px; border-radius: var(--r-full);
+  display: grid; place-items: center; flex-shrink: 0;
+  border: 1.75px solid rgb(var(--trip, var(--accent)));
+  color: rgb(var(--trip-fg, var(--accent-fg)));
+  background: transparent;
+}
+.ir-mark .icon-sm { width: 13px; height: 13px; }
+.ir.settled .ir-mark { background: rgb(var(--trip, var(--accent)) / .16); }
+.ir.free .ir-mark { border-color: rgb(var(--line-strong)); color: rgb(var(--fg-faint)); }
+.ir.unplanned .ir-mark { border-color: rgb(var(--neg)); color: rgb(var(--neg-fg)); background: rgb(var(--neg-bg)); border-style: solid; }
+.ir-title { font-size: var(--t-sm); font-weight: 550; overflow: hidden; text-overflow: ellipsis; }
+.ir-sub { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-top: 3px; }
+.ir-est, .ir-act { text-align: right; }
+.ir-k { font-size: 10px; color: rgb(var(--fg-faint)); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.ir.ahead .ir-title { color: rgb(var(--fg-muted)); }
+.ir-delta { font-size: var(--t-micro); font-weight: 600; font-variant-numeric: tabular-nums; padding: 1px 6px; border-radius: var(--r-full); margin-top: 3px; display: inline-block; }
+.ir-delta.under { background: rgb(var(--pos-bg)); color: rgb(var(--pos-fg)); }
+.ir-delta.over  { background: rgb(var(--neg-bg)); color: rgb(var(--neg-fg)); }
+.ir-actions { justify-self: end; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.ir:hover .ir-actions, .ir:focus-within .ir-actions { opacity: 1; }
+.ir-head { display: grid; grid-template-columns: 50px 24px minmax(0,1fr) 88px 96px 30px; gap: var(--s3); padding: 0 var(--s2) var(--s2); }
+.ir-head > span { text-align: right; }
+
+/* ---- readiness — one figure made of its parts -------------------- */
+.ready { display: flex; gap: 3px; margin: var(--s3) 0 var(--s2); }
+.ready i { height: 8px; flex: 1; border-radius: 2px; background: rgb(var(--track)); transition: background var(--dur-base) var(--ease); }
+.ready i.on { background: rgb(var(--trip, var(--accent))); }
+.ready i.warn { background: rgb(var(--warn)); }
+
+/* ---- trip mode — Day, while you are away -------------------------
+   When today falls inside an active trip the app changes state rather
+   than asking you to navigate. This band is that state, made visible
+   and reversible. --------------------------------------------------- */
+.tripband {
+  display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s3) var(--s4); margin-bottom: var(--s5);
+  border-radius: var(--r-md);
+  border: 1px solid rgb(var(--trip, var(--accent)) / .32);
+  background: rgb(var(--trip, var(--accent)) / .07);
+}
+.tripband .mark {
+  width: 32px; height: 32px; border-radius: var(--r-full); display: grid; place-items: center;
+  background: rgb(var(--trip, var(--accent)) / .16); color: rgb(var(--trip-fg, var(--accent-fg))); flex-shrink: 0;
+}
+.tripband .tb-main { min-width: 0; }
+.tripband .tb-t { font-size: var(--t-sm); font-weight: 600; }
+.tripband .tb-s { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 1px; }
+.tripband .tb-figs { display: flex; gap: var(--s5); margin-left: auto; align-items: baseline; }
+.tripband .tb-fig .k { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); }
+.tripband .tb-fig .v { font-size: var(--t-base); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* the composer, pre-scoped to the trip. removable, never silent. */
+.scope-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 24px; padding: 0 4px 0 8px; border-radius: var(--r-full);
+  font-size: var(--t-xs); font-weight: 550; flex-shrink: 0;
+  background: rgb(var(--trip, var(--accent)) / .16);
+  color: rgb(var(--trip-fg, var(--accent-fg)));
+}
+.scope-pill button { display: grid; place-items: center; width: 16px; height: 16px; border-radius: var(--r-full); opacity: .6; }
+.scope-pill button:hover { opacity: 1; background: rgb(var(--trip, var(--accent)) / .22); }
+.scope-pill .icon-sm { width: 11px; height: 11px; }
+
+/* ---- trip index card --------------------------------------------- */
+.trip { position: relative; display: flex; flex-direction: column; overflow: hidden; transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease); }
+.trip:hover { transform: translateY(-2px); box-shadow: var(--e2); }
+.trip-cover {
+  height: 80px; position: relative; display: flex; align-items: flex-end;
+  padding: var(--s3) var(--s4); color: #fff;
+  background: linear-gradient(135deg,
+    rgb(var(--trip-d, var(--g-700))) 0%,
+    rgb(var(--trip, var(--g-600))) 55%,
+    rgb(var(--trip-l, var(--g-400))) 100%);
+}
+[data-theme="dark"] .trip-cover { filter: saturate(.9) brightness(.8); }
+.trip-cover::after { content: ""; position: absolute; inset: 0; background: radial-gradient(300px 160px at 92% -30%, rgb(255 255 255 / .24), transparent 62%); }
+.trip-cover > * { position: relative; z-index: 1; }
+.trip-name { font-size: var(--t-md); font-weight: 660; letter-spacing: -.02em; }
+.trip-where { font-size: var(--t-xs); color: rgb(255 255 255 / .84); margin-top: 1px; }
+.trip-state { position: absolute; top: var(--s3); right: var(--s3); z-index: 2; font-size: var(--t-micro); font-weight: 600; padding: 3px 8px; border-radius: var(--r-full); background: rgb(255 255 255 / .24); color: #fff; }
+.trip-body { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); flex: 1; }
+.trip-figs { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--s3); }
+.trip-figs .k { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); }
+.trip-figs .v { font-size: var(--t-sm); font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 1px; letter-spacing: -.01em; }
+.trip-foot { margin-top: auto; padding-top: var(--s3); border-top: 1px solid rgb(var(--line-subtle)); display: flex; align-items: center; gap: var(--s2); font-size: var(--t-xs); color: rgb(var(--fg-subtle)); flex-wrap: wrap; }
+
+/* ---- wishlist — the holding area between an idea and a plan ------ */
+.wish { display: flex; align-items: center; gap: var(--s3); padding: var(--s2); margin: 0 calc(var(--s2) * -1); border-radius: var(--r-sm); cursor: grab; transition: background var(--dur-fast) var(--ease); }
+.wish:hover { background: rgb(var(--surface-hover)); }
+.wish-main { flex: 1; min-width: 0; }
+.wish-t { font-size: var(--t-sm); font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wish-s { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); margin-top: 1px; }
+.wish-grab { color: rgb(var(--fg-faint)); flex-shrink: 0; }
+
+/* ---- booking row -------------------------------------------------- */
+.book { display: grid; grid-template-columns: 32px minmax(0,1fr) auto; gap: var(--s3); align-items: center; padding: var(--s3) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.book:first-of-type { border-top: none; padding-top: 0; }
+.book-t { font-size: var(--t-sm); font-weight: 550; }
+.book-s { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 2px; display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; }
+.book-ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--t-micro); letter-spacing: .02em; color: rgb(var(--fg-muted)); background: rgb(var(--surface-sunk)); padding: 1px 5px; border-radius: 4px; }
+.book.missing { border-left: 2px solid rgb(var(--warn)); padding-left: var(--s3); margin-left: calc(var(--s3) * -1); }
+
+/* ---- packing group ------------------------------------------------ */
+.pack { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s2) var(--s5); }
+.pitem { display: flex; align-items: center; gap: var(--s2); padding: 5px 0; font-size: var(--t-sm); }
+.pitem .n { font-size: var(--t-xs); color: rgb(var(--fg-faint)); margin-left: auto; font-variant-numeric: tabular-nums; }
+.pitem.on .t { color: rgb(var(--fg-subtle)); text-decoration: line-through; text-decoration-color: rgb(var(--fg-faint)); }
+
+/* ---- responsive --------------------------------------------------- */
+@media (max-width: 1080px) {
+  .ir, .ir-head { grid-template-columns: 46px 24px minmax(0,1fr) 96px 30px; }
+  .ir .ir-est, .ir-head .h-est { display: none; }
+  .daystrip { grid-template-columns: repeat(5, minmax(0,1fr)); }
+}
+@media (max-width: 680px) {
+  .ir, .ir-head { grid-template-columns: 44px 24px minmax(0,1fr) 88px; padding-left: var(--s1); padding-right: var(--s1); }
+  .ir .ir-actions, .ir-head .h-act { display: none; }
+  .tripband { padding: var(--s3); }
+  .tripband .tb-figs { margin-left: 0; width: 100%; padding-top: var(--s3); border-top: 1px solid rgb(var(--trip, var(--accent)) / .22); justify-content: space-between; gap: var(--s3); }
+  .daystrip { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .burn svg { height: 124px; }
+  .trip-figs { gap: var(--s2); }
+}
+
+/* strokes stay 1.75px however wide the burn-down is stretched */
+.burn path, .burn line { vector-effect: non-scaling-stroke; }
+
+/* ---- trip mode, applied to components Day already owns ------------- */
+.cal-day.trip {
+  background: rgb(var(--trip, var(--accent)) / .08);
+  border-color: rgb(var(--trip, var(--accent)) / .3);
+}
+.cal-day.trip.today { border-color: rgb(var(--trip, var(--accent))); box-shadow: inset 0 0 0 1px rgb(var(--trip, var(--accent)) / .45); }
+.cal-day.trip.today .cal-n { color: rgb(var(--trip-fg, var(--accent-fg))); }
+
+/* a timeline amount that carries two currencies keeps the row's height */
+.tl-amt .fx .fx-main { font-size: var(--t-base); font-weight: 620; letter-spacing: -.01em; }
+.tl-amt .fx .fx-sub  { font-size: var(--t-micro); }
+.tl .fx { align-items: flex-end; }
+
+/* the composer's scope pill sits inside the field, before the input */
+.composer-field .scope-pill { margin-left: calc(var(--s2) * -1); }
+@media (max-width: 680px) {
+  .composer-field .scope-pill { display: none; }
+}
+
+/* a future day inside a trip is still visibly inside it */
+.cal-day.trip.muted { opacity: .62; }
+
+/* hollow means planned — the itinerary mark follows the timeline's rule */
+.ir.ahead .ir-mark { border-style: dashed; }
+.ir.settled .ir-mark { border-style: solid; }
+
+@media (max-width: 680px) {
+  /* only the ends of the burn-down axis survive at phone width */
+  .burn-x span:nth-child(2), .burn-x span:nth-child(3) { display: none; }
+}
+
+
+}

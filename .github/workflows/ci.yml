@@ -41,6 +41,20 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # src/index.css is generated. Regenerate and fail if it differs from what
+      # is committed — the only sanctioned writer is scripts/gen-theme-tokens.mjs
+      # (CLAUDE.md §18). A hand-edit to the generated file is caught here.
+      - name: Theme tokens are generated (no hand-edits)
+        run: |
+          npm run gen:tokens
+          git diff --exit-code src/index.css
+
+      # WCAG-AA gate on the generated theme. Fails below 4.5:1 (3.0:1 for the
+      # decoration-only faint/dim roles). This is what stops the AA regressions
+      # REVIEW found from creeping back the next time a neutral is tuned by eye.
+      - name: Contrast (WCAG AA)
+        run: npm run check:contrast
+
       - name: Build frontend
         run: npm run build
 

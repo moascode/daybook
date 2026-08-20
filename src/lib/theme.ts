@@ -18,9 +18,12 @@ export type ResolvedTheme = 'light' | 'dark'
 /** Mirrors the server-side preference. Read by the pre-paint script in index.html. */
 export const THEME_STORAGE_KEY = 'daybook.theme'
 
-/** Browser-chrome colour per theme; keeps the mobile status bar in step. */
+/** Browser-chrome colour per theme; keeps the mobile status bar in step.
+ *  Light is the v2 brand emerald (--g-500 = rgb(16 163 122)); the old #1D9E75
+ *  sat off the corrected ramp. Keep in step with the pre-paint script in
+ *  index.html. */
 const META_THEME_COLOR: Record<ResolvedTheme, string> = {
-  light: '#1D9E75',
+  light: '#10a37a',
   dark: '#0d1117',
 }
 
@@ -40,7 +43,12 @@ export function resolveTheme(preference: ThemePreference): ResolvedTheme {
 /** Applies the resolved theme to the document and persists the preference. */
 export function applyTheme(preference: ThemePreference): ResolvedTheme {
   const resolved = resolveTheme(preference)
+  // Two markers, one resolved theme (D-2): the `dark` class drives Tailwind's
+  // darkMode:'class' utilities; `data-theme` drives the ported proposal CSS's
+  // [data-theme="…"] selectors. src/index.css emits both, so they must be set
+  // together or the two theming mechanisms drift.
   document.documentElement.classList.toggle('dark', resolved === 'dark')
+  document.documentElement.dataset.theme = resolved
 
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', META_THEME_COLOR[resolved])

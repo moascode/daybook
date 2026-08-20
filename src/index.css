@@ -1,3 +1,9 @@
+/* Ported design-system component layer (dormant in R1, applied in R2+).
+   Must precede @tailwind so Vite/postcss resolve the @import; the ported rules
+   declare their own @layer components, collected at the @tailwind components
+   injection point below regardless of source position. */
+@import './styles/index.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,66 +13,187 @@
  *  THEME TOKENS — GENERATED FILE, DO NOT EDIT BY HAND
  *  Source: scripts/gen-theme-tokens.mjs   Regenerate: npm run gen:tokens
  * ─────────────────────────────────────────────────────────────────────────
- *  Every colour in the app resolves through a custom property below, so the
- *  light and dark themes are defined here and nowhere else. Values are
- *  space-separated RGB channels rather than hex because tailwind.config.js
- *  wraps them as rgb(var(--token) / <alpha-value>) — that is what keeps
- *  opacity modifiers like bg-brand-50/40 and ring-brand-500/20 working.
+ *  Two layers (docs/v2/foundation/01-design-tokens.md):
  *
- *  Two families, deliberately handled differently:
+ *   PRIMITIVES  --n-* --g-* --r/a/b/v/t-*   raw ramps, theme-independent,
+ *               NEVER named by a component.
+ *   SEMANTICS   --canvas --surface --ink --fg-* --line-* --accent-* and the
+ *               six hue roles --pos/neg/warn/info/alt/calm (× -fg -bg -bd).
+ *               Dark mode RE-MAPS these roles onto the same primitives — it is
+ *               not an inversion of ramps, which is why the dark: double-
+ *               inversion trap (CLAUDE.md §18) cannot be expressed here.
+ *   SCALES      --s* (space) --t-* (type) --r-* (radius) --ease --dur-*.
  *
- *  1. NEUTRALS (--surface, --fg, --line ...) are SEMANTIC. Components say
- *     bg-surface / text-fg-subtle, never bg-white / text-gray-500, because a
- *     literal grey step is meaningless once the scale inverts: "gray-900
- *     text" is the darkest thing on screen in light and nearly the lightest
- *     in dark. A new component gets dark mode for free, with no dark:
- *     variants to remember.
+ *  Values are space-separated RGB channels, not hex, because
+ *  tailwind.config.js wraps them as rgb(var(--token) / <alpha-value>) — that
+ *  is what keeps opacity modifiers (bg-brand-50/40, ring-brand-500/20) alive.
  *
- *  2. ACCENTS (--c-brand-*, --c-red-* ...) keep Tailwind's NUMERIC scale
- *     (bg-red-50, text-red-600) and are remapped underneath. Light values are
- *     Tailwind's own hexes, so light mode renders exactly as it did before
- *     this layer existed. Dark values are the same ramp MIRRORED (50<->950,
- *     100<->900, ... 500<->500): a -50 tint chip becomes a -950 tint chip,
- *     -600/-700 accent text becomes -400/-300 and stays legible on a dark
- *     surface, and solid -500 fills are identical in both themes so primary
- *     buttons do not shift.
+ *  Both selector forms are emitted for each theme — .dark (Tailwind
+ *  darkMode:'class') AND [data-theme="…"] (ported proposal CSS) — so the two
+ *  theming mechanisms resolve identically (D-2).
+ *
+ *  Legacy names (--surface-sunken, --surface-inverted, --fg-inverted, the
+ *  numeric --c-*-* accent ramps) are kept for one release as aliases so no
+ *  existing component breaks; module reskins migrate usages onto the v2 roles.
  */
 
 @layer base {
   :root {
+    /* ── PRIMITIVES ── theme-independent */
+    /* neutral — cool grey, one ramp, both themes via semantics */
+    --n-0: 255 255 255;
+    --n-25: 250 251 252;
+    --n-50: 246 247 249;
+    --n-100: 240 242 245;
+    --n-150: 233 236 241;
+    --n-200: 225 229 235;
+    --n-300: 203 209 219;
+    --n-400: 156 165 179;
+    --n-500: 122 132 148;
+    --n-600: 93 103 119;
+    --n-700: 67 76 90;
+    --n-800: 42 49 60;
+    --n-850: 30 35 44;
+    --n-900: 22 26 33;
+    --n-950: 14 17 22;
+    --n-1000: 9 11 15;
+
+    /* brand — single continuous emerald (hue ~162, no seam) */
+    --g-50: 236 250 245;
+    --g-100: 208 243 229;
+    --g-200: 165 231 206;
+    --g-300: 108 213 177;
+    --g-400: 52 190 146;
+    --g-500: 16 163 122;
+    --g-600: 10 133 100;
+    --g-700: 11 106 81;
+    --g-800: 13 85 66;
+    --g-900: 13 69 55;
+    --g-950: 3 38 30;
+
+    /* supporting hues — five, seven steps each */
+    --r-100: 254 226 226;
+    --r-200: 254 202 202;
+    --r-400: 239 93 93;
+    --r-500: 219 50 50;
+    --r-600: 190 35 35;
+    --r-700: 154 28 28;
+    --r-950: 60 12 12;
+    --a-100: 253 238 205;
+    --a-200: 250 223 165;
+    --a-400: 233 160 33;
+    --a-500: 202 133 16;
+    --a-600: 168 109 10;
+    --a-700: 133 85 8;
+    --a-950: 52 32 4;
+    --b-100: 219 233 254;
+    --b-200: 191 216 254;
+    --b-400: 92 145 246;
+    --b-500: 47 111 235;
+    --b-600: 33 89 205;
+    --b-700: 29 71 165;
+    --b-950: 16 30 66;
+    --v-100: 233 226 255;
+    --v-200: 214 203 254;
+    --v-400: 149 122 246;
+    --v-500: 118 84 235;
+    --v-600: 97 62 205;
+    --v-700: 78 50 165;
+    --v-950: 32 22 68;
+    --t-100: 205 240 240;
+    --t-200: 168 228 229;
+    --t-400: 45 176 178;
+    --t-500: 20 148 150;
+    --t-600: 15 119 121;
+    --t-700: 16 95 97;
+    --t-950: 6 40 41;
+
+    /* ── SCALES ── theme-independent */
+    /* space — 4pt grid */
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px;
+    --s6: 24px; --s8: 32px; --s10: 40px; --s12: 48px;
+
+    /* type — integers only */
+    --t-micro: 11px; --t-xs: 12px; --t-sm: 13px; --t-base: 14px;
+    --t-md: 16px; --t-lg: 20px; --t-xl: 26px; --t-2xl: 34px; --t-3xl: 44px;
+
+    /* radius */
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-full: 999px;
+
+    /* motion — applied by intent, not per component */
+    --ease: cubic-bezier(.2, .7, .3, 1);
+    --dur-fast: 120ms;  /* colour, opacity            */
+    --dur-base: 200ms;  /* size, elevation, position  */
+    --dur-slow: 280ms;  /* things that grow           */
+
+    --sidebar-w: 236px;
+  }
+
+  /* ── SEMANTICS: light ── */
+  :root,
+  [data-theme='light'] {
     color-scheme: light;
 
-    /* Neutrals — semantic. Light values match the greys they replaced. */
-    --canvas: 249 250 251;          /* was gray-50      app background      */
-    --surface: 255 255 255;         /* was white        cards, panels, bars */
-    --surface-raised: 255 255 255;  /*                  modals, dropdowns   */
-    --surface-sunken: 249 250 251;  /* was gray-50      wells, table heads  */
-    --surface-hover: 243 244 246;   /* was gray-100     hover+static fills  */
-    --surface-inverted: 17 24 39;   /* was gray-900     toasts, tooltips    */
-    --fg-inverted: 255 255 255;     /* was white        text on the above   */
-    --fg-inverted-muted: 156 163 175; /* was gray-400   dim text on above   */
-    --fg: 17 24 39;                 /* was gray-900/800 primary text        */
-    --fg-muted: 55 65 81;           /* was gray-700/600 secondary text      */
-    --fg-subtle: 107 114 128;       /* was gray-500     labels, captions    */
-    --fg-faint: 156 163 175;        /* was gray-400/300 icons, disabled     */
-    --fg-on-accent: 255 255 255;    /*                  text on solid fills */
-    --line-subtle: 243 244 246;     /* was gray-100     dividers            */
-    --line: 229 231 235;            /* was gray-200     default border      */
-    --line-strong: 209 213 219;     /* was gray-300     inputs, emphasis    */
-    --overlay: 0 0 0;               /*                  modal scrim         */
+    --canvas:         var(--n-50);
+    --surface:        var(--n-0);
+    --surface-sunk:   var(--n-100);
+    --surface-hover:  var(--n-100);
+    --surface-active: var(--n-150);
+    --ink:            var(--n-900);   /* inverted button / tooltip bg */
+    --on-ink:         var(--n-0);
+    --on-ink-dim:     var(--n-400);
 
-    /* Accents — Tailwind's ramps, unchanged. */
-    --c-brand-50: 240 253 246;
-    --c-brand-100: 220 252 233;
-    --c-brand-200: 187 247 212;
-    --c-brand-300: 134 239 176;
-    --c-brand-400: 74 222 131;
-    --c-brand-500: 29 158 117;
-    --c-brand-600: 22 163 94;
-    --c-brand-700: 21 128 74;
-    --c-brand-800: 22 101 61;
-    --c-brand-900: 20 83 52;
-    --c-brand-950: 5 46 26;
+    --fg:        var(--n-900);   /* 15.9:1 */
+    --fg-muted:  var(--n-700);   /*  8.6:1 */
+    --fg-subtle: var(--n-600);   /*  5.6:1  — smallest text still AA */
+    --fg-faint:  var(--n-500);   /*  3.7:1  — icons / decoration only */
+
+    --line-subtle: var(--n-150);
+    --line:        var(--n-200);
+    --line-strong: var(--n-300);
+
+    --accent:    var(--g-600);
+    --accent-hi: var(--g-500);
+    --accent-fg: var(--g-700);   /* accent-coloured text on light bg */
+    --accent-bg: var(--g-50);
+    --accent-bd: var(--g-200);
+
+    --pos-fg: var(--g-700);  --pos: var(--g-500);  --pos-bg: var(--g-50);  --pos-bd: var(--g-200);
+    --neg-fg: var(--r-700);  --neg: var(--r-500);  --neg-bg: var(--r-100); --neg-bd: var(--r-200);
+    --warn-fg:var(--a-700);  --warn:var(--a-500);  --warn-bg:var(--a-100); --warn-bd:var(--a-200);
+    --info-fg:var(--b-700);  --info:var(--b-500);  --info-bg:var(--b-100); --info-bd:var(--b-200);
+    --alt-fg: var(--v-700);  --alt: var(--v-500);  --alt-bg: var(--v-100); --alt-bd: var(--v-200);
+    --calm-fg:var(--t-700);  --calm:var(--t-500);  --calm-bg:var(--t-100); --calm-bd:var(--t-200);
+
+    --grid:  var(--n-200);   /* chart gridlines */
+    --track: var(--n-150);   /* progress track  */
+
+    --e1: 0 1px 2px rgb(16 20 28 / .04);
+    --e2: 0 1px 3px rgb(16 20 28 / .06), 0 4px 12px rgb(16 20 28 / .04);
+    --e3: 0 8px 28px rgb(16 20 28 / .12), 0 2px 6px rgb(16 20 28 / .06);
+    --ring: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(var(--accent) / .55);
+
+    /* ── Legacy aliases (one-layer model → v2). Kept so no component breaks. */
+    --surface-raised:    var(--surface);
+    --surface-sunken:    var(--surface-sunk);
+    --surface-inverted:  var(--ink);
+    --fg-inverted:       var(--on-ink);
+    --fg-inverted-muted: var(--on-ink-dim);
+    --fg-on-accent:      var(--on-ink);
+    --overlay: 0 0 0;
+
+    /* Legacy numeric accent ramps — Tailwind's own hexes (brand re-hued to --g-*). */
+    --c-brand-50: 236 250 245;
+    --c-brand-100: 208 243 229;
+    --c-brand-200: 165 231 206;
+    --c-brand-300: 108 213 177;
+    --c-brand-400: 52 190 146;
+    --c-brand-500: 16 163 122;
+    --c-brand-600: 10 133 100;
+    --c-brand-700: 11 106 81;
+    --c-brand-800: 13 85 66;
+    --c-brand-900: 13 69 55;
+    --c-brand-950: 3 38 30;
 
     --c-red-50: 254 242 242;
     --c-red-100: 254 226 226;
@@ -165,44 +292,72 @@
     --c-yellow-950: 66 32 6;
   }
 
-  .dark {
+  /* ── SEMANTICS: dark ── (emit both selectors so class- and attribute-based
+     theming resolve identically) */
+  .dark,
+  [data-theme='dark'] {
     color-scheme: dark;
 
-    /* Neutrals — not a mechanical inversion. The surface steps are tuned so
-       "sunken" still reads recessed and "hover" still reads lifted, which
-       means they move in the opposite direction to their light values. */
-    --canvas: 13 17 23;
-    --surface: 22 27 34;
-    --surface-raised: 28 33 41;
-    --surface-sunken: 15 20 26;
-    --surface-hover: 33 38 45;
-    /* Toasts and tooltips invert against the page in BOTH themes so they read
-       as chrome floating over the app rather than as another card. */
-    --surface-inverted: 230 237 243;
-    --fg-inverted: 13 17 23;
-    --fg-inverted-muted: 87 96 106;
-    --fg: 230 237 243;
-    --fg-muted: 177 186 196;
-    --fg-subtle: 139 148 158;
-    --fg-faint: 110 118 129;
-    --fg-on-accent: 255 255 255;
-    --line-subtle: 31 36 44;
-    --line: 42 49 59;
-    --line-strong: 58 66 78;
+    --canvas:         var(--n-1000);
+    --surface:        var(--n-900);
+    --surface-sunk:   var(--n-950);
+    --surface-hover:  var(--n-850);
+    --surface-active: var(--n-800);
+    --ink:            var(--n-100);
+    --on-ink:         var(--n-950);
+    --on-ink-dim:     var(--n-600);
+
+    --fg:        var(--n-25);
+    --fg-muted:  var(--n-300);
+    --fg-subtle: var(--n-400);
+    --fg-faint:  var(--n-500);
+
+    --line-subtle: var(--n-900);
+    --line:        var(--n-850);
+    --line-strong: var(--n-800);
+
+    --accent:    var(--g-400);
+    --accent-hi: var(--g-300);
+    --accent-fg: var(--g-300);
+    --accent-bg: var(--g-950);
+    --accent-bd: var(--g-800);
+
+    --pos-fg: var(--g-300);  --pos: var(--g-400);  --pos-bg: var(--g-950);  --pos-bd: var(--g-800);
+    --neg-fg: 248 150 150;   --neg: var(--r-400);  --neg-bg: var(--r-950);  --neg-bd: 108 30 30;
+    --warn-fg:250 210 130;   --warn:var(--a-400);  --warn-bg:var(--a-950);  --warn-bd:96 62 12;
+    --info-fg:150 190 255;   --info:var(--b-400);  --info-bg:var(--b-950);  --info-bd:30 58 122;
+    --alt-fg: 196 178 255;   --alt: var(--v-400);  --alt-bg: var(--v-950);  --alt-bd: 60 42 122;
+    --calm-fg:130 220 220;   --calm:var(--t-400);  --calm-bg:var(--t-950);  --calm-bd:14 78 80;
+
+    --grid:  var(--n-850);
+    --track: var(--n-850);
+
+    --e1: none;
+    --e2: 0 1px 2px rgb(0 0 0 / .4);
+    --e3: 0 12px 32px rgb(0 0 0 / .55), 0 2px 8px rgb(0 0 0 / .4);
+    --ring: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(var(--accent) / .6);
+
+    /* ── Legacy aliases (one-layer model → v2). Kept so no component breaks. */
+    --surface-raised:    var(--n-850);
+    --surface-sunken:    var(--surface-sunk);
+    --surface-inverted:  var(--ink);
+    --fg-inverted:       var(--on-ink);
+    --fg-inverted-muted: var(--on-ink-dim);
+    --fg-on-accent:      255 255 255;
     --overlay: 0 0 0;
 
-    /* Accents — Tailwind's ramps, mirrored. */
-    --c-brand-50: 5 46 26;
-    --c-brand-100: 20 83 52;
-    --c-brand-200: 22 101 61;
-    --c-brand-300: 21 128 74;
-    --c-brand-400: 22 163 94;
-    --c-brand-500: 29 158 117;
-    --c-brand-600: 74 222 131;
-    --c-brand-700: 134 239 176;
-    --c-brand-800: 187 247 212;
-    --c-brand-900: 220 252 233;
-    --c-brand-950: 240 253 246;
+    /* Legacy numeric accent ramps — mirrored (brand re-hued to --g-*). */
+    --c-brand-50: 3 38 30;
+    --c-brand-100: 13 69 55;
+    --c-brand-200: 13 85 66;
+    --c-brand-300: 11 106 81;
+    --c-brand-400: 10 133 100;
+    --c-brand-500: 16 163 122;
+    --c-brand-600: 52 190 146;
+    --c-brand-700: 108 213 177;
+    --c-brand-800: 165 231 206;
+    --c-brand-900: 208 243 229;
+    --c-brand-950: 236 250 245;
 
     --c-red-50: 69 10 10;
     --c-red-100: 127 29 29;
@@ -304,6 +459,34 @@
   body {
     @apply bg-canvas text-fg antialiased;
     margin: 0;
+  }
+
+  /* Every number in a finance app is tabular — non-negotiable. Definition
+     only in R1; components adopt the class in the R1 e2e-seams pass / reskins. */
+  .num,
+  .money,
+  .amt,
+  .figure,
+  .stat-value,
+  td.num,
+  th.num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One focus treatment for the whole app. :where() keeps specificity at 0 so a
+     component's own focus style always wins; this is the fallback ring. */
+  :where(a, button, input, [tabindex]):focus-visible {
+    outline: none;
+    box-shadow: var(--ring);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
   }
 
   /* Native controls (date pickers, scrollbars, autofill) follow the theme via
