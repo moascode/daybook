@@ -18,8 +18,9 @@ differ", v14's solid/hollow grammar) are load-bearing across modules.
 docs/v2/
 ├── README.md               ← you are here: index, conventions, status
 ├── release-plan.md         ← THE ROADMAP. 17 releases, dependencies, tags
+├── execution-playbook.md   ← HOW it gets built: feature-flow agents + model tiers
 ├── gap-analysis.md         ← design ↔ codebase, page by page
-├── open-decisions.md       ← D-numbered items needing owner sign-off
+├── open-decisions.md       ← D-numbered items (all six sign-offs resolved 2026-08-21)
 │
 ├── foundation/             ← cross-module, must land before any module work
 │   ├── 01-design-tokens.md
