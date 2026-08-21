@@ -6,7 +6,7 @@
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -31,7 +31,7 @@ test.afterAll(async () => {
 // ── Happy path via the UI ────────────────────────────────────────────────
 
 test('create the two legs: expense in Bank A, income in Bank B', async () => {
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await page.getByRole('button', { name: 'Add Transaction' }).first().click()
   await fillTransactionForm(page, {
     type: 'Expense', amount: '350', account: 'Bank A', merchant: 'CC Payment',
@@ -72,7 +72,7 @@ test('picking the twin merges the two rows into one transfer', async () => {
 })
 
 test('balances reflect the transfer on both accounts', async () => {
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   await expect(accountCardFor(page, 'Bank A')).toContainText(/-\s?RM\s?350\.00/)
   await expect(accountCardFor(page, 'Bank B')).toContainText(/RM\s?350\.00/)
 })

@@ -8,7 +8,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { waitForApp, signUpOnPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { waitForApp, signUpOnPage, fillAccountForm, fillTransactionForm, navTo, navItem } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 // Short viewport for modal/drawer scroll checks (Wave 2 — B3/C11)
@@ -52,11 +52,10 @@ test('main navigation is accessible on mobile (hamburger menu or visible nav lin
   await waitForApp(page)
 
   // On mobile the sidebar may collapse to a hamburger toggle
-  const hasHamburger = await page
-    .getByRole('button', { name: /Menu|Open navigation|Open sidebar/i })
+  const hasHamburger = await navItem(page, 'menu-open')
     .isVisible()
     .catch(() => false)
-  const hasNavLinks = await page.getByRole('link', { name: 'Tasks' }).isVisible().catch(() => false)
+  const hasNavLinks = await navItem(page, 'tasks').isVisible().catch(() => false)
 
   expect(hasHamburger || hasNavLinks).toBeTruthy()
   await ctx.close()
@@ -69,16 +68,16 @@ test('tapping the mobile menu button reveals navigation links', async ({ browser
   await page.goto('/tasks')
   await waitForApp(page)
 
-  const hamburger = page.getByRole('button', { name: /Menu|Open navigation|Open sidebar/i })
+  const hamburger = navItem(page, 'menu-open')
   const isHamburgerVisible = await hamburger.isVisible().catch(() => false)
 
   if (isHamburgerVisible) {
     await hamburger.click()
-    await expect(page.getByRole('link', { name: 'Tasks' })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Wallet' })).toBeVisible()
+    await expect(navItem(page, 'tasks')).toBeVisible()
+    await expect(navItem(page, 'wallet')).toBeVisible()
   } else {
     // If no hamburger, nav links must already be visible
-    await expect(page.getByRole('link', { name: 'Tasks' })).toBeVisible()
+    await expect(navItem(page, 'tasks')).toBeVisible()
   }
   await ctx.close()
 })
@@ -210,10 +209,10 @@ test('sidebar drawer keeps Settings reachable on a short mobile viewport', async
   // /wallet auto-expands the wallet nav section — the long-list case (C11)
   await page.goto('/wallet')
   await waitForApp(page)
-  await page.getByRole('button', { name: 'Open sidebar' }).click()
+  await navTo(page, 'menu-open')
 
   // Settings is pinned below the scrollable nav and stays fully on screen
-  const settings = page.getByRole('link', { name: 'Settings' })
+  const settings = navItem(page, 'settings')
   await expect(settings).toBeVisible()
   const box = await settings.boundingBox()
   expect(box).not.toBeNull()
@@ -221,7 +220,7 @@ test('sidebar drawer keeps Settings reachable on a short mobile viewport', async
   expect(box!.y + box!.height).toBeLessThanOrEqual(SHORT_MOBILE_VIEWPORT.height + 1)
 
   // The nav list itself scrolls, so the last wallet sub-item is reachable too
-  const importLink = page.getByRole('link', { name: 'Import CSV' })
+  const importLink = navItem(page, 'import')
   await importLink.scrollIntoViewIfNeeded()
   await expect(importLink).toBeVisible()
   await ctx.close()

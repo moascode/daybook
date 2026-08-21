@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -51,7 +51,7 @@ test('net worth label shows the account count', async () => {
 
 test('net worth increases after adding an income transaction', async () => {
   // Navigate to transactions and add income
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await page.getByRole('button', { name: 'Add Transaction' }).click()
 
   await fillTransactionForm(page, {
@@ -64,7 +64,7 @@ test('net worth increases after adding an income transaction', async () => {
   await page.waitForTimeout(400)
 
   // Go back to accounts
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   await page.waitForTimeout(600) // wait for balances to load
 
   // Net worth should now be MYR 500.00
@@ -72,7 +72,7 @@ test('net worth increases after adding an income transaction', async () => {
 })
 
 test('net worth decreases after adding an expense transaction', async () => {
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await page.getByRole('button', { name: 'Add Transaction' }).click()
 
   await fillTransactionForm(page, {
@@ -84,7 +84,7 @@ test('net worth decreases after adding an expense transaction', async () => {
   })
   await page.waitForTimeout(400)
 
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   await page.waitForTimeout(600)
 
   // 500 income - 200 expense = 300 net worth

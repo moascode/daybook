@@ -178,3 +178,28 @@ export async function fillTransactionForm(
   await dialog.getByRole('button', { name: /Add Transaction|Save Changes/ }).click()
   await expect(dialog).toBeHidden()
 }
+
+/**
+ * Shell navigation, anchored to identity not copy/role.
+ *
+ * The sidebar links (and, from R2, the module tabs that replace them) carry a
+ * form-agnostic `data-testid="nav-<dest>"`, so a nav click survives the shell
+ * reskin that would otherwise break `getByRole('link', { name: 'Wallet' })`.
+ *
+ * `:visible` because AppShell renders the nav twice — the desktop <aside> and
+ * the mobile drawer — so on a mobile viewport both copies are in the DOM (the
+ * desktop one display:none). Matching the visible instance keeps strict mode
+ * happy in both viewports. See CLAUDE.md §16 trap 4.
+ *
+ * `dest` is the suffix after `nav-`: tasks · wallet · wallet-toggle ·
+ * transactions · dashboard · accounts · shared · budgets · goals · recurring ·
+ * reports · import · settings · uat · menu-open · menu-close.
+ */
+export function navItem(page: Page, dest: string) {
+  return page.locator(`[data-testid="nav-${dest}"]:visible`)
+}
+
+/** Click a shell nav destination. See {@link navItem} for the dest vocabulary. */
+export async function navTo(page: Page, dest: string) {
+  await navItem(page, dest).click()
+}

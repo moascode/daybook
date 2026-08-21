@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, fillAccountForm } from './helpers'
+import { newAppPage, accountCardFor, fillAccountForm, navTo, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -26,10 +26,10 @@ test('navigates to /wallet/accounts', async () => {
 })
 
 test('wallet tab nav shows all four tabs', async () => {
-  await expect(page.getByRole('link', { name: 'Transactions' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Accounts' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Import CSV' })).toBeVisible()
+  await expect(navItem(page, 'transactions')).toBeVisible()
+  await expect(navItem(page, 'accounts')).toBeVisible()
+  await expect(navItem(page, 'dashboard')).toBeVisible()
+  await expect(navItem(page, 'import')).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────
@@ -153,13 +153,13 @@ test('confirm delete removes the account', async () => {
 // ── Navigate via sidebar Wallet link ──────────────────────────────────
 
 test('sidebar Wallet link navigates to /wallet (transactions)', async () => {
-  await page.getByRole('link', { name: 'Wallet' }).click()
+  await navTo(page, 'wallet')
   await expect(page).toHaveURL(/\/wallet$/)
   await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
 })
 
 test('Accounts tab from transaction page takes you back to accounts', async () => {
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   await expect(page).toHaveURL(/\/wallet\/accounts$/)
   await expect(accountCardFor(page, 'Maybank Current')).toBeVisible()
 })

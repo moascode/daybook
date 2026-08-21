@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, bulletNodeFor, openTaskMenu, toggleNoteOnTask } from './helpers'
+import { newAppPage, bulletNodeFor, openTaskMenu, toggleNoteOnTask, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -28,9 +28,9 @@ test('app redirects to /tasks by default', async () => {
 })
 
 test('sidebar shows Tasks, Wallet and UAT Tests nav items', async () => {
-  await expect(page.getByRole('link', { name: 'Tasks' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Wallet' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'UAT Tests' })).toBeVisible()
+  await expect(navItem(page, 'tasks')).toBeVisible()
+  await expect(navItem(page, 'wallet')).toBeVisible()
+  await expect(navItem(page, 'uat')).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────

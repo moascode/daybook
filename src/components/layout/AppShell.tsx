@@ -23,6 +23,7 @@ export function AppShell() {
             className="flex h-10 w-10 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-hover hover:text-fg"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="Open sidebar"
+            data-testid="nav-menu-open"
           >
             <Menu className="h-5 w-5" />
           </button>

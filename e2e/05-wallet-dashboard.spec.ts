@@ -19,6 +19,7 @@ import {
   fillAccountForm,
   fillTransactionForm,
   businessToday,
+  navTo,
 } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
@@ -65,7 +66,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await fillAccountForm(page, { name: 'Dashboard Bank', type: 'bank' })
   await expect(accountCardFor(page, 'Dashboard Bank')).toBeVisible()
 
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
 
   const thisMonth = monthOffset(0)
@@ -104,7 +105,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
     await fillTransactionForm(page, { type: 'Income', date, amount, account: 'Dashboard Bank', merchant, category })
   }
 
-  await page.getByRole('link', { name: 'Dashboard' }).click()
+  await navTo(page, 'dashboard')
   await expect(page).toHaveURL(/\/wallet\/dashboard$/)
 })
 

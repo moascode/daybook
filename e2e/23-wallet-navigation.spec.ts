@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { newAppPage } from './helpers'
+import { newAppPage, navTo, navItem } from './helpers'
 
 /**
  * Phase A — wallet navigation moved from a squeezed horizontal tab strip to a
@@ -15,19 +15,19 @@ test.describe('wallet left-panel navigation', () => {
     await expect(page.getByText('Daily', { exact: true })).toBeVisible()
     await expect(page.getByText('Planning', { exact: true })).toBeVisible()
 
-    // All nine destinations are reachable as sidebar links.
-    for (const name of [
-      'Transactions',
-      'Dashboard',
-      'Accounts',
-      'Shared',
-      'Budgets',
-      'Goals',
-      'Recurring',
-      'Reports',
-      'Import CSV',
+    // All nine destinations are reachable as sidebar nav items.
+    for (const dest of [
+      'transactions',
+      'dashboard',
+      'accounts',
+      'shared',
+      'budgets',
+      'goals',
+      'recurring',
+      'reports',
+      'import',
     ]) {
-      await expect(page.getByRole('link', { name, exact: true })).toBeVisible()
+      await expect(navItem(page, dest)).toBeVisible()
     }
   })
 
@@ -36,11 +36,11 @@ test.describe('wallet left-panel navigation', () => {
   }) => {
     const page = await newAppPage(browser, '/wallet')
 
-    await page.getByRole('link', { name: 'Budgets', exact: true }).click()
+    await navTo(page, 'budgets')
     await expect(page).toHaveURL(/\/wallet\/budgets$/)
     await expect(page.getByRole('heading', { name: 'Budgets', level: 1 })).toBeVisible()
 
-    await page.getByRole('link', { name: 'Reports', exact: true }).click()
+    await navTo(page, 'reports')
     await expect(page).toHaveURL(/\/wallet\/reports$/)
     await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible()
   })
@@ -48,27 +48,27 @@ test.describe('wallet left-panel navigation', () => {
   test('the Wallet section can be collapsed and re-expanded', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
 
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+    await expect(navItem(page, 'budgets')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Collapse Wallet' }).click()
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeHidden()
+    await navTo(page, 'wallet-toggle')
+    await expect(navItem(page, 'budgets')).toBeHidden()
 
-    await page.getByRole('button', { name: 'Expand Wallet' }).click()
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+    await navTo(page, 'wallet-toggle')
+    await expect(navItem(page, 'budgets')).toBeVisible()
   })
 
   test('leaving /wallet clears a manual collapse so returning auto-expands', async ({
     browser,
   }) => {
     const page = await newAppPage(browser, '/wallet')
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+    await expect(navItem(page, 'budgets')).toBeVisible()
 
-    await page.getByRole('button', { name: 'Collapse Wallet' }).click()
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeHidden()
+    await navTo(page, 'wallet-toggle')
+    await expect(navItem(page, 'budgets')).toBeHidden()
 
     // Navigate away and back via the URL (not the Wallet link, which force-expands).
     await page.goto('/tasks')
     await page.goto('/wallet/dashboard')
-    await expect(page.getByRole('link', { name: 'Budgets', exact: true })).toBeVisible()
+    await expect(navItem(page, 'budgets')).toBeVisible()
   })
 })

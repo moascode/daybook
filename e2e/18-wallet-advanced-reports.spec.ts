@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -48,7 +48,7 @@ test.afterAll(async () => {
 test('wallet navigation or dashboard has a "Reports" link/button', async () => {
   await page.goto('/wallet/dashboard')
   await expect(
-    page.getByRole('link', { name: /Reports/i }).or(page.getByRole('button', { name: /Reports/i })),
+    navItem(page, 'reports'),
   ).toBeVisible()
 })
 

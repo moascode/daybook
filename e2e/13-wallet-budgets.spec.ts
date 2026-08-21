@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -26,7 +26,7 @@ test.afterAll(async () => {
 // ── Navigation ─────────────────────────────────────────────────────────
 
 test('wallet navigation contains a "Budgets" link', async () => {
-  await expect(page.getByRole('link', { name: 'Budgets' })).toBeVisible()
+  await expect(navItem(page, 'budgets')).toBeVisible()
 })
 
 test('navigating to /wallet/budgets shows the Budgets page', async () => {

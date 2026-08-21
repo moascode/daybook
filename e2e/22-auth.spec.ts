@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor, fillTransactionForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor, fillTransactionForm, transactionRowFor, navTo, navItem } from './helpers'
 
 let seq = 0
 // Monotonic counter (not Math.random) so two rapid calls can never collide.
@@ -19,7 +19,7 @@ test('unauthenticated visit shows the sign-in screen, not the app', async ({ bro
   await expect(page.getByRole('heading', { name: 'Daybook' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible()
   // The app shell (sidebar/main nav) must not be reachable while logged out.
-  await expect(page.getByRole('link', { name: 'Tasks' })).toHaveCount(0)
+  await expect(navItem(page, 'tasks')).toHaveCount(0)
   await context.close()
 })
 
@@ -115,7 +115,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await fillAccountForm(pageA, { name: 'Alice Private Bank', type: 'bank' })
   await expect(accountCardFor(pageA, 'Alice Private Bank')).toBeVisible()
 
-  await pageA.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(pageA, 'transactions')
   await pageA.getByRole('button', { name: 'Add Transaction' }).click()
   await fillTransactionForm(pageA, {
     type: 'Expense',
@@ -126,7 +126,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   })
   await expect(transactionRowFor(pageA, 'Alice Coffee')).toBeVisible()
 
-  await pageA.getByRole('link', { name: 'Tasks' }).click()
+  await navTo(pageA, 'tasks')
   await pageA.getByRole('button', { name: 'New task' }).first().click()
   await expect(pageA.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
   await pageA.keyboard.type('Alice secret task')
@@ -138,10 +138,10 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await expect(pageB.locator('[data-testid="account-card"]')).toHaveCount(0)
   await expect(accountCardFor(pageB, 'Alice Private Bank')).toHaveCount(0)
 
-  await pageB.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(pageB, 'transactions')
   await expect(transactionRowFor(pageB, 'Alice Coffee')).toHaveCount(0)
 
-  await pageB.getByRole('link', { name: 'Tasks' }).click()
+  await navTo(pageB, 'tasks')
   await expect(bulletNodeFor(pageB, 'Alice secret task')).toHaveCount(0)
 
   // B still has their OWN per-user seeded default categories (not a shared table).

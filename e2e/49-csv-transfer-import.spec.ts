@@ -9,7 +9,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -42,7 +42,7 @@ test.afterAll(async () => {
 // ── Review step: mark a row as a transfer ────────────────────────────────
 
 test('upload CSV and reach the review step', async () => {
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
   await uploadFixtureCsv(page)
   await page.getByLabel('Import into account *').selectOption('Main Bank')
@@ -103,7 +103,7 @@ test('the transfer shows as a single row and is excluded from totals', async () 
 })
 
 test('balances move on both accounts', async () => {
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   // Main Bank: +180 income − 200 transferred out = −20.
   await expect(accountCardFor(page, 'Main Bank')).toContainText(/-\s?RM\s?20\.00/)
   // Credit Card: +200 transferred in.
@@ -113,7 +113,7 @@ test('balances move on both accounts', async () => {
 // ── Item 3: transfer hint on edit ────────────────────────────────────────
 
 test('editing an imported income/expense row shows the transfer hint', async () => {
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   const row = transactionRowFor(page, 'Grab Food')
   await row.hover()
   await row.getByRole('button', { name: 'Edit transaction' }).click()
