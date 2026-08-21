@@ -16,7 +16,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test'
-import { newAppPage } from './helpers'
+import { newAppPage, navTo } from './helpers'
 
 const API = 'http://localhost:5173/api'
 
@@ -299,7 +299,7 @@ test('review step pre-fills from the builtin map with a "common merchant" captio
   const { fillAccountForm } = await import('./helpers')
   await fillAccountForm(page, { name: 'Card', type: 'bank' })
 
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-12.00,KFC 4471102\n', 'kfc.csv')
   await page.getByRole('button', { name: /Review Rows/ }).click()
   await expect(page.getByText('Review Import')).toBeVisible()
@@ -360,7 +360,7 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
 
   await page.route('**/api/transactions/suggest-categories', (route) => route.abort())
 
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-5.00,SomeShop\n', 'fail.csv')
   await page.getByRole('button', { name: /Review Rows/ }).click()
   await expect(page.getByText('Review Import')).toBeVisible()
@@ -384,7 +384,7 @@ test('a money-in row is not pre-filled with an expense suggestion', async ({ bro
   const { fillAccountForm } = await import('./helpers')
   await fillAccountForm(page, { name: 'Card', type: 'bank' })
 
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   // A refund from a shop the builtin map covers: the row is income, the
   // suggestion is an expense category. Applying it would set a value the row's
   // own Category select does not offer — the select renders blank while the
@@ -409,7 +409,7 @@ test('re-importing the same file after suggestions still detects duplicates (G11
 
   const csv = 'Date,Amount,Merchant\n2026-07-20,-12.00,KFC 4471102\n'
 
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await uploadCsv(page, csv, 'kfc.csv')
   await page.getByRole('button', { name: /Review Rows/ }).click()
   await expect(page.getByText('Review Import')).toBeVisible()
@@ -417,7 +417,7 @@ test('re-importing the same file after suggestions still detects duplicates (G11
   await page.getByRole('button', { name: /Import 1 Transaction/ }).click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await uploadCsv(page, csv, 'kfc.csv')
   await page.getByRole('button', { name: /Review Rows/ }).click()
   await expect(page.getByText('Review Import')).toBeVisible()

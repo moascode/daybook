@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, waitForApp } from './helpers'
+import { newAppPage, waitForApp, navTo, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -22,7 +22,7 @@ test.afterAll(async () => {
 // ── Navigation ─────────────────────────────────────────────────────────
 
 test('Settings link is visible in the sidebar', async () => {
-  await expect(page.getByRole('link', { name: 'Settings' })).toBeVisible()
+  await expect(navItem(page, 'settings')).toBeVisible()
 })
 
 test('Settings link navigates to /settings', async () => {
@@ -62,6 +62,6 @@ test('changing the theme persists immediately after reload (no Save button)', as
 // ── Sidebar navigation from settings ──────────────────────────────────
 
 test('clicking Tasks in sidebar from settings navigates to /tasks', async () => {
-  await page.getByRole('link', { name: 'Tasks' }).click()
+  await navTo(page, 'tasks')
   await expect(page).toHaveURL(/\/tasks$/)
 })

@@ -7,7 +7,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -28,7 +28,7 @@ test.afterAll(async () => {
 // ── Navigate to Import CSV ──────────────────────────────────────────────
 
 test('navigate to Import CSV tab', async () => {
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await expect(page).toHaveURL(/\/wallet\/import$/)
   await page.waitForLoadState('networkidle')
   // Wait for the heading to render
@@ -161,7 +161,7 @@ test('imported transactions have correct amounts', async () => {
 // ── Duplicate detection ──────────────────────────────────────────────────
 
 test('importing the same CSV a second time detects all 4 as duplicates', async () => {
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   const csvContent2 = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
   await page.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
@@ -184,7 +184,7 @@ test('Import button is disabled when all rows are duplicates', async () => {
 test('header toggle is checked by default in the mapping step', async () => {
   // Re-upload the CSV to get back to mapping step
   const csvContent = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
-  await page.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(page, 'import')
   await page.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
@@ -216,7 +216,7 @@ test('review category options are filtered by each row type', async ({ browser }
   await isoPage.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(isoPage, { name: 'Filter Account', type: 'bank' })
 
-  await isoPage.getByRole('link', { name: 'Import CSV' }).click()
+  await navTo(isoPage, 'import')
   await expect(isoPage.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
   const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
   await isoPage.evaluate(async (content) => {

@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -16,7 +16,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Chip Account', type: 'cash' })
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await page.getByRole('button', { name: 'Add Transaction' }).click()
   await fillTransactionForm(page, {
     type: 'Expense',

@@ -35,27 +35,27 @@ const walletGroups = [
   {
     label: 'Daily',
     items: [
-      { to: '/wallet', label: 'Transactions', icon: List, end: true },
-      { to: '/wallet/dashboard', label: 'Dashboard', icon: BarChart3, end: false },
-      { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false },
-      { to: '/wallet/shared', label: 'Shared', icon: Users, end: false },
+      { to: '/wallet', label: 'Transactions', icon: List, end: true, testid: 'nav-transactions' },
+      { to: '/wallet/dashboard', label: 'Dashboard', icon: BarChart3, end: false, testid: 'nav-dashboard' },
+      { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false, testid: 'nav-accounts' },
+      { to: '/wallet/shared', label: 'Shared', icon: Users, end: false, testid: 'nav-shared' },
     ],
   },
   {
     label: 'Planning',
     items: [
-      { to: '/wallet/budgets', label: 'Budgets', icon: PieChart, end: false },
-      { to: '/wallet/goals', label: 'Goals', icon: Target, end: false },
-      { to: '/wallet/recurring', label: 'Recurring', icon: RefreshCw, end: false },
+      { to: '/wallet/budgets', label: 'Budgets', icon: PieChart, end: false, testid: 'nav-budgets' },
+      { to: '/wallet/goals', label: 'Goals', icon: Target, end: false, testid: 'nav-goals' },
+      { to: '/wallet/recurring', label: 'Recurring', icon: RefreshCw, end: false, testid: 'nav-recurring' },
     ],
   },
   {
     label: 'Analyse',
-    items: [{ to: '/wallet/reports', label: 'Reports', icon: BarChart2, end: false }],
+    items: [{ to: '/wallet/reports', label: 'Reports', icon: BarChart2, end: false, testid: 'nav-reports' }],
   },
   {
     label: 'Data',
-    items: [{ to: '/wallet/import', label: 'Import CSV', icon: Upload, end: false }],
+    items: [{ to: '/wallet/import', label: 'Import CSV', icon: Upload, end: false, testid: 'nav-import' }],
   },
 ] as const
 
@@ -134,6 +134,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
             className="flex h-10 w-10 items-center justify-center rounded-md text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:hidden"
             onClick={onClose}
             aria-label="Close sidebar"
+            data-testid="nav-menu-close"
           >
             <X className="h-4 w-4" />
           </button>
@@ -144,7 +145,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       {/* min-h-0 lets this flex child actually shrink so the nav scrolls and
           Settings below stays pinned on short viewports (C11) */}
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-2">
-        <NavLink to="/tasks" end onClick={onClose} className={topLinkClass}>
+        <NavLink to="/tasks" end onClick={onClose} data-testid="nav-tasks" className={topLinkClass}>
           <CheckSquare className="h-4 w-4 flex-shrink-0" />
           Tasks
         </NavLink>
@@ -155,6 +156,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
             <NavLink
               to="/wallet"
               end={false}
+              data-testid="nav-wallet"
               onClick={() => {
                 setWalletOverride(true)
                 onClose?.()
@@ -170,6 +172,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
               type="button"
               onClick={() => setWalletOverride(!walletExpanded)}
               aria-label={walletExpanded ? 'Collapse Wallet' : 'Expand Wallet'}
+              data-testid="nav-wallet-toggle"
               aria-expanded={walletExpanded}
               className="ml-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:h-7 md:w-7"
             >
@@ -195,6 +198,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
                       to={item.to}
                       end={item.end}
                       onClick={onClose}
+                      data-testid={item.testid}
                       className={subLinkClass}
                     >
                       <item.icon className="h-3.5 w-3.5 flex-shrink-0" />
@@ -210,7 +214,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
 
         {/* Dev-only UAT link */}
         {TEST_HOOKS_ENABLED && (
-          <NavLink to="/uat" end onClick={onClose} className={topLinkClass}>
+          <NavLink to="/uat" end onClick={onClose} data-testid="nav-uat" className={topLinkClass}>
             <FlaskConical className="h-4 w-4 flex-shrink-0" />
             UAT Tests
           </NavLink>
@@ -220,7 +224,7 @@ export function Sidebar({ open = true, onClose }: SidebarProps) {
       {/* Bottom: Settings */}
       <div className="shrink-0 border-t border-line px-3 py-3">
         {/* end=false: stay highlighted on /settings/sharing; badge surfaces pending invites */}
-        <NavLink to="/settings" end={false} onClick={onClose} className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
+        <NavLink to="/settings" end={false} onClick={onClose} data-testid="nav-settings" className={({ isActive }) => cn(topLinkClass({ isActive }), 'justify-between')}>
           <span className="flex items-center gap-3">
             <Settings className="h-4 w-4 flex-shrink-0" />
             Settings

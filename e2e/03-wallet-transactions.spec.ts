@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -45,7 +45,7 @@ test.afterAll(async () => {
 // ── Navigation ─────────────────────────────────────────────────────────
 
 test('navigate to Transactions tab', async () => {
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await expect(page).toHaveURL(/\/wallet$/)
   await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
   // Clear the default current-month date filters so transactions with past dates are visible
@@ -360,7 +360,7 @@ test('transactions are grouped by date with day headers', async () => {
 // ── Account balance reflects transactions ────────────────────────────────
 
 test('account balance updates to reflect transactions', async () => {
-  await page.getByRole('link', { name: 'Accounts' }).click()
+  await navTo(page, 'accounts')
   // Test Bank: income 5000 - transfer 500 - expense 12 (Kopitiam) - expense 30 (Bistro) = 4458
   const bankCard = accountCardFor(page, 'Test Bank')
   await expect(bankCard.getByText(/RM\s4,458\.00/)).toBeVisible()
@@ -372,7 +372,7 @@ test('account balance updates to reflect transactions', async () => {
 // ── Quick date filters ───────────────────────────────────────────────────
 
 test('date range "This month" is applied and shown as active', async () => {
-  await page.getByRole('link', { name: 'Transactions' }).click()
+  await navTo(page, 'transactions')
   await page.getByTestId('filter-this-month').click()
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
 

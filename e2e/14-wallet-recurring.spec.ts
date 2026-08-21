@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm } from './helpers'
+import { newAppPage, fillAccountForm, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -26,7 +26,7 @@ test.afterAll(async () => {
 // ── Navigation ─────────────────────────────────────────────────────────
 
 test('wallet navigation contains a "Recurring" link', async () => {
-  await expect(page.getByRole('link', { name: /Recurring/i })).toBeVisible()
+  await expect(navItem(page, 'recurring')).toBeVisible()
 })
 
 test('navigating to /wallet/recurring shows the Recurring page', async () => {
