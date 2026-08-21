@@ -75,10 +75,10 @@ test('empty state disappears after first account', async () => {
 test('account card shows name, type badge, currency and balance', async () => {
   const card = accountCardFor(page, 'Maybank Savings')
   await expect(card.getByText('Maybank Savings')).toBeVisible()
-  await expect(card.getByText('Bank', { exact: true })).toBeVisible()
+  await expect(card.getByTestId('account-card-type')).toHaveText('Bank')
   await expect(card.getByText('MYR', { exact: true })).toBeVisible()
   // Balance starts at 0 — formatMYR uses 'ms-MY' locale which outputs "RM 0.00"
-  await expect(card.getByText(/RM\s*0\.00/)).toBeVisible()
+  await expect(card.getByTestId('account-card-balance')).toHaveText(/RM\s*0\.00/)
 })
 
 // ── Edit account ──────────────────────────────────────────────────────

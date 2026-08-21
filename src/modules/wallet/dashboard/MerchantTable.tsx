@@ -86,7 +86,7 @@ export function MerchantTable({ rows, trendMonths, dateFrom, dateTo }: MerchantT
           </thead>
           <tbody>
             {rows.slice(0, 10).map((row) => (
-              <tr key={row.merchant} className="border-b border-line-subtle last:border-0">
+              <tr key={row.merchant} data-testid="merchant-table-row" className="border-b border-line-subtle last:border-0">
                 <td className="py-2.5 pr-3">
                   <span className="font-medium capitalize text-fg">{row.merchant}</span>
                   {row.isNew ? (

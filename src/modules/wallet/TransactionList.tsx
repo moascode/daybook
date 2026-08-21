@@ -193,13 +193,13 @@ function TransactionRow({
             </span>
           )}
           {category && (
-            <Badge color={category.color} className="flex-shrink-0">
+            <Badge color={category.color} className="flex-shrink-0" data-testid="transaction-row-category">
               {category.name}
             </Badge>
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-subtle">
-          {account && <span>{account.name}</span>}
+          {account && <span data-testid="transaction-row-account">{account.name}</span>}
           {isOnSharedAccount && account?.sharedByUsername && (
             <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
               {account.sharedByUsername}
@@ -208,7 +208,7 @@ function TransactionRow({
           {destAccount && (
             <>
               <ArrowRightLeft className="h-3 w-3" />
-              <span>{destAccount.name}</span>
+              <span data-testid="transaction-row-dest-account">{destAccount.name}</span>
             </>
           )}
           {transaction.description && transaction.merchant && (
@@ -226,7 +226,10 @@ function TransactionRow({
           the two differ. The ledger amount is never hidden: it is what left the
           account, and reconciling against a statement needs it. The second line
           is what the summary, dashboard and budgets are counting (§3). */}
-      <span className={cn('flex-shrink-0 text-right text-sm font-semibold', amountColor)}>
+      <span
+        data-testid="transaction-row-amount"
+        className={cn('flex-shrink-0 text-right text-sm font-semibold', amountColor)}
+      >
         {amountPrefix}{formatMYR(transaction.amount)}
         {showsShare && (
           <span className="block text-[11px] font-normal text-fg-faint" data-testid="effective-amount">
@@ -307,18 +310,18 @@ export function TransactionList({
       {dailyGroups.map((group) => (
           <div key={group.date}>
             {/* Day header */}
-            <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center justify-between px-3 py-2" data-testid="day-header">
               <span className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
                 {format(parseISO(group.date), 'EEE, dd MMM yyyy')}
               </span>
               <div className="flex items-center gap-3 text-xs">
                 {group.totalIncome > 0 && (
-                  <span className="text-positive-600">
+                  <span className="text-positive-600" data-testid="day-header-income">
                     +{formatMYR(group.totalIncome)}
                   </span>
                 )}
                 {group.totalExpense > 0 && (
-                  <span className="text-red-600">
+                  <span className="text-red-600" data-testid="day-header-expense">
                     -{formatMYR(group.totalExpense)}
                   </span>
                 )}

@@ -82,11 +82,13 @@ export function DateRangeControl({
         <div className="flex flex-wrap items-end gap-3">
           <DatePicker
             label="From"
+            data-testid="filter-from"
             value={value.dateFrom}
             onChange={(e) => onChange({ ...value, dateFrom: e.target.value })}
           />
           <DatePicker
             label="To"
+            data-testid="filter-to"
             value={value.dateTo}
             onChange={(e) => onChange({ ...value, dateTo: e.target.value })}
           />

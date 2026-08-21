@@ -102,12 +102,12 @@ test('search combines with the type filter', async () => {
 
   // The Type filter lives in the collapsible Filters section
   await page.getByTestId('filter-toggle').click()
-  await page.getByLabel('Type').selectOption('income')
+  await page.getByTestId('filter-type').selectOption('income')
   await expect(transactionRowFor(page, 'Starlight Studio')).toBeVisible()
   await expect(transactionRowFor(page, 'Starbucks Coffee')).not.toBeVisible()
 
   // Reset for later tests
-  await page.getByLabel('Type').selectOption('all')
+  await page.getByTestId('filter-type').selectOption('all')
   await page.getByTestId('transaction-search').fill('')
 })
 

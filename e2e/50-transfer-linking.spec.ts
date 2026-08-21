@@ -73,8 +73,8 @@ test('picking the twin merges the two rows into one transfer', async () => {
 
 test('balances reflect the transfer on both accounts', async () => {
   await navTo(page, 'accounts')
-  await expect(accountCardFor(page, 'Bank A')).toContainText(/-\s?RM\s?350\.00/)
-  await expect(accountCardFor(page, 'Bank B')).toContainText(/RM\s?350\.00/)
+  await expect(accountCardFor(page, 'Bank A').getByTestId('account-card-balance')).toHaveText(/-\s?RM\s?350\.00/)
+  await expect(accountCardFor(page, 'Bank B').getByTestId('account-card-balance')).toHaveText(/RM\s?350\.00/)
 })
 
 // ── Guard cases via the API (same session user) ──────────────────────────

@@ -119,7 +119,7 @@ export function WhatChanged({
           const label = `${over ? '▲ +' : '▼ −'}${formatMYR(Math.abs(row.delta)).replace('RM', '').trim()}`
 
           return (
-            <li key={row.id}>
+            <li key={row.id} data-testid="what-changed-row">
               <Link
                 to={transactionsLink({ categoryId: row.id, dateFrom, dateTo })}
                 className="block rounded-lg px-1.5 py-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500"

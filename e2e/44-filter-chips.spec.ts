@@ -33,7 +33,7 @@ test.afterAll(async () => {
 test('applying an account filter shows a removable chip', async () => {
   await page.getByTestId('filter-toggle').click()
   await expect(page.getByTestId('filter-panel')).toBeVisible()
-  await page.getByTestId('filter-panel').getByLabel('Account').selectOption('Chip Account')
+  await page.getByTestId('filter-panel').getByTestId('filter-account').selectOption('Chip Account')
 
   const chips = page.getByTestId('active-filter-chips')
   await expect(chips).toBeVisible()
@@ -45,13 +45,14 @@ test('clicking the chip × clears just that filter', async () => {
   // colliding with the filter-panel field labels, so scope to the chip by text.
   await page
     .getByTestId('active-filter-chips')
-    .locator('span', { hasText: 'Account: Chip Account' })
+    .getByTestId('filter-chip')
+    .filter({ hasText: 'Account: Chip Account' })
     .getByRole('button', { name: 'Remove filter' })
     .click()
 
   // Chip row gone (no other filters active) and the Account select back to "all".
   await expect(page.getByTestId('active-filter-chips')).toHaveCount(0)
-  await expect(page.getByTestId('filter-panel').getByLabel('Account')).toHaveValue('')
+  await expect(page.getByTestId('filter-panel').getByTestId('filter-account')).toHaveValue('')
 })
 
 test('a ?account= deep-link auto-opens Filters and shows the chip', async () => {

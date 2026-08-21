@@ -188,13 +188,13 @@ test('what changed ranks categories against their own baseline', async () => {
   const panel = page.getByTestId('what-changed')
   await expect(panel).toBeVisible()
   // Shopping had no baseline at all → +200, the biggest mover, so it sorts first.
-  await expect(panel.locator('li').first()).toContainText('Shopping')
-  await expect(panel.locator('li').first()).toContainText(/▲ \+200\.00/)
+  await expect(panel.getByTestId('what-changed-row').first()).toContainText('Shopping')
+  await expect(panel.getByTestId('what-changed-row').first()).toContainText(/▲ \+200\.00/)
 })
 
 test('what changed reports categories that fell as well as rose', async () => {
   // Transport: 150 against a 300 baseline → 150 under.
-  const transport = page.getByTestId('what-changed').locator('li', { hasText: 'Transport' })
+  const transport = page.getByTestId('what-changed-row').filter({ hasText: 'Transport' })
   await expect(transport).toContainText(/▼ −150\.00/)
 })
 
@@ -208,7 +208,7 @@ test('the movers sum to the headline difference', async () => {
 // ── Where it goes ───────────────────────────────────────────────────────
 
 test('category breakdown lists every category with a bar', async () => {
-  const rows = page.getByTestId('category-breakdown').locator('li')
+  const rows = page.getByTestId('category-breakdown-row')
   await expect(rows.filter({ hasText: 'Shopping' })).toContainText(/RM\s*200\.00/)
   await expect(rows.filter({ hasText: 'Transport' })).toContainText(/RM\s*150\.00/)
 })
@@ -216,8 +216,8 @@ test('category breakdown lists every category with a bar', async () => {
 test('uncategorised spending is a visible row, not a silent omission', async () => {
   // The old pie dropped these rows, so it never summed to the expense total.
   const uncategorised = page
-    .getByTestId('category-breakdown')
-    .locator('li', { hasText: 'Uncategorised' })
+    .getByTestId('category-breakdown-row')
+    .filter({ hasText: 'Uncategorised' })
   await expect(uncategorised).toContainText(/RM\s*40\.00/)
 })
 
@@ -227,8 +227,8 @@ test('the breakdown reconciles to the headline figure', async () => {
 
 test('a category row opens the transactions behind it', async () => {
   await page
-    .getByTestId('category-breakdown')
-    .locator('li', { hasText: 'Shopping' })
+    .getByTestId('category-breakdown-row')
+    .filter({ hasText: 'Shopping' })
     .getByRole('link')
     .click()
   await expect(page).toHaveURL(/\/wallet\?.*category=/)
@@ -239,8 +239,8 @@ test('a category row opens the transactions behind it', async () => {
 
 test('the Uncategorised row filters to only unfiled transactions, not everything', async () => {
   await page
-    .getByTestId('category-breakdown')
-    .locator('li', { hasText: 'Uncategorised' })
+    .getByTestId('category-breakdown-row')
+    .filter({ hasText: 'Uncategorised' })
     .getByRole('link')
     .click()
   await expect(page).toHaveURL(/category=__uncategorised__/)
@@ -256,7 +256,7 @@ test('a What-changed row opens a window wide enough to show its baseline, not ju
   // Transport has one current-month row (Petronas, 150) and three baseline-month
   // rows (Petronas, 300 each) — the delta shown is computed across all four, so
   // the destination must show all four or the number on screen is unverifiable.
-  await page.getByTestId('what-changed').locator('li', { hasText: 'Transport' }).click()
+  await page.getByTestId('what-changed-row').filter({ hasText: 'Transport' }).click()
   await expect(page).toHaveURL(/\/wallet\?.*category=/)
   await expect(page.getByText('Petronas').first()).toBeVisible()
   await expect(page.getByText('Petronas')).toHaveCount(4)
@@ -277,14 +277,14 @@ test('committed vs discretionary split is shown', async () => {
 })
 
 test('merchant table reports count and average, not just total', async () => {
-  const row = page.getByTestId('merchant-table').locator('tr', { hasText: 'Giant Mall' })
+  const row = page.getByTestId('merchant-table-row').filter({ hasText: 'Giant Mall' })
   await expect(row).toContainText(/RM\s*200\.00/)
   await expect(page.getByTestId('merchant-table')).toContainText('Times')
   await expect(page.getByTestId('merchant-table')).toContainText('Average')
 })
 
 test('a merchant seen every month is labelled as such', async () => {
-  const petronas = page.getByTestId('merchant-table').locator('tr', { hasText: 'Petronas' })
+  const petronas = page.getByTestId('merchant-table-row').filter({ hasText: 'Petronas' })
   await expect(petronas).toContainText(/every month/i)
 })
 

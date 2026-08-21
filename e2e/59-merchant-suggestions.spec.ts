@@ -287,7 +287,7 @@ test('review step pre-fills a category from history with a match-count caption',
   await expect(page.getByTestId('csv-suggestions-banner')).toContainText('Suggested a category for 1 of 1 row')
   await expect(page.getByText('MCDONALDS · you categorised this 3×')).toBeVisible()
 
-  const categorySelect = page.locator('tbody tr').first().locator('select').last()
+  const categorySelect = page.getByTestId('csv-review-row').first().getByTestId('csv-row-category')
   await expect(categorySelect).toHaveValue(foodDrink)
 
   await ctx.close()
@@ -335,18 +335,18 @@ test('Clear suggestions nulls only the pre-filled rows, hand-picked categories u
   // Row order mirrors CSV row order (the suggestion pass mutates rows in
   // place, it does not reorder them) — an input's value isn't part of its
   // textContent, so filtering by hasText can't locate a row by merchant here.
-  const rows = page.locator('tbody tr')
+  const rows = page.getByTestId('csv-review-row')
   const suggestedRow = rows.nth(0) // MCDONALDS/KLCC
   const manualRow = rows.nth(1) // BRAND NEW SHOP
 
-  await expect(suggestedRow.locator('select').last()).toHaveValue(foodDrink)
+  await expect(suggestedRow.getByTestId('csv-row-category')).toHaveValue(foodDrink)
   // Hand-pick a category on the row that had no suggestion.
-  await manualRow.locator('select').last().selectOption(other)
+  await manualRow.getByTestId('csv-row-category').selectOption(other)
 
   await page.getByTestId('csv-suggestions-banner').getByRole('button', { name: 'Clear suggestions' }).click()
 
-  await expect(suggestedRow.locator('select').last()).toHaveValue('')
-  await expect(manualRow.locator('select').last()).toHaveValue(other)
+  await expect(suggestedRow.getByTestId('csv-row-category')).toHaveValue('')
+  await expect(manualRow.getByTestId('csv-row-category')).toHaveValue(other)
   await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
 
   await ctx.close()
@@ -393,10 +393,10 @@ test('a money-in row is not pre-filled with an expense suggestion', async ({ bro
   await page.getByRole('button', { name: /Review Rows/ }).click()
   await expect(page.getByText('Review Import')).toBeVisible()
 
-  await expect(page.locator('tbody tr').first().locator('select').first()).toHaveValue('income')
+  await expect(page.getByTestId('csv-review-row').first().getByTestId('csv-row-type')).toHaveValue('income')
   await expect(page.getByText('KFC · common merchant')).not.toBeVisible()
   await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
-  await expect(page.locator('tbody tr').first().locator('select').last()).toHaveValue('')
+  await expect(page.getByTestId('csv-review-row').first().getByTestId('csv-row-category')).toHaveValue('')
 
   await page.context().close()
 })

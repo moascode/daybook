@@ -29,7 +29,7 @@ test('create an account with an opening balance', async () => {
   await dialog.getByRole('button', { name: /Create Account/ }).click()
   await expect(dialog).toBeHidden()
 
-  await expect(accountCardFor(page, 'Savings').getByText('RM 1,000.00')).toBeVisible()
+  await expect(accountCardFor(page, 'Savings').getByTestId('account-card-balance')).toHaveText('RM 1,000.00')
 })
 
 test('net worth includes the opening balance', async () => {
@@ -48,7 +48,7 @@ test('opening balance feeds the running balance after a transaction', async () =
   })
 
   await page.goto('/wallet/accounts')
-  await expect(accountCardFor(page, 'Savings').getByText('RM 900.00')).toBeVisible()
+  await expect(accountCardFor(page, 'Savings').getByTestId('account-card-balance')).toHaveText('RM 900.00')
 })
 
 test('editing the opening balance updates the running balance', async () => {
@@ -62,5 +62,5 @@ test('editing the opening balance updates the running balance', async () => {
   await expect(dialog).toBeHidden()
 
   // 2000 opening − 100 expense = 1900
-  await expect(accountCardFor(page, 'Savings').getByText('RM 1,900.00')).toBeVisible()
+  await expect(accountCardFor(page, 'Savings').getByTestId('account-card-balance')).toHaveText('RM 1,900.00')
 })
