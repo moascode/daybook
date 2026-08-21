@@ -1,0 +1,237 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   Concern: .page, .dash 12-col grid, .section, .card, .band, .stack.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+/* ---- page ---- */
+.content { width: 100%; max-width: 1160px; margin: 0 auto; padding: var(--s8) var(--s6) var(--s12); }
+.page-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s6); flex-wrap: wrap; }
+.page-title { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.022em; }
+.page-sub { font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.page-actions { display: flex; gap: var(--s2); margin-left: auto; }
+
+/* section = the unit of the page. one heading, one body, no nesting. */
+.section { margin-top: var(--s8); }
+.section:first-child { margin-top: 0; }
+.section-head { display: flex; align-items: baseline; gap: var(--s3); margin-bottom: var(--s3); }
+.section-title { font-size: var(--t-base); font-weight: 600; letter-spacing: -.01em; }
+.section-sub { font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.section-action {
+  margin-left: auto; font-size: var(--t-sm); font-weight: 550; color: rgb(var(--fg-muted));
+  display: inline-flex; align-items: center; gap: var(--s1);
+}
+.section-action:hover { color: rgb(var(--fg)); }
+
+.card { background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: var(--r-lg); box-shadow: var(--e1); }
+.card-pad { padding: var(--s5); }
+.card-head { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4); }
+.card-title { font-size: var(--t-base); font-weight: 600; letter-spacing: -.01em; }
+.card-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.divider { height: 1px; background: rgb(var(--line-subtle)); margin: var(--s4) 0; }
+
+.grid { display: grid; gap: var(--s4); }
+.g2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.g4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.g-main { grid-template-columns: minmax(0,1.65fr) minmax(0,1fr); align-items: start; }
+.stack { display: flex; flex-direction: column; gap: var(--s4); }
+
+/* ---- summary band (replaces the gradient hero) ---- */
+.summary { display: flex; align-items: flex-start; gap: var(--s8); flex-wrap: wrap; }
+.summary-main { min-width: 240px; }
+.eyebrow { font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.figure {
+  font-size: var(--t-3xl); font-weight: 680; letter-spacing: -.035em;
+  line-height: 1.05; margin-top: var(--s2); display: flex; align-items: baseline;
+}
+.figure .cents { font-size: var(--t-lg); font-weight: 600; color: rgb(var(--fg-faint)); letter-spacing: -.02em; }
+.figure-meta { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s3); font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.summary-spark { flex: 1; min-width: 200px; max-width: 340px; align-self: flex-end; }
+
+@media (max-width: 1080px) {
+  .g-main { grid-template-columns: minmax(0,1fr); }
+  .g4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 860px) {
+  .g3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+
+@media (max-width: 680px) {
+  /* root type-scale override at mobile width — kept here even though it targets
+     :root, because it lives in §5 RESPONSIVE and is scoped by this breakpoint,
+     not a primitive/semantic token (those are generated separately). */
+  :root { --t-3xl: 36px; --t-2xl: 28px; }
+}
+
+@media (max-width: 680px) {
+  .card-head { flex-wrap: wrap; }
+  .card-head .segment { margin-left: 0 !important; width: 100%; }
+  .card-head .segment button { flex: 1; }
+}
+
+@media (max-width: 680px) {
+  .content { padding: var(--s5) var(--s4) 96px; }
+  .section { margin-top: var(--s6); }
+  .card-pad { padding: var(--s4); }
+  .g2, .g3, .g4 { grid-template-columns: repeat(2, minmax(0,1fr)); gap: var(--s3); }
+  .g-1-on-mobile { grid-template-columns: minmax(0,1fr) !important; }
+  .page-actions { display: none; }          /* replaced by the FAB */
+  .summary { gap: var(--s5); }
+  .summary-spark { max-width: none; width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .g2.g-tight-mobile, .g4 { grid-template-columns: minmax(0,1fr); }
+}
+
+/* =====================================================================
+   v4 — one page grid. every card lands on the same 12 columns with one
+   gap value, and rows stretch so neighbours are always equal height.
+   ===================================================================== */
+.dash {
+  display: grid; grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--s5); align-items: stretch;
+}
+.dash > * { min-width: 0; }
+.dash > .card, .dash > section > .card { height: 100%; }
+.c3 { grid-column: span 3; } .c4 { grid-column: span 4; }
+.c5 { grid-column: span 5; } .c6 { grid-column: span 6; }
+.c7 { grid-column: span 7; } .c8 { grid-column: span 8; }
+.c12 { grid-column: span 12; }
+/* a titled block that still stretches with its row */
+.block { display: flex; flex-direction: column; }
+.block > .card { flex: 1; }
+
+@media (max-width: 1080px) {
+  .c3, .c4, .c5, .c6, .c7 { grid-column: span 6; }
+  .c8, .c12 { grid-column: span 12; }
+}
+@media (max-width: 680px) {
+  .dash { gap: var(--s4); }
+  .c3, .c4, .c5, .c6, .c7, .c8, .c12 { grid-column: span 12; }
+}
+
+/* ---- hero (brought back, on the corrected ramp so there's no seam) ---- */
+.hero {
+  position: relative; overflow: hidden; color: #fff;
+  border-radius: var(--r-lg); padding: var(--s6);
+  display: flex; flex-direction: column;
+  background: linear-gradient(135deg, rgb(var(--g-700)) 0%, rgb(var(--g-600)) 45%, rgb(var(--g-400)) 100%);
+}
+[data-theme="dark"] .hero {
+  background: linear-gradient(135deg, rgb(var(--g-900)) 0%, rgb(var(--g-700)) 55%, rgb(var(--g-500)) 100%);
+}
+.hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(520px 260px at 88% -20%, rgb(255 255 255 / .22), transparent 62%),
+    radial-gradient(320px 220px at 102% 108%, rgb(255 255 255 / .12), transparent 60%);
+}
+.hero > * { position: relative; z-index: 1; }
+.hero-eyebrow { font-size: var(--t-sm); color: rgb(255 255 255 / .82); }
+.hero-greeting {
+  font-size: var(--t-lg); font-weight: 650; letter-spacing: -.02em;
+  margin-top: var(--s1); line-height: 1.25;
+}
+.hero-figure {
+  font-size: var(--t-3xl); font-weight: 680; letter-spacing: -.035em;
+  line-height: 1.05; display: flex; align-items: baseline; font-variant-numeric: tabular-nums;
+}
+.hero-figure .cents { font-size: var(--t-lg); font-weight: 600; color: rgb(255 255 255 / .62); letter-spacing: -.02em; }
+.hero-row { display: flex; align-items: flex-end; gap: var(--s5); flex-wrap: wrap; margin-top: var(--s5); }
+.hero-actions { display: flex; gap: var(--s2); margin-left: auto; flex-wrap: wrap; }
+.chip-glass { background: rgb(255 255 255 / .18); color: #fff; }
+.btn-glass {
+  background: rgb(255 255 255 / .16); color: #fff;
+  border-color: rgb(255 255 255 / .26); backdrop-filter: blur(4px);
+}
+.btn-glass:hover { background: rgb(255 255 255 / .26); }
+.btn-solid-light { background: #fff; color: rgb(var(--g-800)); }
+.btn-solid-light:hover { background: rgb(255 255 255 / .9); }
+.hero-stats {
+  display: grid; grid-template-columns: repeat(3, minmax(0,1fr));
+  gap: var(--s4); margin-top: auto; padding-top: var(--s5);
+  border-top: 1px solid rgb(255 255 255 / .2);
+}
+.hero-stat-k { font-size: var(--t-xs); color: rgb(255 255 255 / .78); }
+.hero-stat-v { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.hero-stat-s { font-size: var(--t-micro); color: rgb(255 255 255 / .7); margin-top: 2px; }
+@media (max-width: 680px) {
+  .hero { padding: var(--s5); }
+  .hero-actions { margin-left: 0; width: 100%; }
+  .hero-actions .btn { flex: 1; }
+  .hero-stats { grid-template-columns: repeat(3, minmax(0,1fr)); gap: var(--s2); }
+  .hero-stat-v { font-size: var(--t-md); }
+}
+
+/* ---- hero: figure left, the three numbers right of a hairline ---- */
+.hero-body { display: flex; gap: var(--s6); align-items: center; margin-top: var(--s5); }
+.hero-main { flex: 1; min-width: 0; }
+.hero-figure-row { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.hero-stats {
+  display: flex; flex-direction: column; gap: var(--s4);
+  padding-left: var(--s6); border-left: 1px solid rgb(255 255 255 / .22);
+  flex-shrink: 0; min-width: 176px;
+  border-top: none; margin: 0; padding-top: 0;
+}
+.hero-stats > div { display: flex; align-items: baseline; gap: var(--s3); }
+.hero-stat-k { flex: 1; }
+.hero-stat-v { margin-top: 0; font-size: var(--t-md); }
+@media (max-width: 900px) {
+  .hero-body { flex-direction: column; align-items: stretch; gap: var(--s5); }
+  .hero-stats {
+    flex-direction: row; padding-left: 0; padding-top: var(--s4);
+    border-left: none; border-top: 1px solid rgb(255 255 255 / .22);
+  }
+  .hero-stats > div { flex: 1; flex-direction: column; gap: 2px; }
+}
+
+/* v7.1 section content that is NOT motion (sizing, not transition) — kept with
+   its component instead of motion.css. */
+/* ---- v7.1: no decorative sparkline on the overview account card, so both
+   cards in the first row can sit tighter ---- */
+.hero { padding: var(--s5) var(--s6); }
+.hero-body { margin-top: var(--s4); }
+.hero-greeting { font-size: var(--t-md); }
+.hero-stats { gap: var(--s3); }
+
+/* mobile: stat cards pair up instead of one per screen; 4-up tag rows stay 2-up */
+@media (max-width: 680px) { .c3 { grid-column: span 6; } }
+
+@media (max-width: 420px) { .g4 { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+
+/* ---- v10: summary band — a short full-width card with no partner to match ---- */
+.band { display: flex; align-items: flex-start; gap: var(--s6); flex-wrap: wrap; }
+.band-main { min-width: 220px; }
+.band-fig { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
+.band-fig .v { font-size: var(--t-2xl); font-weight: 680; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.band-fig .k { font-size: var(--t-sm); color: rgb(var(--fg-subtle)); font-variant-numeric: tabular-nums; }
+.band-stats {
+  display: flex; gap: var(--s6); margin-left: auto;
+  padding-left: var(--s6); border-left: 1px solid rgb(var(--line-subtle));
+}
+.band-stat .k { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.band-stat .v { font-size: var(--t-md); font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.band-stat .s { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); margin-top: 2px; }
+@media (max-width: 900px) {
+  .band-stats { margin-left: 0; padding-left: 0; border-left: none; padding-top: var(--s4);
+                border-top: 1px solid rgb(var(--line-subtle)); width: 100%; justify-content: space-between; gap: var(--s4); }
+}
+
+/* a task list fills its row — the space below the last task is room for more */
+.dash > section.c8 { display: flex; flex-direction: column; }
+.dash > section.c8 > .card:last-child { flex: 1; }
+
+/* AMBIGUOUS CONCERN: physically ships at the end of the Trips source section
+   (adjacent to .dash > .c8.stack usage on the trip detail page) but this is a
+   generic .dash grid utility, so it's routed to layout.css with the rest of
+   the .dash/.c* grid-column rules. */
+/* .stack gap matches the dash gap so stacked cards line up with the rail */
+.dash > .c8.stack { gap: var(--s5); }
+.dash > .c4.stack { gap: var(--s5); }
+
+
+}

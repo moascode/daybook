@@ -1,0 +1,119 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   The v7 motion layer: same curve, same three durations everywhere.
+   MUST be imported LAST - it intentionally overrides earlier component rules
+   (e.g. restyles .trow) via import order, not selector specificity.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+/* =====================================================================
+   v7 — motion layer. Same curve and the same three durations everywhere,
+   so the whole product feels like one material.
+     fast  120ms  colour / opacity swaps
+     base  200ms  size, elevation, position
+     slow  280ms  things that grow (search, panels, charts)
+   ===================================================================== */
+:root { --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 280ms; }
+
+/* ---- buttons: colour fast, lift on hover, press down ---- */
+.btn, .filter-btn, .menu-btn-wide {
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.btn:hover, .filter-btn:hover { transform: translateY(-1px); }
+.btn-primary:hover { box-shadow: var(--e2); }
+.btn:active, .filter-btn:active, .menu-btn-wide:active { transform: translateY(0) scale(.985); }
+
+/* ---- circular bar actions ---- */
+.circle-btn, .icon-btn, .avatar-btn {
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+.circle-btn:hover, .avatar-btn:hover { transform: scale(1.06); }
+.circle-btn:active, .icon-btn:active, .avatar-btn:active { transform: scale(.94); }
+.icon-btn:hover { transform: scale(1.08); }
+
+/* ---- module tabs: icon rises, underline wipes in ---- */
+.modtab .icon { transition: transform var(--dur-base) var(--ease); }
+.modtab:hover .icon { transform: translateY(-2px) scale(1.06); }
+.modtab::before { transition: transform var(--dur-slow) var(--ease), opacity var(--dur-base) var(--ease); }
+.modtab[aria-current="page"]::before { animation: wipe var(--dur-slow) var(--ease) both; }
+@keyframes wipe { from { transform: scaleX(.2); opacity: 0 } to { transform: scaleX(1); opacity: 1 } }
+
+/* ---- segmented control: the thumb slides in feel ---- */
+.segment button {
+  transition: background var(--dur-base) var(--ease), color var(--dur-fast) var(--ease),
+              box-shadow var(--dur-base) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.segment button:active { transform: scale(.96); }
+
+/* ---- nav + menus ---- */
+.nav-item, .menu-item, .menu-wide, .menu-you, .section-action, .tabbar a {
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-base) var(--ease);
+}
+.nav-item:hover, .menu-wide:hover, .menu-you:hover { transform: translateX(2px); }
+.section-action:hover { transform: translateX(2px); }
+.menu-wide .bubble { transition: background var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease); }
+.menu-wide:hover .bubble { transform: scale(1.08); }
+.menu-panel { animation: pop var(--dur-base) var(--ease) both; transform-origin: top right; }
+@keyframes pop { from { opacity: 0; transform: translateY(-6px) scale(.97) } to { opacity: 1; transform: none } }
+.pane.show { animation: fadeIn var(--dur-base) var(--ease) both; }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(6px) } to { opacity: 1; transform: none } }
+
+/* ---- cards: interactive ones lift, static ones stay put ---- */
+.acct, .card { transition: border-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease), transform var(--dur-base) var(--ease); }
+.acct:hover { transform: translateY(-2px); }
+.acct-feature:hover { transform: translateY(-2px); box-shadow: var(--e3); }
+
+/* ---- rows: background plus the amount nudging in ---- */
+.trow { transition: background var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease); }
+.trow .tavatar { transition: transform var(--dur-base) var(--ease); }
+.trow:hover .tavatar { transform: scale(1.07) rotate(-2deg); }
+.trow .amt { transition: transform var(--dur-base) var(--ease); }
+.trow:hover .amt { transform: translateX(-2px); }
+.trow-actions { transition: opacity var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease); transform: translateX(4px); }
+.trow:hover .trow-actions, .trow:focus-within .trow-actions { transform: translateX(0); }
+tbody tr { transition: background var(--dur-fast) var(--ease); }
+.prow { transition: background var(--dur-fast) var(--ease); border-radius: var(--r-sm); }
+.prow:hover { background: rgb(var(--surface-hover)); box-shadow: 0 0 0 8px rgb(var(--surface-hover)); }
+
+/* ---- charts respond to the pointer ---- */
+.bar { cursor: default; }
+.bar-fill { transition: opacity var(--dur-base) var(--ease), transform var(--dur-base) var(--ease); }
+.bar:hover .bar-fill { opacity: 1; transform: translateY(-3px); }
+.bar-val, .bar-day { transition: color var(--dur-fast) var(--ease); }
+.bar:hover .bar-val, .bar:hover .bar-day { color: rgb(var(--fg)); }
+
+.donut circle { transition: stroke-width var(--dur-base) var(--ease), opacity var(--dur-fast) var(--ease); cursor: default; }
+.donut:hover circle { opacity: .5; }
+.donut circle:hover { stroke-width: 27; opacity: 1; }
+.donut circle:first-child { opacity: 1 !important; }
+.dl-row { transition: background var(--dur-fast) var(--ease); border-radius: 6px; }
+.dl-row:hover { background: rgb(var(--surface-hover)); box-shadow: 0 0 0 6px rgb(var(--surface-hover)); }
+
+.chart svg path, .chart svg rect, .chart svg circle { transition: opacity var(--dur-base) var(--ease), filter var(--dur-base) var(--ease); }
+.chart:hover .tip { transform: translate(-50%, -100%) scale(1.03); }
+.tip { transition: transform var(--dur-base) var(--ease); }
+
+/* ---- progress + bars animate to their value ---- */
+.track > i, .budget-fill, .stat-bar > i { transition: width var(--dur-slow) var(--ease), background var(--dur-fast) var(--ease); }
+.budget:hover .budget-fill { filter: saturate(1.25); }
+
+/* ---- chips ---- */
+.chip { transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.chip-mute:hover { transform: scale(1.03); }
+
+/* ---- page + sidebar entrance ---- */
+.content { animation: rise var(--dur-slow) var(--ease) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+
+/* ---- fab ---- */
+.fab { transition: transform var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease); }
+.fab:hover { transform: scale(1.06); }
+.fab:active { transform: scale(.92); }
+
+
+}

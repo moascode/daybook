@@ -1,0 +1,123 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   Concern: btn, chip, icon-btn, circle-btn, avatar, seg, notice, empty, skel.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+.avatar {
+  width: 28px; height: 28px; border-radius: var(--r-full);
+  background: rgb(var(--surface-active)); color: rgb(var(--fg-muted));
+  font-size: var(--t-micro); font-weight: 650;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: rgb(var(--fg-subtle)); position: relative; flex-shrink: 0;
+  transition: background .12s var(--ease), color .12s var(--ease);
+}
+.icon-btn:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  font-size: var(--t-sm); font-weight: 550; border-radius: var(--r-sm);
+  padding: 0 var(--s3); height: 34px; border: 1px solid transparent; white-space: nowrap;
+  transition: background .12s var(--ease), border-color .12s var(--ease), transform .08s var(--ease);
+}
+.btn:active { transform: translateY(.5px); }
+.btn-primary { background: rgb(var(--ink)); color: rgb(var(--on-ink)); }
+.btn-primary:hover { background: rgb(var(--n-800)); }
+[data-theme="dark"] .btn-primary:hover { background: rgb(var(--n-0)); }
+.btn-secondary { background: rgb(var(--surface)); border-color: rgb(var(--line)); color: rgb(var(--fg-muted)); }
+.btn-secondary:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+.btn-quiet { color: rgb(var(--fg-subtle)); }
+.btn-quiet:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+.btn-lg { height: 40px; font-size: var(--t-base); padding: 0 var(--s4); }
+
+.segment {
+  display: inline-flex; background: rgb(var(--surface-sunk));
+  border: 1px solid rgb(var(--line)); border-radius: var(--r-sm); padding: 2px; gap: 2px;
+}
+.segment button {
+  font-size: var(--t-xs); font-weight: 550; padding: 0 var(--s3); height: 26px;
+  border-radius: 6px; color: rgb(var(--fg-subtle)); transition: all .12s var(--ease);
+}
+.segment button:hover { color: rgb(var(--fg)); }
+.segment button[aria-selected="true"] {
+  background: rgb(var(--surface)); color: rgb(var(--fg));
+  box-shadow: var(--e1); font-weight: 600;
+}
+
+/* ---- chips / tags ---- */
+.chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: var(--t-xs); font-weight: 550; padding: 2px var(--s2);
+  border-radius: 6px; white-space: nowrap;
+}
+.chip-pos  { background: rgb(var(--pos-bg));  color: rgb(var(--pos-fg)); }
+.chip-neg  { background: rgb(var(--neg-bg));  color: rgb(var(--neg-fg)); }
+.chip-warn { background: rgb(var(--warn-bg)); color: rgb(var(--warn-fg)); }
+.chip-info { background: rgb(var(--info-bg)); color: rgb(var(--info-fg)); }
+.chip-mute { background: rgb(var(--surface-sunk)); color: rgb(var(--fg-subtle)); }
+.chip .icon-sm { width: 12px; height: 12px; stroke-width: 2.2; }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--t-xs); font-weight: 500; color: rgb(var(--fg-muted));
+}
+.tag i { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
+
+/* ---- notice ---- */
+.notice {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4); border-radius: var(--r-md);
+  background: rgb(var(--surface)); border: 1px solid rgb(var(--line));
+  border-left: 3px solid rgb(var(--warn));
+}
+.notice-title { font-size: var(--t-sm); font-weight: 600; }
+.notice-sub { font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.notice .icon-wrap { color: rgb(var(--warn)); display: flex; }
+
+/* ---- empty / skeleton states ---- */
+.empty { text-align: center; padding: var(--s10) var(--s4); color: rgb(var(--fg-subtle)); }
+.empty-title { font-size: var(--t-base); font-weight: 550; color: rgb(var(--fg)); margin-top: var(--s3); }
+.empty-sub { font-size: var(--t-sm); margin-top: var(--s1); }
+.skel { background: rgb(var(--surface-sunk)); border-radius: 6px; animation: pulse 1.6s var(--ease) infinite; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+
+/* circular right-hand actions, Facebook-style */
+.circle-btn {
+  position: relative; width: 40px; height: 40px; border-radius: var(--r-full);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  background: rgb(var(--surface-sunk)); color: rgb(var(--fg));
+  transition: background .12s var(--ease);
+}
+.circle-btn:hover { background: rgb(var(--surface-active)); }
+.circle-btn .icon { width: 20px; height: 20px; }
+.circle-btn .count {
+  position: absolute; top: -2px; right: -2px;
+  background: rgb(var(--neg)); color: #fff; font-size: 10px; font-weight: 700;
+  min-width: 18px; height: 18px; border-radius: var(--r-full);
+  display: flex; align-items: center; justify-content: center; padding: 0 5px;
+  box-shadow: 0 0 0 2px rgb(var(--surface));
+}
+.avatar-btn { position: relative; width: 40px; height: 40px; flex-shrink: 0; }
+.avatar-btn .avatar { width: 40px; height: 40px; font-size: var(--t-sm); }
+.avatar-btn .caret {
+  position: absolute; right: -2px; bottom: -2px; width: 17px; height: 17px;
+  border-radius: var(--r-full); background: rgb(var(--surface-active));
+  color: rgb(var(--fg)); display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px rgb(var(--surface));
+}
+.avatar-btn .caret svg { width: 11px; height: 11px; stroke-width: 3; }
+
+@media (max-width: 680px) {
+  .circle-btn { width: 36px; height: 36px; }
+  .avatar-btn, .avatar-btn .avatar { width: 36px; height: 36px; }
+}
+
+
+}

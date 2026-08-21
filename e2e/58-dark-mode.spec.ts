@@ -31,6 +31,13 @@ const themeToggle = (p: Page) => p.getByTestId('theme-toggle').locator('visible=
 const htmlIsDark = (p: Page) =>
   p.evaluate(() => document.documentElement.classList.contains('dark'))
 
+// D-2: the resolved theme is carried by TWO markers set together — the `dark`
+// class (Tailwind darkMode:'class') and the data-theme attribute (the ported
+// proposal CSS's [data-theme] selectors). If they ever drift, half the app
+// themes and half does not, so assert both.
+const htmlDataTheme = (p: Page) =>
+  p.evaluate(() => document.documentElement.dataset.theme)
+
 const bodyBackground = (p: Page) =>
   p.evaluate(() => getComputedStyle(document.body).backgroundColor)
 
@@ -38,6 +45,7 @@ const bodyBackground = (p: Page) =>
 
 test('app starts in light mode by default', async () => {
   expect(await htmlIsDark(page)).toBe(false)
+  expect(await htmlDataTheme(page)).toBe('light')
 })
 
 test('the top-bar toggle switches to dark', async () => {
@@ -46,6 +54,8 @@ test('the top-bar toggle switches to dark', async () => {
   await themeToggle(page).click()
 
   await expect.poll(() => htmlIsDark(page)).toBe(true)
+  // Both markers move together (D-2), not just the class.
+  await expect.poll(() => htmlDataTheme(page)).toBe('dark')
   // The token layer must actually repaint, not just add a class.
   expect(await bodyBackground(page)).not.toBe(lightBackground)
 })
@@ -93,8 +103,11 @@ test('dark mode is applied before the app boots, with no white flash', async () 
   await fresh.goto('/settings', { waitUntil: 'domcontentloaded' })
 
   expect(await htmlIsDark(fresh)).toBe(true)
+  // Both markers must be set pre-paint by the inline script, not just the class.
+  expect(await htmlDataTheme(fresh)).toBe('dark')
   // The <html> class is only half of it — the canvas token must resolve dark.
-  expect(await bodyBackground(fresh)).toBe('rgb(13, 17, 23)')
+  // v2 dark canvas is --n-1000 (rgb(9, 11, 15)); the pre-v2 value was 13,17,23.
+  expect(await bodyBackground(fresh)).toBe('rgb(9, 11, 15)')
   await fresh.close()
 })
 

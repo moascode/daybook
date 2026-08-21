@@ -46,3 +46,4 @@ server/data/
 # Claude Code agent worktree checkouts (ephemeral, harness-managed)
 .claude/worktrees/
 d1-export/
+docs/v2/.flow/

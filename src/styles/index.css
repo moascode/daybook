@@ -1,0 +1,14 @@
+/* Ported from proposal-v2/theme.css §4-5. GENERATED-ADJACENT: hand-ported once in R1.
+   These classes are DORMANT in R1 — defined here, applied to components in R2+.
+   Each concern file below wraps its own rules in `@layer components { ... }` —
+   @import does not reliably nest inside a single @layer block across Vite's
+   postcss-import + Tailwind v3, so the layer is declared per-file instead. */
+@import './shell.css';
+@import './primitives.css';
+@import './layout.css';
+@import './data.css';
+@import './charts.css';
+@import './tasks.css';
+@import './day.css';
+@import './trips.css';
+@import './motion.css';

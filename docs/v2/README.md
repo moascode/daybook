@@ -18,8 +18,9 @@ differ", v14's solid/hollow grammar) are load-bearing across modules.
 docs/v2/
 ├── README.md               ← you are here: index, conventions, status
 ├── release-plan.md         ← THE ROADMAP. 17 releases, dependencies, tags
+├── execution-playbook.md   ← HOW it gets built: feature-flow agents + model tiers
 ├── gap-analysis.md         ← design ↔ codebase, page by page
-├── open-decisions.md       ← D-numbered items needing owner sign-off
+├── open-decisions.md       ← D-numbered items (all six sign-offs resolved 2026-08-21)
 │
 ├── foundation/             ← cross-module, must land before any module work
 │   ├── 01-design-tokens.md
@@ -58,7 +59,7 @@ Update the row when a release merges. `—` means not started.
 
 | Release | Tag | Scope | Status |
 |---|---|---|---|
-| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | — |
+| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | [PR 125](https://github.com/moascode/daybook/pull/125) — in review |
 | R2 | v2.11.0 | Foundation — app shell | — |
 | R3 | v2.12.0 | Wallet — design adoption (8 pages) | — |
 | R4 | v2.13.0 | Tasks — minimum schema for the designed rows | — |

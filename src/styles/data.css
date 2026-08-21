@@ -1,0 +1,329 @@
+/* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
+   Concern: .trow, .tday (.tgroup-head), table, .prow, filters, .stat-card, .acct.
+   See docs/v2/foundation/02-component-layer.md.
+   DORMANT in R1 - defined here, applied to components starting R2+. */
+
+@layer components {
+
+/* ---- stat ---- */
+.stat { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s1); }
+.stat-label { display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: rgb(var(--fg-subtle)); font-weight: 500; }
+.stat-label .icon-sm { color: rgb(var(--fg-faint)); }
+.stat-value { font-size: var(--t-xl); font-weight: 660; letter-spacing: -.028em; line-height: 1.15; }
+.stat-value.pos { color: rgb(var(--pos-fg)); }
+.stat-value.neg { color: rgb(var(--neg-fg)); }
+.stat-foot { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s1); font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.stat-bar { height: 3px; border-radius: var(--r-full); background: rgb(var(--track)); margin-top: var(--s3); overflow: hidden; }
+.stat-bar > i { display: block; height: 100%; border-radius: var(--r-full); }
+
+/* ---- transaction list (same component desktop + mobile) ---- */
+.tlist { display: flex; flex-direction: column; }
+.tgroup-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: var(--s4) 0 var(--s2); font-size: var(--t-xs);
+  color: rgb(var(--fg-subtle)); font-weight: 550;
+  position: sticky; top: 56px; background: rgb(var(--surface)); z-index: 1;
+}
+.tgroup-head:first-child { padding-top: 0; }
+.trow {
+  display: grid; align-items: center; gap: var(--s3);
+  grid-template-columns: 1fr 132px 128px 112px 32px;
+  padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
+  border-radius: var(--r-md); border-top: 1px solid rgb(var(--line-subtle));
+  transition: background .1s var(--ease);
+}
+.trow:hover { background: rgb(var(--surface-hover)); }
+.trow:hover .trow-actions { opacity: 1; }
+.tlist .trow:first-of-type { border-top: none; }
+.tlead { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.tavatar {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--t-xs); font-weight: 650;
+}
+.tname { font-size: var(--t-base); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tsub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmeta { font-size: var(--t-sm); color: rgb(var(--fg-muted)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amt { text-align: right; font-size: var(--t-base); font-weight: 600; letter-spacing: -.01em; }
+.amt.neg { color: rgb(var(--fg)); }
+.amt.pos { color: rgb(var(--pos-fg)); }
+.trow-actions { opacity: 0; transition: opacity .12s var(--ease); }
+.trow:focus-within .trow-actions { opacity: 1; }
+
+/* plain data table (merchants, accounts) */
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left; font-size: var(--t-xs); font-weight: 550;
+  color: rgb(var(--fg-subtle)); padding: 0 var(--s3) var(--s2); white-space: nowrap;
+}
+th.num, td.num { text-align: right; }
+td { padding: var(--s3); font-size: var(--t-sm); vertical-align: middle; border-top: 1px solid rgb(var(--line-subtle)); }
+tbody tr:hover { background: rgb(var(--surface-hover)); }
+td:first-child, th:first-child { padding-left: 0; }
+td:last-child, th:last-child { padding-right: 0; }
+
+
+.filters { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.filters .search { max-width: 260px; }
+.filter-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 var(--s3);
+  border-radius: var(--r-sm); border: 1px solid rgb(var(--line));
+  font-size: var(--t-sm); font-weight: 500; color: rgb(var(--fg-muted));
+  background: rgb(var(--surface)); transition: all .12s var(--ease);
+}
+.filter-btn:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+.filter-btn .count {
+  background: rgb(var(--accent-bg)); color: rgb(var(--accent-fg));
+  font-size: var(--t-micro); font-weight: 650; border-radius: var(--r-full);
+  min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; padding: 0 4px;
+}
+
+/* ---- account cards ---- */
+.acct {
+  padding: var(--s4); border-radius: var(--r-lg); background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line)); box-shadow: var(--e1);
+  display: flex; flex-direction: column; gap: var(--s3);
+  transition: border-color .12s var(--ease), box-shadow .12s var(--ease);
+}
+.acct:hover { border-color: rgb(var(--line-strong)); box-shadow: var(--e2); }
+.acct-top { display: flex; align-items: center; gap: var(--s2); }
+.acct-mark {
+  width: 32px; height: 32px; border-radius: 9px; display: flex;
+  align-items: center; justify-content: center; flex-shrink: 0;
+}
+.acct-name { font-size: var(--t-sm); font-weight: 550; }
+.acct-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.acct-bal { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.acct-foot { display: flex; align-items: center; justify-content: space-between; font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.acct.add {
+  border-style: dashed; box-shadow: none; align-items: center; justify-content: center;
+  color: rgb(var(--fg-subtle)); font-size: var(--t-sm); font-weight: 500; min-height: 132px;
+}
+.acct.add:hover { color: rgb(var(--fg)); border-color: rgb(var(--accent)); }
+
+/* the one place a card face is allowed — the featured account */
+.acct-feature {
+  color: rgb(var(--n-0)); border: none;
+  background:
+    radial-gradient(120% 140% at 88% 0%, rgb(var(--g-500) / .9), transparent 62%),
+    linear-gradient(150deg, rgb(var(--n-850)), rgb(var(--n-950)));
+  box-shadow: var(--e2);
+}
+.acct-feature .acct-sub, .acct-feature .acct-foot { color: rgb(var(--n-0) / .62); }
+.acct-feature .acct-mark { background: rgb(255 255 255 / .12); color: rgb(var(--n-0)); }
+
+/* ---- people / settlement ---- */
+.prow { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.prow:first-child { border-top: none; padding-top: 0; }
+.pname { font-size: var(--t-sm); font-weight: 500; }
+.psub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.pamt { margin-left: auto; font-size: var(--t-base); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 860px) {
+  .trow { grid-template-columns: 1fr 112px 104px 32px; }
+  .trow .col-hide-md { display: none; }
+}
+
+@media (max-width: 680px) {
+  /* transactions: two-line row, amount right — no 5-line stacked card */
+  .trow {
+    grid-template-columns: 1fr auto; gap: var(--s3);
+    padding: var(--s3) var(--s2); align-items: center;
+  }
+  .trow .col-mobile-hide { display: none; }
+  .tavatar { width: 38px; height: 38px; }
+  .trow-actions { display: none; }
+  .tgroup-head { top: 0; }
+}
+
+@media (max-width: 680px) {
+  th.col-md, td.col-md { display: none; }
+  .hide-mobile { display: none !important; }
+}
+
+/* the toolbar filter field is visually distinct from global search */
+.filter-field {
+  display: flex; align-items: center; gap: var(--s2); height: 34px;
+  padding: 0 var(--s3); border-radius: var(--r-sm);
+  background: rgb(var(--surface-sunk)); border: 1px solid transparent;
+  color: rgb(var(--fg-faint)); flex: 1; max-width: 280px;
+}
+.filter-field:focus-within { background: rgb(var(--surface)); border-color: rgb(var(--accent) / .6); box-shadow: 0 0 0 3px rgb(var(--accent) / .12); }
+.filter-field input { border: none; background: transparent; outline: none; flex: 1; font-size: var(--t-sm); color: rgb(var(--fg)); min-width: 0; }
+
+/* ---- stat card (In / Out / Net as separate cards) ---- */
+.stat-card { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s4) var(--s5); }
+.stat-card .stat-icon {
+  width: 30px; height: 30px; border-radius: var(--r-sm); margin-bottom: var(--s2);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.tgroup-head {
+  display: grid; grid-template-columns: 1fr 132px 128px 112px 32px;
+  gap: var(--s3); align-items: baseline;
+  padding: var(--s5) var(--s2) var(--s2); margin: 0 calc(var(--s2) * -1);
+  font-size: var(--t-xs); color: rgb(var(--fg-subtle)); font-weight: 550;
+  position: sticky; top: 56px; background: rgb(var(--surface)); z-index: 1;
+}
+.tgroup-head:first-child { padding-top: 0; }
+.tgroup-head .tg-date { grid-column: 1; }
+.tgroup-head .tg-date b { color: rgb(var(--fg)); font-weight: 600; font-size: var(--t-sm); }
+.tgroup-head .tg-total { grid-column: 4; text-align: right; font-variant-numeric: tabular-nums; }
+.tgroup-head .tg-total b { display: block; color: rgb(var(--fg-muted)); font-weight: 600; font-size: var(--t-sm); }
+@media (max-width: 860px) {
+  .tgroup-head { grid-template-columns: 1fr 112px 104px 32px; }
+  .tgroup-head .tg-total { grid-column: 3; }
+}
+
+@media (max-width: 680px) {
+  .tgroup-head { grid-template-columns: 1fr auto; top: 0; padding: var(--s4) var(--s2) var(--s2); }
+  .tgroup-head .tg-total { grid-column: 2; }
+}
+
+/* --- v3 fixes --- */
+.tgroup-head .tg-total b { display: inline; margin-left: 6px; }
+
+/* ---- day total: no label, just the number, on a soft overlay ---- */
+.tgroup-head { padding-top: var(--s4); }
+.tgroup-head .tg-total {
+  justify-self: end; display: inline-flex; align-items: center;
+  padding: 3px var(--s2); border-radius: 6px;
+  background: rgb(var(--surface-sunk));
+  font-size: var(--t-sm); font-weight: 600; color: rgb(var(--fg));
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+.tgroup-head .tg-total.pos { background: rgb(var(--pos-bg)); color: rgb(var(--pos-fg)); }
+
+/* v7 section content that is NOT motion (sizing, not transition) — kept with
+   its component instead of motion.css. */
+/* ---- stat cards: three lines, icon sits with the label ---- */
+.stat-card { padding: var(--s5); gap: 0; justify-content: flex-start; }
+.stat-card .stat-topline { display: flex; align-items: center; gap: var(--s2); }
+.stat-card .stat-icon {
+  width: 26px; height: 26px; border-radius: 7px; margin: 0; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.stat-card .stat-icon .icon-sm { width: 14px; height: 14px; }
+.stat-card .stat-label { font-size: var(--t-sm); font-weight: 550; color: rgb(var(--fg-muted)); }
+.stat-card .stat-value { font-size: var(--t-xl); margin-top: var(--s3); }
+.stat-card .stat-foot { margin-top: var(--s2); font-size: var(--t-sm); }
+
+/* AMBIGUOUS CONCERN: .goal reads as a wallet-goals list card; placed here
+   alongside .acct/.stat-card rather than charts.css (which owns the .ring
+   progress indicator it's paired with on the page). */
+/* ---- goal card ---- */
+.goal { display: flex; gap: var(--s4); align-items: center; }
+.goal-main { flex: 1; min-width: 0; }
+.goal-name { font-size: var(--t-base); font-weight: 600; }
+.goal-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 2px; }
+.goal-fig { font-size: var(--t-lg); font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: var(--s2); }
+.goal-fig span { font-size: var(--t-sm); font-weight: 550; color: rgb(var(--fg-subtle)); }
+
+/* ---- settlement / person balance ---- */
+.bal-row { display: grid; grid-template-columns: 1fr 200px 108px; gap: var(--s3); align-items: center; padding: var(--s3) var(--s2); margin: 0 calc(var(--s2)*-1); border-radius: var(--r-sm); transition: background var(--dur-fast) var(--ease); }
+.bal-row:hover { background: rgb(var(--surface-hover)); }
+.bal-track { position: relative; height: 8px; }
+.bal-track::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: rgb(var(--line-strong)); }
+.bal-bar { position: absolute; top: 0; height: 8px; border-radius: var(--r-full); }
+.settle-row { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.settle-row:first-of-type { border-top: none; }
+.settle-arrow { color: rgb(var(--fg-faint)); flex-shrink: 0; }
+
+/* ---- status dot + generic meta list ---- */
+.dot-s { width: 7px; height: 7px; border-radius: var(--r-full); flex-shrink: 0; display: inline-block; }
+.kv { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--t-sm); padding: var(--s2) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.kv:first-child { border-top: none; }
+.kv .k { color: rgb(var(--fg-subtle)); }
+.kv .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- generic list row used by recurring / reports ---- */
+.lrow {
+  display: grid; align-items: center; gap: var(--s3);
+  grid-template-columns: 1fr 128px 116px 104px 92px 32px;
+  padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
+  border-radius: var(--r-md); border-top: 1px solid rgb(var(--line-subtle));
+  transition: background var(--dur-fast) var(--ease);
+}
+.lrow:first-of-type { border-top: none; }
+.lrow:hover { background: rgb(var(--surface-hover)); }
+.lrow:hover .tavatar { transform: scale(1.07) rotate(-2deg); }
+.lrow .trow-actions { opacity: 0; }
+.lrow:hover .trow-actions, .lrow:focus-within .trow-actions { opacity: 1; transform: translateX(0); }
+.lhead {
+  display: grid; gap: var(--s3);
+  grid-template-columns: 1fr 128px 116px 104px 92px 32px;
+  padding: 0 var(--s2) var(--s2);
+  font-size: var(--t-xs); font-weight: 550; color: rgb(var(--fg-subtle));
+}
+.lhead .num, .lrow .num { text-align: right; }
+@media (max-width: 1080px) {
+  .lrow, .lhead { grid-template-columns: 1fr 110px 96px 32px; }
+  .lrow .col-hide-md, .lhead .col-hide-md { display: none; }
+  .bal-row { grid-template-columns: 1fr 140px 96px; }
+}
+
+@media (max-width: 680px) {
+  .lrow, .lhead { grid-template-columns: 1fr auto; }
+  .lrow .col-mobile-hide, .lhead .col-mobile-hide { display: none; }
+  .lhead { display: none; }
+  .bal-row { grid-template-columns: 1fr 96px; }
+  .bal-row .bal-track { display: none; }
+  .goal { gap: var(--s3); }
+}
+
+/* ---- v9: per-person settle, and compact suggestion / contribution rows ---- */
+.bal-row { grid-template-columns: 1fr 180px 104px 78px; }
+.bal-row .btn { opacity: 0; transition: opacity var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.bal-row:hover .btn, .bal-row:focus-within .btn { opacity: 1; }
+.settle-row .btn { margin-left: auto; }
+.settle-row .pamt { margin-left: 0; min-width: 76px; text-align: right; }
+
+/* suggestion / action rows: one line of text, action on the right */
+.sug { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.sug:first-of-type { border-top: none; padding-top: 0; }
+.sug-main { flex: 1; min-width: 0; }
+.sug-title { font-size: var(--t-sm); font-weight: 550; }
+.sug-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 1px; }
+.sug .btn { flex-shrink: 0; }
+
+@media (max-width: 1080px) { .bal-row { grid-template-columns: 1fr 140px 96px 78px; } }
+@media (max-width: 680px) {
+  .bal-row { grid-template-columns: 1fr 96px 72px; }
+  .bal-row .btn { opacity: 1; }
+}
+.sug { padding: var(--s2) 0; }
+.kv { padding: 6px 0; }
+
+/* the .band ~ .grid.g4 .kv rules below reference .band (layout.css) via a
+   combinator but restyle .kv itself — kept with the .bal-row/.bal-foot block
+   they ship alongside in the source. */
+/* balances: the settle action gets its own column and the total lines up with it */
+.bal-row { grid-template-columns: 1fr 176px 104px 76px; }
+.bal-row .btn { opacity: 1; }
+.bal-foot { display: grid; grid-template-columns: 1fr 176px 104px 76px; gap: var(--s3); align-items: baseline; padding: 0 var(--s2); }
+.bal-foot .lbl { grid-column: 1 / 3; font-size: var(--t-sm); color: rgb(var(--fg-subtle)); }
+.bal-foot .val { grid-column: 3; text-align: right; }
+@media (max-width: 1080px) { .bal-row, .bal-foot { grid-template-columns: 1fr 140px 96px 76px; } }
+@media (max-width: 680px) {
+  .bal-row, .bal-foot { grid-template-columns: 1fr 96px 72px; }
+  .bal-foot .lbl { grid-column: 1; } .bal-foot .val { grid-column: 2; }
+}
+@media (max-width: 680px) {
+  /* the per-person Settle is redundant on mobile — the Settle up card below
+     shows the same three actions with more room */
+  .bal-row { grid-template-columns: 1fr auto; }
+  .bal-row .btn { display: none; }
+  .bal-foot { grid-template-columns: 1fr auto; }
+  .bal-foot .lbl { grid-column: 1; } .bal-foot .val { grid-column: 2; }
+  /* four-up key/value rows stack rather than wrap */
+  .band ~ .grid.g4 { grid-template-columns: minmax(0,1fr); }
+  .band ~ .grid.g4 .kv { padding: 5px 0; border-top: 1px solid rgb(var(--line-subtle)); }
+  .band ~ .grid.g4 .kv:first-child { border-top: none; }
+}
+/* balances has no per-row action again — three columns, total aligned to the amount */
+.bal-row, .bal-foot { grid-template-columns: 1fr 176px 104px; }
+@media (max-width: 1080px) { .bal-row, .bal-foot { grid-template-columns: 1fr 140px 104px; } }
+@media (max-width: 680px) { .bal-row, .bal-foot { grid-template-columns: 1fr auto; } }
+
+
+}

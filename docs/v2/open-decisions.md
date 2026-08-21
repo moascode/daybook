@@ -5,23 +5,29 @@ happens if it goes either way, and which release is blocked. A decision with a
 **Recommendation** can be taken by whoever picks the release up; a decision
 marked **Owner sign-off** cannot (CLAUDE.md rule 10 / rule 8).
 
+**Owner ruling 2026-08-21:** all six sign-off decisions resolved — D-3 keep
+outliner, D-4 Trips as a module, D-5 full multi-currency, D-7 defer ledger
+switching, D-11 Claude Haiku (governed — see
+[cross-cutting/ai-usage.md](cross-cutting/ai-usage.md)), D-15 task sharing
+approved.
+
 | # | Decision | Blocks | Status |
 |---|---|---|---|
 | D-1 | CSS strategy: ported component layer vs Tailwind utilities | R1 | Recommendation below |
 | D-2 | `.dark` class vs `[data-theme]` | R1 | Recommendation below |
-| D-3 | Does the bullet outliner survive, and where? | R4, R5 | **Owner sign-off** |
-| D-4 | Trips as a fourth module vs a lens | R6 | **Owner sign-off** |
-| D-5 | Multi-currency — reverses the MYR-only decision | R14 | **Owner sign-off** |
+| D-3 | Does the bullet outliner survive, and where? | R4, R5 | ✅ **KEEP** — as a list-detail view mode |
+| D-4 | Trips as a fourth module vs a lens | R6 | ✅ **MODULE** |
+| D-5 | Multi-currency — reverses the MYR-only decision | R14 | ✅ **FULL multi-currency** |
 | D-6 | Time of day on a transaction | R6 (interim), R15 (real) | Recommendation below |
-| D-7 | Ledger switching (Household / Personal) | R2 | **Owner sign-off** |
+| D-7 | Ledger switching (Household / Personal) | R2 | ✅ **DEFER** — no switch in R2 |
 | D-8 | Notifications — is there anything to notify about? | R2 (badge), R17 | Recommendation below |
 | D-9 | Number formatting: minus sign, cents in summaries | R1 | Recommendation below |
 | D-10 | Category colour: per-category or per-type | R7 | Recommendation below |
-| D-11 | Composer parsing: rules or Claude | R7 | **Owner sign-off** (Phase 5a) |
+| D-11 | Composer parsing: rules or Claude | R7 | ✅ **CLAUDE HAIKU** — governed, rules-first |
 | D-12 | Currency in the mockups is `$`; the app is MYR | R1 | Recommendation below |
 | D-13 | e2e churn: convert selectors or accept rewrites | R1 | Recommendation below |
 | D-14 | Keep `/wallet/canonicalize-merchants` in the new IA? | R3 | Recommendation below |
-| D-15 | Task sharing across the household | R4, R10 | **Owner sign-off** |
+| D-15 | Task sharing across the household | R4, R10 | ✅ **APPROVED** — share like transactions |
 
 ---
 
@@ -57,7 +63,13 @@ attribute. Ported CSS works unchanged, Tailwind works unchanged, and the
 pre-paint script gains one line. Spec 58 (which blocks the JS bundle to prove
 the pre-paint works) must be extended to assert the attribute too.
 
-## D-3 · The bullet outliner — **owner sign-off**
+## D-3 · The bullet outliner — ✅ **RESOLVED: keep it**
+
+> **Owner, 2026-08-21:** keep the outliner — "awesome for brainstorming or just
+> taking some notes." Recommended option 1 adopted: it survives as a **view mode
+> on the list-detail page** (D-3 recommendation below). Nothing about the
+> outliner's behaviour changes; it stops being the front door.
+
 
 `TasksPage.tsx` is 792 lines of Workflowy-style outliner: nested tree, keyboard
 shortcuts, zoom-to-bullet, DnD, notes. **The proposal contains no outliner.** Its
@@ -77,7 +89,15 @@ Three options:
 This has to be the owner's call — it is the one place the redesign deletes
 shipped functionality rather than adding to it.
 
-## D-4 · Trips: module or lens — **owner sign-off**
+## D-4 · Trips: module or lens — ✅ **RESOLVED: module**
+
+> **Owner, 2026-08-21:** module, to prioritise it — and the lens was explained
+> in full before confirming. The lens has no home for the wishlist and bookings
+> (neither task nor transaction) and cramps the differentiator pages onto
+> already-full Wallet/Day screens; the module's dead-tab cost is mitigated by the
+> badge-only-when-live rule and the "travel as a category of your life" landing
+> page. R6 builds the tab.
+
 
 `REVIEW.md` v15 argues for a fourth module: a wishlist and bookings are neither
 tasks nor transactions and have nowhere to live otherwise. The cost is a fourth
@@ -87,7 +107,14 @@ The design's mitigation is real (the landing page is *travel as a category of
 your life*, not the active trip), but this is a permanent change to the app's
 top-level shape. Confirm before R6 builds the tab.
 
-## D-5 · Multi-currency — **owner sign-off**
+## D-5 · Multi-currency — ✅ **RESOLVED: full multi-currency**
+
+> **Owner, 2026-08-21:** go full multi-currency. This reverses CLAUDE.md §15's
+> single-currency decision — **update §6 and §15 when R14 ships.** R14 stays a
+> one-way door and must be split further before starting; audit every money
+> surface (`formatMYR` call sites, `countableAmount`, the dashboard pure module,
+> CSV export, settlements) before merge.
+
 
 CLAUDE.md §6 records the app as single-currency: *"the per-account currency
 selector was removed; `currency` stays 'MYR'"*. Trips needs a per-transaction
@@ -115,7 +142,13 @@ at 23:00 for a 09:00 coffee would place the coffee at 23:00, and the whole point
 of the timeline is that 09:41 Whole Foods and 09:48 "log the receipt" sit seven
 minutes apart.
 
-## D-7 · Ledger switching — **owner sign-off**
+## D-7 · Ledger switching — ✅ **RESOLVED: defer**
+
+> **Owner, 2026-08-21:** defer. R2 renders the account menu with the profile
+> card and the group list and **no switch**. Per-account and per-list (D-15)
+> sharing cover "share with the household"; if a clean "our books vs. just mine"
+> wall is wanted later, it comes back as its own proposal.
+
 
 The designed account menu switches between a **Household** ledger and a
 **Personal** one. Today there is one ledger per user plus `groups` for sharing
@@ -153,7 +186,22 @@ user has already chosen them), and use the six semantic roles only for
 *meaning* — positive, negative, warning, info. Charts read category colours;
 chips and states read semantics. `chartColors.ts` already does roughly this.
 
-## D-11 · Composer parsing — **owner sign-off**
+## D-11 · Composer parsing — ✅ **RESOLVED: Claude Haiku, governed**
+
+> **Owner, 2026-08-21:** use the Claude API, **Haiku model only**, "use it
+> wisely", and **warn before any design decision to use the API** — plus a
+> request for the full list of places the API is needed.
+>
+> This establishes a standing governance rule that reaches beyond the composer.
+> It is recorded in full, with the complete touchpoint inventory, in
+> **[cross-cutting/ai-usage.md](cross-cutting/ai-usage.md)** — the single source
+> of truth for API usage. In short: Haiku everywhere; rules-first with Claude as
+> fallback; one call per submit; preview-confirmed, never a silent write; works
+> with no key; and no new call wired without an explicit per-touchpoint yes.
+>
+> Also saved as a session-persistent feedback memory so the warn-before-wiring
+> rule survives across sessions.
+
 
 The composer's whole argument is that `coffee 4.20 cash` beats a form. Two ways
 to parse it:
@@ -193,7 +241,13 @@ the proposal. **Recommendation: keep it**, moved into the profile menu's
 *Import & export data* group alongside Import CSV — it is data plumbing, which
 is exactly what the proposal moved out of the sidebar.
 
-## D-15 · Task sharing — **owner sign-off**
+## D-15 · Task sharing — ✅ **RESOLVED: approved**
+
+> **Owner, 2026-08-21:** "Task can be shared like transactions." R4 includes
+> `tasks.assignee_id` and `task_list_shares` (mirroring `account_shares`), R5
+> ships the assignee column, R10 ships Assigned to me. Reuse the Phase 5b sharing
+> shape — do not invent a second sharing model.
+
 
 The designed Tasks module is household-shared throughout: assignees, "Assigned
 to me", turnaround times per person, a 90-day split of who completes what.

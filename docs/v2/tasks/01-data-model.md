@@ -3,7 +3,7 @@
 Purpose: make the designed task row renderable. This is **adoption cost, not
 feature scope** — R5 cannot draw `tasks.html` without it.
 
-Blocking decisions: **D-3** (outliner), **D-15** (sharing).
+Decisions (both resolved 2026-08-21): **D-3** → keep outliner as a view mode; **D-15** → task sharing approved. See [../open-decisions.md](../open-decisions.md).
 
 ---
 
