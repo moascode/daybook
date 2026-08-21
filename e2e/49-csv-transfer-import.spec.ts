@@ -54,7 +54,7 @@ test('upload CSV and reach the review step', async () => {
 test('type select offers Transfer and swaps category for a destination dropdown', async () => {
   // Petron (RM 200) is the credit-card payment leg — mark it as a transfer.
   // Fixture rows keep CSV order: Grab Food, Petron, Giant, Netflix.
-  const petronRow = page.locator('tbody tr').nth(1)
+  const petronRow = page.getByTestId('csv-review-row').nth(1)
   await expect(petronRow.getByRole('textbox', { name: /^Merchant for row/ })).toHaveValue('Petron')
   const typeSelect = petronRow.getByRole('combobox', { name: /^Type for row/ })
   await expect(typeSelect.locator('option', { hasText: 'Transfer' })).toHaveCount(1)
@@ -105,9 +105,9 @@ test('the transfer shows as a single row and is excluded from totals', async () 
 test('balances move on both accounts', async () => {
   await navTo(page, 'accounts')
   // Main Bank: +180 income − 200 transferred out = −20.
-  await expect(accountCardFor(page, 'Main Bank')).toContainText(/-\s?RM\s?20\.00/)
+  await expect(accountCardFor(page, 'Main Bank').getByTestId('account-card-balance')).toHaveText(/-\s?RM\s?20\.00/)
   // Credit Card: +200 transferred in.
-  await expect(accountCardFor(page, 'Credit Card')).toContainText(/RM\s?200\.00/)
+  await expect(accountCardFor(page, 'Credit Card').getByTestId('account-card-balance')).toHaveText(/RM\s?200\.00/)
 })
 
 // ── Item 3: transfer hint on edit ────────────────────────────────────────

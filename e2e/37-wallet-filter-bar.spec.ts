@@ -58,10 +58,10 @@ test('"Custom…" reveals From/To pre-filled with the current range', async () =
   // the app correctly shows 2026-07-01. Same pre-existing bug that was fixed in
   // e2e/03-wallet-transactions.spec.ts (localISO); the app is not involved.
   const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  await expect(page.getByLabel('From')).toHaveValue(firstDay)
+  await expect(page.getByTestId('filter-from')).toHaveValue(firstDay)
   // Picking a preset closes the editors again
   await page.getByTestId('filter-this-month').click()
-  await expect(page.getByLabel('From')).toHaveCount(0)
+  await expect(page.getByTestId('filter-from')).toHaveCount(0)
 })
 
 // ── Filters toggle + active-count badge ────────────────────────────────
@@ -70,14 +70,14 @@ test('the Filters section is collapsed by default and opens on toggle', async ()
   await expect(page.getByTestId('filter-panel')).toHaveCount(0)
   await page.getByTestId('filter-toggle').click()
   await expect(page.getByTestId('filter-panel')).toBeVisible()
-  await expect(page.getByLabel('Type')).toBeVisible()
+  await expect(page.getByTestId('filter-type')).toBeVisible()
 })
 
 test('active filters are counted on the Filters badge', async () => {
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
-  await page.getByLabel('Type').selectOption('expense')
+  await page.getByTestId('filter-type').selectOption('expense')
   await expect(page.getByTestId('filter-count')).toHaveText('1')
-  await page.getByLabel('Account').selectOption('Bar Account')
+  await page.getByTestId('filter-account').selectOption('Bar Account')
   await expect(page.getByTestId('filter-count')).toHaveText('2')
 })
 
@@ -106,12 +106,12 @@ test('Clear resets every filter and disappears when nothing is active', async ()
 
 test('the Category dropdown footer option opens the category manager', async () => {
   await page.getByTestId('filter-toggle').click()
-  await page.getByLabel('Category').selectOption('__manage__')
+  await page.getByTestId('filter-category').selectOption('__manage__')
   await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).not.toBeVisible()
   // The active category filter is unchanged (still All Categories)
-  await expect(page.getByLabel('Category')).toHaveValue('')
+  await expect(page.getByTestId('filter-category')).toHaveValue('')
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
 })
 

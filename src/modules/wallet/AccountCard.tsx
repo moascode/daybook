@@ -100,7 +100,7 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
             <div>
               <h3 className="font-semibold text-fg">{account.name}</h3>
               <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                <Badge color={account.color}>
+                <Badge color={account.color} data-testid="account-card-type">
                   {ACCOUNT_TYPE_LABELS[account.type]}
                 </Badge>
                 <span className="text-xs text-fg-faint">{account.currency}</span>
@@ -175,6 +175,7 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
             Balance
           </p>
           <p
+            data-testid="account-card-balance"
             className={cn(
               'mt-0.5 text-xl font-bold',
               balance === null

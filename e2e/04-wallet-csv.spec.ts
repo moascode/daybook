@@ -108,17 +108,17 @@ test('review table shows the CSV rows with correct merchants', async () => {
 
 test('review table has checkboxes (included column)', async () => {
   // Each row has a checkbox; by default all are checked (included)
-  const checkboxes = page.locator('input[type="checkbox"]')
+  const checkboxes = page.getByTestId('csv-row-include')
   const count = await checkboxes.count()
   expect(count).toBeGreaterThanOrEqual(4)
 })
 
 test('unchecking a row reduces the import count', async () => {
   // Uncheck the first row
-  await page.locator('input[type="checkbox"]').first().uncheck()
+  await page.getByTestId('csv-row-include').first().uncheck()
   await expect(page.getByText('3 to import')).toBeVisible()
   // Re-check it for the actual import
-  await page.locator('input[type="checkbox"]').first().check()
+  await page.getByTestId('csv-row-include').first().check()
   await expect(page.getByText('4 to import')).toBeVisible()
 })
 
@@ -229,14 +229,14 @@ test('review category options are filtered by each row type', async ({ browser }
 
   // Positive amounts parse as income → the category select offers income
   // categories, never an expense-only one.
-  const firstRow = isoPage.locator('tbody tr').first()
-  const categorySelect = firstRow.locator('select').last()
+  const firstRow = isoPage.getByTestId('csv-review-row').first()
+  const categorySelect = firstRow.getByTestId('csv-row-category')
   await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(1)
   await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(0)
 
   // Flip the row to Expense → the options swap: an income category can no
   // longer be attached to an expense row.
-  await firstRow.locator('select').first().selectOption('expense')
+  await firstRow.getByTestId('csv-row-type').selectOption('expense')
   await expect(categorySelect.locator('option', { hasText: 'Food & Drink' })).toHaveCount(1)
   await expect(categorySelect.locator('option', { hasText: 'Salary' })).toHaveCount(0)
 

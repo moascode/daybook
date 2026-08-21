@@ -54,7 +54,7 @@ test('navigate to Transactions tab', async () => {
 
 test('shows "No transactions" placeholder when list is empty', async () => {
   // There are accounts but no transactions
-  await expect(page.getByText(/No transactions match/)).toBeVisible()
+  await expect(page.getByTestId('transactions-empty')).toBeVisible()
 })
 
 // ── Add expense ────────────────────────────────────────────────────────
@@ -99,12 +99,13 @@ test('add an expense transaction', async () => {
 
 test('expense shows negative amount in red', async () => {
   const row = transactionRowFor(page, 'Starbucks')
-  await expect(row.getByText(/RM\s125\.50/)).toHaveClass(/text-red-600/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveText(/RM\s125\.50/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveClass(/text-red-600/)
 })
 
 test('expense shows category badge', async () => {
   const row = transactionRowFor(page, 'Starbucks')
-  await expect(row.getByText('Food & Drink')).toBeVisible()
+  await expect(row.getByTestId('transaction-row-category')).toHaveText('Food & Drink')
 })
 
 // ── Add income ─────────────────────────────────────────────────────────
@@ -124,17 +125,18 @@ test('add an income transaction', async () => {
 
 test('income shows positive amount in green', async () => {
   const row = transactionRowFor(page, 'Acme Corp')
-  await expect(row.getByText(/RM\s5,000\.00/)).toHaveClass(/text-positive-600/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveText(/RM\s5,000\.00/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveClass(/text-positive-600/)
 })
 
 // ── Summary row ────────────────────────────────────────────────────────
 
 test('summary row shows correct income, expense and net', async () => {
-  // Income = 5000, Expense = 125.50, Net = 4874.50
-  await expect(page.getByText('RM 5,000.00').first()).toBeVisible()
-  await expect(page.getByText('RM 125.50').first()).toBeVisible()
-  // Net summary; the total-balance banner can show the same figure, so .first().
-  await expect(page.getByText('RM 4,874.50').first()).toBeVisible()
+  // Income = 5000, Expense = 125.50, Net = 4874.50 — anchored to the summary
+  // tiles so the total-balance banner sharing a figure can't satisfy them.
+  await expect(page.getByTestId('summary-income')).toContainText('RM 5,000.00')
+  await expect(page.getByTestId('summary-expense')).toContainText('RM 125.50')
+  await expect(page.getByTestId('summary-net')).toContainText('RM 4,874.50')
 })
 
 // ── Add transfer ────────────────────────────────────────────────────────
@@ -154,19 +156,20 @@ test('add a transfer between accounts', async () => {
 
 test('transfer shows blue arrow icon (not red/green)', async () => {
   const row = transactionRowFor(page, 'ATM Withdrawal')
-  await expect(row.getByText(/RM\s500\.00/)).toHaveClass(/text-blue-600/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveText(/RM\s500\.00/)
+  await expect(row.getByTestId('transaction-row-amount')).toHaveClass(/text-blue-600/)
 })
 
 test('transfer does NOT affect income/expense summary', async () => {
   // Income still 5000, expense still 125.50 — transfer is excluded from totals
-  await expect(page.getByText('RM 5,000.00').first()).toBeVisible()
-  await expect(page.getByText('RM 125.50').first()).toBeVisible()
+  await expect(page.getByTestId('summary-income')).toContainText('RM 5,000.00')
+  await expect(page.getByTestId('summary-expense')).toContainText('RM 125.50')
 })
 
 test('transfer shows source → destination account names', async () => {
   const row = transactionRowFor(page, 'ATM Withdrawal')
-  await expect(row.getByText('Test Bank')).toBeVisible()
-  await expect(row.getByText('Test Cash')).toBeVisible()
+  await expect(row.getByTestId('transaction-row-account')).toHaveText('Test Bank')
+  await expect(row.getByTestId('transaction-row-dest-account')).toHaveText('Test Cash')
 })
 
 // ── Edit transaction ────────────────────────────────────────────────────
@@ -195,8 +198,8 @@ test('update merchant and amount, save', async () => {
 
 test('updated amount is reflected in the summary', async () => {
   // Expense is now 98.00, net = 5000 - 98 = 4902
-  await expect(page.getByText('RM 98.00').first()).toBeVisible()
-  await expect(page.getByText('RM 4,902.00').first()).toBeVisible()
+  await expect(page.getByTestId('summary-expense')).toContainText('RM 98.00')
+  await expect(page.getByTestId('summary-net')).toContainText('RM 4,902.00')
 })
 
 // ── Delete transaction ──────────────────────────────────────────────────
@@ -218,27 +221,27 @@ test('deleted transaction stays gone when the undo toast is not used', async () 
 
 test('filter by type: Income shows only income transactions', async () => {
   await ensureFiltersOpen()
-  await page.getByLabel('Type').selectOption('income')
+  await page.getByTestId('filter-type').selectOption('income')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
 })
 
 test('filter by type: Expense shows only expense transactions', async () => {
-  await page.getByLabel('Type').selectOption('expense')
+  await page.getByTestId('filter-type').selectOption('expense')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
   // No expense transactions remain (we deleted Costa Coffee)
-  await expect(page.getByText(/No transactions match/)).toBeVisible()
+  await expect(page.getByTestId('transactions-empty')).toBeVisible()
 })
 
 test('filter by type: Transfer shows only transfers', async () => {
-  await page.getByLabel('Type').selectOption('transfer')
+  await page.getByTestId('filter-type').selectOption('transfer')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
 })
 
 test('reset type filter to All Types', async () => {
-  await page.getByLabel('Type').selectOption('all')
+  await page.getByTestId('filter-type').selectOption('all')
   // Both Acme Corp (income) and ATM Withdrawal (transfer) visible
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
@@ -247,7 +250,7 @@ test('reset type filter to All Types', async () => {
 test('filter by date range: future From date yields no results', async () => {
   // From/To live behind the Custom… segment of the date-range control
   await page.getByTestId('filter-custom-range').click()
-  await page.getByLabel('From').fill('2030-01-01')
+  await page.getByTestId('filter-from').fill('2030-01-01')
   // The empty state names the active range and offers to widen it, rather than
   // the generic "no match" that left the date filter as an unstated cause.
   await expect(page.getByTestId('transactions-empty')).toContainText('2030-01-01')
@@ -255,15 +258,15 @@ test('filter by date range: future From date yields no results', async () => {
 })
 
 test('clear date filter restores transactions', async () => {
-  await page.getByLabel('From').fill('')
+  await page.getByTestId('filter-from').fill('')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
 })
 
 test('filter by account: Test Cash shows only cash account transactions', async () => {
-  await page.getByLabel('Account').selectOption('Test Cash')
+  await page.getByTestId('filter-account').selectOption('Test Cash')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
-  await page.getByLabel('Account').selectOption('')
+  await page.getByTestId('filter-account').selectOption('')
 })
 
 test('filter by tag: "coffee" shows tagged transaction', async () => {
@@ -296,8 +299,8 @@ test('clear tag filter restores all transactions', async () => {
 
 test('tag filter works standalone without other filters (no category/account required)', async () => {
   // Ensure no category or account filter is active
-  await page.getByLabel('Account').selectOption('')
-  await page.getByLabel('Category').selectOption('')
+  await page.getByTestId('filter-account').selectOption('')
+  await page.getByTestId('filter-category').selectOption('')
   // Filter by coffee tag alone — should return only Kopitiam
   const filterTagInput = page.locator('#filter-tags')
   await filterTagInput.click()
@@ -352,9 +355,11 @@ test('tag filter uses OR logic: selecting multiple tags shows transactions match
 // ── Date grouping headers ────────────────────────────────────────────────
 
 test('transactions are grouped by date with day headers', async () => {
-  // Transactions from different dates should have date header rows
-  await expect(page.getByText('14 Jan 2026')).toBeVisible()
-  await expect(page.getByText('16 Jan 2026')).toBeVisible()
+  // Transactions from different dates should have date header rows. Anchored to
+  // the day-header seam so a weekday/date split in the reskin can't strand the
+  // date text in a sibling element and fail a bare getByText.
+  await expect(page.getByTestId('day-header').filter({ hasText: '14 Jan 2026' })).toBeVisible()
+  await expect(page.getByTestId('day-header').filter({ hasText: '16 Jan 2026' })).toBeVisible()
 })
 
 // ── Account balance reflects transactions ────────────────────────────────
@@ -363,10 +368,10 @@ test('account balance updates to reflect transactions', async () => {
   await navTo(page, 'accounts')
   // Test Bank: income 5000 - transfer 500 - expense 12 (Kopitiam) - expense 30 (Bistro) = 4458
   const bankCard = accountCardFor(page, 'Test Bank')
-  await expect(bankCard.getByText(/RM\s4,458\.00/)).toBeVisible()
+  await expect(bankCard.getByTestId('account-card-balance')).toHaveText(/RM\s4,458\.00/)
   // Test Cash: received 500 from transfer
   const cashCard = accountCardFor(page, 'Test Cash')
-  await expect(cashCard.getByText(/RM\s500\.00/)).toBeVisible()
+  await expect(cashCard.getByTestId('account-card-balance')).toHaveText(/RM\s500\.00/)
 })
 
 // ── Quick date filters ───────────────────────────────────────────────────
@@ -381,8 +386,8 @@ test('date range "This month" is applied and shown as active', async () => {
   const now = new Date()
   const firstDay = localISO(new Date(now.getFullYear(), now.getMonth(), 1))
   const lastDay = localISO(new Date(now.getFullYear(), now.getMonth() + 1, 0))
-  await expect(page.getByLabel('From')).toHaveValue(firstDay)
-  await expect(page.getByLabel('To')).toHaveValue(lastDay)
+  await expect(page.getByTestId('filter-from')).toHaveValue(firstDay)
+  await expect(page.getByTestId('filter-to')).toHaveValue(lastDay)
 })
 
 test('date range "Last month" sets the previous month bounds', async () => {
@@ -393,8 +398,8 @@ test('date range "Last month" sets the previous month bounds', async () => {
   const now = new Date()
   const firstDay = localISO(new Date(now.getFullYear(), now.getMonth() - 1, 1))
   const lastDay = localISO(new Date(now.getFullYear(), now.getMonth(), 0))
-  await expect(page.getByLabel('From')).toHaveValue(firstDay)
-  await expect(page.getByLabel('To')).toHaveValue(lastDay)
+  await expect(page.getByTestId('filter-from')).toHaveValue(firstDay)
+  await expect(page.getByTestId('filter-to')).toHaveValue(lastDay)
 })
 
 test('date range "All time" clears the date range', async () => {
@@ -402,8 +407,8 @@ test('date range "All time" clears the date range', async () => {
   await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByTestId('filter-clear-dates')).toHaveClass(/bg-brand/)
   await page.getByTestId('filter-custom-range').click()
-  await expect(page.getByLabel('From')).toHaveValue('')
-  await expect(page.getByLabel('To')).toHaveValue('')
+  await expect(page.getByTestId('filter-from')).toHaveValue('')
+  await expect(page.getByTestId('filter-to')).toHaveValue('')
 })
 
 // ── Multi-select delete ──────────────────────────────────────────────────
@@ -581,7 +586,7 @@ test('default From/To equal the current month bounds in a UTC+8 timezone', async
   })
   // Custom… opens the From/To editors pre-filled with the active (default) range.
   await pg.getByTestId('filter-custom-range').click()
-  await expect(pg.getByLabel('From')).toHaveValue(expected.from)
-  await expect(pg.getByLabel('To')).toHaveValue(expected.to)
+  await expect(pg.getByTestId('filter-from')).toHaveValue(expected.from)
+  await expect(pg.getByTestId('filter-to')).toHaveValue(expected.to)
   await context.close()
 })

@@ -44,7 +44,7 @@ export function CategoryBreakdown({
         {rows.map((row) => {
           const prior = previous.get(row.id) ?? 0
           return (
-            <li key={row.id}>
+            <li key={row.id} data-testid="category-breakdown-row">
               <Link
                 to={transactionsLink({ categoryId: row.id, dateFrom, dateTo })}
                 className="grid min-h-[2.25rem] grid-cols-[minmax(5rem,7rem)_minmax(0,1fr)_minmax(4.5rem,auto)] items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500 sm:gap-3"

@@ -660,6 +660,7 @@ export function WalletPage() {
             {filterChips.map((chip) => (
               <span
                 key={chip.key}
+                data-testid="filter-chip"
                 className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
               >
                 {chip.label}
@@ -683,18 +684,21 @@ export function WalletPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Select
                 label="Type"
+                data-testid="filter-type"
                 options={typeOptions}
                 value={filters.type}
                 onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
               />
               <Select
                 label="Account"
+                data-testid="filter-account"
                 options={accountOptions}
                 value={filters.accountId ?? ''}
                 onChange={(e) => setFilters({ accountId: e.target.value || null })}
               />
               <Select
                 label="Category"
+                data-testid="filter-category"
                 options={categoryOptions}
                 value={filters.categoryId ?? ''}
                 onChange={(e) => {

@@ -185,7 +185,7 @@ test('exporting with only one transaction selected produces a file with that tra
 test('export modal only shows transactions matching the active type filter', async () => {
   // Apply "Expense" type filter
   await ensureFiltersOpen()
-  await page.getByLabel('Type').selectOption('expense')
+  await page.getByTestId('filter-type').selectOption('expense')
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   const list = page.getByTestId('export-transaction-list')
@@ -194,7 +194,7 @@ test('export modal only shows transactions matching the active type filter', asy
   await expect(list.getByText('Income Source')).not.toBeVisible()
   // Close and reset filter
   await page.getByRole('button', { name: 'Cancel' }).click()
-  await page.getByLabel('Type').selectOption('all')
+  await page.getByTestId('filter-type').selectOption('all')
 })
 
 // ── Server-side export honours active filters (Phase 5c C4) ───────────
@@ -212,13 +212,13 @@ async function downloadContent(testid: string): Promise<string> {
 
 test('exported file with an active type filter contains only matching rows', async () => {
   await ensureFiltersOpen()
-  await page.getByLabel('Type').selectOption('expense')
+  await page.getByTestId('filter-type').selectOption('expense')
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   const content = await downloadContent('export-csv-btn')
   expect(content).toMatch(/Test Merchant/)
   expect(content).not.toMatch(/Income Source/)
-  await page.getByLabel('Type').selectOption('all')
+  await page.getByTestId('filter-type').selectOption('all')
 })
 
 test('exported file with an active search filter contains only matching rows', async () => {

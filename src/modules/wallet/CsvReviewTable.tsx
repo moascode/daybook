@@ -95,6 +95,7 @@ export function CsvReviewTable({
           {rows.map((row, index) => (
             <tr
               key={index}
+              data-testid="csv-review-row"
               className={cn(
                 'transition-colors',
                 !row.included && 'bg-surface-sunken opacity-60',
@@ -109,6 +110,8 @@ export function CsvReviewTable({
                   checked={row.included}
                   onChange={() => onToggleInclude(index)}
                   className="h-4 w-4 rounded border-line-strong text-brand-500 focus:ring-brand-500"
+                  data-testid="csv-row-include"
+                  aria-label={`Include row ${index + 1}`}
                 />
               </td>
 
@@ -181,6 +184,7 @@ export function CsvReviewTable({
               <td className="px-3 py-2">
                 <Select
                   options={typeOptions}
+                  data-testid="csv-row-type"
                   value={row.type}
                   onChange={(e) => {
                     const type = e.target.value as ImportRow['type']
@@ -217,6 +221,7 @@ export function CsvReviewTable({
                 {row.type === 'transfer' ? (
                   <Select
                     options={destinationOptions}
+                    data-testid="csv-row-destination"
                     value={row.destinationAccountId ?? ''}
                     onChange={(e) =>
                       onRowChange(index, {
@@ -231,6 +236,7 @@ export function CsvReviewTable({
                   <>
                     <Select
                       options={categoryOptionsFor(row.type)}
+                      data-testid="csv-row-category"
                       value={row.categoryId ?? ''}
                       onChange={(e) =>
                         // A hand-picked category overrides the suggestion —
