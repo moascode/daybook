@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { newAppPage, waitForApp, signUpOnPage, businessDatePlus, bulletNodeFor } from './helpers'
+import { newAppPage, waitForApp, signUpOnPage, businessDatePlus } from './helpers'
 
 test.describe('module tabs', () => {
   test('Tasks and Wallet tabs navigate and mark the active module', async ({ browser }) => {
@@ -43,33 +43,25 @@ test.describe('module tabs', () => {
   })
 
   test('the Tasks tab shows a live overdue+due-today count', async ({ browser }) => {
-    // This test does more server round-trips than most (task create + update
-    // + a full reload, which itself fires the shell's whole badge-poll burst
-    // on top of the normal boot sequence) — local D1/miniflare has shown
-    // itself to be tight on the default 45s budget under that load; give it
-    // real headroom rather than a flaky pass/fail line.
-    test.setTimeout(90_000)
     const page = await newAppPage(browser, '/tasks')
 
     // No tasks yet — no badge.
     const tasksTab = page.getByTestId('nav-tasks').locator('visible=true')
     await expect(tasksTab.locator('.count')).toHaveCount(0)
 
-    // Seed one overdue task, then reload so the shell's badge poll (fires once
-    // on mount) picks it up — it only re-polls every 60s otherwise.
-    await page.getByRole('button', { name: 'New task' }).first().click()
-    await page.keyboard.type('Overdue badge check')
-    await page.getByRole('textbox', { name: 'Task content' }).last().blur()
-    await page.waitForTimeout(500)
+    // Seed one overdue task via the API directly rather than the UI (click →
+    // type → blur → locate the resulting bullet-node → update) — same end
+    // state, far fewer round-trips and no dependency on DOM/React timing.
+    const created = await page.request.post('http://localhost:5173/api/tasks', {
+      data: { parentId: null, content: 'Overdue badge check', sortOrder: 1 },
+    })
+    const { id: taskId } = (await created.json()) as { id: string }
+    await page.request.patch(`http://localhost:5173/api/tasks/${taskId}`, {
+      data: { dueDate: businessDatePlus(-2) },
+    })
 
-    const node = bulletNodeFor(page, 'Overdue badge check')
-    const taskId = await node.getAttribute('data-task-id')
-    await page.evaluate(
-      ({ id, dueDate }: { id: string; dueDate: string }) => window.__testUpdateTask(id, { dueDate }),
-      { id: taskId, dueDate: businessDatePlus(-2) },
-    )
-    await page.waitForTimeout(400)
-
+    // Reload so the shell's badge poll (fires once on mount) picks it up —
+    // it only re-polls every 60s otherwise.
     await page.reload()
     await waitForApp(page)
     await expect(tasksTab.locator('.count')).toHaveText('1')
