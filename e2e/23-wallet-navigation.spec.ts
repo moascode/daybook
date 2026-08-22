@@ -46,11 +46,13 @@ test.describe('wallet module sidebar navigation', () => {
     // only rather than assuming a page-level <h1> that no longer exists.
     await navTo(page, 'budgets')
     await expect(page).toHaveURL(/\/wallet\/budgets$/)
-    await expect(page.getByRole('heading', { name: 'Budgets' })).toBeVisible()
+    // exact: 'Budgets' is otherwise a substring match of the empty state's
+    // "No budgets yet" <h3> — getByRole name matching is substring by default.
+    await expect(page.getByRole('heading', { name: 'Budgets', exact: true })).toBeVisible()
 
     await navTo(page, 'reports')
     await expect(page).toHaveURL(/\/wallet\/reports$/)
-    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Reports', exact: true })).toBeVisible()
   })
 
   test('the Tasks module sidebar replaces the Wallet one when navigating away', async ({ browser }) => {
