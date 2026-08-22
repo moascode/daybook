@@ -71,50 +71,63 @@ export function useNotificationBadges(): void {
   useEffect(() => {
     let cancelled = false
 
-    const load = async () => {
-      try {
-        const raw = await api.get<Record<string, unknown>[]>('/invites')
-        if (!cancelled) setPendingInvites(raw.map(mapInvite))
-      } catch {
-        // ignore — the poll retries in 60s
-      }
+    // Four independent counts — none depends on another's result, so they run
+    // concurrently rather than as one long sequential chain (each still fails
+    // independently and retries on the next 60s tick; Promise.all is safe here
+    // because every branch catches its own error instead of letting it reject).
+    const load = () =>
+      Promise.all([
+        (async () => {
+          try {
+            const raw = await api.get<Record<string, unknown>[]>('/invites')
+            if (!cancelled) setPendingInvites(raw.map(mapInvite))
+          } catch {
+            // ignore — the poll retries in 60s
+          }
+        })(),
 
-      if (!cancelled) await refreshClaimBadge()
+        (async () => {
+          if (!cancelled) await refreshClaimBadge()
+        })(),
 
-      try {
-        await loadRecurringTransactions()
-        if (cancelled) return
-        const userId = useAppStore.getState().user?.id ?? ''
-        const dismissed = getDismissedBillIds(userId)
-        const today = startOfDay(new Date())
-        const count = useWalletStore
-          .getState()
-          .recurringTransactions.filter((r) => {
-            if (dismissed.has(r.id)) return false
-            return differenceInDays(parseISO(r.nextDueDate), today) <= 7
-          }).length
-        useNotificationBadgeStore.getState().setBillsDueCount(count)
-      } catch {
-        // ignore — the poll retries in 60s
-      }
+        (async () => {
+          try {
+            await loadRecurringTransactions()
+            if (cancelled) return
+            const userId = useAppStore.getState().user?.id ?? ''
+            const dismissed = getDismissedBillIds(userId)
+            const today = startOfDay(new Date())
+            const count = useWalletStore
+              .getState()
+              .recurringTransactions.filter((r) => {
+                if (dismissed.has(r.id)) return false
+                return differenceInDays(parseISO(r.nextDueDate), today) <= 7
+              }).length
+            useNotificationBadgeStore.getState().setBillsDueCount(count)
+          } catch {
+            // ignore — the poll retries in 60s
+          }
+        })(),
 
-      try {
-        await loadTasks()
-        if (cancelled) return
-        const today = startOfDay(new Date())
-        // Due today or overdue, matching BulletNode.tsx's overdue check plus
-        // "today" (BulletNode: strictly before today = overdue only).
-        const count = useTasksStore
-          .getState()
-          .tasks.filter((t) => {
-            if (t.isCompleted || !t.dueDate) return false
-            return !isBefore(today, startOfDay(parseISO(t.dueDate)))
-          }).length
-        useNotificationBadgeStore.getState().setTasksDueCount(count)
-      } catch {
-        // ignore — the poll retries in 60s
-      }
-    }
+        (async () => {
+          try {
+            await loadTasks()
+            if (cancelled) return
+            const today = startOfDay(new Date())
+            // Due today or overdue, matching BulletNode.tsx's overdue check
+            // plus "today" (BulletNode: strictly before today = overdue only).
+            const count = useTasksStore
+              .getState()
+              .tasks.filter((t) => {
+                if (t.isCompleted || !t.dueDate) return false
+                return !isBefore(today, startOfDay(parseISO(t.dueDate)))
+              }).length
+            useNotificationBadgeStore.getState().setTasksDueCount(count)
+          } catch {
+            // ignore — the poll retries in 60s
+          }
+        })(),
+      ]).then(() => undefined)
 
     load()
     const timer = setInterval(load, 60_000)

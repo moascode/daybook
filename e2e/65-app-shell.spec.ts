@@ -43,6 +43,12 @@ test.describe('module tabs', () => {
   })
 
   test('the Tasks tab shows a live overdue+due-today count', async ({ browser }) => {
+    // This test does more server round-trips than most (task create + update
+    // + a full reload, which itself fires the shell's whole badge-poll burst
+    // on top of the normal boot sequence) — local D1/miniflare has shown
+    // itself to be tight on the default 45s budget under that load; give it
+    // real headroom rather than a flaky pass/fail line.
+    test.setTimeout(90_000)
     const page = await newAppPage(browser, '/tasks')
 
     // No tasks yet — no badge.
