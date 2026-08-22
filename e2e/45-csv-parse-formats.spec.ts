@@ -47,8 +47,8 @@ test('imports a US-format date and a European-decimal amount correctly', async (
   await expect(page.getByText('Review Import')).toBeVisible()
 
   // B-13: 12/31/2025 (day 31 > 12 ⇒ MM/DD) → 2025-12-31, not the invalid 2025-31-12.
-  await expect(page.locator('input[type="date"]')).toHaveValue('2025-12-31')
+  await expect(page.getByTestId('csv-row-date')).toHaveValue('2025-12-31')
   // B-14: European "1.234,56" → 1234.56, not 1.23456.
-  await expect(page.locator('input[type="number"]')).toHaveValue('1234.56')
+  await expect(page.getByTestId('csv-row-amount')).toHaveValue('1234.56')
   await expect(page.getByRole('textbox', { name: /^Merchant for row/ })).toHaveValue('Euro Store')
 })

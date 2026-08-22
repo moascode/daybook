@@ -302,7 +302,7 @@ test('tag filter works standalone without other filters (no category/account req
   await page.getByTestId('filter-account').selectOption('')
   await page.getByTestId('filter-category').selectOption('')
   // Filter by coffee tag alone — should return only Kopitiam
-  const filterTagInput = page.locator('#filter-tags')
+  const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('coffee')
   await filterTagInput.press('ArrowDown')
@@ -324,9 +324,8 @@ test('tag filter uses OR logic: selecting multiple tags shows transactions match
   })
   await expect(page.getByRole('dialog')).not.toBeVisible()
 
-  // Use #filter-tags id to locate the filter bar TagInput reliably
-  // (placeholder disappears after the first tag is selected)
-  const filterTagInput = page.locator('#filter-tags')
+  // The placeholder disappears after the first tag is selected, so anchor on testid.
+  const filterTagInput = page.getByTestId('filter-tags')
 
   // Select 'coffee' tag
   await filterTagInput.click()
@@ -500,7 +499,7 @@ test('tag filter works when Last Month date range is active', async () => {
 
   // Now apply the tag filter — only the tagged transaction should remain.
   await ensureFiltersOpen()
-  const filterTagInput = page.locator('#filter-tags')
+  const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
   await filterTagInput.press('ArrowDown')
@@ -532,7 +531,7 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
 
   // Applying any tag filter must NOT crash (if it did, the list would stay unchanged).
   await ensureFiltersOpen()
-  const filterTagInput = page.locator('#filter-tags')
+  const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
   await filterTagInput.press('ArrowDown')

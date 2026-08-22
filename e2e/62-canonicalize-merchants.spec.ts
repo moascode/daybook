@@ -81,8 +81,7 @@ test('navigating directly to /wallet/canonicalize-merchants loads a preview tabl
 })
 
 test('the preview table shows the messy merchant and its canonical form', async () => {
-  const table = page.getByTestId('canonicalize-merchants-table')
-  const row = table.locator('tr').filter({ hasText: MESSY_MERCHANT })
+  const row = page.getByTestId('canonicalize-merchant-row').filter({ hasText: MESSY_MERCHANT })
   await expect(row).toBeVisible()
   await expect(row.getByText(CANONICAL_MERCHANT, { exact: true })).toBeVisible()
 })
