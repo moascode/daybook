@@ -36,16 +36,21 @@ test.describe('wallet module sidebar navigation', () => {
     }
   })
 
-  test('sub-links navigate and the sidebar reflects the active page', async ({ browser }) => {
+  test('sub-links navigate and the page renders', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
 
+    // R2 retires the old TopBar's route-title <h1> (routeTitles.ts) along with
+    // TopBar itself — the app bar has no page-title area, by design (it's
+    // module tabs + search, not a title bar). Each page's own content heading
+    // is an <h2> (e.g. BudgetsPage/ReportsPage), so this now matches by name
+    // only rather than assuming a page-level <h1> that no longer exists.
     await navTo(page, 'budgets')
     await expect(page).toHaveURL(/\/wallet\/budgets$/)
-    await expect(page.getByRole('heading', { name: 'Budgets', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Budgets' })).toBeVisible()
 
     await navTo(page, 'reports')
     await expect(page).toHaveURL(/\/wallet\/reports$/)
-    await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible()
   })
 
   test('the Tasks module sidebar replaces the Wallet one when navigating away', async ({ browser }) => {
