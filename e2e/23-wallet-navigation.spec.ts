@@ -2,20 +2,26 @@ import { test, expect } from '@playwright/test'
 import { newAppPage, navTo, navItem } from './helpers'
 
 /**
- * Phase A — wallet navigation moved from a squeezed horizontal tab strip to a
- * grouped, collapsible "Wallet" section in the left Sidebar.
+ * R2 — wallet navigation moved from a squeezed horizontal tab strip (Phase A),
+ * then from a collapsible "Wallet" section inside one shared sidebar, to a
+ * module-scoped sidebar: visiting /wallet* shows only Wallet's own nav, with
+ * no cross-module expand/collapse control (that mechanism no longer exists —
+ * the app bar's module tabs answer "which module", the sidebar only answers
+ * "where inside it"). See docs/v2/foundation/03-app-shell.md §4.
  */
-test.describe('wallet left-panel navigation', () => {
-  test('wallet section auto-expands on /wallet and shows grouped sub-links', async ({
+test.describe('wallet module sidebar navigation', () => {
+  test('the Wallet module sidebar shows the grouped nav with no group label on the first set', async ({
     browser,
   }) => {
     const page = await newAppPage(browser, '/wallet')
 
-    // Group headers are present when the section is expanded.
-    await expect(page.getByText('Daily', { exact: true })).toBeVisible()
-    await expect(page.getByText('Planning', { exact: true })).toBeVisible()
+    // First group (Overview/Transactions/Accounts/Shared) is unlabeled; only
+    // "Plan" and "Analyse" carry group headers now (design spec §4 table).
+    await expect(page.getByText('Plan', { exact: true })).toBeVisible()
+    await expect(page.getByText('Analyse', { exact: true })).toBeVisible()
 
-    // All nine destinations are reachable as sidebar nav items.
+    // All eight sidebar destinations are reachable (Import CSV moved off the
+    // sidebar into the account menu — see the separate test below).
     for (const dest of [
       'transactions',
       'dashboard',
@@ -25,15 +31,12 @@ test.describe('wallet left-panel navigation', () => {
       'goals',
       'recurring',
       'reports',
-      'import',
     ]) {
       await expect(navItem(page, dest)).toBeVisible()
     }
   })
 
-  test('sub-links navigate and the top bar reflects the active page', async ({
-    browser,
-  }) => {
+  test('sub-links navigate and the sidebar reflects the active page', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
 
     await navTo(page, 'budgets')
@@ -45,30 +48,24 @@ test.describe('wallet left-panel navigation', () => {
     await expect(page.getByRole('heading', { name: 'Reports', level: 1 })).toBeVisible()
   })
 
-  test('the Wallet section can be collapsed and re-expanded', async ({ browser }) => {
+  test('the Tasks module sidebar replaces the Wallet one when navigating away', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
-
     await expect(navItem(page, 'budgets')).toBeVisible()
 
-    await navTo(page, 'wallet-toggle')
+    await page.goto('/tasks')
+    // Wallet's own nav is gone — only the current module's nav renders.
     await expect(navItem(page, 'budgets')).toBeHidden()
-
-    await navTo(page, 'wallet-toggle')
-    await expect(navItem(page, 'budgets')).toBeVisible()
   })
 
-  test('leaving /wallet clears a manual collapse so returning auto-expands', async ({
-    browser,
-  }) => {
+  test('Import CSV is reachable from the account menu, not the sidebar', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
-    await expect(navItem(page, 'budgets')).toBeVisible()
 
-    await navTo(page, 'wallet-toggle')
-    await expect(navItem(page, 'budgets')).toBeHidden()
-
-    // Navigate away and back via the URL (not the Wallet link, which force-expands).
-    await page.goto('/tasks')
-    await page.goto('/wallet/dashboard')
-    await expect(navItem(page, 'budgets')).toBeVisible()
+    // D-14 / design spec §4: Import CSV leaves the sidebar; it must still be
+    // reachable from somewhere or the feature has no UI entry point at all.
+    // It lives in the account menu's settings pane, alongside merchant names.
+    await page.getByTestId('account-menu-button').click()
+    await page.getByTestId('account-menu-settings').click()
+    await page.getByTestId('account-menu-import-csv').click()
+    await expect(page).toHaveURL(/\/wallet\/import$/)
   })
 })

@@ -354,7 +354,11 @@
 .appbar .menu-btn { display: none; }
 .appbar { position: sticky; }
 .modtabs { position: absolute; left: 50%; transform: translateX(-50%); top: 0; }
-@media (max-width: 680px) { .appbar .menu-btn { display: flex; } }
+/* R2 fix: .modtabs already hides at 820px (rule above), but this rule used to
+   wait until 680px to show the hamburger, leaving 681-820px with NO way to
+   reach module nav (.tabbar/.fab are also 680px-only). Match the 820px
+   threshold so the hamburger fills the gap the moment the tabs disappear. */
+@media (max-width: 820px) { .appbar .menu-btn { display: flex; } }
 @media (max-width: 820px) {
   .appbar-left { flex: 1 1 auto; min-width: 0; }
   .appbar-right { flex: 0 0 auto; }
@@ -387,5 +391,14 @@
 /* the wrapper shows focus — the input must not draw a second box inside it */
 .search input:focus-visible, .filter-field input:focus-visible { box-shadow: none; }
 
+/* =====================================================================
+   R2 — Day/Trips render disabled (with a tooltip) rather than hidden until
+   R6 (design spec §2). Dims + blocks activation without pointer-events:none,
+   which would also suppress the hover-triggered .tip-label tooltip; the
+   disabled tabs are non-interactive elements (no href/onClick) rather than
+   working links, so nothing besides the tooltip needs to be blocked here.
+   ===================================================================== */
+.modtab[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
+.tabbar a[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 
 }
