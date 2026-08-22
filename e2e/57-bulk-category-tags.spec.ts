@@ -71,8 +71,8 @@ test.describe('bulk edit dialog', () => {
 
   test('applying a category and a tag updates every selected transaction', async () => {
     await page.getByTestId('bulk-edit-category').selectOption({ label: 'Food & Drink' })
-    await page.locator('#bulk-edit-tags').fill('work')
-    await page.locator('#bulk-edit-tags').press('Enter')
+    await page.getByTestId('bulk-edit-tags').fill('work')
+    await page.getByTestId('bulk-edit-tags').press('Enter')
 
     await expect(page.getByTestId('bulk-edit-apply')).toBeEnabled()
     await page.getByTestId('bulk-edit-apply').click()

@@ -10,6 +10,7 @@ interface TagInputProps {
   placeholder?: string
   label?: string
   id?: string
+  testId?: string
 }
 
 export function TagInput({
@@ -20,6 +21,7 @@ export function TagInput({
   placeholder,
   label,
   id,
+  testId,
 }: TagInputProps) {
   const [inputValue, setInputValue] = useState('')
   const [isOpen, setIsOpen] = useState(false)
@@ -129,6 +131,7 @@ export function TagInput({
         <input
           ref={inputRef}
           id={id}
+          data-testid={testId}
           type="text"
           value={inputValue}
           onChange={handleInputChange}

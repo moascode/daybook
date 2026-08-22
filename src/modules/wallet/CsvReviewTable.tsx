@@ -124,6 +124,7 @@ export function CsvReviewTable({
                   }
                   className="w-36 text-xs"
                   disabled={!row.included}
+                  data-testid="csv-row-date"
                 />
               </td>
 
@@ -177,6 +178,7 @@ export function CsvReviewTable({
                   }
                   className="w-28 text-xs"
                   disabled={!row.included}
+                  data-testid="csv-row-amount"
                 />
               </td>
 

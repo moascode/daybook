@@ -172,7 +172,11 @@ export function CanonicalizeMerchantsPage() {
           </thead>
           <tbody>
             {merchants.map((m) => (
-              <tr key={m.current} className="border-b border-line-subtle last:border-0">
+              <tr
+                key={m.current}
+                data-testid="canonicalize-merchant-row"
+                className="border-b border-line-subtle last:border-0"
+              >
                 <td className="px-3 py-2 text-fg">{m.current}</td>
                 <td className="px-3 py-2 text-fg-muted">{m.canonical}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{m.transactionCount}</td>

@@ -711,6 +711,7 @@ export function WalletPage() {
               />
               <TagInput
                 id="filter-tags"
+                testId="filter-tags"
                 label="Tags"
                 value={filters.tags}
                 onChange={(tags) => setFilters({ tags })}
