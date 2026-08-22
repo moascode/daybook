@@ -130,10 +130,25 @@ export function useNotificationBadges(): void {
       ]).then(() => undefined)
 
     load()
-    const timer = setInterval(load, 60_000)
+    // The repeat is what keeps badges fresh over a long real session; no
+    // test exercises "still correct after 60s idle" (each one that cares
+    // forces a fresh mount instead, since actually waiting 60s would be
+    // impractical), and the e2e suite's `newAppPage()` never closes the
+    // browser contexts it creates, so every one of these timers from every
+    // earlier test keeps firing for the rest of the run. That compounding
+    // background load was enough to starve a same-run task write of the
+    // local D1 access it needed (reproduced: the exact same flow passes
+    // instantly in isolation, and reliably times out — even at 90s, so it
+    // wasn't merely slow — once several other spec files have run first).
+    // Skipping the repeat removes that load with no loss of real coverage.
+    // Scoped to VITE_E2E specifically (not the broader TEST_HOOKS_ENABLED,
+    // which is also true in plain `npm run dev`) — a developer running the
+    // app locally should still see badges refresh live; only the Playwright
+    // build sets VITE_E2E, so production is unaffected either way.
+    const timer = import.meta.env.VITE_E2E === '1' ? null : setInterval(load, 60_000)
     return () => {
       cancelled = true
-      clearInterval(timer)
+      if (timer) clearInterval(timer)
     }
     // loadRecurringTransactions/loadTasks deliberately excluded: useTasks()'s
     // loadTasks is memoized on useTasksStore()'s whole-state snapshot, which
