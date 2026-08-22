@@ -37,7 +37,7 @@ test('net worth banner appears once an account exists', async () => {
 
 test('net worth shows a formatted MYR amount (zero for new empty account)', async () => {
   // New account has no transactions → balance = 0
-  const netWorthEl = page.locator('p.text-2xl')
+  const netWorthEl = page.getByTestId('net-worth-value')
   await expect(netWorthEl).toBeVisible()
   // The value should be formatted as MYR 0.00 (or similar locale format)
   await expect(netWorthEl).toContainText('0.00')
@@ -68,7 +68,7 @@ test('net worth increases after adding an income transaction', async () => {
   await page.waitForTimeout(600) // wait for balances to load
 
   // Net worth should now be MYR 500.00
-  await expect(page.locator('p.text-2xl')).toContainText('500')
+  await expect(page.getByTestId('net-worth-value')).toContainText('500')
 })
 
 test('net worth decreases after adding an expense transaction', async () => {
@@ -88,7 +88,7 @@ test('net worth decreases after adding an expense transaction', async () => {
   await page.waitForTimeout(600)
 
   // 500 income - 200 expense = 300 net worth
-  await expect(page.locator('p.text-2xl')).toContainText('300')
+  await expect(page.getByTestId('net-worth-value')).toContainText('300')
 })
 
 test('second account adds to the net worth total', async () => {
@@ -97,7 +97,7 @@ test('second account adds to the net worth total', async () => {
   await page.waitForTimeout(500)
 
   // Net worth should be 300 (same — new empty account adds 0)
-  await expect(page.locator('p.text-2xl')).toContainText('300')
+  await expect(page.getByTestId('net-worth-value')).toContainText('300')
   // Two accounts now
   await expect(page.getByText('2 accounts')).toBeVisible()
 })

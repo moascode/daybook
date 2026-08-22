@@ -172,11 +172,11 @@ test('batched balances endpoint matches the per-account route', async () => {
 test('hero net worth matches the sum of account balances', async () => {
   await page.goto('/wallet')
   // Main 150 + Savings 40 = 190
-  await expect(page.locator('p.text-2xl')).toContainText('190.00')
+  await expect(page.getByTestId('net-worth-value')).toContainText('190.00')
 
   await page.goto('/wallet/accounts')
   await expect(page.getByText('Total Net Worth')).toBeVisible()
-  await expect(page.locator('p.text-2xl')).toContainText('190.00')
+  await expect(page.getByTestId('net-worth-value')).toContainText('190.00')
 })
 
 // ── §1.3: recurring-rule validation ────────────────────────────────────

@@ -22,7 +22,7 @@ export function NetWorthBanner({ netWorth, accountCount, className }: NetWorthBa
         <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
           Total Net Worth
         </p>
-        <p className="mt-1.5 text-2xl font-bold text-brand-900">
+        <p className="mt-1.5 text-2xl font-bold text-brand-900" data-testid="net-worth-value">
           {netWorth === null ? '…' : formatMYR(netWorth)}
         </p>
         <p className="mt-1 text-xs text-brand-700/60">

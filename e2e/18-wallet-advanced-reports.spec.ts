@@ -83,14 +83,14 @@ test('custom date range selector is present on the reports page', async () => {
 
 test('custom date range has From and To date inputs', async () => {
   const picker = page.getByTestId('custom-date-range')
-  await expect(picker.getByLabel(/From|Start/i)).toBeVisible()
-  await expect(picker.getByLabel(/To|End/i)).toBeVisible()
+  await expect(picker.getByTestId('filter-from')).toBeVisible()
+  await expect(picker.getByTestId('filter-to')).toBeVisible()
 })
 
 test('applying a custom date range updates the report to show that period', async () => {
   const picker = page.getByTestId('custom-date-range')
-  await picker.getByLabel(/From|Start/i).fill('2026-01-01')
-  await picker.getByLabel(/To|End/i).fill('2026-01-31')
+  await picker.getByTestId('filter-from').fill('2026-01-01')
+  await picker.getByTestId('filter-to').fill('2026-01-31')
   await page.getByRole('button', { name: /Apply|Update/i }).click()
   // Report should now reflect January data only
   await expect(page.getByText(/Jan 2026|January 2026/i)).toBeVisible()
@@ -107,8 +107,8 @@ test('custom range report shows only transactions within the selected window', a
 
 test('changing date range to Q1 shows both transactions', async () => {
   const picker = page.getByTestId('custom-date-range')
-  await picker.getByLabel(/From|Start/i).fill('2026-01-01')
-  await picker.getByLabel(/To|End/i).fill('2026-03-31')
+  await picker.getByTestId('filter-from').fill('2026-01-01')
+  await picker.getByTestId('filter-to').fill('2026-03-31')
   await page.getByRole('button', { name: /Apply|Update/i }).click()
   await expect(picker.getByText(/300|RM 300/)).toBeVisible()
   await expect(picker.getByText(/450|RM 450/)).toBeVisible()
