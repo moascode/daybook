@@ -177,4 +177,54 @@ test.describe('responsive chrome', () => {
     await expect(desktopPage.locator('.tabbar')).toBeHidden()
     await desktopCtx.close()
   })
+
+  test('the module switcher fills the 681-820px gap and only the gap', async ({ browser }) => {
+    // 681-820px: .modtabs (app bar) has no room, and .tabbar/the drawer
+    // haven't engaged yet (<=680px only) — the switcher is the only way to
+    // change modules here, and .module-head steps aside for it.
+    const gapCtx = await browser.newContext({ viewport: { width: 700, height: 900 } })
+    const gapPage = await gapCtx.newPage()
+    await signUpOnPage(gapPage)
+    await gapPage.goto('/wallet')
+    await waitForApp(gapPage)
+
+    const switcherBtn = gapPage.getByTestId('modswitch-button')
+    await expect(switcherBtn).toBeVisible()
+    await expect(gapPage.locator('.module-head')).toBeHidden()
+
+    await switcherBtn.click()
+    const menu = gapPage.getByTestId('modswitch-menu')
+    await expect(menu).toBeVisible()
+    await expect(menu.getByRole('button', { name: 'Wallet' })).toHaveClass(/active/)
+    const dayItem = menu.getByRole('button', { name: /Day — coming soon/ })
+    await expect(dayItem).toBeDisabled()
+
+    // Disabled items don't navigate.
+    await dayItem.click({ force: true })
+    await expect(gapPage).toHaveURL(/\/wallet$/)
+
+    // A live module navigates and closes the menu.
+    await menu.getByRole('button', { name: 'Tasks' }).click()
+    await expect(gapPage).toHaveURL(/\/tasks$/)
+    await expect(menu).toBeHidden()
+    await gapCtx.close()
+
+    // Outside the gap (above and below) the switcher stays out of the way.
+    const wideCtx = await browser.newContext({ viewport: { width: 900, height: 700 } })
+    const widePage = await wideCtx.newPage()
+    await signUpOnPage(widePage)
+    await widePage.goto('/wallet')
+    await waitForApp(widePage)
+    await expect(widePage.getByTestId('modswitch-button')).toBeHidden()
+    await expect(widePage.locator('.module-head')).toBeVisible()
+    await wideCtx.close()
+
+    const narrowCtx = await browser.newContext({ viewport: { width: 600, height: 900 } })
+    const narrowPage = await narrowCtx.newPage()
+    await signUpOnPage(narrowPage)
+    await narrowPage.goto('/wallet')
+    await waitForApp(narrowPage)
+    await expect(narrowPage.getByTestId('modswitch-button')).toBeHidden()
+    await narrowCtx.close()
+  })
 })
