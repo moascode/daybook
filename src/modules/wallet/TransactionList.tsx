@@ -323,7 +323,7 @@ export function TransactionList({
             {/* Day header */}
             <div className="tgroup-head" data-testid="day-header">
               <span className="tg-date">
-                <b>{format(d, 'EEE')}</b> {format(d, 'dd MMM yyyy')}
+                <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
               </span>
               <span
                 className={cn('tg-total', dayNet >= 0 && 'pos')}

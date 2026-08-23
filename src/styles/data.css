@@ -25,6 +25,14 @@
   position: sticky; top: 56px; background: rgb(var(--surface)); z-index: 1;
 }
 .tgroup-head:first-child { padding-top: 0; }
+/* R3 fix: the wrapping .card has overflow-hidden (corner clipping for other
+   .card uses), which the CSS spec makes .tgroup-head's sticky *containing*
+   block instead of the real scrolling ancestor (<main>, overflow-y-auto).
+   Since that card's height is auto-fit to content, it never itself scrolls,
+   so the header is permanently pinned 56px inside it — on top of the row
+   below — rather than sticking under the app bar as the page scrolls. Opt
+   this one card out of the clip so <main> becomes the sticky context again. */
+.card:has(> .tlist) { overflow: visible; }
 .trow {
   display: grid; align-items: center; gap: var(--s3);
   grid-template-columns: 1fr 132px 128px 112px 32px;
