@@ -224,12 +224,16 @@ td:last-child, th:last-child { padding-right: 0; }
 .stat-card .stat-label { font-size: var(--t-sm); font-weight: 550; color: rgb(var(--fg-muted)); }
 .stat-card .stat-value { font-size: var(--t-xl); margin-top: var(--s3); }
 @media (max-width: 680px) {
-  /* R3 fix: layout.css's .g3 goes 2-col at 860px, leaving ~130px per card
-     here — too narrow for --t-xl (26px) to fit an ordinary amount like
-     "RM 5,000.00" on one line, so it wrapped mid-number ("RM 5,00"/"0.00").
-     A smaller size keeps normal amounts on one line; the earlier
+  /* R3 fix: layout.css's .g3 goes 2-col at 860px, leaving ~130px content
+     width per card here (173px card - 40px padding) — too narrow for
+     --t-xl (26px) to fit an ordinary amount like "RM 5,000.00" on one line,
+     so it wrapped mid-number ("RM 5,00"/"0.00"). --t-lg (20px) still
+     measured ~175px for that string, still wrapping; --t-md (16px) still
+     ~140px, still 7px over. --t-base (14px) measures ~123px, comfortably
+     under, and is what actually stops the wrap (measured directly, not
+     estimated — see docs/v2/.flow/.../flow-plan.md fixes log). The earlier
      overflow-wrap stays as the fallback for a rare amount still too wide. */
-  .stat-card .stat-value { font-size: var(--t-lg); }
+  .stat-card .stat-value { font-size: var(--t-base); }
 }
 .stat-card .stat-foot { margin-top: var(--s2); font-size: var(--t-sm); }
 
