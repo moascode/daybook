@@ -33,7 +33,7 @@
 8. **Ask, don't assume.** If a feature spec is ambiguous, ask the user. Don't invent behaviour.
 9. **Keep `.env.local` out of git.** It is in `.gitignore`. Never log or expose API keys.
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
-11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npm run test:e2e:parallel` (the locally-sharded runner, ~2-3 min — see Section 16) to confirm no regressions; fall back to `npx playwright test` (~10 min, single-worker) only if you need the single shared server. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
+11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run a **targeted** `npx playwright test <the affected spec files>` locally to confirm no regressions, then push and check the PR's CI status (`get_check_runs`/`get_status` on the head commit) for the authoritative full-suite result — CI already shards the whole suite; don't reproduce that locally. See Section 16 for why (the local sharded runner is fragile enough in a sandboxed session that reproducing it wastes time without adding signal CI doesn't already give) and for conventions. New spec files follow the naming pattern `NN-description.spec.ts`.
 12. **Branch before you touch anything.** Never commit directly to `main`. Every task — no matter how small — starts with `git checkout -b <branch>`. When done, open a PR. See Section 11 for naming and PR conventions.
 13. **Never fail silently.** Every failed operation must say something the user
     can act on — a toast, an inline message, an error state. This applies to
@@ -1505,35 +1505,40 @@ e2e/
 
 ### Running tests
 
-**Default to the parallel runner for a full-suite check.** A plain
-`npx playwright test` runs single-worker (`workers: 1`, `fullyParallel: false`
-in `playwright.config.ts`) and takes ~10 minutes — CI only gets to ~2 minutes
-by sharding across 6 *separate machines*. `scripts/e2e-parallel.sh` reproduces
-that speedup on one machine by giving each shard its own `wrangler dev`
-process, port, and D1 `--persist-to` directory (this repo's local D1 is fragile
-under any concurrent access to shared storage, so isolation — not just
-parallel workers — is required). Every session should reach for this before a
-bare `npx playwright test` when running the full suite.
+**Run targeted specs locally; rely on CI for the full-suite, end-to-end
+result.** Do not run the full suite locally — not `npm run test:e2e:parallel`,
+not a bare `npx playwright test`, and not from inside a review/verification
+subagent either. This was standing advice to "default to the parallel runner"
+until an R3 session actually did that repeatedly in a resource-constrained
+sandbox: the local sharded runner's own D1/`wrangler dev` isolation
+requirement (below) makes it fragile there, a subagent misreported a
+targeted 16-spec count as if it were the ~450-680-test full suite, and a
+full local run partially crashed mid-way and returned inflated, garbled
+numbers — none of which added signal beyond CI, all of which burned real
+time. **GitHub Actions already shards the whole suite** (6 jobs, exactly what
+`test:e2e:parallel` reproduces locally) — after pushing, poll the PR's check
+runs (or read the `check_suite.completed` webhook event on a subscribed PR)
+for the authoritative result instead of reproducing it yourself.
 
 ```bash
-npm run test:e2e:parallel          # Full suite, sharded locally (~2-3 min). Default N = min(nproc, 6).
-npm run test:e2e:parallel -- 2     # Fewer shards — use this if the default N crashes a shard (see below)
-npx playwright test                # Full suite, single-worker (~10 min) — use when you need the one shared server, e.g. debugging a flake in isolation
-npx playwright test e2e/01-tasks   # Single file
-npx playwright test --headed       # Watch mode (headed)
-npx playwright show-report         # View last HTML report (single-run only; parallel shards report to playwright-report-shard-N/)
+npx playwright test e2e/01-tasks   # Targeted — the specs touching what you changed. This is the default.
+npx playwright test --headed       # Watch mode (headed), for one file while debugging
+npx playwright show-report         # View last HTML report
 ```
 
-`scripts/e2e-parallel.sh` builds once, boots N isolated `wrangler dev`
-instances, runs `--shard=i/N` against each in parallel, and retries — once —
-only a shard whose *server* crashed mid-run (the known wrangler/workerd
-"empty ✘ [ERROR]" fragility documented in `playwright.config.ts`, not a real
-test failure). A shard whose server stayed healthy but whose tests failed is
-never retried and is reported as a real failure. Full logs land in
-`.e2e-parallel-logs/` per shard. If a shard's server dies repeatedly even
-after the retry, pass a smaller N (e.g. `npm run test:e2e:parallel -- 2`) —
-each shard runs a real `wrangler dev` + Chromium, which is genuine CPU/memory
-pressure on a small machine.
+`npm run test:e2e:parallel` and a bare full-suite `npx playwright test` still
+exist and still work as manual, human-driven tools (a developer debugging
+something CI itself can't reproduce, or wanting the full local signal before
+even opening a PR) — `scripts/e2e-parallel.sh` gives each of its N shards an
+isolated `wrangler dev` process, port, and D1 `--persist-to` directory, and
+retries once a shard whose *server* crashed mid-run (the known
+wrangler/workerd "empty ✘ [ERROR]" fragility documented in
+`playwright.config.ts`, not a real test failure; a shard whose server stayed
+healthy but whose tests failed is never retried). If a shard's server dies
+repeatedly even after the retry, a smaller `N` (`npm run test:e2e:parallel
+-- 2`) reduces the CPU/memory pressure of N concurrent `wrangler dev` +
+Chromium processes. None of this is a session's default move, though —
+targeted-local-plus-CI is.
 
 ### Traps this suite has already fallen into
 
