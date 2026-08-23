@@ -24,10 +24,6 @@ test.afterAll(async () => {
   await page.context().close()
 })
 
-// AppShell renders both bars and hides one with `md:` classes, so the toggle is
-// in the DOM twice. Match the one actually on screen for this viewport.
-const themeToggle = (p: Page) => p.getByTestId('theme-toggle').locator('visible=true')
-
 const htmlIsDark = (p: Page) =>
   p.evaluate(() => document.documentElement.classList.contains('dark'))
 
@@ -48,10 +44,18 @@ test('app starts in light mode by default', async () => {
   expect(await htmlDataTheme(page)).toBe('light')
 })
 
-test('the top-bar toggle switches to dark', async () => {
+// R2: the standalone top-bar theme toggle is gone — light/dark switching now
+// happens only through the Settings page's Theme select (SettingsPage.tsx),
+// which was always the second, independent path CLAUDE.md §18 rule 4 already
+// documents ("shared by the Settings select and the TopBar toggle"). This
+// test replaces the removed toggle-click test and keeps the same coverage
+// (both D-2 markers move together, the token layer actually repaints) — and
+// leaves the page in dark mode for the reload/pre-boot tests below, same as
+// the toggle click used to.
+test('choosing Dark from Settings switches to dark', async () => {
   const lightBackground = await bodyBackground(page)
 
-  await themeToggle(page).click()
+  await page.getByLabel('Theme', { exact: true }).selectOption('dark')
 
   await expect.poll(() => htmlIsDark(page)).toBe(true)
   // Both markers move together (D-2), not just the class.
@@ -60,28 +64,7 @@ test('the top-bar toggle switches to dark', async () => {
   expect(await bodyBackground(page)).not.toBe(lightBackground)
 })
 
-test('the toggle reflects the current theme and switches back', async () => {
-  // A toggle button: the name is what it controls, aria-pressed is the state.
-  await expect(themeToggle(page)).toHaveAttribute('aria-pressed', 'true')
-  await themeToggle(page).click()
-  await expect.poll(() => htmlIsDark(page)).toBe(false)
-  await expect(themeToggle(page)).toHaveAttribute('aria-pressed', 'false')
-})
-
-test('the toggle does not capture other specs\' getByLabel lookups', async () => {
-  // Regression: an aria-label of "Switch to dark theme" made getByLabel('To')
-  // (the date-range inputs) and getByLabel('Theme') ambiguous across the suite,
-  // because getByLabel matches substrings. Keep the name collision-free.
-  const label = await themeToggle(page).getAttribute('aria-label')
-  expect(label).toBe('Dark theme')
-})
-
 // ── Persistence ────────────────────────────────────────────────────────
-
-test('the toggle writes through to the Settings select', async () => {
-  await themeToggle(page).click()
-  await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('dark')
-})
 
 test('dark mode survives a reload', async () => {
   await page.reload()

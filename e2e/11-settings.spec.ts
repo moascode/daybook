@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, waitForApp, navTo, navItem } from './helpers'
+import { newAppPage, waitForApp, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -21,11 +21,27 @@ test.afterAll(async () => {
 
 // ── Navigation ─────────────────────────────────────────────────────────
 
-test('Settings link is visible in the sidebar', async () => {
-  await expect(navItem(page, 'settings')).toBeVisible()
+test('Settings is reachable via the account menu', async () => {
+  // R2: the module sidebar renders nothing on /settings itself (it's not one
+  // of the four primary modules — design spec §4's own allowance), so
+  // Settings' discoverability now runs through the account menu instead.
+  // Close again without navigating, so the shared `page` stays on /settings
+  // for the tests that follow.
+  await page.getByTestId('account-menu-button').click()
+  await expect(page.getByTestId('account-menu-settings')).toBeVisible()
+  await page.keyboard.press('Escape')
 })
 
-test('Settings link navigates to /settings', async () => {
+test('the account menu actually navigates to /settings', async () => {
+  // Prove the real path works (not just that the shared `page` already
+  // happens to be there from beforeAll): leave, then come back via
+  // Settings & privacy → Preferences, ending back on /settings for the
+  // tests below.
+  await page.goto('/tasks')
+  await waitForApp(page)
+  await page.getByTestId('account-menu-button').click()
+  await page.getByTestId('account-menu-settings').click()
+  await page.getByRole('button', { name: 'Preferences' }).click()
   await expect(page).toHaveURL(/\/settings$/)
 })
 
@@ -59,9 +75,9 @@ test('changing the theme persists immediately after reload (no Save button)', as
   await expect(page.getByLabel('Theme', { exact: true })).toHaveValue('system', { timeout: 8000 })
 })
 
-// ── Sidebar navigation from settings ──────────────────────────────────
+// ── Module-tab navigation from settings ─────────────────────────────────
 
-test('clicking Tasks in sidebar from settings navigates to /tasks', async () => {
+test('clicking Tasks in the app bar from settings navigates to /tasks', async () => {
   await navTo(page, 'tasks')
   await expect(page).toHaveURL(/\/tasks$/)
 })

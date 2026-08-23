@@ -1,47 +1,41 @@
 import { useState } from 'react'
-import { Outlet, useLocation } from 'react-router-dom'
-import { Menu } from 'lucide-react'
-import { Sidebar } from './Sidebar'
-import { TopBar } from './TopBar'
-import { HelpButton } from './HelpButton'
-import { ThemeToggle } from './ThemeToggle'
-import { routeTitles } from './routeTitles'
+import { Outlet } from 'react-router-dom'
+import { AppBar } from './AppBar'
+import { ModuleSidebar } from './ModuleSidebar'
+import { MobileTabBar } from './MobileTabBar'
+import { useNotificationBadges } from '@/hooks/useNotificationBadges'
 import { ToastContainer } from '@/components/ui/Toast'
 
+/**
+ * v2 shell: a full-width AppBar on top, a module-scoped ModuleSidebar +
+ * page content below it, and the mobile bottom tab bar. Replaces the old
+ * Sidebar + TopBar pairing (design spec §7).
+ *
+ * `.appbar` is a sticky sibling above `.shell` (not a flex item inside it) —
+ * `.shell` lays out the sidebar and the content column side by side;
+ * `.sidebar`'s own `top: 56px` sticky offset assumes the app bar sits above it
+ * in normal flow, not squeezed into the same flex row.
+ */
 export function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
-  const location = useLocation()
-  const mobileTitle = routeTitles[location.pathname] ?? 'Daybook'
+
+  // Single 60s poll for every shell badge (invites, claims, bills due, tasks
+  // due) — mounted once here, not per-component. See the hook for why.
+  useNotificationBadges()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-sunken">
-      <Sidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Mobile top bar with hamburger + current page title (U-05) */}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-4 md:hidden">
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-hover hover:text-fg"
-            onClick={() => setMobileSidebarOpen(true)}
-            aria-label="Open sidebar"
-            data-testid="nav-menu-open"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-          <h1 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">{mobileTitle}</h1>
-          <div className="ml-auto flex items-center gap-1">
-            <ThemeToggle />
-            <HelpButton />
-          </div>
+    <>
+      <AppBar onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
+      <div className="shell">
+        <ModuleSidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+        <div className="main-col">
+          <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+            <Outlet />
+          </main>
         </div>
-        {/* Desktop top bar */}
-        <div className="hidden md:block">
-          <TopBar />
-        </div>
-        <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
-          <Outlet />
-        </main>
       </div>
+      <MobileTabBar />
       <ToastContainer />
-    </div>
+    </>
   )
 }

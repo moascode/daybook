@@ -25,11 +25,12 @@ test('navigates to /wallet/accounts', async () => {
   await expect(page).toHaveURL(/\/wallet\/accounts$/)
 })
 
-test('wallet tab nav shows all four tabs', async () => {
+test('wallet sidebar shows the core destinations', async () => {
+  // R2: Import CSV left the sidebar (design spec §4 / D-14) — it's reachable
+  // from the account menu now, covered in 23-wallet-navigation.spec.ts.
   await expect(navItem(page, 'transactions')).toBeVisible()
   await expect(navItem(page, 'accounts')).toBeVisible()
   await expect(navItem(page, 'dashboard')).toBeVisible()
-  await expect(navItem(page, 'import')).toBeVisible()
 })
 
 // ── Empty state ────────────────────────────────────────────────────────

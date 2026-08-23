@@ -9,7 +9,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo, navigateToImportCsv } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -42,7 +42,7 @@ test.afterAll(async () => {
 // ── Review step: mark a row as a transfer ────────────────────────────────
 
 test('upload CSV and reach the review step', async () => {
-  await navTo(page, 'import')
+  await navigateToImportCsv(page)
   await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
   await uploadFixtureCsv(page)
   await page.getByLabel('Import into account *').selectOption('Main Bank')

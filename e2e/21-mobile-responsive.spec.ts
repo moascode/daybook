@@ -61,23 +61,32 @@ test('main navigation is accessible on mobile (hamburger menu or visible nav lin
   await ctx.close()
 })
 
-test('tapping the mobile menu button reveals navigation links', async ({ browser }: { browser: Browser }) => {
+test('tapping the mobile menu button reveals the module sidebar drawer', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
   await signUpOnPage(page)
-  await page.goto('/tasks')
+  await page.goto('/wallet')
   await waitForApp(page)
 
+  // R2: Tasks/Wallet live in the always-visible bottom tab bar now, not the
+  // drawer, so this checks the MODULE'S OWN nav (something only the drawer
+  // reveals) rather than nav-tasks/nav-wallet. The `<aside class="sidebar">`
+  // is always in the DOM (translated off-screen when closed, per the ported
+  // CSS), so this asserts on the `.open` class and real clickability
+  // (toBeInViewport) rather than plain visibility, which a transform-hidden
+  // element can still satisfy.
   const hamburger = navItem(page, 'menu-open')
   const isHamburgerVisible = await hamburger.isVisible().catch(() => false)
+  const sidebar = page.locator('.sidebar')
 
   if (isHamburgerVisible) {
+    await expect(sidebar).not.toHaveClass(/\bopen\b/)
     await hamburger.click()
-    await expect(navItem(page, 'tasks')).toBeVisible()
-    await expect(navItem(page, 'wallet')).toBeVisible()
+    await expect(sidebar).toHaveClass(/\bopen\b/)
+    await expect(navItem(page, 'budgets')).toBeInViewport()
   } else {
-    // If no hamburger, nav links must already be visible
-    await expect(navItem(page, 'tasks')).toBeVisible()
+    // If no hamburger at this width, the sidebar must already be on screen.
+    await expect(navItem(page, 'budgets')).toBeInViewport()
   }
   await ctx.close()
 })
@@ -206,7 +215,7 @@ test('sidebar drawer keeps Settings reachable on a short mobile viewport', async
   const ctx = await browser.newContext({ viewport: SHORT_MOBILE_VIEWPORT })
   const page = await ctx.newPage()
   await signUpOnPage(page)
-  // /wallet auto-expands the wallet nav section — the long-list case (C11)
+  // /wallet's module sidebar has the full 7-item grouped nav — the long-list case (C11)
   await page.goto('/wallet')
   await waitForApp(page)
   await navTo(page, 'menu-open')
@@ -219,9 +228,11 @@ test('sidebar drawer keeps Settings reachable on a short mobile viewport', async
   expect(box!.y).toBeGreaterThanOrEqual(0)
   expect(box!.y + box!.height).toBeLessThanOrEqual(SHORT_MOBILE_VIEWPORT.height + 1)
 
-  // The nav list itself scrolls, so the last wallet sub-item is reachable too
-  const importLink = navItem(page, 'import')
-  await importLink.scrollIntoViewIfNeeded()
-  await expect(importLink).toBeVisible()
+  // The nav list itself scrolls, so the last wallet sub-item ("Analyse" group,
+  // Reports) is reachable too. Import CSV no longer lives in the sidebar
+  // (moved to the account menu — see 23-wallet-navigation.spec.ts).
+  const reportsLink = navItem(page, 'reports')
+  await reportsLink.scrollIntoViewIfNeeded()
+  await expect(reportsLink).toBeVisible()
   await ctx.close()
 })

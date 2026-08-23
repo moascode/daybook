@@ -19,7 +19,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -39,8 +39,8 @@ test.afterAll(async () => {
 
 // ── Navigate to Import CSV ──────────────────────────────────────────────
 
-test('navigate to Import CSV tab', async () => {
-  await navTo(page, 'import')
+test('navigate to Import CSV via the account menu', async () => {
+  await navigateToImportCsv(page)
   await expect(page).toHaveURL(/\/wallet\/import$/)
   await page.waitForLoadState('networkidle')
   await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()

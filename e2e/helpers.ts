@@ -191,9 +191,10 @@ export async function fillTransactionForm(
  * desktop one display:none). Matching the visible instance keeps strict mode
  * happy in both viewports. See CLAUDE.md §16 trap 4.
  *
- * `dest` is the suffix after `nav-`: tasks · wallet · wallet-toggle ·
- * transactions · dashboard · accounts · shared · budgets · goals · recurring ·
- * reports · import · settings · uat · menu-open · menu-close.
+ * `dest` is the suffix after `nav-`: tasks · wallet · transactions ·
+ * dashboard · accounts · shared · budgets · goals · recurring · reports ·
+ * settings · uat · menu-open · menu-close. (`import` and `wallet-toggle`
+ * were removed by R2 — see {@link navigateToImportCsv}.)
  */
 export function navItem(page: Page, dest: string) {
   return page.locator(`[data-testid="nav-${dest}"]:visible`)
@@ -202,4 +203,17 @@ export function navItem(page: Page, dest: string) {
 /** Click a shell nav destination. See {@link navItem} for the dest vocabulary. */
 export async function navTo(page: Page, dest: string) {
   await navItem(page, dest).click()
+}
+
+/**
+ * Navigate to CSV Import via the account menu. R2 moved it off the sidebar
+ * (design spec §4 / D-14 — "Import CSV leaves the sidebar... becomes a
+ * button on the Transactions page and *Import & export data* in the profile
+ * menu"), so `navTo(page, 'import')` no longer resolves to anything.
+ * Assumes the account menu is currently closed.
+ */
+export async function navigateToImportCsv(page: Page) {
+  await page.getByTestId('account-menu-button').click()
+  await page.getByTestId('account-menu-settings').click()
+  await page.getByTestId('account-menu-import-csv').click()
 }

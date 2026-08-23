@@ -2,10 +2,13 @@ import { test, expect } from '@playwright/test'
 import { newAppPage } from './helpers'
 
 test.describe('Help & Guide', () => {
-  test('the TopBar help button opens the guide page', async ({ browser }) => {
+  test('the account menu\'s Help & support item opens the guide page', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
-    await page.getByRole('button', { name: 'Help & Guide' }).first().click()
+    // R2: the standalone TopBar help button is gone — Help & support now
+    // lives in the account menu's root pane (design spec §5).
+    await page.getByTestId('account-menu-button').click()
+    await page.getByRole('button', { name: 'Help & support' }).click()
 
     await expect(page).toHaveURL(/\/help$/)
     // Both the TopBar page title and the page header read "Help & Guide";
