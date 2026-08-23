@@ -10,9 +10,10 @@
 .stat-label { display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: rgb(var(--fg-subtle)); font-weight: 500; }
 .stat-label .icon-sm { color: rgb(var(--fg-faint)); }
 /* R3 fix: formatMYR's Intl.NumberFormat output has a non-breaking space
-   between "RM" and the digits, making the whole string one unbreakable unit
-   that overflowed the card at narrow widths (2-col stat grid, <=390px). Let
-   it wrap as a fallback if it still doesn't fit. */
+   between "RM" and the digits, making the whole string one unbreakable unit.
+   overflow-wrap is a safety net for pathologically large amounts; the real
+   fix (a smaller mobile size, below) keeps ordinary amounts on one line
+   instead of breaking mid-number ("RM 5,00" / "0.00"). */
 .stat-value { font-size: var(--t-xl); font-weight: 660; letter-spacing: -.028em; line-height: 1.15; overflow-wrap: anywhere; }
 .stat-value.pos { color: rgb(var(--pos-fg)); }
 .stat-value.neg { color: rgb(var(--neg-fg)); }
@@ -222,6 +223,14 @@ td:last-child, th:last-child { padding-right: 0; }
 .stat-card .stat-icon .icon-sm { width: 14px; height: 14px; }
 .stat-card .stat-label { font-size: var(--t-sm); font-weight: 550; color: rgb(var(--fg-muted)); }
 .stat-card .stat-value { font-size: var(--t-xl); margin-top: var(--s3); }
+@media (max-width: 680px) {
+  /* R3 fix: layout.css's .g3 goes 2-col at 860px, leaving ~130px per card
+     here — too narrow for --t-xl (26px) to fit an ordinary amount like
+     "RM 5,000.00" on one line, so it wrapped mid-number ("RM 5,00"/"0.00").
+     A smaller size keeps normal amounts on one line; the earlier
+     overflow-wrap stays as the fallback for a rare amount still too wide. */
+  .stat-card .stat-value { font-size: var(--t-lg); }
+}
 .stat-card .stat-foot { margin-top: var(--s2); font-size: var(--t-sm); }
 
 /* AMBIGUOUS CONCERN: .goal reads as a wallet-goals list card; placed here
