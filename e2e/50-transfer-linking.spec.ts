@@ -68,7 +68,10 @@ test('picking the twin merges the two rows into one transfer', async () => {
   await expect(transactionRowFor(page, 'Payment Received')).toHaveCount(0)
 
   // Both totals drop to zero — a transfer counts as neither income nor expense.
-  await expect(page.getByText(/\+\s?RM\s?0\.00/)).toBeVisible() // Net
+  // Scoped to the summary tile (not a bare text search): R3 added an unlabelled
+  // per-day net pill next to each day header, which can coincidentally render
+  // the identical "+RM 0.00" string and made the old unscoped locator ambiguous.
+  await expect(page.getByTestId('summary-net')).toHaveText(/\+\s?RM\s?0\.00/) // Net
 })
 
 test('balances reflect the transfer on both accounts', async () => {

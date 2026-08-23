@@ -195,7 +195,6 @@ function TransactionRow({
             )}
           </div>
           <div className="tsub flex items-center gap-2">
-            {account && <span>{account.name}</span>}
             {isOnSharedAccount && account?.sharedByUsername && (
               <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
                 {account.sharedByUsername}
