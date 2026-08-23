@@ -108,7 +108,16 @@ export function AccountMenu() {
         </span>
       </button>
 
-      <div className={cn('menu-panel', open && 'open')}>
+      {/* Mounted only while open — not just CSS-hidden. This panel mirrors
+          live state (the user's groups) as plain text with no scoping
+          wrapper, and getByText() doesn't filter by visibility, so an
+          always-in-the-DOM-but-CSS-hidden version collided with
+          33-household.spec.ts's own getByText('Family Group') the moment
+          this menu started mirroring the group Alice had just created.
+          Same fix shape as the old Sidebar.tsx's mobile drawer
+          ({open && <div>...}). */}
+      {open && (
+      <div className="menu-panel open">
         {/* ── Root pane ─────────────────────────────────────────── */}
         <div className={cn('pane', pane === 'root' && 'show')}>
           <div className="menu-card">
@@ -249,6 +258,7 @@ export function AccountMenu() {
           ))}
         </div>
       </div>
+      )}
     </div>
   )
 }
