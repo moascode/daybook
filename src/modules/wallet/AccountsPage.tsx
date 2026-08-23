@@ -85,7 +85,7 @@ export function AccountsPage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Page sub-header */}
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-fg">Accounts</h2>
           <p className="text-xs text-fg-subtle mt-0.5">Manage your accounts and balances</p>
@@ -114,7 +114,7 @@ export function AccountsPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid g3">
           {accounts.map((account) => (
             <AccountCard
               key={account.id}
