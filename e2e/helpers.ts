@@ -203,3 +203,16 @@ export function navItem(page: Page, dest: string) {
 export async function navTo(page: Page, dest: string) {
   await navItem(page, dest).click()
 }
+
+/**
+ * Navigate to CSV Import via the account menu. R2 moved it off the sidebar
+ * (design spec §4 / D-14 — "Import CSV leaves the sidebar... becomes a
+ * button on the Transactions page and *Import & export data* in the profile
+ * menu"), so `navTo(page, 'import')` no longer resolves to anything.
+ * Assumes the account menu is currently closed.
+ */
+export async function navigateToImportCsv(page: Page) {
+  await page.getByTestId('account-menu-button').click()
+  await page.getByTestId('account-menu-settings').click()
+  await page.getByTestId('account-menu-import-csv').click()
+}
