@@ -9,7 +9,12 @@
 .stat { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s1); }
 .stat-label { display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); color: rgb(var(--fg-subtle)); font-weight: 500; }
 .stat-label .icon-sm { color: rgb(var(--fg-faint)); }
-.stat-value { font-size: var(--t-xl); font-weight: 660; letter-spacing: -.028em; line-height: 1.15; }
+/* R3 fix: formatMYR's Intl.NumberFormat output has a non-breaking space
+   between "RM" and the digits, making the whole string one unbreakable unit.
+   overflow-wrap is a safety net for pathologically large amounts; the real
+   fix (a smaller mobile size, below) keeps ordinary amounts on one line
+   instead of breaking mid-number ("RM 5,00" / "0.00"). */
+.stat-value { font-size: var(--t-xl); font-weight: 660; letter-spacing: -.028em; line-height: 1.15; overflow-wrap: anywhere; }
 .stat-value.pos { color: rgb(var(--pos-fg)); }
 .stat-value.neg { color: rgb(var(--neg-fg)); }
 .stat-foot { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s1); font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
@@ -25,6 +30,14 @@
   position: sticky; top: 56px; background: rgb(var(--surface)); z-index: 1;
 }
 .tgroup-head:first-child { padding-top: 0; }
+/* R3 fix: the wrapping .card has overflow-hidden (corner clipping for other
+   .card uses), which the CSS spec makes .tgroup-head's sticky *containing*
+   block instead of the real scrolling ancestor (<main>, overflow-y-auto).
+   Since that card's height is auto-fit to content, it never itself scrolls,
+   so the header is permanently pinned 56px inside it — on top of the row
+   below — rather than sticking under the app bar as the page scrolls. Opt
+   this one card out of the clip so <main> becomes the sticky context again. */
+.card:has(> .tlist) { overflow: visible; }
 .trow {
   display: grid; align-items: center; gap: var(--s3);
   grid-template-columns: 1fr 132px 128px 112px 32px;
@@ -33,7 +46,6 @@
   transition: background .1s var(--ease);
 }
 .trow:hover { background: rgb(var(--surface-hover)); }
-.trow:hover .trow-actions { opacity: 1; }
 .tlist .trow:first-of-type { border-top: none; }
 .tlead { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
 .tavatar {
@@ -47,8 +59,15 @@
 .amt { text-align: right; font-size: var(--t-base); font-weight: 600; letter-spacing: -.01em; }
 .amt.neg { color: rgb(var(--fg)); }
 .amt.pos { color: rgb(var(--pos-fg)); }
-.trow-actions { opacity: 0; transition: opacity .12s var(--ease); }
-.trow:focus-within .trow-actions { opacity: 1; }
+/* R3 fix: always visible, matching docs/v1/phase-5c-wallet-ux.md B6
+   ("transaction rows have always-visible edit/delete... invisible on touch
+   is the bug"). The dormant hover-fade-in this replaced put opacity:0 as
+   the DEFAULT, unreachable by touch on any device without :hover — same
+   class of bug B6 already fixed once, just reintroduced here. display:flex
+   is explicit (not a Tailwind `flex` class on the element) so the mobile
+   `display:none` below wins on specificity instead of losing to a
+   same-layer utility declared after this rule. */
+.trow-actions { display: flex; }
 
 /* plain data table (merchants, accounts) */
 table { width: 100%; border-collapse: collapse; }
@@ -71,7 +90,13 @@ td:last-child, th:last-child { padding-right: 0; }
   font-size: var(--t-sm); font-weight: 500; color: rgb(var(--fg-muted));
   background: rgb(var(--surface)); transition: all .12s var(--ease);
 }
-.filter-btn:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+/* R3 fix: hover is now handled per-state in WalletPage.tsx's own Tailwind
+   classes (a plain hover:bg-surface-hover when inactive, hover:bg-brand-100
+   when active) rather than here — a single unconditional .filter-btn:hover
+   rule had the same (0,2,0) specificity as :hover pseudo-class selectors
+   always beat plain utility classes regardless of source order, so hovering
+   an ACTIVE filter button (bg-brand-50 from a Tailwind utility) reverted it
+   to the neutral hover colour, erasing the active indicator on hover. */
 .filter-btn .count {
   background: rgb(var(--accent-bg)); color: rgb(var(--accent-fg));
   font-size: var(--t-micro); font-weight: 650; border-radius: var(--r-full);
@@ -86,7 +111,11 @@ td:last-child, th:last-child { padding-right: 0; }
   transition: border-color .12s var(--ease), box-shadow .12s var(--ease);
 }
 .acct:hover { border-color: rgb(var(--line-strong)); box-shadow: var(--e2); }
-.acct-top { display: flex; align-items: center; gap: var(--s2); }
+/* R3 fix: three always-visible 40px touch targets (share/edit/delete) don't
+   fit beside the name at narrow widths; without wrap they silently overflow
+   past the root's overflow-hidden (kept for the accent bar), hiding edit and
+   delete entirely on mobile instead of just dropping to a second line. */
+.acct-top { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .acct-mark {
   width: 32px; height: 32px; border-radius: 9px; display: flex;
   align-items: center; justify-content: center; flex-shrink: 0;

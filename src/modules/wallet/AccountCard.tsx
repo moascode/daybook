@@ -71,8 +71,7 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
       tabIndex={0}
       aria-label={`View transactions for ${account.name}`}
       className={cn(
-        'group relative overflow-hidden rounded-xl border border-line bg-surface',
-        'transition-shadow hover:shadow-md cursor-pointer',
+        'acct group relative overflow-hidden cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2'
       )}
       onClick={handleCardClick}
@@ -84,111 +83,107 @@ export function AccountCard({ account, balance, onEdit, onDelete, onShare, share
         style={{ backgroundColor: account.color }}
       />
 
-      <div className="p-5 pl-6">
-        {/* Header row */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-lg"
-              style={{ backgroundColor: `${account.color}18` }}
-            >
-              <IconComponent
-                className="h-5 w-5"
-                style={{ color: account.color }}
-              />
-            </div>
-            <div>
-              <h3 className="font-semibold text-fg">{account.name}</h3>
-              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                <Badge color={account.color} data-testid="account-card-type">
-                  {ACCOUNT_TYPE_LABELS[account.type]}
-                </Badge>
-                <span className="text-xs text-fg-faint">{account.currency}</span>
-                {account.isShared && account.sharedByUsername && (
-                  <span className="flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
-                    <Share2 className="h-2.5 w-2.5" />
-                    {account.sharedByUsername}
-                  </span>
-                )}
-                {!account.isShared && sharesCount !== undefined && sharesCount > 0 && (
-                  <span className="flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
-                    <Share2 className="h-2.5 w-2.5" />
-                    Shared with {sharesCount}
-                  </span>
-                )}
-              </div>
+      {/* Header row */}
+      <div className="acct-top justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="acct-mark"
+            style={{ backgroundColor: `${account.color}18` }}
+          >
+            <IconComponent
+              className="h-5 w-5"
+              style={{ color: account.color }}
+            />
+          </div>
+          <div>
+            <h3 className="acct-name">{account.name}</h3>
+            <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+              <Badge color={account.color} data-testid="account-card-type">
+                {ACCOUNT_TYPE_LABELS[account.type]}
+              </Badge>
+              <span className="acct-sub">{account.currency}</span>
+              {account.isShared && account.sharedByUsername && (
+                <span className="flex items-center gap-1 rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] font-medium text-purple-600">
+                  <Share2 className="h-2.5 w-2.5" />
+                  {account.sharedByUsername}
+                </span>
+              )}
+              {!account.isShared && sharesCount !== undefined && sharesCount > 0 && (
+                <span className="flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
+                  <Share2 className="h-2.5 w-2.5" />
+                  Shared with {sharesCount}
+                </span>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* Actions — always visible (B6), emphasised on hover like transaction rows */}
-          <div
-            className="flex gap-1 text-fg-faint transition-colors group-hover:text-fg-muted"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* U-2: share button — only shown for own (non-shared-in) accounts */}
-            {!account.isShared && onShare && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-                onClick={() => onShare(account)}
-                aria-label="Manage sharing"
-                title="Manage sharing"
-              >
-                <Share2 className="h-3.5 w-3.5 text-purple-500" />
-              </Button>
-            )}
+        {/* Actions — always visible (B6), emphasised on hover like transaction rows */}
+        <div
+          className="flex gap-1 text-fg-faint transition-colors group-hover:text-fg-muted"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* U-2: share button — only shown for own (non-shared-in) accounts */}
+          {!account.isShared && onShare && (
             <Button
               variant="ghost"
               size="sm"
               className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-              onClick={() => onEdit(account)}
-              aria-label="Edit account"
+              onClick={() => onShare(account)}
+              aria-label="Manage sharing"
+              title="Manage sharing"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Share2 className="h-3.5 w-3.5 text-purple-500" />
             </Button>
-            {/* Delete is owner-only — a shared-in account can never be deleted here. */}
-            {!account.isShared && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-                onClick={() => onDelete(account)}
-                aria-label="Delete account"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Description */}
-        {account.description && (
-          <p className="mt-2 text-sm text-fg-subtle line-clamp-1">
-            {account.description}
-          </p>
-        )}
-
-        {/* Balance */}
-        <div className="mt-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-fg-faint">
-            Balance
-          </p>
-          <p
-            data-testid="account-card-balance"
-            className={cn(
-              'mt-0.5 text-xl font-bold',
-              balance === null
-                ? 'text-fg-faint'
-                : balance >= 0
-                  ? 'text-fg'
-                  : 'text-red-600'
-            )}
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+            onClick={() => onEdit(account)}
+            aria-label="Edit account"
           >
-            {balance === null ? '...' : formatMYR(balance)}
-          </p>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          {/* Delete is owner-only — a shared-in account can never be deleted here. */}
+          {!account.isShared && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+              onClick={() => onDelete(account)}
+              aria-label="Delete account"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Description */}
+      {account.description && (
+        <p className="text-sm text-fg-subtle line-clamp-1">
+          {account.description}
+        </p>
+      )}
+
+      {/* Balance */}
+      <p
+        data-testid="account-card-balance"
+        className={cn(
+          'acct-bal',
+          balance === null
+            ? 'text-fg-faint'
+            : balance >= 0
+              ? 'text-fg'
+              : 'text-red-600'
+        )}
+      >
+        {balance === null ? '...' : formatMYR(balance)}
+      </p>
+      <p className="acct-foot">
+        <span>Balance</span>
+      </p>
     </div>
   )
 }

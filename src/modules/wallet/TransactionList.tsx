@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
@@ -140,7 +140,7 @@ function TransactionRow({
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? `${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
       className={cn(
-        'group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+        'group trow',
         interactive && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
         selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-surface-sunken',
@@ -149,87 +149,94 @@ function TransactionRow({
       onClick={interactive ? handleRowClick : undefined}
       onKeyDown={interactive ? handleRowKeyDown : undefined}
     >
-      {/* Checkbox (select mode) or type indicator */}
-      {selectMode ? (
-        <input
-          type="checkbox"
-          checked={isSelected ?? false}
-          onChange={() => onToggleSelect?.(transaction.id)}
-          onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
-          aria-label="Select transaction"
-        />
-      ) : (
-        <div
-          className={cn(
-            'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold',
-            transaction.type === 'income'
-              ? 'bg-positive-50 text-positive-600'
-              : transaction.type === 'expense'
-                ? 'bg-red-50 text-red-600'
-                : 'bg-blue-50 text-blue-600'
-          )}
-        >
-          {transaction.type === 'transfer' ? (
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-          ) : transaction.type === 'income' ? (
-            '+'
-          ) : (
-            '-'
-          )}
-        </div>
-      )}
+      <div className="tlead">
+        {/* Checkbox (select mode) or type indicator */}
+        {selectMode ? (
+          <input
+            type="checkbox"
+            checked={isSelected ?? false}
+            onChange={() => onToggleSelect?.(transaction.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
+            aria-label="Select transaction"
+          />
+        ) : (
+          <div
+            className={cn(
+              'tavatar flex-shrink-0',
+              transaction.type === 'income'
+                ? 'bg-positive-50 text-positive-600'
+                : transaction.type === 'expense'
+                  ? 'bg-red-50 text-red-600'
+                  : 'bg-blue-50 text-blue-600'
+            )}
+          >
+            {transaction.type === 'transfer' ? (
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+            ) : transaction.type === 'income' ? (
+              '+'
+            ) : (
+              '-'
+            )}
+          </div>
+        )}
 
-      {/* Details */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium text-fg">
-            {transaction.merchant || transaction.description || 'Untitled'}
-          </span>
-          {transaction.hasSplits && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
-              <Users className="h-2.5 w-2.5" />
-              Split
+        {/* Name + secondary details */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="tname">
+              {transaction.merchant || transaction.description || 'Untitled'}
             </span>
-          )}
-          {category && (
-            <Badge color={category.color} className="flex-shrink-0" data-testid="transaction-row-category">
-              {category.name}
-            </Badge>
-          )}
+            {transaction.hasSplits && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+                <Users className="h-2.5 w-2.5" />
+                Split
+              </span>
+            )}
+          </div>
+          <div className="tsub flex items-center gap-2">
+            {isOnSharedAccount && account?.sharedByUsername && (
+              <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
+                {account.sharedByUsername}
+              </span>
+            )}
+            {destAccount && (
+              <>
+                <ArrowRightLeft className="h-3 w-3" />
+                <span data-testid="transaction-row-dest-account">{destAccount.name}</span>
+              </>
+            )}
+            {transaction.description && transaction.merchant && (
+              <span className="truncate">- {transaction.description}</span>
+            )}
+            {transaction.tags.map((tag) => (
+              <Badge key={tag} variant="default" className="text-[10px]">
+                {tag}
+              </Badge>
+            ))}
+          </div>
         </div>
-        <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-subtle">
-          {account && <span data-testid="transaction-row-account">{account.name}</span>}
-          {isOnSharedAccount && account?.sharedByUsername && (
-            <span className="rounded-full bg-purple-50 px-1.5 py-0.5 text-[10px] text-purple-600 font-medium">
-              {account.sharedByUsername}
-            </span>
-          )}
-          {destAccount && (
-            <>
-              <ArrowRightLeft className="h-3 w-3" />
-              <span data-testid="transaction-row-dest-account">{destAccount.name}</span>
-            </>
-          )}
-          {transaction.description && transaction.merchant && (
-            <span className="truncate">- {transaction.description}</span>
-          )}
-          {transaction.tags.map((tag) => (
-            <Badge key={tag} variant="default" className="text-[10px]">
-              {tag}
-            </Badge>
-          ))}
-        </div>
+      </div>
+
+      {/* Category */}
+      <div className="tmeta col-hide-md col-mobile-hide">
+        {category && (
+          <Badge color={category.color} data-testid="transaction-row-category">
+            {category.name}
+          </Badge>
+        )}
+      </div>
+
+      {/* Account */}
+      <div className="tmeta col-mobile-hide">
+        {account && <span data-testid="transaction-row-account">{account.name}</span>}
       </div>
 
       {/* Amount — ledger figure, with what it actually cost you underneath when
           the two differ. The ledger amount is never hidden: it is what left the
           account, and reconciling against a statement needs it. The second line
           is what the summary, dashboard and budgets are counting (§3). */}
-      <span
-        data-testid="transaction-row-amount"
-        className={cn('flex-shrink-0 text-right text-sm font-semibold', amountColor)}
-      >
+      <span data-testid="transaction-row-amount" className={cn('amt', amountColor)}>
         {amountPrefix}{formatMYR(transaction.amount)}
         {showsShare && (
           <span className="block text-[11px] font-normal text-fg-faint" data-testid="effective-amount">
@@ -241,7 +248,7 @@ function TransactionRow({
       {/* Row actions — hidden in select mode and on read-only shared rows */}
       {!selectMode && !readOnly && (
         <div
-          className="flex flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
+          className="trow-actions flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
           onClick={(e) => e.stopPropagation()}
         >
           {/* U-6: hide split button on transfers. U-07: and hide it entirely when
@@ -306,48 +313,48 @@ export function TransactionList({
   }
 
   return (
-    <div className="space-y-1">
-      {dailyGroups.map((group) => (
-          <div key={group.date}>
+    <div className="tlist">
+      {dailyGroups.map((group) => {
+        // Rounded to cents before the sign check: raw float subtraction can
+        // leave residue like -4.4e-17 on an exactly-zero day, which would
+        // print "-RM 0.00" in the neutral (non-.pos) style — a wrong sign
+        // on a live money page.
+        const dayNet = Math.round((group.totalIncome - group.totalExpense) * 100) / 100
+        const d = parseISO(group.date)
+        return (
+          <Fragment key={group.date}>
             {/* Day header */}
-            <div className="flex items-center justify-between px-3 py-2" data-testid="day-header">
-              <span className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                {format(parseISO(group.date), 'EEE, dd MMM yyyy')}
+            <div className="tgroup-head" data-testid="day-header">
+              <span className="tg-date">
+                <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
               </span>
-              <div className="flex items-center gap-3 text-xs">
-                {group.totalIncome > 0 && (
-                  <span className="text-positive-600" data-testid="day-header-income">
-                    +{formatMYR(group.totalIncome)}
-                  </span>
-                )}
-                {group.totalExpense > 0 && (
-                  <span className="text-red-600" data-testid="day-header-expense">
-                    -{formatMYR(group.totalExpense)}
-                  </span>
-                )}
-              </div>
+              <span
+                className={cn('tg-total', dayNet >= 0 && 'pos')}
+                data-testid="day-header-net"
+              >
+                {dayNet >= 0 ? '+' : '-'}{formatMYR(Math.abs(dayNet))}
+              </span>
             </div>
 
             {/* Transactions in this day */}
-            <div className="divide-y divide-line-subtle">
-              {group.transactions.map((t) => (
-                <TransactionRow
-                  key={t.id}
-                  transaction={t}
-                  accounts={accounts}
-                  categories={categories}
-                  onEdit={onEdit}
-                  onSplit={onSplit}
-                  onDelete={onDelete}
-                  selectMode={selectMode}
-                  isSelected={selectedIds?.has(t.id)}
-                  onToggleSelect={onToggleSelect}
-                  highlighted={highlightId === t.id}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+            {group.transactions.map((t) => (
+              <TransactionRow
+                key={t.id}
+                transaction={t}
+                accounts={accounts}
+                categories={categories}
+                onEdit={onEdit}
+                onSplit={onSplit}
+                onDelete={onDelete}
+                selectMode={selectMode}
+                isSelected={selectedIds?.has(t.id)}
+                onToggleSelect={onToggleSelect}
+                highlighted={highlightId === t.id}
+              />
+            ))}
+          </Fragment>
+        )
+      })}
     </div>
   )
 }

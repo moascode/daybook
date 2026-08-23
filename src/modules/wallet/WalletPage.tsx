@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, TrendingDown, Download, Upload, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { TagInput } from '@/components/ui/TagInput'
@@ -535,7 +534,7 @@ export function WalletPage() {
           <h2 className="text-base font-semibold text-fg">Transactions</h2>
           <p className="text-xs text-fg-subtle mt-0.5">Track income, expenses, and transfers</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {accounts.length > 0 && !selectMode && (
             <Button
               variant="secondary"
@@ -567,6 +566,12 @@ export function WalletPage() {
             <Download className="h-3.5 w-3.5" />
             Export
           </Button>
+          <Link to="/wallet/import">
+            <Button variant="secondary" size="sm" data-testid="import-csv-btn">
+              <Upload className="h-3.5 w-3.5" />
+              Import CSV
+            </Button>
+          </Link>
           {!selectMode && (
             <Button size="sm" onClick={crud.openCreate}>
               <Plus className="h-3.5 w-3.5" />
@@ -600,18 +605,19 @@ export function WalletPage() {
           (or a group: members can view shared transactions with no accounts). */}
       {(accounts.length > 0 || hasGroups) && (
       <>
-      <div className="mb-4 rounded-xl border border-line bg-surface p-4">
+      <div className="card card-pad mb-4">
         {/* Search-first single row: search, date range, Filters toggle, Clear */}
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="min-w-[14rem] flex-1">
-            <Input
+        <div className="filters">
+          <div className="filter-field">
+            <Filter className="h-3.5 w-3.5" />
+            <input
               id="transaction-search"
               type="search"
               aria-label="Search transactions"
-              placeholder="Search merchant or description..."
+              data-testid="transaction-search"
+              placeholder={`Filter these ${transactions.length} transactions…`}
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
-              data-testid="transaction-search"
             />
           </div>
           <DateRangeControl
@@ -624,19 +630,16 @@ export function WalletPage() {
             data-testid="filter-toggle"
             aria-expanded={filtersOpen}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+              'filter-btn',
               filtersOpen || activeFilterCount > 0
-                ? 'border-brand-300 bg-brand-50 text-brand-700'
-                : 'border-line text-fg-muted hover:bg-surface-sunken',
+                ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                : 'hover:bg-surface-hover hover:text-fg',
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filters
             {activeFilterCount > 0 && (
-              <span
-                data-testid="filter-count"
-                className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-brand-500 px-1 text-xs font-semibold text-fg-on-accent"
-              >
+              <span className="count" data-testid="filter-count">
                 {activeFilterCount}
               </span>
             )}
@@ -646,7 +649,7 @@ export function WalletPage() {
               type="button"
               onClick={clearAllFilters}
               data-testid="filter-clear-all"
-              className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-fg-subtle hover:bg-surface-sunken hover:text-fg-muted transition-colors"
+              className="btn btn-quiet"
             >
               <X className="h-3.5 w-3.5" />
               Clear
@@ -661,7 +664,7 @@ export function WalletPage() {
               <span
                 key={chip.key}
                 data-testid="filter-chip"
-                className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
+                className="chip chip-mute"
               >
                 {chip.label}
                 <button
@@ -669,7 +672,7 @@ export function WalletPage() {
                   onClick={chip.onClear}
                   aria-label="Remove filter"
                   title={`Remove ${chip.label}`}
-                  className="ml-0.5 rounded-full p-0.5 hover:bg-brand-100"
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -748,26 +751,34 @@ export function WalletPage() {
       </div>
 
       {/* Summary row */}
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-positive-100 bg-positive-50 px-4 py-3">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-positive-600">
-            <TrendingUp className="h-3.5 w-3.5" /> Income
+      <div className="grid g3 g-1-on-mobile mb-4">
+        <div className="card stat-card">
+          <div className="stat-topline">
+            <span className="stat-icon bg-pos-bg text-pos-fg">
+              <TrendingUp className="h-3.5 w-3.5" />
+            </span>
+            <span className="stat-label">Income</span>
           </div>
-          <p className="mt-1 text-lg font-bold text-positive-700" data-testid="summary-income">{formatMYR(summary.totalIncome)}</p>
+          <p className={cn('stat-value', 'pos')} data-testid="summary-income">{formatMYR(summary.totalIncome)}</p>
         </div>
-        <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-red-600">
-            <TrendingDown className="h-3.5 w-3.5" /> Expense
+        <div className="card stat-card">
+          <div className="stat-topline">
+            <span className="stat-icon bg-neg-bg text-neg-fg">
+              <TrendingDown className="h-3.5 w-3.5" />
+            </span>
+            <span className="stat-label">Expense</span>
           </div>
-          <p className="mt-1 text-lg font-bold text-red-700" data-testid="summary-expense">{formatMYR(summary.totalExpense)}</p>
+          <p className={cn('stat-value', 'neg')} data-testid="summary-expense">{formatMYR(summary.totalExpense)}</p>
         </div>
-        <div className={cn(
-          'rounded-lg border px-4 py-3',
-          summary.net >= 0 ? 'border-positive-100 bg-positive-50' : 'border-red-100 bg-red-50',
-        )}>
-          <div className="text-xs font-medium text-fg-subtle">Net</div>
+        <div className="card stat-card">
+          <div className="stat-topline">
+            <span className={cn('stat-icon', summary.net >= 0 ? 'bg-pos-bg text-pos-fg' : 'bg-neg-bg text-neg-fg')}>
+              <Wallet className="h-3.5 w-3.5" />
+            </span>
+            <span className="stat-label">Net</span>
+          </div>
           {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
-          <p className={cn('mt-1 text-lg font-bold', summary.net >= 0 ? 'text-positive-700' : 'text-red-700')} data-testid="summary-net">
+          <p className={cn('stat-value', summary.net >= 0 ? 'pos' : 'neg')} data-testid="summary-net">
             {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>
@@ -834,7 +845,7 @@ export function WalletPage() {
       )}
 
       {/* Transaction list */}
-      <div className="rounded-xl border border-line bg-surface overflow-hidden">
+      <div className="card overflow-hidden px-4 py-2 sm:px-5">
         {/* "Create an account first" is onboarding advice, and it is only true
             for a user who has nothing at all. A group member with no account of
             their own still has other people's splits to read, so for them the

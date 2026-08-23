@@ -127,15 +127,40 @@ tsc -b                          # base typecheck
 npm run typecheck:server        # server tree
 npm run typecheck:worker        # worker tree
 npm run check:contrast          # NEW in R1 — AA gate, fails the build below 4.5:1
-npm run test:e2e                # full Playwright suite, no skips (rule 11)
+npx playwright test <files>     # TARGETED — the specs touching the changed pages only
 npm run d1:schema-diff          # only when a migration changed
 npm run gen:tokens && git diff --exit-code src/index.css   # tokens changed ONLY via generator
 ```
 
+**Never run the full local suite as a gate — not `npm run test:e2e:parallel`,
+not `npx playwright test` with no file args, and not from inside a review
+subagent either.** It was tried during R3 PR-1 and cost real time: the local
+sharded runner is fragile in this sandboxed environment (CLAUDE.md §16 — its
+own D1/`wrangler dev` isolation problem), a subagent misreported a targeted
+16-spec run's count as if it were the full ~450-680-test suite, and a second
+full local run partially crashed and returned inflated/garbled numbers. None
+of that added real signal beyond CI, none of it caught anything CI didn't
+also catch, and all of it burned wall-clock and, that day, contributed to
+tripping the account's own request rate limit.
+
+**The actual full-suite, end-to-end signal is GitHub Actions — use it, don't
+reproduce it locally.** After Verify's targeted specs pass and the push lands:
+`mcp__github__pull_request_read` (`method: "get_check_runs"`, then
+`get_status`) on the PR's head commit is the authoritative full run — CI
+shards the whole suite exactly the way `test:e2e:parallel` was meant to
+locally, without the sandbox's resource contention. Poll it (or wait for the
+`check_suite.completed` webhook event on a subscribed PR) rather than
+re-running the suite yourself. A local *targeted* re-run of one or two spec
+files to chase a specific CI failure is fine and often faster than waiting
+for another CI round-trip — the rule is against reproducing the *whole*
+suite locally, not against any local Playwright at all.
+
 **On any failure the flow gates — both modes, no auto-loop** (skill rule). I add
-one project rule on top: a Playwright failure is checked against the known
-`wrangler dev` broken-pipe flake (CLAUDE.md §13) before anything is called a
-real break — reproduce the shard locally first.
+one project rule on top: a Playwright failure (local targeted or CI) is checked
+against the known `wrangler dev` broken-pipe flake (CLAUDE.md §13) before
+anything is called a real break — a same-commit CI re-run of just the failed
+job is the way to confirm that, per CLAUDE.md §13's own release-flake recipe,
+not a broader local reproduction attempt.
 
 I'll add a `scripts/flow-checks.sh` wrapping the above so Verify runs one command.
 

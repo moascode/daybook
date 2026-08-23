@@ -14,7 +14,7 @@ export function NetWorthBanner({ netWorth, accountCount, className }: NetWorthBa
     <div
       data-testid="net-worth-banner"
       className={cn(
-        'flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 px-5 py-4',
+        'flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-5',
         className,
       )}
     >
