@@ -5,7 +5,7 @@ test.describe.configure({ mode: 'serial' })
 async function signUpAndGoTo(browser: import('@playwright/test').Browser, username: string, path: string) {
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: 'test-password' },
   })
   await page.goto(path)
@@ -108,8 +108,8 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     const aliceCtx = await browser.newContext()
     const alicePage = await aliceCtx.newPage()
     const aliceName = `alice_inv_err_${Date.now()}`
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TestGroup' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await alicePage.request.post('/api/groups', { data: { name: 'TestGroup' } })
 
     await alicePage.goto('/settings/sharing')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
@@ -132,16 +132,16 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     const aliceName = `alice_rem_${ts}`
     const bobName = `bob_rem_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'RemoveGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'RemoveGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
 
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
     // Alice removes Bob via UI
     await alicePage.goto('/settings/sharing')
@@ -169,15 +169,15 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     const ts = Date.now()
     const aliceName = `alice_del_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'DelGroup' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'DelGroup' } })
     const group = await groupRes.json()
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json()
     // Share the account with the group
-    await alicePage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+    await alicePage.request.post(`/api/accounts/${acct.id}/shares`, {
       data: { groupId: group.id, canWrite: false },
     })
 
@@ -202,16 +202,16 @@ test.describe('33 — Sharing settings: groups, invites, memberships', () => {
     const aliceName = `alice_leave_${ts}`
     const bobName = `bob_leave_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'LeaveGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'LeaveGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
 
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
     // Bob navigates to household and leaves the group
     await bobPage.goto('/settings/sharing')

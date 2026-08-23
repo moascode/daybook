@@ -22,7 +22,7 @@ async function signUpAndOpenSettings(
   const context = await browser.newContext()
   const page = await context.newPage()
   const username = `e2e_pw_${Date.now()}_${seq++}`
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: ORIGINAL },
   })
   await page.goto('/settings')
@@ -71,12 +71,12 @@ test('changing the password succeeds; the old one stops working', async ({ brows
   await expect(page.getByTestId('current-password')).toHaveValue('')
   await expect(page.getByText('Signed in as')).toBeVisible()
 
-  const stale = await page.request.post('http://localhost:5173/api/auth/login', {
+  const stale = await page.request.post('/api/auth/login', {
     data: { username, password: ORIGINAL },
   })
   expect(stale.status()).toBe(401)
 
-  const fresh = await page.request.post('http://localhost:5173/api/auth/login', {
+  const fresh = await page.request.post('/api/auth/login', {
     data: { username, password: UPDATED },
   })
   expect(fresh.status()).toBe(200)
@@ -88,20 +88,20 @@ test('changing the password signs other devices out', async ({ browser }) => {
   // A second, independent session for the same user — the "other device".
   const other = await browser.newContext()
   const otherPage = await other.newPage()
-  const login = await otherPage.request.post('http://localhost:5173/api/auth/login', {
+  const login = await otherPage.request.post('/api/auth/login', {
     data: { username, password: ORIGINAL },
   })
   expect(login.status()).toBe(200)
-  expect((await otherPage.request.get('http://localhost:5173/api/auth/me')).status()).toBe(200)
+  expect((await otherPage.request.get('/api/auth/me')).status()).toBe(200)
 
   await submitChange(page, ORIGINAL, UPDATED)
   await expect(page.getByTestId('current-password')).toHaveValue('')
 
   // The other device's session is now dead — this is the point of the feature.
-  expect((await otherPage.request.get('http://localhost:5173/api/auth/me')).status()).toBe(401)
+  expect((await otherPage.request.get('/api/auth/me')).status()).toBe(401)
 
   // …while the device that made the change is still signed in.
-  expect((await page.request.get('http://localhost:5173/api/auth/me')).status()).toBe(200)
+  expect((await page.request.get('/api/auth/me')).status()).toBe(200)
 
   await other.close()
 })

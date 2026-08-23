@@ -67,7 +67,7 @@ test('log out returns to the sign-in screen, and the same credentials log back i
   const page = await context.newPage()
 
   // Register up front, then load the app authenticated.
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: 'test-password' },
   })
   await page.goto('/settings')
@@ -145,7 +145,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await expect(bulletNodeFor(pageB, 'Alice secret task')).toHaveCount(0)
 
   // B still has their OWN per-user seeded default categories (not a shared table).
-  const bCategories = await pageB.request.get('http://localhost:5173/api/categories')
+  const bCategories = await pageB.request.get('/api/categories')
   expect((await bCategories.json()).length).toBe(15)
 
   // A's data is untouched by B's session.
@@ -160,7 +160,7 @@ test('login with wrong password shows an error', async ({ browser }) => {
   const username = unique()
   const context = await browser.newContext()
   const page = await context.newPage()
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: 'test-password' },
   })
   // New context = logged out (cookie lives on the request context above only

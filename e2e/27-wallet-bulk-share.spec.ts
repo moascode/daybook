@@ -5,12 +5,12 @@ test.describe.configure({ mode: 'serial' })
 
 test.describe('27 — Wallet bulk share dialog', () => {
   async function setupAccountAndTransaction(page: ReturnType<typeof newAppPage> extends Promise<infer P> ? P : never) {
-    const acctRes = await page.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await page.request.post('/api/accounts', {
       data: { name: 'Test Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
     const today = businessToday()
-    await page.request.post('http://localhost:5173/api/transactions', {
+    await page.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Bulk Share Test', amount: 50, type: 'expense', tag: '[]' },
     })
     return acct
@@ -81,15 +81,15 @@ test.describe('27 — Wallet bulk share dialog', () => {
 
   test('Dialog shows correct transaction count in heading', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
-    const acctRes = await page.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await page.request.post('/api/accounts', {
       data: { name: 'Test Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
     const today = businessToday()
-    await page.request.post('http://localhost:5173/api/transactions', {
+    await page.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Share Txn A', amount: 30, type: 'expense', tag: '[]' },
     })
-    await page.request.post('http://localhost:5173/api/transactions', {
+    await page.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Share Txn B', amount: 20, type: 'expense', tag: '[]' },
     })
     await page.reload()
@@ -142,16 +142,16 @@ test.describe('27 — Bulk share with group members', () => {
     const ts = Date.now()
     const bobName = `bob_bulk_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: `alice_bulk_${ts}`, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: `alice_bulk_${ts}`, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'BulkGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'BulkGroup' } })
     const group = await groupRes.json() as { id: string }
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get('/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
@@ -161,10 +161,10 @@ test.describe('27 — Bulk share with group members', () => {
   test('Per-transaction mode control with owner-absorbs rounding', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    await alicePage.request.post('http://localhost:5173/api/transactions', {
+    await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Odd Cents', amount: 10.01, type: 'expense', tag: '[]' },
     })
-    await alicePage.request.post('http://localhost:5173/api/transactions', {
+    await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Full Pass', amount: 30, type: 'expense', tag: '[]' },
     })
 
@@ -206,7 +206,7 @@ test.describe('27 — Bulk share with group members', () => {
     const today = businessToday()
     // RM10.05 at 30% is 3.015 — lands exactly on a rounding boundary, so the
     // owner-absorbs rule is actually exercised (a round RM100 would not be).
-    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txn = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Percent Bill', amount: 10.05, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
@@ -240,7 +240,7 @@ test.describe('27 — Bulk share with group members', () => {
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
-    const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
+    const splits = await alicePage.request.get(`/api/transactions/${txn.id}/splits`)
       .then((r) => r.json()) as Array<{ share_amount: number }>
     const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
     // 30% of RM10.05 rounds up to 3.02, and the payer absorbs the rest — the
@@ -254,7 +254,7 @@ test.describe('27 — Bulk share with group members', () => {
   test('Keep as-is save refreshes Shared badges and exits select mode', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobPage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    await alicePage.request.post('http://localhost:5173/api/transactions', {
+    await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Badge Refresh', amount: 50, type: 'expense', tag: '[]' },
     })
 
@@ -281,7 +281,7 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(alicePage.getByText('Shared', { exact: true })).toBeVisible({ timeout: 5_000 })
 
     // Keep as-is wrote a single recipient-owes-100% row
-    const bobShared = await bobPage.request.get('http://localhost:5173/api/transactions?view=shared-with-me').then((r) => r.json()) as Array<{ merchant: string }>
+    const bobShared = await bobPage.request.get('/api/transactions?view=shared-with-me').then((r) => r.json()) as Array<{ merchant: string }>
     expect(bobShared.some((t) => t.merchant === 'Badge Refresh')).toBe(true)
 
     await aliceCtx.close()
@@ -301,16 +301,16 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     const ts = Date.now()
     const bobName = `bob_uni_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: `alice_uni_${ts}`, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: `alice_uni_${ts}`, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'UniGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'UniGroup' } })
     const group = await groupRes.json() as { id: string }
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invites = await bobPage.request.get('/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
@@ -328,20 +328,20 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     const bobName = `bob_trio_${ts}`
     const carolName = `carol_trio_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: `alice_trio_${ts}`, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
-    await carolPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: carolName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: `alice_trio_${ts}`, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await carolPage.request.post('/api/auth/signup', { data: { username: carolName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'TrioGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'TrioGroup' } })
     const group = await groupRes.json() as { id: string }
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: carolName } })
-    const bobInvites = await bobPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
-    await bobPage.request.post(`http://localhost:5173/api/invites/${bobInvites[0].id}/accept`)
-    const carolInvites = await carolPage.request.get('http://localhost:5173/api/invites').then((r) => r.json()) as Array<{ id: string }>
-    await carolPage.request.post(`http://localhost:5173/api/invites/${carolInvites[0].id}/accept`)
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: carolName } })
+    const bobInvites = await bobPage.request.get('/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await bobPage.request.post(`/api/invites/${bobInvites[0].id}/accept`)
+    const carolInvites = await carolPage.request.get('/api/invites').then((r) => r.json()) as Array<{ id: string }>
+    await carolPage.request.post(`/api/invites/${carolInvites[0].id}/accept`)
 
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json() as { id: string }
@@ -351,7 +351,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
   test('Percent auto-adjust rebalances remaining recipients equally', async ({ browser }) => {
     const { aliceCtx, bobCtx, carolCtx, alicePage, bobName, carolName, acct } = await setupTrio(browser)
     const today = businessToday()
-    const txn = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txn = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Trio Bill', amount: 100, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
@@ -384,7 +384,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
-    const splits = await alicePage.request.get(`http://localhost:5173/api/transactions/${txn.id}/splits`)
+    const splits = await alicePage.request.get(`/api/transactions/${txn.id}/splits`)
       .then((r) => r.json()) as Array<{ share_amount: number }>
     const amounts = splits.map((s) => s.share_amount).sort((a, b) => a - b)
     expect(amounts).toEqual([15, 15, 70])
@@ -397,10 +397,10 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
   test('Same split for all — equal mode applies per transaction total', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    const txnA = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnA = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Uniform A', amount: 30, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
-    const txnB = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnB = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Uniform B', amount: 50, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
@@ -421,8 +421,8 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     await dialog.getByRole('button', { name: /Split 2 Transactions/ }).click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
-    const splitsA = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
-    const splitsB = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsA = await alicePage.request.get(`/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsB = await alicePage.request.get(`/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
     expect(splitsA.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([15, 15])
     expect(splitsB.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([25, 25])
 
@@ -433,10 +433,10 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
   test('Same split for all — percent mode scales per transaction total', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    const txnA = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnA = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Pct Uniform A', amount: 100, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
-    const txnB = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnB = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Pct Uniform B', amount: 40, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
@@ -463,8 +463,8 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
-    const splitsA = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
-    const splitsB = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsA = await alicePage.request.get(`/api/transactions/${txnA.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsB = await alicePage.request.get(`/api/transactions/${txnB.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
     expect(splitsA.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([25, 75])
     expect(splitsB.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([10, 30])
 
@@ -475,10 +475,10 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
   test('Same split for all — a 0% share is reported as a config error, not as unsplittable transactions', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    await alicePage.request.post('http://localhost:5173/api/transactions', {
+    await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Zero Pct A', amount: 60, type: 'expense', tag: '[]' },
     })
-    await alicePage.request.post('http://localhost:5173/api/transactions', {
+    await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Zero Pct B', amount: 20, type: 'expense', tag: '[]' },
     })
 
@@ -509,10 +509,10 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
   test('Same split for all — fixed amounts: payer absorbs remainder, too-small transactions are skipped', async ({ browser }) => {
     const { aliceCtx, bobCtx, alicePage, bobName, acct } = await setupPair(browser)
     const today = businessToday()
-    const txnBig = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnBig = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Fixed Big', amount: 100, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
-    const txnSmall = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnSmall = await alicePage.request.post('/api/transactions', {
       data: { accountId: acct.id, date: today, merchant: 'Fixed Small', amount: 10, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
 
@@ -537,10 +537,10 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
     await saveBtn.click()
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
-    const splitsBig = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnBig.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
+    const splitsBig = await alicePage.request.get(`/api/transactions/${txnBig.id}/splits`).then((r) => r.json()) as Array<{ share_amount: number }>
     expect(splitsBig.map((s) => s.share_amount).sort((a, b) => a - b)).toEqual([20, 80])
 
-    const splitsSmall = await alicePage.request.get(`http://localhost:5173/api/transactions/${txnSmall.id}/splits`).then((r) => r.json()) as unknown[]
+    const splitsSmall = await alicePage.request.get(`/api/transactions/${txnSmall.id}/splits`).then((r) => r.json()) as unknown[]
     expect(splitsSmall.length).toBe(0)
 
     await aliceCtx.close()

@@ -12,8 +12,8 @@ async function setupTwoUsers(browser: import('@playwright/test').Browser) {
   const aliceName = `alice_sa_${Date.now()}`
   const bobName = `bob_sa_${Date.now()}`
 
-  await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-  await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+  await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+  await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
   return { alicePage, bobPage, aliceName, bobName, aliceCtx, bobCtx }
 }
@@ -116,14 +116,14 @@ test.describe('34 — Shared accounts', () => {
 
     // Alice unshares it — via API directly for test simplicity
     // (Find groupId and accountId via API)
-    const groups = await alicePage.request.get('http://localhost:5173/api/groups')
+    const groups = await alicePage.request.get('/api/groups')
     const groupsData = await groups.json()
     const groupId = groupsData[0]?.id
-    const accounts = await alicePage.request.get('http://localhost:5173/api/accounts')
+    const accounts = await alicePage.request.get('/api/accounts')
     const accountsData = await accounts.json()
     const acct = accountsData.find((a: { name: string }) => a.name === 'Shared Card')
     if (groupId && acct) {
-      await alicePage.request.delete(`http://localhost:5173/api/accounts/${acct.id}/shares/${groupId}`)
+      await alicePage.request.delete(`/api/accounts/${acct.id}/shares/${groupId}`)
     }
 
     // Bob refreshes — should no longer see it
@@ -192,24 +192,24 @@ test.describe('34 — Shared accounts', () => {
     const aliceName = `alice_iso_${ts}`
     const carolName = `carol_iso_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await carolPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: carolName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await carolPage.request.post('/api/auth/signup', { data: { username: carolName, password: 'test-password' } })
 
     // Alice creates a group (Carol is NOT invited)
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'PrivateGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'PrivateGroup' } })
     const group = await groupRes.json()
 
     // Alice creates and shares an account
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Private', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+    await alicePage.request.post(`/api/accounts/${acct.id}/shares`, {
       data: { groupId: group.id, canWrite: false },
     })
 
     // Carol checks her accounts via API — Alice's account must NOT be there
-    const carolAcctsRes = await carolPage.request.get('http://localhost:5173/api/accounts')
+    const carolAcctsRes = await carolPage.request.get('/api/accounts')
     const carolAccts = await carolAcctsRes.json()
     expect(carolAccts.find((a: { id: string }) => a.id === acct.id)).toBeUndefined()
 
@@ -226,34 +226,34 @@ test.describe('34 — Shared accounts', () => {
     const aliceName = `alice_unshare_${ts}`
     const bobName = `bob_unshare_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'UnshareGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'UnshareGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const acctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const acctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Shared', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const acct = await acctRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+    await alicePage.request.post(`/api/accounts/${acct.id}/shares`, {
       data: { groupId: group.id, canWrite: false },
     })
 
     // Bob verifies he can see the shared account
-    const beforeRes = await bobPage.request.get('http://localhost:5173/api/accounts')
+    const beforeRes = await bobPage.request.get('/api/accounts')
     const before = await beforeRes.json()
     expect(before.find((a: { id: string }) => a.id === acct.id)).toBeDefined()
 
     // Alice unshares via API (DELETE /accounts/:id/shares/:groupId)
-    await alicePage.request.delete(`http://localhost:5173/api/accounts/${acct.id}/shares/${group.id}`)
+    await alicePage.request.delete(`/api/accounts/${acct.id}/shares/${group.id}`)
 
     // Bob checks again — Alice's account is gone
-    const afterRes = await bobPage.request.get('http://localhost:5173/api/accounts')
+    const afterRes = await bobPage.request.get('/api/accounts')
     const after = await afterRes.json()
     expect(after.find((a: { id: string }) => a.id === acct.id)).toBeUndefined()
 

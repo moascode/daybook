@@ -10,7 +10,7 @@ import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTra
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 let page: Page
 

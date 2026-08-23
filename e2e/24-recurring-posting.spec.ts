@@ -91,7 +91,7 @@ test('processing catches up every occurrence due on/before today', async () => {
 
   // Run the same catch-up pass the app fires on boot.
   const res = await page.request.post(
-    'http://localhost:5173/api/recurring-transactions/process',
+    '/api/recurring-transactions/process',
   )
   expect(res.ok()).toBeTruthy()
   const body = await res.json()
@@ -123,18 +123,18 @@ test('boot processing posts due rules and surfaces a toast', async () => {
 
 test('the API rejects a transfer-type or invalid-frequency recurring rule', async () => {
   const accounts = await (
-    await page.request.get('http://localhost:5173/api/accounts')
+    await page.request.get('/api/accounts')
   ).json()
   const accountId = accounts[0].id
 
   const transferRule = await page.request.post(
-    'http://localhost:5173/api/recurring-transactions',
+    '/api/recurring-transactions',
     { data: { accountId, amount: 10, merchant: 'Bad', type: 'transfer', frequency: 'monthly', nextDueDate: '2026-06-01' } },
   )
   expect(transferRule.status()).toBe(400)
 
   const badFreq = await page.request.post(
-    'http://localhost:5173/api/recurring-transactions',
+    '/api/recurring-transactions',
     { data: { accountId, amount: 10, merchant: 'Bad', type: 'expense', frequency: 'yearly', nextDueDate: '2026-06-01' } },
   )
   expect(badFreq.status()).toBe(400)

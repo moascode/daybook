@@ -57,7 +57,7 @@ test('clicking the chip × clears just that filter', async () => {
 
 test('a ?account= deep-link auto-opens Filters and shows the chip', async () => {
   // Grab the account id from the API, then deep-link into the transactions list.
-  const accounts = await page.request.get('http://localhost:5173/api/accounts')
+  const accounts = await page.request.get('/api/accounts')
   const chipAccount = (await accounts.json()).find(
     (a: { id: string; name: string }) => a.name === 'Chip Account',
   )

@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { newAppPage, businessToday } from './helpers'
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 async function categoryIdByName(page: Page, name: string): Promise<string> {
   const cats = (await (await page.request.get(`${API}/categories`)).json()) as { id: string; name: string }[]

@@ -14,7 +14,7 @@ import type { Browser, BrowserContext, Page } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 function businessToday(): string {
   return new Intl.DateTimeFormat('en-CA', {

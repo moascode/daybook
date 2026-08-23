@@ -33,7 +33,7 @@
 8. **Ask, don't assume.** If a feature spec is ambiguous, ask the user. Don't invent behaviour.
 9. **Keep `.env.local` out of git.** It is in `.gitignore`. Never log or expose API keys.
 10. **Phase discipline.** Only build features in the current phase (see Section 9). Don't jump ahead.
-11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npx playwright test` to confirm no regressions. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
+11. **E2E tests required.** Every new feature or behaviour change must have a corresponding Playwright test in `/e2e/`. Before marking any feature complete, run `npm run test:e2e:parallel` (the locally-sharded runner, ~2-3 min — see Section 16) to confirm no regressions; fall back to `npx playwright test` (~10 min, single-worker) only if you need the single shared server. New spec files follow the naming pattern `NN-description.spec.ts`. See Section 16 for conventions.
 12. **Branch before you touch anything.** Never commit directly to `main`. Every task — no matter how small — starts with `git checkout -b <branch>`. When done, open a PR. See Section 11 for naming and PR conventions.
 13. **Never fail silently.** Every failed operation must say something the user
     can act on — a toast, an inline message, an error state. This applies to
@@ -1504,12 +1504,36 @@ e2e/
 | Refactor (no behaviour change) | Run existing suite; no new tests needed unless coverage gaps are found |
 
 ### Running tests
+
+**Default to the parallel runner for a full-suite check.** A plain
+`npx playwright test` runs single-worker (`workers: 1`, `fullyParallel: false`
+in `playwright.config.ts`) and takes ~10 minutes — CI only gets to ~2 minutes
+by sharding across 6 *separate machines*. `scripts/e2e-parallel.sh` reproduces
+that speedup on one machine by giving each shard its own `wrangler dev`
+process, port, and D1 `--persist-to` directory (this repo's local D1 is fragile
+under any concurrent access to shared storage, so isolation — not just
+parallel workers — is required). Every session should reach for this before a
+bare `npx playwright test` when running the full suite.
+
 ```bash
-npx playwright test              # Full suite (headless)
-npx playwright test e2e/01-tasks # Single file
-npx playwright test --headed     # Watch mode (headed)
-npx playwright show-report       # View last HTML report
+npm run test:e2e:parallel          # Full suite, sharded locally (~2-3 min). Default N = min(nproc, 6).
+npm run test:e2e:parallel -- 2     # Fewer shards — use this if the default N crashes a shard (see below)
+npx playwright test                # Full suite, single-worker (~10 min) — use when you need the one shared server, e.g. debugging a flake in isolation
+npx playwright test e2e/01-tasks   # Single file
+npx playwright test --headed       # Watch mode (headed)
+npx playwright show-report         # View last HTML report (single-run only; parallel shards report to playwright-report-shard-N/)
 ```
+
+`scripts/e2e-parallel.sh` builds once, boots N isolated `wrangler dev`
+instances, runs `--shard=i/N` against each in parallel, and retries — once —
+only a shard whose *server* crashed mid-run (the known wrangler/workerd
+"empty ✘ [ERROR]" fragility documented in `playwright.config.ts`, not a real
+test failure). A shard whose server stayed healthy but whose tests failed is
+never retried and is reported as a real failure. Full logs land in
+`.e2e-parallel-logs/` per shard. If a shard's server dies repeatedly even
+after the retry, pass a smaller N (e.g. `npm run test:e2e:parallel -- 2`) —
+each shard runs a real `wrangler dev` + Chromium, which is genuine CPU/memory
+pressure on a small machine.
 
 ### Traps this suite has already fallen into
 

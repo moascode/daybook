@@ -52,11 +52,11 @@ test.describe('module tabs', () => {
     // Seed one overdue task via the API directly rather than the UI (click →
     // type → blur → locate the resulting bullet-node → update) — same end
     // state, far fewer round-trips and no dependency on DOM/React timing.
-    const created = await page.request.post('http://localhost:5173/api/tasks', {
+    const created = await page.request.post('/api/tasks', {
       data: { parentId: null, content: 'Overdue badge check', sortOrder: 1 },
     })
     const { id: taskId } = (await created.json()) as { id: string }
-    await page.request.patch(`http://localhost:5173/api/tasks/${taskId}`, {
+    await page.request.patch(`/api/tasks/${taskId}`, {
       data: { dueDate: businessDatePlus(-2) },
     })
 
@@ -77,11 +77,11 @@ test.describe('notification bell', () => {
 
     // Seed via the API directly (account + a recurring rule due in 2 days),
     // same approach as the tasks-badge test — no DOM/React-timing dependency.
-    const account = await page.request.post('http://localhost:5173/api/accounts', {
+    const account = await page.request.post('/api/accounts', {
       data: { name: 'Bell Test Account' },
     })
     const { id: accountId } = (await account.json()) as { id: string }
-    await page.request.post('http://localhost:5173/api/recurring-transactions', {
+    await page.request.post('/api/recurring-transactions', {
       data: {
         accountId,
         amount: 42,

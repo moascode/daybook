@@ -47,6 +47,23 @@ function resolveChromiumPath(): string | undefined {
 
 const chromiumPath = resolveChromiumPath()
 
+// ── Parallel local shards (scripts/e2e-parallel.sh) ───
+//
+// CI parallelizes by running each `--shard=N/6` on its own runner — a separate
+// machine, so nothing shares a port or a D1 file. Locally that's one machine,
+// and this repo's local D1 (miniflare/workerd) is fragile under ANY concurrent
+// access — even two `wrangler dev` processes pointed at the same persisted
+// state have produced SQLITE_BUSY errors and hung requests (see the postmortem
+// in scripts/e2e-parallel.sh). So a local parallel run needs each shard fully
+// isolated: its own port, its own D1 storage directory, its own report folder.
+//
+// These three env vars are how the script achieves that. Left unset (every
+// existing invocation — CI, `npm run test:e2e`, a plain `npx playwright test`)
+// every default below reproduces today's exact single-server behavior.
+const E2E_PORT = process.env.E2E_PORT || '5173'
+const E2E_PERSIST_TO = process.env.E2E_PERSIST_TO // undefined → wrangler's own default (.wrangler/state)
+const E2E_REPORT_DIR = process.env.E2E_REPORT_DIR || 'playwright-report'
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 45_000,
@@ -81,10 +98,10 @@ export default defineConfig({
   workers: 1,
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'playwright-report', open: 'never' }],
+    ['html', { outputFolder: E2E_REPORT_DIR, open: 'never' }],
   ],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${E2E_PORT}`,
     // Pin the browser to the app's business timezone — the same one
     // worker/lib.ts todayStr() is pinned to (B-11), so the clock the server
     // stamps rows with and the clock the client filters months by agree.
@@ -148,9 +165,16 @@ export default defineConfig({
       // test dies on "no such table: users". Applying here makes the harness
       // self-bootstrapping instead of depending on someone having run it.
       // It is idempotent — wrangler skips migrations already recorded.
+      //
+      // This whole command is a fallback for a bare `npx playwright test` (or
+      // CI, which always runs exactly one shard per machine). scripts/
+      // e2e-parallel.sh starts and migrates each shard's server itself, before
+      // Playwright ever gets here — `reuseExistingServer` (true outside CI)
+      // then sees the health check already passing and skips this entirely,
+      // so the build-and-migrate-and-serve sequence below never runs 6 times.
       command:
         'VITE_E2E=1 npm run build && ' +
-        'npx wrangler d1 migrations apply daybook --env dev --local && ' +
+        `npx wrangler d1 migrations apply daybook --env dev --local${E2E_PERSIST_TO ? ` --persist-to "${E2E_PERSIST_TO}"` : ''} && ` +
         // --show-interactive-dev-session=false: `wrangler dev` otherwise runs an
         // interactive session with hotkeys (b/d/l/x) that reads stdin. Playwright's
         // webServer gives it no stdin, and in CI the process exited ~30s in with an
@@ -162,9 +186,13 @@ export default defineConfig({
         // devtools attached; workerd died writing to that pipe
         // ("Broken pipe", kj/async-io-unix.c++:186), taking the rest of the shard
         // with it. Production and `npm run dev:worker` keep their request logs.
-        'npx wrangler dev --env dev --port 5173 --show-interactive-dev-session false ' +
-        '--var DAYBOOK_QUIET_LOGS:1',
-      url: 'http://localhost:5173/api/health',
+        // --inspector-port is derived from the app port (offset +4000) — wrangler's
+        // own default (9229) is shared across every instance, so two shards on one
+        // machine would collide on it even with different --port/--persist-to.
+        `npx wrangler dev --env dev --port ${E2E_PORT} --inspector-port ${Number(E2E_PORT) + 4000} ` +
+        `--show-interactive-dev-session false --var DAYBOOK_QUIET_LOGS:1` +
+        (E2E_PERSIST_TO ? ` --persist-to "${E2E_PERSIST_TO}"` : ''),
+      url: `http://localhost:${E2E_PORT}/api/health`,
       reuseExistingServer: !process.env.CI,
       // Generous: covers a cold `vite build` as well as wrangler's ~3s start.
       timeout: 120_000,

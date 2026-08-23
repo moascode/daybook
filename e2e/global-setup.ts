@@ -21,7 +21,11 @@
  * that ever changes.
  */
 async function globalSetup() {
-  const url = 'http://localhost:5173/api/test/reset'
+  // Matches playwright.config.ts's E2E_PORT (default 5173) — a parallel local
+  // shard (scripts/e2e-parallel.sh) runs each shard's server on its own port,
+  // and this must wipe THAT shard's D1, not whatever happens to be on 5173.
+  const port = process.env.E2E_PORT || '5173'
+  const url = `http://localhost:${port}/api/test/reset`
   const res = await fetch(url, { method: 'POST' })
   if (!res.ok) {
     // Loud, not silent. A skipped wipe reintroduces the slow accumulation this
