@@ -631,7 +631,9 @@ export function WalletPage() {
             aria-expanded={filtersOpen}
             className={cn(
               'filter-btn',
-              (filtersOpen || activeFilterCount > 0) && 'border-brand-300 bg-brand-50 text-brand-700',
+              filtersOpen || activeFilterCount > 0
+                ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                : 'hover:bg-surface-hover hover:text-fg',
             )}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -749,7 +751,7 @@ export function WalletPage() {
       </div>
 
       {/* Summary row */}
-      <div className="grid g3 mb-4">
+      <div className="grid g3 g-1-on-mobile mb-4">
         <div className="card stat-card">
           <div className="stat-topline">
             <span className="stat-icon bg-pos-bg text-pos-fg">

@@ -114,7 +114,7 @@ export function AccountsPage() {
           }
         />
       ) : (
-        <div className="grid g3">
+        <div className="grid g3 g-1-on-mobile">
           {accounts.map((account) => (
             <AccountCard
               key={account.id}

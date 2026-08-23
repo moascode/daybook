@@ -248,7 +248,7 @@ function TransactionRow({
       {/* Row actions — hidden in select mode and on read-only shared rows */}
       {!selectMode && !readOnly && (
         <div
-          className="trow-actions flex flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
+          className="trow-actions flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
           onClick={(e) => e.stopPropagation()}
         >
           {/* U-6: hide split button on transfers. U-07: and hide it entirely when
@@ -315,7 +315,11 @@ export function TransactionList({
   return (
     <div className="tlist">
       {dailyGroups.map((group) => {
-        const dayNet = group.totalIncome - group.totalExpense
+        // Rounded to cents before the sign check: raw float subtraction can
+        // leave residue like -4.4e-17 on an exactly-zero day, which would
+        // print "-RM 0.00" in the neutral (non-.pos) style — a wrong sign
+        // on a live money page.
+        const dayNet = Math.round((group.totalIncome - group.totalExpense) * 100) / 100
         const d = parseISO(group.date)
         return (
           <Fragment key={group.date}>
