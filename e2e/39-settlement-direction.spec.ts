@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 test.describe.configure({ mode: 'serial' })
 

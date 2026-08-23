@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { FlaskConical, Settings, X } from 'lucide-react'
 import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
 import { modules } from './modules'
+import { ModuleSwitcher } from './ModuleSwitcher'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
 
@@ -25,6 +26,12 @@ const navItemClass = ({ isActive }: { isActive: boolean }) => cn('nav-item', isA
  * Renders nothing on routes that aren't one of the four primary modules
  * (/settings, /help, /uat) — SettingsLayout already has its own General/Sharing
  * tab strip, and Settings stays reachable from AccountMenu on every route.
+ *
+ * `<ModuleSwitcher>` sits above `.module-head`, always mounted like
+ * everything else in the shell — CSS shows it only in the 681-820px gap
+ * (where `.modtabs` has no room and the mobile tab bar/drawer haven't
+ * engaged yet) and hides `.module-head` in that same band, since the
+ * switcher already shows the active module's icon and name.
  */
 export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
   const location = useLocation()
@@ -36,6 +43,7 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
     <>
       <div className={cn('sidebar-backdrop', open && 'show')} onClick={onClose} aria-hidden="true" />
       <aside className={cn('sidebar', open && 'open')}>
+        <ModuleSwitcher activeModule={activeModule} onNavigate={onClose} />
         <div className="module-head">
           <span className="module-head-mark">
             <activeModule.icon className="icon" size={16} />

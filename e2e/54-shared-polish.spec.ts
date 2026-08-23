@@ -12,7 +12,7 @@ import type { Browser } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 interface Fixture {
   payerCtx: import('@playwright/test').BrowserContext

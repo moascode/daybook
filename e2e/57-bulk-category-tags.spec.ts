@@ -11,7 +11,7 @@ import { newAppPage, businessToday } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 async function seed(page: Page, merchants: string[]) {
   const acct = await (await page.request.post(`${API}/accounts`, {

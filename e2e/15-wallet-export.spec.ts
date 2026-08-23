@@ -243,28 +243,28 @@ test('exported rows match the on-screen selection when shared-in rows are select
   // Another user shares an account (with a transaction on it) into a group
   // with the main spec user. The list "all" view shows that row; the export
   // used to hard-scope to own rows and silently drop it from the file.
-  const me = (await (await page.request.get('http://localhost:5173/api/auth/me')).json()).user
+  const me = (await (await page.request.get('/api/auth/me')).json()).user
   const sharerCtx = await browser.newContext()
   const sharerPage = await sharerCtx.newPage()
-  await sharerPage.request.post('http://localhost:5173/api/auth/signup', {
+  await sharerPage.request.post('/api/auth/signup', {
     data: { username: `sharer_exp_${Date.now()}`, password: 'test-password' },
   })
-  const group = await (await sharerPage.request.post('http://localhost:5173/api/groups', {
+  const group = await (await sharerPage.request.post('/api/groups', {
     data: { name: 'ExportGroup' },
   })).json()
-  await sharerPage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, {
+  await sharerPage.request.post(`/api/groups/${group.id}/invites`, {
     data: { username: me.username },
   })
-  const invites = await (await page.request.get('http://localhost:5173/api/invites')).json()
-  await page.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+  const invites = await (await page.request.get('/api/invites')).json()
+  await page.request.post(`/api/invites/${invites[0].id}/accept`)
 
-  const acct = await (await sharerPage.request.post('http://localhost:5173/api/accounts', {
+  const acct = await (await sharerPage.request.post('/api/accounts', {
     data: { name: 'Shared Export Acct', type: 'cash' },
   })).json()
-  await sharerPage.request.post(`http://localhost:5173/api/accounts/${acct.id}/shares`, {
+  await sharerPage.request.post(`/api/accounts/${acct.id}/shares`, {
     data: { groupId: group.id, canWrite: false },
   })
-  const txn = await sharerPage.request.post('http://localhost:5173/api/transactions', {
+  const txn = await sharerPage.request.post('/api/transactions', {
     data: { accountId: acct.id, date: '2026-01-15', amount: 42, type: 'expense', merchant: 'Shared Spend' },
   })
   expect(txn.status()).toBe(201)

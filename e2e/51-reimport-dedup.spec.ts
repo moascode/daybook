@@ -9,7 +9,7 @@
 
 import { test, expect } from '@playwright/test'
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 const OUT_HASH = 'e2e-link-out-hash'
 const IN_HASH = 'e2e-link-in-hash'

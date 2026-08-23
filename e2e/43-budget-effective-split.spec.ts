@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 test.describe('43 — Budget spending uses the effective split amount', () => {
   test('budget spend falls when a split is settled, not when it is created', async ({ browser }) => {

@@ -13,7 +13,7 @@ import { newAppPage, businessDatePlus } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 let page: Page
 let accountId: string

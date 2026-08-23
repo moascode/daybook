@@ -254,7 +254,7 @@ test('CSV import respects shared-account write permission', async ({ browser }) 
   const ts = Date.now()
   const aliceName = `alice_csv_${ts}`
   const bobName = `bob_csv_${ts}`
-  const API = 'http://localhost:5173/api'
+  const API = '/api'
 
   await alice.request.post(`${API}/auth/signup`, { data: { username: aliceName, password: 'test-password' } })
   await bob.request.post(`${API}/auth/signup`, { data: { username: bobName, password: 'test-password' } })

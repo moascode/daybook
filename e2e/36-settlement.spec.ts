@@ -12,38 +12,38 @@ test.describe('36 — Settlement', () => {
     const aliceName = `alice_set_${Date.now()}`
     const bobName = `bob_set_${Date.now()}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
     // Get user IDs
-    const aliceMeRes = await alicePage.request.get('http://localhost:5173/api/auth/me')
+    const aliceMeRes = await alicePage.request.get('/api/auth/me')
     const aliceMe = await aliceMeRes.json()
-    const bobMeRes = await bobPage.request.get('http://localhost:5173/api/auth/me')
+    const bobMeRes = await bobPage.request.get('/api/auth/me')
     const bobMe = await bobMeRes.json()
 
     // Alice creates group and invites Bob
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'Family' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'Family' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
 
     // Bob accepts
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
     // Alice creates an account and a transaction
-    const aliceAcctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const aliceAcctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const aliceAcct = await aliceAcctRes.json()
 
-    const txnRes = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnRes = await alicePage.request.post('/api/transactions', {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
 
     // Split 50/50 between Alice and Bob via API
-    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
+    await alicePage.request.post('/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -56,7 +56,7 @@ test.describe('36 — Settlement', () => {
     })
 
     // Check group balances — Bob owes Alice 100
-    const balancesRes = await bobPage.request.get(`http://localhost:5173/api/groups/${group.id}/balances`)
+    const balancesRes = await bobPage.request.get(`/api/groups/${group.id}/balances`)
     const balances = await balancesRes.json()
     expect(balances.length).toBe(1)
     expect(balances[0].fromUserId).toBe(bobMe.user.id)
@@ -64,7 +64,7 @@ test.describe('36 — Settlement', () => {
     expect(Math.round(balances[0].amount)).toBe(100)
 
     // Bob creates an account for settlement
-    const bobAcctRes = await bobPage.request.post('http://localhost:5173/api/accounts', {
+    const bobAcctRes = await bobPage.request.post('/api/accounts', {
       data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#3b82f6', icon: 'wallet', openingBalance: 0 },
     })
     const bobAcct = await bobAcctRes.json()
@@ -126,35 +126,35 @@ test.describe('36 — Settlement', () => {
     const aliceName = `alice_undo_${ts}`
     const bobName = `bob_undo_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const aliceMeRes = await alicePage.request.get('http://localhost:5173/api/auth/me')
+    const aliceMeRes = await alicePage.request.get('/api/auth/me')
     const aliceMe = await aliceMeRes.json()
-    const bobMeRes = await bobPage.request.get('http://localhost:5173/api/auth/me')
+    const bobMeRes = await bobPage.request.get('/api/auth/me')
     const bobMe = await bobMeRes.json()
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'UndoGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'UndoGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const aliceAcctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const aliceAcctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const aliceAcct = await aliceAcctRes.json()
-    const bobAcctRes = await bobPage.request.post('http://localhost:5173/api/accounts', {
+    const bobAcctRes = await bobPage.request.post('/api/accounts', {
       data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#3b82f6', icon: 'wallet', openingBalance: 0 },
     })
     const bobAcct = await bobAcctRes.json()
 
-    const txnRes = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnRes = await alicePage.request.post('/api/transactions', {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
+    await alicePage.request.post('/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -204,35 +204,35 @@ test.describe('36 — Settlement', () => {
     const aliceName = `alice_over_${ts}`
     const bobName = `bob_over_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const aliceMeRes = await alicePage.request.get('http://localhost:5173/api/auth/me')
+    const aliceMeRes = await alicePage.request.get('/api/auth/me')
     const aliceMe = await aliceMeRes.json()
-    const bobMeRes = await bobPage.request.get('http://localhost:5173/api/auth/me')
+    const bobMeRes = await bobPage.request.get('/api/auth/me')
     const bobMe = await bobMeRes.json()
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'OverGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'OverGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const aliceAcctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const aliceAcctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const aliceAcct = await aliceAcctRes.json()
-    const bobAcctRes = await bobPage.request.post('http://localhost:5173/api/accounts', {
+    const bobAcctRes = await bobPage.request.post('/api/accounts', {
       data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#3b82f6', icon: 'wallet', openingBalance: 0 },
     })
     const bobAcct = await bobAcctRes.json()
 
-    const txnRes = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnRes = await alicePage.request.post('/api/transactions', {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
+    await alicePage.request.post('/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -245,7 +245,7 @@ test.describe('36 — Settlement', () => {
     })
 
     // Bob tries to settle RM200 but only owes RM100 — server caps at actual owed
-    const settleRes = await bobPage.request.post('http://localhost:5173/api/settlements', {
+    const settleRes = await bobPage.request.post('/api/settlements', {
       data: {
         groupId: group.id,
         toUserId: aliceMe.user.id,
@@ -260,11 +260,11 @@ test.describe('36 — Settlement', () => {
     // W4: the cap is applied when the claim is recorded; the balance clears once
     // Alice confirms it, into an account she picks herself.
     const settleBody = await settleRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/settlements/${settleBody.id}/confirm`, {
+    await alicePage.request.post(`/api/settlements/${settleBody.id}/confirm`, {
       data: { accountId: aliceAcct.id },
     })
 
-    const balancesRes = await bobPage.request.get(`http://localhost:5173/api/groups/${group.id}/balances`)
+    const balancesRes = await bobPage.request.get(`/api/groups/${group.id}/balances`)
     const balances = await balancesRes.json()
     expect(balances.length).toBe(0)
 
@@ -281,35 +281,35 @@ test.describe('36 — Settlement', () => {
     const aliceName = `alice_hist_${ts}`
     const bobName = `bob_hist_${ts}`
 
-    await alicePage.request.post('http://localhost:5173/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
-    await bobPage.request.post('http://localhost:5173/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
+    await alicePage.request.post('/api/auth/signup', { data: { username: aliceName, password: 'test-password' } })
+    await bobPage.request.post('/api/auth/signup', { data: { username: bobName, password: 'test-password' } })
 
-    const aliceMeRes = await alicePage.request.get('http://localhost:5173/api/auth/me')
+    const aliceMeRes = await alicePage.request.get('/api/auth/me')
     const aliceMe = await aliceMeRes.json()
-    const bobMeRes = await bobPage.request.get('http://localhost:5173/api/auth/me')
+    const bobMeRes = await bobPage.request.get('/api/auth/me')
     const bobMe = await bobMeRes.json()
 
-    const groupRes = await alicePage.request.post('http://localhost:5173/api/groups', { data: { name: 'HistGroup' } })
+    const groupRes = await alicePage.request.post('/api/groups', { data: { name: 'HistGroup' } })
     const group = await groupRes.json()
-    await alicePage.request.post(`http://localhost:5173/api/groups/${group.id}/invites`, { data: { username: bobName } })
-    const invRes = await bobPage.request.get('http://localhost:5173/api/invites')
+    await alicePage.request.post(`/api/groups/${group.id}/invites`, { data: { username: bobName } })
+    const invRes = await bobPage.request.get('/api/invites')
     const invites = await invRes.json()
-    await bobPage.request.post(`http://localhost:5173/api/invites/${invites[0].id}/accept`)
+    await bobPage.request.post(`/api/invites/${invites[0].id}/accept`)
 
-    const aliceAcctRes = await alicePage.request.post('http://localhost:5173/api/accounts', {
+    const aliceAcctRes = await alicePage.request.post('/api/accounts', {
       data: { name: 'Alice Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
     })
     const aliceAcct = await aliceAcctRes.json()
-    const bobAcctRes = await bobPage.request.post('http://localhost:5173/api/accounts', {
+    const bobAcctRes = await bobPage.request.post('/api/accounts', {
       data: { name: 'Bob Cash', type: 'cash', currency: 'MYR', color: '#3b82f6', icon: 'wallet', openingBalance: 0 },
     })
     const bobAcct = await bobAcctRes.json()
 
-    const txnRes = await alicePage.request.post('http://localhost:5173/api/transactions', {
+    const txnRes = await alicePage.request.post('/api/transactions', {
       data: { accountId: aliceAcct.id, date: '2026-01-01', merchant: 'Dinner', amount: 200, type: 'expense', tag: '[]' },
     })
     const txn = await txnRes.json()
-    await alicePage.request.post('http://localhost:5173/api/transactions/splits', {
+    await alicePage.request.post('/api/transactions/splits', {
       data: {
         transactions: [{
           transactionId: txn.id,
@@ -322,7 +322,7 @@ test.describe('36 — Settlement', () => {
     })
 
     // Bob settles via API
-    await bobPage.request.post('http://localhost:5173/api/settlements', {
+    await bobPage.request.post('/api/settlements', {
       data: { groupId: group.id, toUserId: aliceMe.user.id, amount: 100, note: 'cash', fromAccountId: bobAcct.id },
     })
 

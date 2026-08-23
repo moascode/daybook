@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 /** Payer + recipient in one group, with one split transaction dated `date`. */
 async function splitFixture(

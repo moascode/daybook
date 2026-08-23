@@ -518,7 +518,7 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
   // Inject a row with tag='' directly into the DB — simulates data created before
   // multi-tag support where SQLite stored the default empty string.
   // Before the fix, json_each('') throws and breaks the entire filter query.
-  await page.request.post('http://localhost:5173/api/test/inject-legacy-tag-row')
+  await page.request.post('/api/test/inject-legacy-tag-row')
 
   // Reload so the page fetches the freshly injected row. The store resets to
   // "This Month" on reload, so immediately switch to All Time to see all rows.
@@ -564,11 +564,11 @@ test('default From/To equal the current month bounds in a UTC+8 timezone', async
   // the last day of the previous month and To as the day before month-end.
   const context = await browser.newContext({ timezoneId: 'Asia/Kuala_Lumpur' })
   const pg = await context.newPage()
-  await pg.request.post('http://localhost:5173/api/auth/signup', {
+  await pg.request.post('/api/auth/signup', {
     data: { username: `e2e_tz_${Date.now()}`, password: 'test-password' },
   })
   // The filter bar only renders once an account exists.
-  await pg.request.post('http://localhost:5173/api/accounts', {
+  await pg.request.post('/api/accounts', {
     data: { name: 'TZ Account', type: 'cash' },
   })
   await pg.goto('/wallet')

@@ -14,7 +14,7 @@ import { newAppPage, businessToday } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 // ── Bug 1: net worth must exclude shared-in accounts ───────────────────
 

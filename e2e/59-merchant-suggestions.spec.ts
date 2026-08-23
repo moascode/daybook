@@ -18,7 +18,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { newAppPage, navigateToImportCsv } from './helpers'
 
-const API = 'http://localhost:5173/api'
+const API = '/api'
 
 interface Suggestion {
   raw: string

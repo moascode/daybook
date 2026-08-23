@@ -34,6 +34,11 @@ server/data/
 # Wrangler local state — Miniflare's local D1 SQLite files, caches, build output
 .wrangler/
 
+# scripts/e2e-parallel.sh — per-shard isolated D1 storage, logs, HTML reports
+.wrangler-e2e-shard-*/
+.e2e-parallel-logs/
+playwright-report-shard-*/
+
 # infra/daybook runtime files (pidfile, log, generated session secret)
 .daybook/
 

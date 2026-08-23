@@ -52,7 +52,7 @@ let userSeq = 0
  */
 export async function signUpOnPage(page: Page) {
   const username = `e2e_${Date.now()}_${userSeq++}`
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: 'test-password' },
   })
 }
@@ -70,7 +70,7 @@ export async function newAppPage(browser: Browser, path = '/') {
   const context = await browser.newContext()
   const page = await context.newPage()
   const username = `e2e_${Date.now()}_${userSeq++}`
-  await page.request.post('http://localhost:5173/api/auth/signup', {
+  await page.request.post('/api/auth/signup', {
     data: { username, password: 'test-password' },
   })
   await page.goto(path)
