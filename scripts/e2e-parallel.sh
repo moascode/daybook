@@ -119,17 +119,44 @@ free_port() {
   return 1
 }
 
+# Recursively SIGKILL a PID and everything it spawned. Needed because
+# `wrangler dev`'s own node process supervises workerd and RESPAWNS it the
+# instant it dies — so killing only the current port-holder (what free_port
+# does) can chase a moving target forever. Observed directly: fuser -k on
+# the app port killed workerd, and a fresh workerd instance reappeared on
+# the very same port seconds later, spawned by the still-alive wrangler CLI
+# process several tree levels above — free_port's own polling loop then has
+# nothing to converge on and can spin for its full 10s timeout repeatedly.
+kill_tree() {
+  local pid="$1" child
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill -9 "$pid" >/dev/null 2>&1 || true
+}
+
 declare -A SERVER_PIDS=()
 
 cleanup() {
+  # Captured first: this trap's own commands (the `|| true` guards below in
+  # particular) otherwise overwrite $? by the time the function returns,
+  # silently turning a real "shard(s) failed" `exit 1` into a 0 — observed
+  # directly in this environment (script printed the failure summary, then
+  # exited 0). Restored explicitly at the end so a caller (CI, `&&`/`if`
+  # chain, another script) sees the real result.
+  local status=$?
   if [ "${#SERVER_PIDS[@]}" -gt 0 ]; then
     echo "› Stopping shard server(s)…"
     for i in "${!SERVER_PIDS[@]}"; do
+      # Kill the whole tree FIRST so the supervisor can't respawn workerd
+      # out from under free_port's port-release wait — see kill_tree above.
+      kill_tree "${SERVER_PIDS[$i]}"
       free_port "$(port_for "$i")" || true
       free_port "$(inspector_for "$i")" || true
     done
     wait >/dev/null 2>&1 || true
   fi
+  exit "$status"
 }
 trap cleanup EXIT INT TERM
 
@@ -177,6 +204,9 @@ start_shard() {
 
 stop_shard() {
   local i="$1"
+  # Kill the whole tree first — see kill_tree's comment: wrangler's node
+  # process respawns workerd, so free_port alone can chase a moving target.
+  kill_tree "${SERVER_PIDS[$i]}"
   free_port "$(port_for "$i")" || true
   free_port "$(inspector_for "$i")" || true
   unset "SERVER_PIDS[$i]"
