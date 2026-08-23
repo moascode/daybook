@@ -60,8 +60,11 @@ test.describe('wallet module sidebar navigation', () => {
     await expect(navItem(page, 'budgets')).toBeVisible()
 
     await page.goto('/tasks')
-    // Wallet's own nav is gone — only the current module's nav renders.
-    await expect(navItem(page, 'budgets')).toBeHidden()
+    // Wallet's own nav is gone — genuinely absent from the DOM (ModuleSidebar
+    // swaps its whole subtree per active module), not just hidden, so assert
+    // on the unfiltered locator rather than the :visible-filtered navItem()
+    // (which would pass just as well if the element were merely display:none).
+    await expect(page.getByTestId('nav-budgets')).toHaveCount(0)
   })
 
   test('Import CSV is reachable from the account menu, not the sidebar', async ({ browser }) => {

@@ -68,6 +68,36 @@ test.describe('module tabs', () => {
   })
 })
 
+test.describe('notification bell', () => {
+  test('shows a live count from bills due within 7 days', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet/accounts')
+
+    const bell = page.getByTestId('notifications-bell')
+    await expect(bell.locator('.count')).toHaveCount(0)
+
+    // Seed via the API directly (account + a recurring rule due in 2 days),
+    // same approach as the tasks-badge test — no DOM/React-timing dependency.
+    const account = await page.request.post('http://localhost:5173/api/accounts', {
+      data: { name: 'Bell Test Account' },
+    })
+    const { id: accountId } = (await account.json()) as { id: string }
+    await page.request.post('http://localhost:5173/api/recurring-transactions', {
+      data: {
+        accountId,
+        amount: 42,
+        merchant: 'Bell Test Bill',
+        frequency: 'monthly',
+        nextDueDate: businessDatePlus(2),
+      },
+    })
+
+    // Reload so the shell's badge poll (fires once on mount) picks it up.
+    await page.reload()
+    await waitForApp(page)
+    await expect(bell.locator('.count')).toHaveText('1')
+  })
+})
+
 test.describe('account menu', () => {
   test('opens, slides to the settings pane, and back again', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
@@ -112,6 +142,16 @@ test.describe('search field', () => {
     await expect(search).toBeFocused()
     await search.fill('groceries')
     await expect(page).toHaveURL(/\/tasks$/)
+  })
+
+  test('Escape blurs the field', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+
+    const search = page.getByLabel('Search across all modules')
+    await search.click()
+    await expect(search).toBeFocused()
+    await search.press('Escape')
+    await expect(search).not.toBeFocused()
   })
 })
 

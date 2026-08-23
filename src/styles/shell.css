@@ -129,11 +129,14 @@
     border-top: 1px solid rgb(var(--line));
     padding: 6px var(--s2) calc(6px + env(safe-area-inset-bottom));
   }
-  .tabbar a {
+  /* R2: disabled tabs (Day/Trips) are <button> so aria-label reaches
+     assistive tech (a generic-role element like a bare <a> without href
+     can't be ARIA-named) — same layout rule extended to match. */
+  .tabbar a, .tabbar button {
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
     font-size: 10px; font-weight: 550; color: rgb(var(--fg-faint)); padding: 6px 0; border-radius: var(--r-sm);
   }
-  .tabbar a .icon { width: 21px; height: 21px; }
+  .tabbar a .icon, .tabbar button .icon { width: 21px; height: 21px; }
   .tabbar a.active { color: rgb(var(--accent)); }
 }
 
@@ -145,6 +148,14 @@
     align-items: center; justify-content: center; box-shadow: var(--e3);
   }
   .fab .icon { width: 22px; height: 22px; stroke-width: 2.2; }
+}
+
+@media (max-width: 680px) {
+  /* R2: the document (not <main>) is the scroll container here — .shell has
+     no height constraint, so <main>'s own overflow-y-auto never engages.
+     Without this, the fixed .tabbar permanently covers the last ~50px of
+     every page (last row, last button) with no way to scroll it clear. */
+  .main-col { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 }
 
 /* ---- module switcher (Daybook is multi-module: Tasks, Wallet, …) ---- */
@@ -223,6 +234,12 @@
   background: rgb(var(--surface));
   border-bottom: 1px solid rgb(var(--line));
 }
+/* R2: the document is the scroll container now (see .main-col above), so an
+   in-page anchor's scrollIntoView({block:'start'}) — e.g. HelpPage.tsx's
+   section links — lands the target at viewport y=0, which is BEHIND this
+   sticky 56px bar. scroll-padding-top keeps the browser's own scroll-to
+   logic clear of it without HelpPage needing to know the bar's height. */
+html { scroll-padding-top: 64px; }
 .appbar-left { display: flex; align-items: center; gap: var(--s2); flex: 1; min-width: 0; }
 .appbar-right { display: flex; align-items: center; gap: var(--s2); flex: 1; justify-content: flex-end; }
 .appbar-logo {
@@ -354,11 +371,15 @@
 .appbar .menu-btn { display: none; }
 .appbar { position: sticky; }
 .modtabs { position: absolute; left: 50%; transform: translateX(-50%); top: 0; }
-/* R2 fix: .modtabs already hides at 820px (rule above), but this rule used to
-   wait until 680px to show the hamburger, leaving 681-820px with NO way to
-   reach module nav (.tabbar/.fab are also 680px-only). Match the 820px
-   threshold so the hamburger fills the gap the moment the tabs disappear. */
-@media (max-width: 820px) { .appbar .menu-btn { display: flex; } }
+/* R2: 681-820px is a known gap — .modtabs hides at 820px (rule above) but
+   the sidebar's drawer mechanism (.sidebar.open, .sidebar-backdrop.show)
+   only engages ≤680px, so a hamburger shown above 680px would toggle state
+   with no visible effect (also true of .tabbar/.fab, both 680px-only). An
+   earlier version of this rule widened the threshold to 820px, which
+   produced exactly that dead button instead of fixing anything — reverted.
+   No module-switching UI exists in that band yet; it needs its own design
+   pass (e.g. extending .tabbar's range), not a CSS-only patch here. */
+@media (max-width: 680px) { .appbar .menu-btn { display: flex; } }
 @media (max-width: 820px) {
   .appbar-left { flex: 1 1 auto; min-width: 0; }
   .appbar-right { flex: 0 0 auto; }

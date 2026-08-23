@@ -11,7 +11,14 @@ export function SearchField() {
   return (
     <div className="search">
       <Search className="icon-sm" size={15} aria-hidden="true" />
-      <input type="text" placeholder="Search Daybook…" aria-label="Search across all modules" />
+      <input
+        type="text"
+        placeholder="Search Daybook…"
+        aria-label="Search across all modules"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') e.currentTarget.blur()
+        }}
+      />
     </div>
   )
 }

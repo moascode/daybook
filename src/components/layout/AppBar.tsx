@@ -4,7 +4,8 @@ import { modules } from './modules'
 import { SearchField } from './SearchField'
 import { AccountMenu } from './AccountMenu'
 import { useHouseholdStore } from '@/stores/household.store'
-import { useNotificationBadgeStore } from '@/hooks/useNotificationBadges'
+import { useNotificationBadgeStore } from '@/stores/notifications.store'
+import { useToastStore } from '@/stores/toast.store'
 
 interface AppBarProps {
   onOpenMobileMenu: () => void
@@ -33,6 +34,7 @@ export function AppBar({ onOpenMobileMenu }: AppBarProps) {
   const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
   const billsDueCount = useNotificationBadgeStore((s) => s.billsDueCount)
   const tasksDueCount = useNotificationBadgeStore((s) => s.tasksDueCount)
+  const addToast = useToastStore((s) => s.addToast)
 
   // Bell = pending invites + unresolved split claims + bills due (design §2 / D-8).
   const bellCount = pendingInvites + pendingClaimCount + billsDueCount
@@ -59,10 +61,20 @@ export function AppBar({ onOpenMobileMenu }: AppBarProps) {
       <nav className="modtabs" aria-label="Modules">
         {modules.map((m) =>
           m.disabled ? (
-            <span
+            // A real <button> (not a <span>) so aria-label actually reaches
+            // assistive tech — ARIA prohibits naming a generic-role element
+            // (what a bare <span> maps to), which made this tab invisible to
+            // screen readers despite the visible "coming soon" tooltip
+            // (design spec §2's whole point is that a disabled control WITH
+            // A STATED REASON is honest). aria-disabled, not the native
+            // `disabled` attribute — the latter can suppress :hover in some
+            // engines, which would kill the tooltip this exists to show.
+            <button
               key={m.id}
-              className="modtab"
+              type="button"
               aria-disabled="true"
+              onClick={(e) => e.preventDefault()}
+              className="modtab"
               aria-label={`${m.label} — coming soon`}
               data-testid={modTabTestId(m.id)}
             >
@@ -70,7 +82,7 @@ export function AppBar({ onOpenMobileMenu }: AppBarProps) {
               <span className="tip-label" aria-hidden="true">
                 Coming soon
               </span>
-            </span>
+            </button>
           ) : (
             <NavLink
               key={m.id}
@@ -94,13 +106,34 @@ export function AppBar({ onOpenMobileMenu }: AppBarProps) {
       </nav>
 
       <div className="appbar-right">
-        {/* Not wired to any action yet — quick-add's form/modal is out of scope
-            for R2 (design shell only). */}
-        <button type="button" className="circle-btn" aria-label="Quick add" data-testid="quick-add">
+        {/* Quick-add's form/modal is out of scope for R2 (design shell only)
+            — a toast beats a click that silently does nothing (rule 13),
+            same treatment AccountMenu's "Report a problem" already gets. */}
+        <button
+          type="button"
+          className="circle-btn"
+          aria-label="Quick add"
+          data-testid="quick-add"
+          onClick={() => addToast({ message: "Quick add isn't wired up yet — use New Task or Add Transaction for now." })}
+        >
           <Plus className="icon" />
         </button>
-        {/* No dropdown panel in R2 — just the live count (design §2). */}
-        <button type="button" className="circle-btn" aria-label="Notifications" data-testid="notifications-bell">
+        {/* No dropdown panel in R2 — just the live count (design §2); the
+            click still needs to say something rather than nothing. */}
+        <button
+          type="button"
+          className="circle-btn"
+          aria-label="Notifications"
+          data-testid="notifications-bell"
+          onClick={() =>
+            addToast({
+              message:
+                bellCount > 0
+                  ? `${bellCount} notification${bellCount === 1 ? '' : 's'} — see Settings → Sharing for invites and claims, Wallet → Recurring for bills due.`
+                  : "Nothing pending right now — this'll open a panel here in a future release.",
+            })
+          }
+        >
           <Bell className="icon" />
           {bellCount > 0 && <span className="count">{bellCount > 99 ? '99+' : bellCount}</span>}
         </button>

@@ -32,7 +32,16 @@ test('Settings is reachable via the account menu', async () => {
   await page.keyboard.press('Escape')
 })
 
-test('Settings link navigates to /settings', async () => {
+test('the account menu actually navigates to /settings', async () => {
+  // Prove the real path works (not just that the shared `page` already
+  // happens to be there from beforeAll): leave, then come back via
+  // Settings & privacy → Preferences, ending back on /settings for the
+  // tests below.
+  await page.goto('/tasks')
+  await waitForApp(page)
+  await page.getByTestId('account-menu-button').click()
+  await page.getByTestId('account-menu-settings').click()
+  await page.getByRole('button', { name: 'Preferences' }).click()
   await expect(page).toHaveURL(/\/settings$/)
 })
 

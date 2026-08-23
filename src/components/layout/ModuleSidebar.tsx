@@ -90,6 +90,10 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             </NavLink>
           )}
         </div>
+
+        {/* Design spec §4: "Keep the trust-note footer (On your hardware).
+            It is true and it is the product's position." */}
+        <p className="mt-2 px-2 text-xs text-fg-faint">Daybook · On your hardware</p>
       </aside>
     </>
   )

@@ -191,9 +191,10 @@ export async function fillTransactionForm(
  * desktop one display:none). Matching the visible instance keeps strict mode
  * happy in both viewports. See CLAUDE.md §16 trap 4.
  *
- * `dest` is the suffix after `nav-`: tasks · wallet · wallet-toggle ·
- * transactions · dashboard · accounts · shared · budgets · goals · recurring ·
- * reports · import · settings · uat · menu-open · menu-close.
+ * `dest` is the suffix after `nav-`: tasks · wallet · transactions ·
+ * dashboard · accounts · shared · budgets · goals · recurring · reports ·
+ * settings · uat · menu-open · menu-close. (`import` and `wallet-toggle`
+ * were removed by R2 — see {@link navigateToImportCsv}.)
  */
 export function navItem(page: Page, dest: string) {
   return page.locator(`[data-testid="nav-${dest}"]:visible`)
