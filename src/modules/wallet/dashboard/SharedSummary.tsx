@@ -28,7 +28,7 @@ const MIN_BALANCE = 0.005
  * sidebar's PendingClaimsBadge reads), and fetching it a second time here would
  * risk it disagreeing with what's shown elsewhere.
  */
-export function SharedSummary({ className }: { className?: string } = {}) {
+export function SharedSummary({ className }: { className?: string }) {
   const userId = useAppStore((s) => s.user?.id ?? '')
   const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
   const [pairings, setPairings] = useState<Pairing[] | null>(null)

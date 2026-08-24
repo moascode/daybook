@@ -139,6 +139,12 @@
 .hero-figure {
   font-size: var(--t-3xl); font-weight: 680; letter-spacing: -.035em;
   line-height: 1.05; display: flex; align-items: baseline; font-variant-numeric: tabular-nums;
+  /* R3 fix: a 7-figure net worth (a realistic balance, not a token amount)
+     at --t-3xl (44px) can exceed the hero's content width at 390px by a
+     small margin — .hero-main already has min-width:0, so this is the
+     wrap permission that lets it actually use that room instead of
+     overflowing past the edge. */
+  overflow-wrap: anywhere;
 }
 .hero-figure .cents { font-size: var(--t-lg); font-weight: 600; color: rgb(255 255 255 / .62); letter-spacing: -.02em; }
 .hero-row { display: flex; align-items: flex-end; gap: var(--s5); flex-wrap: wrap; margin-top: var(--s5); }
@@ -177,9 +183,22 @@
   flex-shrink: 0; min-width: 176px;
   border-top: none; margin: 0; padding-top: 0;
 }
-.hero-stats > div { display: flex; align-items: baseline; gap: var(--s3); }
+/* R3 fix: a flex item's default min-width is `auto`, which for a text child
+   means "at least as wide as the longest unbreakable run" — formatMYR's
+   non-breaking space between "RM" and the digits makes a long Kept/Money
+   figure one such run, so at <=900px (.hero-stats > div becomes flex:1 in a
+   3-up row) a value like "+RM 5,653.30" refused to shrink to its share and
+   pushed the whole row past the hero's edge. min-width:0 alone just moved
+   the failure from overflow to an ugly mid-number wrap ("5,65"/"3.30") —
+   the same round-1 mistake PR-1 made with .stat-value before measuring
+   that no font size fits 3 columns in ~100px each. The real fix is
+   structural, not typographic: below 480px the three stats stack as
+   full-width label/value rows instead of 3 narrow columns, so each figure
+   gets the hero's whole content width. min-width:0 and overflow-wrap stay
+   as defensive fallbacks for the 480-900px band and any edge case. */
+.hero-stats > div { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
 .hero-stat-k { flex: 1; }
-.hero-stat-v { margin-top: 0; font-size: var(--t-md); }
+.hero-stat-v { margin-top: 0; font-size: var(--t-md); overflow-wrap: anywhere; }
 @media (max-width: 900px) {
   .hero-body { flex-direction: column; align-items: stretch; gap: var(--s5); }
   .hero-stats {
@@ -187,6 +206,10 @@
     border-left: none; border-top: 1px solid rgb(255 255 255 / .22);
   }
   .hero-stats > div { flex: 1; flex-direction: column; gap: 2px; }
+}
+@media (max-width: 480px) {
+  .hero-stats { flex-direction: column; gap: var(--s2); }
+  .hero-stats > div { flex-direction: row; justify-content: space-between; align-items: baseline; }
 }
 
 /* v7.1 section content that is NOT motion (sizing, not transition) — kept with
