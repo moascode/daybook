@@ -1,20 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import {
-  Wallet,
-  CreditCard,
-  Smartphone,
-  Building2,
-  PiggyBank,
-  TrendingUp,
-  Banknote,
-  Coins,
-  Pencil,
-  Trash2,
-  Share2,
-} from 'lucide-react'
+import { Wallet, Pencil, Trash2, Share2 } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ACCOUNT_TYPE_LABELS, ICON_MAP } from '@/lib/accountDisplay'
 import type { Account } from '@/types/wallet.types'
 
 interface AccountCardProps {
@@ -25,26 +14,6 @@ interface AccountCardProps {
   onDelete: (account: Account) => void
   onShare?: (account: Account) => void
   sharesCount?: number
-}
-
-export const ACCOUNT_TYPE_LABELS: Record<Account['type'], string> = {
-  cash: 'Cash',
-  card: 'Card',
-  'e-wallet': 'E-Wallet',
-  bank: 'Bank',
-  investment: 'Investment',
-  other: 'Other',
-}
-
-export const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
-  wallet: Wallet,
-  'credit-card': CreditCard,
-  smartphone: Smartphone,
-  building: Building2,
-  'piggy-bank': PiggyBank,
-  'trending-up': TrendingUp,
-  banknote: Banknote,
-  coins: Coins,
 }
 
 export function AccountCard({ account, balance, onEdit, onDelete, onShare, sharesCount }: AccountCardProps) {

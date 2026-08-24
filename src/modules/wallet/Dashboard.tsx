@@ -58,7 +58,7 @@ import { DashboardCard } from './dashboard/DashboardCard'
 import { SharedSummary } from './dashboard/SharedSummary'
 import { UpcomingBills, type UpcomingBill } from './dashboard/UpcomingBills'
 import { transactionsLink } from './dashboard/links'
-import { ICON_MAP, ACCOUNT_TYPE_LABELS } from './AccountCard'
+import { ICON_MAP, ACCOUNT_TYPE_LABELS } from '@/lib/accountDisplay'
 import { TransactionList } from './TransactionList'
 
 /** Months of history behind the stat-tile sparklines, regardless of mode. */
