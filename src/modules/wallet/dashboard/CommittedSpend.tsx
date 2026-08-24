@@ -6,6 +6,7 @@ import type { CommittedSplit } from './insights'
 
 interface CommittedSpendProps {
   split: CommittedSplit
+  className?: string
 }
 
 /**
@@ -14,12 +15,16 @@ interface CommittedSpendProps {
  * The useful cut for changing anything: a committed cost is a decision already
  * made, so the discretionary half is where the month is actually won or lost.
  */
-export function CommittedSpend({ split }: CommittedSpendProps) {
+export function CommittedSpend({ split, className }: CommittedSpendProps) {
   const colors = useDashboardChartColors()
   const total = split.committed + split.discretionary
   if (total <= 0) {
     return (
-      <DashboardCard title="Locked in vs. up to you" subtitle="Committed costs against the rest.">
+      <DashboardCard
+        className={className}
+        title="Locked in vs. up to you"
+        subtitle="Committed costs against the rest."
+      >
         <p className="py-6 text-center text-sm text-fg-subtle">No spending in this period yet.</p>
       </DashboardCard>
     )
@@ -29,6 +34,7 @@ export function CommittedSpend({ split }: CommittedSpendProps) {
 
   return (
     <DashboardCard
+      className={className}
       title="Locked in vs. up to you"
       subtitle="Bills, subscriptions and anything you pay most months, against everything you decided on in the moment."
     >

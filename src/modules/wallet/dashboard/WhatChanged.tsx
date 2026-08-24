@@ -21,6 +21,7 @@ interface WhatChangedProps {
    */
   dateFrom: string
   dateTo: string
+  className?: string
 }
 
 /** Biggest same-direction movers to name in the callout, before falling back to "N categories." */
@@ -77,6 +78,7 @@ export function WhatChanged({
   comparisonDescription,
   dateFrom,
   dateTo,
+  className,
 }: WhatChangedProps) {
   const colors = useDashboardChartColors()
   const scale = Math.max(...rows.map((r) => Math.abs(r.delta)), 1)
@@ -84,7 +86,7 @@ export function WhatChanged({
   const movers = rows.filter((r) => Math.abs(r.delta) >= 0.005)
   if (movers.length === 0) {
     return (
-      <DashboardCard title="What changed" subtitle={`Each category against ${comparisonDescription}.`}>
+      <DashboardCard title="What changed" subtitle={`Each category against ${comparisonDescription}.`} className={className}>
         <p className="py-6 text-center text-sm text-fg-subtle">
           Nothing has moved against your usual pattern this period.
         </p>
@@ -100,6 +102,7 @@ export function WhatChanged({
       subtitle={`Each category against ${comparisonDescription}. The bars add up to ${
         netDelta >= 0 ? '+' : '−'
       }${formatMYR(Math.abs(netDelta))}.`}
+      className={className}
     >
       <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
         <span className="inline-flex items-center gap-1.5">
