@@ -246,7 +246,7 @@ export function SplitsSection({
 
   return (
     <section
-      className="rounded-xl border border-line bg-surface"
+      className="card"
       data-testid="splits-section"
       data-counterparty={counterpartyUsername}
     >
