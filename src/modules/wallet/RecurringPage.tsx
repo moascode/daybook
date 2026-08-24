@@ -211,7 +211,7 @@ export function RecurringPage() {
               <div
                 key={rule.id}
                 data-testid="recurring-row"
-                className="rounded-xl border border-line bg-surface p-4"
+                className="card card-pad hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
