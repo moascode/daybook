@@ -57,6 +57,9 @@ import { MerchantTable } from './dashboard/MerchantTable'
 import { DashboardCard } from './dashboard/DashboardCard'
 import { SharedSummary } from './dashboard/SharedSummary'
 import { UpcomingBills, type UpcomingBill } from './dashboard/UpcomingBills'
+import { transactionsLink } from './dashboard/links'
+import { ICON_MAP, ACCOUNT_TYPE_LABELS } from './AccountCard'
+import { TransactionList } from './TransactionList'
 
 /** Months of history behind the stat-tile sparklines, regardless of mode. */
 const TILE_TREND_MONTHS = 12
@@ -109,7 +112,7 @@ export function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [range, setRange] = useState<DateRangeValue>(() => monthRange(0))
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => getDismissed(userId))
-  const [balances, setBalances] = useState<Record<string, number>>({})
+  const [balances, setBalances] = useState<Record<string, number> | null>(null)
   const dataVersion = useWalletStore((s) => s.dataVersion)
 
   const { dateFrom, dateTo } = range
@@ -544,6 +547,39 @@ export function Dashboard() {
     saveDismissed(userId, next)
   }
 
+  // ── Hero / featured account / recent activity — selections over figures
+  // already displayed elsewhere on the page, not new aggregations. ──
+  const username = useAppStore((s) => s.user?.username ?? '')
+
+  // Net worth is what YOU own — byte-identical to AccountsPage.tsx:46-51 and
+  // WalletPage.tsx's own ownAccounts reduce (README invariant 3 / PR #101).
+  const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+
+  const netWorth = useMemo(
+    () => (balances === null ? null : ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0)),
+    [ownAccounts, balances],
+  )
+
+  // Highest-balance own account. No default_account_id setting exists in this
+  // codebase to reuse (Decision 5), so this selection rule is the one being
+  // introduced. Ties broken by earlier createdAt, then id, so the pick is
+  // deterministic.
+  const featuredAccount = useMemo(() => {
+    if (balances === null || ownAccounts.length === 0) return null
+    return [...ownAccounts].sort((a, b) => {
+      const d = (balances[b.id] ?? 0) - (balances[a.id] ?? 0)
+      if (d !== 0) return d
+      const c = a.createdAt.localeCompare(b.createdAt)
+      return c !== 0 ? c : a.id.localeCompare(b.id)
+    })[0]
+  }, [ownAccounts, balances])
+
+  // Most recent 5 rows of the period already scoped by the filter row above.
+  const recentTxns = useMemo(
+    () => [...periodTxns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
+    [periodTxns],
+  )
+
   if (transactions.length === 0 && accounts.length === 0) {
     return (
       <div className="mx-auto max-w-5xl">
@@ -563,25 +599,118 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="flex flex-col gap-4">
-        {/* One filter row, scoping every panel below it. Year-on-year history
-            stays on Reports — a genuinely different lens (monthly bars, two
-            calendar years side by side) the dashboard doesn't replicate. */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <DateRangeControl
-            value={range}
-            onChange={setRange}
-            presets={['this-month', 'last-month', 'last-3-months', 'last-12-months', 'all-time', 'custom']}
-          />
-          <Link
-            to="/wallet/reports"
-            className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
-          >
-            Year-on-year comparison →
-          </Link>
-        </div>
+      {/* One filter row, scoping every panel below it. Year-on-year history
+          stays on Reports — a genuinely different lens (monthly bars, two
+          calendar years side by side) the dashboard doesn't replicate. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <DateRangeControl
+          value={range}
+          onChange={setRange}
+          presets={['this-month', 'last-month', 'last-3-months', 'last-12-months', 'all-time', 'custom']}
+        />
+        <Link
+          to="/wallet/reports"
+          className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
+        >
+          Year-on-year comparison →
+        </Link>
+      </div>
 
+      <div className="dash">
+        {/* Row A — hero + featured account */}
+        <section className="hero c8" data-testid="overview-hero">
+          <p className="hero-eyebrow">
+            {isMonthMode && monthPeriod?.inProgress ? 'So far in' : 'In'}{' '}
+            {isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel}
+          </p>
+          <h2 className="hero-greeting">{username ? `Hi, ${username}` : 'Your money'}</h2>
+          <div className="hero-body">
+            <div className="hero-main">
+              <div className="hero-figure-row">
+                <span className="hero-figure" data-testid="hero-net-worth">
+                  {netWorth === null ? '…' : formatMYR(netWorth)}
+                </span>
+                <span className="chip chip-glass">Net worth</span>
+              </div>
+              <p className="hero-eyebrow mt-2" data-testid="hero-account-count">
+                across {ownAccounts.length} account{ownAccounts.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <div className="hero-stats">
+              <div>
+                <span className="hero-stat-k">Money in</span>
+                <span className="hero-stat-v" data-testid="hero-money-in">{formatMYR(summary.income)}</span>
+              </div>
+              <div>
+                <span className="hero-stat-k">Money out</span>
+                <span className="hero-stat-v" data-testid="hero-money-out">{formatMYR(summary.expense)}</span>
+              </div>
+              <div>
+                <span className="hero-stat-k">Kept</span>
+                <span className="hero-stat-v" data-testid="hero-kept">
+                  {summary.net > 0 ? '+' : ''}{formatMYR(summary.net)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {balances === null ? (
+          <div className="acct acct-feature c4" data-testid="featured-account">
+            <p className="acct-bal">…</p>
+          </div>
+        ) : featuredAccount ? (
+          <Link
+            to={`/wallet?account=${featuredAccount.id}`}
+            className="acct acct-feature c4"
+            data-testid="featured-account"
+          >
+            <div className="acct-top">
+              <div className="acct-mark">
+                {(() => {
+                  const FeaturedIcon = ICON_MAP[featuredAccount.icon] ?? ICON_MAP.wallet
+                  return <FeaturedIcon className="h-5 w-5" />
+                })()}
+              </div>
+              <div>
+                <h3 className="acct-name">{featuredAccount.name}</h3>
+                <span className="acct-sub">
+                  {ACCOUNT_TYPE_LABELS[featuredAccount.type]} · {featuredAccount.currency}
+                </span>
+              </div>
+            </div>
+            <p className="acct-bal" data-testid="featured-account-balance">
+              {formatMYR(balances[featuredAccount.id] ?? 0)}
+            </p>
+            <p className="acct-foot">
+              <span>Largest balance</span>
+              <span>Accounts →</span>
+            </p>
+          </Link>
+        ) : (
+          <Link to="/wallet/accounts" className="acct add c4">
+            Add an account
+          </Link>
+        )}
+
+        {/* Row B */}
+        <UpcomingBills className="c4" bills={upcomingBills} onDismiss={handleDismiss} />
+        <BudgetPace
+          className="c4"
+          budgets={budgets}
+          spending={budgetSpendingMap}
+          categories={categories}
+          elapsed={budgetElapsed}
+          elapsedLabel={budgetElapsedLabel}
+          showPaceNotch={isMonthMode}
+          limitMultiplier={isMonthMode ? 1 : rangeMonthSpan}
+          daysLeft={budgetDaysLeft}
+        />
+        <SharedSummary className="c4" />
+
+        {/* Row C */}
         <SpendPace
+          className="c12"
           spent={summary.expense}
           usual={pace.usual}
           curve={pace.curve}
@@ -599,12 +728,57 @@ export function Dashboard() {
           formatDayTooltipLabel={spendPaceFormatDayTooltipLabel}
         />
 
-        <StatTiles tiles={tiles} />
+        {/* Row C' — StatTiles keeps its own markup and mobile behaviour
+            untouched (Decision 3); it is the one child kept in a wrapper. */}
+        <div className="c12">
+          <StatTiles tiles={tiles} />
+        </div>
 
-        <UpcomingBills bills={upcomingBills} onDismiss={handleDismiss} />
+        {/* Row D */}
+        {breakdown.length > 0 && (
+          <CategoryBreakdown
+            className="c6"
+            rows={breakdown}
+            previous={previousByCategory}
+            total={summary.expense}
+            dateFrom={periodBounds.from}
+            dateTo={periodBounds.to}
+          />
+        )}
+        <WeekRhythm className="c6" averages={weekday} months={isMonthMode ? BASELINE_MONTHS : rangeMonthSpan} />
 
+        {/* Row E */}
+        <DashboardCard
+          className="c8"
+          title="Recent activity"
+          action={{
+            label: 'See all',
+            to: transactionsLink({ dateFrom: periodBounds.from, dateTo: periodBounds.to }),
+          }}
+        >
+          <div data-testid="recent-activity">
+            <TransactionList
+              transactions={recentTxns}
+              accounts={accounts}
+              categories={categories}
+              readOnly
+              showDayTotals={false}
+            />
+          </div>
+        </DashboardCard>
+        <MerchantTable
+          className="c4"
+          rows={merchants}
+          trendMonths={TREND_MONTHS}
+          dateFrom={periodBounds.from}
+          dateTo={periodBounds.to}
+        />
+
+        {/* Row F */}
+        <CommittedSpend className={hasBaseline ? 'c6' : 'c12'} split={committed} />
         {hasBaseline && (
           <WhatChanged
+            className="c6"
             rows={deltas}
             netDelta={netDelta}
             comparisonDescription={comparisonDescription}
@@ -613,49 +787,19 @@ export function Dashboard() {
           />
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {breakdown.length > 0 && (
-            <CategoryBreakdown
-              rows={breakdown}
-              previous={previousByCategory}
-              total={summary.expense}
-              dateFrom={periodBounds.from}
-              dateTo={periodBounds.to}
-            />
-          )}
-          <WeekRhythm averages={weekday} months={isMonthMode ? BASELINE_MONTHS : rangeMonthSpan} />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <CommittedSpend split={committed} />
-          <BudgetPace
-            budgets={budgets}
-            spending={budgetSpendingMap}
-            categories={categories}
-            elapsed={budgetElapsed}
-            elapsedLabel={budgetElapsedLabel}
-            showPaceNotch={isMonthMode}
-            limitMultiplier={isMonthMode ? 1 : rangeMonthSpan}
-            daysLeft={budgetDaysLeft}
-          />
-        </div>
-
-        <MerchantTable
-          rows={merchants}
-          trendMonths={TREND_MONTHS}
-          dateFrom={periodBounds.from}
-          dateTo={periodBounds.to}
-        />
-
-        <SharedSummary />
-
-        <DashboardCard title="Goals" subtitle="Progress against target." action={{ label: 'Manage', to: '/wallet/goals' }}>
+        {/* Row G */}
+        <DashboardCard
+          className="c12"
+          title="Goals"
+          subtitle="Progress against target."
+          action={{ label: 'Manage', to: '/wallet/goals' }}
+        >
           {goals.length === 0 ? (
             <p className="py-6 text-center text-sm text-fg-subtle">No goals set yet.</p>
           ) : (
             <div data-testid="dashboard-goals">
               {goals.map((goal) => {
-                const balance = balances[goal.accountId] ?? 0
+                const balance = balances?.[goal.accountId] ?? 0
                 const saved = Math.max(0, Math.min(balance, goal.targetAmount))
                 const percent = goal.targetAmount > 0 ? (saved / goal.targetAmount) * 100 : 0
                 return (
