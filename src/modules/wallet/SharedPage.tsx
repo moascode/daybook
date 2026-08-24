@@ -275,7 +275,7 @@ export function SharedPage() {
 
           The per-state breakdown lives inside each person card, where the date
           filter that scopes it also lives. */}
-      <div className="flex flex-wrap gap-4 rounded-xl border border-line bg-surface px-5 py-4" data-testid="shared-headline">
+      <div className="card card-pad flex flex-wrap gap-4" data-testid="shared-headline">
         <div className="min-w-[7rem] flex-1">
           <p className="text-xs text-fg-subtle">Owed to you</p>
           <p className="text-lg font-bold text-positive-700" data-testid="headline-owed-to-me">
@@ -314,15 +314,15 @@ export function SharedPage() {
       </div>
 
       {awaitingMyConfirmation.length > 0 && (
-        <div className="rounded-xl border border-line bg-surface" data-testid="awaiting-confirmation">
+        <div className="card" data-testid="awaiting-confirmation">
           <div className="border-b border-line-subtle px-5 py-3">
-            <h3 className="text-sm font-semibold text-fg">
+            <h3 className="card-title">
               Payments to confirm
-              <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+              <span className="ml-2 rounded-full bg-warn-bg px-2 py-0.5 text-xs font-medium text-warn-fg">
                 {awaitingMyConfirmation.length}
               </span>
             </h3>
-            <p className="mt-0.5 text-xs text-fg-subtle">
+            <p className="card-sub mt-0.5">
               Someone says they have paid you. Confirming books it into your account and clears the balance.
             </p>
           </div>
@@ -376,15 +376,15 @@ export function SharedPage() {
         const history = historyByGroup[group.id] ?? []
         if (history.length === 0) return null
         return (
-          <div key={group.id} data-testid="settlement-history">
+          <div key={group.id} className="card card-pad" data-testid="settlement-history">
             <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
               Recent settlements{groups.length > 1 ? ` · ${group.name}` : ''}
             </h4>
-            <div className="space-y-2">
+            <ul className="divide-y divide-line-subtle">
               {history.slice(0, 10).map((s) => (
-                <div
+                <li
                   key={s.id}
-                  className="flex items-start justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm"
+                  className="flex items-start justify-between gap-3 py-2.5 text-sm"
                   data-testid="settlement-row"
                 >
                   <div className="min-w-0 flex-1 overflow-hidden">
@@ -433,9 +433,9 @@ export function SharedPage() {
                       Undo
                     </Button>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )
       })}
@@ -508,7 +508,7 @@ function withinUndoWindow(settledAt: string): boolean {
 
 function SettlementStatus({ status }: { status: Settlement['status'] }) {
   const style = {
-    awaiting_confirmation: { label: 'Awaiting confirmation', cls: 'bg-amber-50 text-amber-700' },
+    awaiting_confirmation: { label: 'Awaiting confirmation', cls: 'bg-warn-bg text-warn-fg' },
     confirmed: { label: 'Confirmed', cls: 'bg-positive-50 text-positive-700' },
     rejected: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
   }[status] ?? { label: status, cls: 'bg-surface-hover text-fg-muted' }
