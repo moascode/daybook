@@ -7,6 +7,7 @@ interface WeekRhythmProps {
   /** Seven averages, Monday first. */
   averages: number[]
   months: number
+  className?: string
 }
 
 // Low → high spend, mapped onto Tailwind's `blue` scale. This scale is
@@ -36,7 +37,7 @@ const INK_MUTED = 'text-slate-900/70'
  * with a legend doing the rest, rather than asking the reader to compare bar
  * heights against no fixed scale.
  */
-export function WeekRhythm({ averages, months }: WeekRhythmProps) {
+export function WeekRhythm({ averages, months, className }: WeekRhythmProps) {
   const resolvedTheme = useAppStore((s) => s.resolvedTheme)
   const max = Math.max(...averages)
   const min = Math.min(...averages)
@@ -54,6 +55,7 @@ export function WeekRhythm({ averages, months }: WeekRhythmProps) {
 
   return (
     <DashboardCard
+      className={className}
       title="Your week"
       subtitle={`Average spend per weekday over the last ${months} month${months === 1 ? '' : 's'}.`}
     >

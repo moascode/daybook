@@ -11,14 +11,23 @@ interface TransactionListProps {
   transactions: Transaction[]
   accounts: Account[]
   categories: Category[]
-  onEdit: (transaction: Transaction) => void
-  onDelete: (transaction: Transaction) => void
+  onEdit?: (transaction: Transaction) => void
+  onDelete?: (transaction: Transaction) => void
   onSplit?: (transaction: Transaction) => void
   selectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
   /** Row to ring and scroll to — set by /wallet?txn=<id> deep links. */
   highlightId?: string
+  /** Forces every row read-only regardless of account permissions — for a
+   *  summary surface (e.g. the dashboard's "Recent activity") that should
+   *  never offer edit/delete/split. */
+  readOnly?: boolean
+  /** Set false to omit the day-net pill — for a truncated list (e.g. a
+   *  5-row "recent activity" slice) where a partial day's total would
+   *  disagree with the same date's total on the full /wallet list.
+   *  Day headers (the date itself) still render either way. */
+  showDayTotals?: boolean
 }
 
 function groupByDay(transactions: Transaction[]): DailyGroup[] {
@@ -64,17 +73,19 @@ function TransactionRow({
   isSelected,
   onToggleSelect,
   highlighted,
+  forcedReadOnly,
 }: {
   transaction: Transaction
   accounts: Account[]
   categories: Category[]
-  onEdit: (t: Transaction) => void
+  onEdit?: (t: Transaction) => void
   onSplit?: (t: Transaction) => void
-  onDelete: (t: Transaction) => void
+  onDelete?: (t: Transaction) => void
   selectMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: string) => void
   highlighted?: boolean
+  forcedReadOnly?: boolean
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
 
@@ -94,7 +105,7 @@ function TransactionRow({
   const isOnSharedAccount = account?.isShared
   // Read-only shared-in account: edit/delete/split would always 403, so the row
   // exposes no mutating affordances and isn't clickable-to-edit.
-  const readOnly = !!(account?.isShared && account.canWrite !== 1)
+  const readOnly = forcedReadOnly || !!(account?.isShared && account.canWrite !== 1)
   const interactive = selectMode || !readOnly
 
   // Only when the two genuinely differ, and never on transfers (excluded from
@@ -118,7 +129,7 @@ function TransactionRow({
     if (selectMode) {
       onToggleSelect?.(transaction.id)
     } else if (!readOnly) {
-      onEdit(transaction)
+      onEdit?.(transaction)
     }
   }
 
@@ -270,7 +281,7 @@ function TransactionRow({
             variant="ghost"
             size="sm"
             className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onEdit(transaction)}
+            onClick={() => onEdit?.(transaction)}
             aria-label="Edit transaction"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -279,7 +290,7 @@ function TransactionRow({
             variant="ghost"
             size="sm"
             className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onDelete(transaction)}
+            onClick={() => onDelete?.(transaction)}
             aria-label="Delete transaction"
           >
             <Trash2 className="h-3.5 w-3.5 text-red-500" />
@@ -301,6 +312,8 @@ export function TransactionList({
   selectedIds,
   onToggleSelect,
   highlightId,
+  readOnly,
+  showDayTotals = true,
 }: TransactionListProps) {
   const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
 
@@ -328,12 +341,14 @@ export function TransactionList({
               <span className="tg-date">
                 <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
               </span>
-              <span
-                className={cn('tg-total', dayNet >= 0 && 'pos')}
-                data-testid="day-header-net"
-              >
-                {dayNet >= 0 ? '+' : '-'}{formatMYR(Math.abs(dayNet))}
-              </span>
+              {showDayTotals && (
+                <span
+                  className={cn('tg-total', dayNet >= 0 && 'pos')}
+                  data-testid="day-header-net"
+                >
+                  {dayNet >= 0 ? '+' : '-'}{formatMYR(Math.abs(dayNet))}
+                </span>
+              )}
             </div>
 
             {/* Transactions in this day */}
@@ -350,6 +365,7 @@ export function TransactionList({
                 isSelected={selectedIds?.has(t.id)}
                 onToggleSelect={onToggleSelect}
                 highlighted={highlightId === t.id}
+                forcedReadOnly={readOnly}
               />
             ))}
           </Fragment>

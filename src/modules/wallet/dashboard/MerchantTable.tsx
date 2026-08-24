@@ -11,6 +11,7 @@ interface MerchantTableProps {
   /** Period bounds for the "All merchants" action link. Omit either to skip the link. */
   dateFrom?: string
   dateTo?: string
+  className?: string
 }
 
 /** A single visit isn't a "frequent, easy to miss" pattern. */
@@ -42,12 +43,12 @@ function findFrequentButSmallCandidate(rows: MerchantSpend[]): MerchantSpend | n
  * completely different responses. The average column is what separates them,
  * and the small-and-frequent case is the one the old list made invisible.
  */
-export function MerchantTable({ rows, trendMonths, dateFrom, dateTo }: MerchantTableProps) {
+export function MerchantTable({ rows, trendMonths, dateFrom, dateTo, className }: MerchantTableProps) {
   const colors = useDashboardChartColors()
 
   if (rows.length === 0) {
     return (
-      <DashboardCard title="Who you paid" subtitle="Merchants in this period.">
+      <DashboardCard title="Who you paid" subtitle="Merchants in this period." className={className}>
         <p className="py-6 text-center text-sm text-fg-subtle">
           No merchant names on this period’s spending yet.
         </p>
@@ -62,6 +63,7 @@ export function MerchantTable({ rows, trendMonths, dateFrom, dateTo }: MerchantT
       title="Who you paid"
       subtitle="Sorted by total — read the count column too: a small amount paid often is a different problem from one big purchase."
       action={dateFrom && dateTo ? { label: 'All merchants', to: transactionsLink({ dateFrom, dateTo }) } : undefined}
+      className={className}
     >
       <div className="-mx-1 overflow-x-auto px-1">
         <table className="w-full min-w-[30rem] text-[13px]" data-testid="merchant-table">

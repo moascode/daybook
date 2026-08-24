@@ -27,7 +27,7 @@ interface AccountCardProps {
   sharesCount?: number
 }
 
-const ACCOUNT_TYPE_LABELS: Record<Account['type'], string> = {
+export const ACCOUNT_TYPE_LABELS: Record<Account['type'], string> = {
   cash: 'Cash',
   card: 'Card',
   'e-wallet': 'E-Wallet',
@@ -36,7 +36,7 @@ const ACCOUNT_TYPE_LABELS: Record<Account['type'], string> = {
   other: 'Other',
 }
 
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
+export const ICON_MAP: Record<string, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
   wallet: Wallet,
   'credit-card': CreditCard,
   smartphone: Smartphone,

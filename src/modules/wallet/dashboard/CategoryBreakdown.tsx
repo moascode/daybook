@@ -12,6 +12,7 @@ interface CategoryBreakdownProps {
   total: number
   dateFrom: string
   dateTo: string
+  className?: string
 }
 
 /**
@@ -30,12 +31,14 @@ export function CategoryBreakdown({
   total,
   dateFrom,
   dateTo,
+  className,
 }: CategoryBreakdownProps) {
   const colors = useDashboardChartColors()
   const scale = Math.max(...rows.map((r) => Math.max(r.amount, previous.get(r.id) ?? 0)), 1)
 
   return (
     <DashboardCard
+      className={className}
       title="Where it goes"
       subtitle="The thin bar behind each row is the same category last period."
       action={{ label: 'Transactions', to: transactionsLink({ dateFrom, dateTo }) }}

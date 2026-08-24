@@ -1,11 +1,13 @@
 import { useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { TrendingDown, TrendingUp } from 'lucide-react'
-import { formatMYR, formatAxisMYR } from '@/lib/utils'
+import { cn, formatMYR, formatAxisMYR } from '@/lib/utils'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { useDashboardChartColors } from './chartColors'
 
 interface SpendPaceProps {
+  /** Optional grid-span / layout class forwarded to the root `<section>`. */
+  className?: string
   /** Spend so far in the selected period. */
   spent: number
   /** The same measurement over the comparison window. */
@@ -46,6 +48,7 @@ interface SpendPaceProps {
 }
 
 export function SpendPace({
+  className,
   spent,
   usual,
   curve,
@@ -92,7 +95,7 @@ export function SpendPace({
   const usualAverage = monthsSpanned !== undefined ? usual / monthsSpanned : undefined
 
   return (
-    <section className="rounded-xl border border-line bg-surface p-5">
+    <section className={cn('card card-pad', className)}>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
         <div>
           <p className="text-sm font-medium text-fg-muted">

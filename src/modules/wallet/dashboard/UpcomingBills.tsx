@@ -1,5 +1,5 @@
 import { Bell, X } from 'lucide-react'
-import { formatMYR } from '@/lib/utils'
+import { cn, formatMYR } from '@/lib/utils'
 import type { RecurringTransaction } from '@/types/wallet.types'
 
 export interface UpcomingBill extends RecurringTransaction {
@@ -9,6 +9,7 @@ export interface UpcomingBill extends RecurringTransaction {
 interface UpcomingBillsProps {
   bills: UpcomingBill[]
   onDismiss: (id: string) => void
+  className?: string
 }
 
 /**
@@ -18,14 +19,14 @@ interface UpcomingBillsProps {
  * `bill-reminder` test id, the "due in N days" wording, the amount and the
  * Dismiss control — so the migration to theme tokens is the only edit here.
  */
-export function UpcomingBills({ bills, onDismiss }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProps) {
   if (bills.length === 0) return null
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className={cn('card card-pad', className)}>
       <div className="mb-3 flex items-center gap-2">
-        <Bell className="h-4 w-4 text-amber-600" />
-        <h3 className="text-sm font-semibold text-amber-800">Upcoming Bills</h3>
+        <Bell className="h-4 w-4 text-warn-fg" />
+        <h3 className="text-sm font-semibold text-warn-fg">Upcoming Bills</h3>
       </div>
       <div className="flex flex-col gap-2">
         {bills.map((bill) => {
@@ -34,11 +35,11 @@ export function UpcomingBills({ bills, onDismiss }: UpcomingBillsProps) {
             <div
               key={bill.id}
               data-testid="bill-reminder"
-              className="flex items-center justify-between rounded-lg border border-amber-100 bg-surface px-3 py-2"
+              className="flex items-center justify-between rounded-lg border border-warn-bd bg-surface px-3 py-2"
             >
               <div>
                 <p className="text-sm font-medium text-fg">{bill.merchant || '(no merchant)'}</p>
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-warn-fg">
                   {days < 0
                     ? `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}`
                     : days === 0

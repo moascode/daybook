@@ -21,6 +21,7 @@ interface BudgetPaceProps {
   limitMultiplier?: number
   /** Days left in the period. Only meaningful — and only supplied — alongside `showPaceNotch`. */
   daysLeft?: number
+  className?: string
 }
 
 /** A budget must be at least this far ahead of pace before the callout calls it out — a few points over the notch is normal noise, not a warning. */
@@ -58,6 +59,7 @@ export function BudgetPace({
   showPaceNotch = true,
   limitMultiplier = 1,
   daysLeft,
+  className,
 }: BudgetPaceProps) {
   const byId = new Map(categories.map((c) => [c.id, c]))
   const rows = budgets
@@ -79,6 +81,7 @@ export function BudgetPace({
   if (rows.length === 0) {
     return (
       <DashboardCard
+        className={className}
         title="Budgets"
         subtitle="Set a monthly limit on a category to track it here."
         action={{ label: 'Manage', to: '/wallet/budgets' }}
@@ -90,6 +93,7 @@ export function BudgetPace({
 
   return (
     <DashboardCard
+      className={className}
       title="Budgets"
       subtitle={
         showPaceNotch

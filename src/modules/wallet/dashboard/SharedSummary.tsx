@@ -28,7 +28,7 @@ const MIN_BALANCE = 0.005
  * sidebar's PendingClaimsBadge reads), and fetching it a second time here would
  * risk it disagreeing with what's shown elsewhere.
  */
-export function SharedSummary() {
+export function SharedSummary({ className }: { className?: string } = {}) {
   const userId = useAppStore((s) => s.user?.id ?? '')
   const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
   const [pairings, setPairings] = useState<Pairing[] | null>(null)
@@ -76,7 +76,7 @@ export function SharedSummary() {
   if (pairings.length === 0 && pendingClaimCount === 0) return null
 
   return (
-    <DashboardCard title="Shared" action={{ label: 'Shared', to: '/wallet/shared' }}>
+    <DashboardCard title="Shared" action={{ label: 'Shared', to: '/wallet/shared' }} className={className}>
       <div data-testid="shared-summary">
         {pairings.length > 0 && (
           <ul role="list" className="flex flex-col gap-0.5">
