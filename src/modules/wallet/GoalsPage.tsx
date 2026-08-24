@@ -87,6 +87,15 @@ export function GoalsPage() {
     }
   }, [deleteGoal, crud, addToast])
 
+  // Summary-band figures: reduces over the same `goals`/`balances` data every
+  // card below already renders, using the identical per-goal clamp each card
+  // computes for its own progress bar — no new fetch, no new aggregation.
+  const goalSaved = (goal: Goal) => Math.max(0, Math.min(balances[goal.accountId] ?? 0, goal.targetAmount))
+  const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0)
+  const totalSaved = goals.reduce((sum, g) => sum + goalSaved(g), 0)
+  const goalsPct = totalTarget > 0 ? Math.min((totalSaved / totalTarget) * 100, 100) : 0
+  const completedCount = goals.filter((g) => goalSaved(g) >= g.targetAmount).length
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-5 flex items-center justify-between">
@@ -108,7 +117,40 @@ export function GoalsPage() {
           action={<Button size="sm" onClick={openCreate}>Add your first goal</Button>}
         />
       ) : (
-        <div className="flex flex-col gap-3">
+        <>
+          {/* Summary band — mirrors the Budgets band above the row list. */}
+          <div className="card card-pad mb-4">
+            <div className="band">
+              <div className="band-main">
+                <div className="band-fig">
+                  <span className="v">{formatMYR(totalSaved)}</span>
+                  <span className="k">of {formatMYR(totalTarget)} target</span>
+                </div>
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-hover">
+                  <div
+                    className="h-full rounded-full bg-brand-500 transition-all"
+                    style={{ width: `${goalsPct}%` }}
+                  />
+                </div>
+              </div>
+              <div className="band-stats">
+                <div className="band-stat">
+                  <p className="k">Goals</p>
+                  <p className="v">{goals.length}</p>
+                </div>
+                <div className="band-stat">
+                  <p className="k">Completed</p>
+                  <p className="v">{completedCount}</p>
+                </div>
+                <div className="band-stat">
+                  <p className="k">Remaining</p>
+                  <p className="v">{formatMYR(totalTarget - totalSaved)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
           {goals.map((goal) => {
             const balance = balances[goal.accountId] ?? 0
             const saved = Math.max(0, Math.min(balance, goal.targetAmount))
@@ -119,7 +161,7 @@ export function GoalsPage() {
               <div
                 key={goal.id}
                 data-testid="goal-card"
-                className="rounded-xl border border-line bg-surface p-4"
+                className="card card-pad hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
@@ -167,7 +209,8 @@ export function GoalsPage() {
               </div>
             )
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Create / Edit modal */}

@@ -81,6 +81,13 @@ export function BudgetsPage() {
     }
   }, [deleteBudget, crud, addToast])
 
+  // Summary-band figures: reduces over the same `budgets`/`spending` data
+  // every row below already renders — no new fetch, no new aggregation.
+  const totalBudgeted = budgets.reduce((sum, b) => sum + b.limitAmount, 0)
+  const totalSpent = budgets.reduce((sum, b) => sum + (spending.get(b.categoryId) ?? 0), 0)
+  const monthPct = totalBudgeted > 0 ? Math.min((totalSpent / totalBudgeted) * 100, 100) : 0
+  const overBudgetCount = budgets.filter((b) => (spending.get(b.categoryId) ?? 0) > b.limitAmount).length
+
   const expenseCategories = categories.filter((c) => c.type === 'expense' || c.type === 'both')
   const usedCategoryIds = new Set(budgets.map((b) => b.categoryId))
   const availableCategories = crud.editingItem
@@ -119,7 +126,49 @@ export function BudgetsPage() {
           }
         />
       ) : (
-        <div className="flex flex-col gap-3">
+        <>
+          {/* Month summary band — figure left, three stats right of a
+              hairline, pace bar full width beneath. Reduces over the same
+              `budgets`/`spending` data the rows below already render. */}
+          <div className="card card-pad mb-4">
+            <div className="band">
+              <div className="band-main">
+                <div className="band-fig">
+                  <span className="v">{formatMYR(totalSpent)}</span>
+                  <span className="k">of {formatMYR(totalBudgeted)} budgeted</span>
+                </div>
+                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-hover">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      totalSpent > totalBudgeted
+                        ? 'bg-red-500'
+                        : monthPct > 80
+                          ? 'bg-orange-400'
+                          : 'bg-brand-500',
+                    )}
+                    style={{ width: `${monthPct}%` }}
+                  />
+                </div>
+              </div>
+              <div className="band-stats">
+                <div className="band-stat">
+                  <p className="k">Remaining</p>
+                  <p className="v">{formatMYR(totalBudgeted - totalSpent)}</p>
+                </div>
+                <div className="band-stat">
+                  <p className="k">Categories</p>
+                  <p className="v">{budgets.length}</p>
+                </div>
+                <div className="band-stat">
+                  <p className="k">Over budget</p>
+                  <p className="v">{overBudgetCount}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
           {budgets.map((budget) => {
             const category = categories.find((c) => c.id === budget.categoryId)
             const spent = spending.get(budget.categoryId) ?? 0
@@ -130,7 +179,7 @@ export function BudgetsPage() {
               <div
                 key={budget.id}
                 data-testid="budget-row"
-                className="rounded-xl border border-line bg-surface p-4"
+                className="card card-pad hover:bg-surface-hover transition-colors"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -193,7 +242,8 @@ export function BudgetsPage() {
               </div>
             )
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Add / Edit modal */}

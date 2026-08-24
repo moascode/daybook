@@ -101,7 +101,7 @@ export function ReportsPage() {
       </div>
 
       {/* Year-on-year */}
-      <div className="rounded-xl border border-line bg-surface p-5 mb-6">
+      <div className="card card-pad mb-6">
         <h3 className="mb-1 text-sm font-semibold text-fg">Year-on-year comparison</h3>
         <p className="mb-4 text-xs text-fg-subtle">{lastYear} vs {thisYear}</p>
         <div data-testid="yoy-chart">
@@ -131,7 +131,7 @@ export function ReportsPage() {
       </div>
 
       {/* Custom date range */}
-      <div className="rounded-xl border border-line bg-surface p-5" data-testid="custom-date-range">
+      <div className="card card-pad" data-testid="custom-date-range">
         <h3 className="mb-4 text-sm font-semibold text-fg">Custom date range</h3>
         <div className="flex flex-wrap items-end gap-3">
           {/* Shared date-range widgets (§6.4); the range only loads on Apply. */}
@@ -167,7 +167,7 @@ export function ReportsPage() {
                       <span className="ml-2 text-xs text-fg-faint">{t.date}</span>
                     </div>
                     <span className={t.type === 'income' ? 'text-positive-600 font-medium' : t.type === 'transfer' ? 'text-fg-subtle font-medium' : 'text-red-600 font-medium'}>
-                      {t.type === 'income' ? '+' : t.type === 'transfer' ? '↔' : '-'}{formatMYR(t.amount)}
+                      {t.type === 'income' ? '+' : t.type === 'transfer' ? '↔' : '-'}{formatMYR(countableAmount(t))}
                     </span>
                   </div>
                 ))}
