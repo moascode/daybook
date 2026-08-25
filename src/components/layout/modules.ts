@@ -14,6 +14,8 @@ import {
   BarChart2,
   CalendarClock,
   UserCheck,
+  CheckCircle2,
+  Repeat,
 } from 'lucide-react'
 
 /**
@@ -109,6 +111,21 @@ export const modules: ModuleDescriptor[] = [
       // "Unsorted" bucket) is injected by ModuleSidebar itself, not listed
       // here — this file stays static/pure, no per-user data (see the doc
       // comment above ModuleDescriptor).
+      {
+        label: 'Review',
+        items: [
+          { to: '/tasks/completed', label: 'Completed', icon: CheckCircle2, end: false, testid: 'nav-tasks-completed' },
+          {
+            to: '/tasks/habits',
+            label: 'Habits',
+            icon: Repeat,
+            end: false,
+            testid: 'nav-tasks-habits',
+            disabled: true,
+            disabledReason: 'Coming in R11',
+          },
+        ],
+      },
     ],
   },
   {

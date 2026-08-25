@@ -3,6 +3,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { TasksTodayPage } from '@/modules/tasks/TasksTodayPage'
 import { TasksAllPage } from '@/modules/tasks/TasksAllPage'
 import { TasksListDetailPage } from '@/modules/tasks/TasksListDetailPage'
+import { TasksCompletedPage } from '@/modules/tasks/TasksCompletedPage'
 import { WalletLayout } from '@/modules/wallet/WalletLayout'
 import { WalletPage } from '@/modules/wallet/WalletPage'
 import { AccountsPage } from '@/modules/wallet/AccountsPage'
@@ -29,6 +30,7 @@ export const router = createBrowserRouter([
       { path: 'tasks', element: <TasksTodayPage /> },
       { path: 'tasks/all', element: <TasksAllPage /> },
       { path: 'tasks/lists/:listId', element: <TasksListDetailPage /> },
+      { path: 'tasks/completed', element: <TasksCompletedPage /> },
       {
         path: 'wallet',
         element: <WalletLayout />,
