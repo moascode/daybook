@@ -64,7 +64,7 @@ yet even though the code is merged to `main`; see the warning below.
 | R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | ✅ merged [PR 125](https://github.com/moascode/daybook/pull/125) — **not tagged** |
 | R2 | v2.11.0 | Foundation — app shell | ✅ merged [PR 130](https://github.com/moascode/daybook/pull/130) — **not tagged** |
 | R3 | v2.12.0 | Wallet — design adoption (8 pages) | ✅ merged [PR 132](https://github.com/moascode/daybook/pull/132)–[135](https://github.com/moascode/daybook/pull/135) (4 PRs) — **not tagged** |
-| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | 🟡 [PR 138](https://github.com/moascode/daybook/pull/138) open — not merged |
+| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | ✅ merged [PR 138](https://github.com/moascode/daybook/pull/138) — **not tagged** |
 | R5 | v2.14.0 | Tasks — design adoption (4 pages) | — |
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | — |
 | R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | — |
@@ -85,11 +85,12 @@ yet even though the code is merged to `main`; see the warning below.
 > #112's follow-up), has nothing to do with the Tasks schema bump this table's
 > R4 row means, and did not advance this roadmap. See
 > `docs/v1/project-history.md`'s entry on PR #136 for detail. R4 in *this*
-> table is still not started.
+> table (PR #138, merged 2026-08-25) is the Tasks schema bump — unrelated to
+> PR #136.
 >
 > **Next tag due is `v2.10.0`**, covering R1 (already merged). Verify current
 > state before trusting this table — `git log --oneline v2.9.2..main` on
-> 2026-08-25 showed R1–R3 merged and unreleased.
+> 2026-08-25 showed R1–R4 merged and unreleased.
 
 ---
 
