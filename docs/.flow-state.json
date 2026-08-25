@@ -2,10 +2,11 @@
   "task": "AI-assisted merchant canonicalization: regex-guess -> history validation -> corrections cache -> AI fallback",
   "task_type": "feature",
   "mode": "auto",
-  "phase": "implement",
+  "phase": "review",
   "completed_artifacts": [
+    "flow-plan.md",
     "flow-context-map.md",
-    "flow-plan.md"
+    "implement"
   ],
   "locked_files": [
     "server/migrations/0012_merchant_corrections.sql",
@@ -25,5 +26,5 @@
   ],
   "review_loop": 0,
   "escalations": [],
-  "updated_at": "2026-08-11T15:15:30.568897+00:00"
+  "updated_at": "2026-08-25T03:11:48.859238+00:00"
 }

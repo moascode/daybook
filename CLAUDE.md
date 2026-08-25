@@ -764,6 +764,47 @@ CREATE INDEX IF NOT EXISTS idx_absorbed_hashes_txn ON absorbed_import_hashes(tra
   accounts; opposite directions; amounts equal within 1 cent; no splits or
   settlement links; fee/FX legs rejected in v1).
 
+### AI-assisted merchant name resolution (migration `0012_merchant_corrections.sql` / `0013_` on Workers, docs/v1/flow-plan.md)
+
+Memoizes AI-derived merchant-name corrections per user, so Claude is only ever
+asked about a given bank narrative template once.
+
+```sql
+CREATE TABLE IF NOT EXISTS merchant_corrections (
+  user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  regex_guess    TEXT NOT NULL,
+  corrected_name TEXT NOT NULL,
+  created_at     TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, regex_guess)
+);
+```
+
+- Resolution ladder, shared by both callers below (`resolveMerchantLadder` in
+  `worker/routes/wallet.ts`): **regex guess** (`canonicalizeMerchantForDisplay`)
+  → **`merchant_corrections` cache hit** (keyed on `correctionKey(guess)`, a
+  trim/collapse/lower-case normalisation) → **the caller's own transaction
+  history hit**, case-insensitive → **AI on the raw narrative**
+  (`resolveMerchantsWithAI`, `worker/lib/anthropic.ts`, `claude-haiku-4-5`) →
+  memoize the AI answer so the next occurrence of the same guess resolves free.
+- `POST /merchants/resolve` `{items: [{raw, guess}]}` — called by CSV import
+  (`CsvImport.tsx`) for every row whose merchant was split out of a narrative
+  column, **before** category suggestion (suggestion groups by the final
+  name, so this ordering is load-bearing). Returns
+  `{resolutions: [{guess, name, source}], failedGuesses, failureReason?}`;
+  always 200 — an unresolved guess keeps its regex value and is reported, never
+  silently dropped (rule 13). `CsvReviewTable.tsx` marks an unresolved row with
+  an icon; a manual merchant edit clears the marker.
+- `POST /merchants/canonicalize` (bulk cleanup) runs the **same** ladder over
+  every distinct stored merchant — the stored value is the raw input, its
+  regex form is the first-stage guess — and the preview response gains
+  `source` per row (`CanonicalizeMerchantsPage.tsx` shows it as a badge).
+- Separate rate-limit bucket (`ai_rate_limit_merchant`, same 20/hour shape as
+  category suggestion's `ai_rate_limit_suggest_categories`) so a large CSV
+  import cannot exhaust the bulk-categorisation budget and the two AI features
+  fail independently.
+- Never affects `import_hash` (G11, §9.2): duplicate detection stays keyed on
+  the raw narrative text captured before any resolution step runs.
+
 ---
 
 ## 7. TypeScript Types
@@ -941,11 +982,18 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 2. Auto-detect columns (date, amount, description/merchant)
 3. For each row, compute `import_hash = SHA-256(date + '|' + amount + '|' + merchant)`
 4. **Duplicate check:** query DB for existing `import_hash` values; mark matching rows as "already imported" and skip them by default
-5. Show review table: all rows, each row editable, checkbox to exclude (duplicates pre-unchecked)
-6. 🔮 *(Phase 5a — deferred, NOT implemented)* Claude was planned to auto-suggest a
-   category per non-duplicate row. Today categorisation in the review step is **manual**.
-7. User reviews + confirms → batch insert transactions with `import_hash` set
-8. Show success summary: X imported, Y skipped (duplicates), Z excluded by user
+5. **Merchant name resolution** (shipped, §6/§9.3): for rows whose merchant was
+   split out of a single narrative column, `POST /merchants/resolve` runs the
+   regex → corrections cache → history → AI ladder and rewrites `merchant` to
+   the resolved name before category suggestion runs. A guess the ladder
+   cannot improve keeps its regex value and is marked in the review table
+   (never silently left looking resolved).
+6. Category suggestion (PR #109/#112): a category is pre-filled per non-duplicate
+   row from the user's own history / the builtin cold-start map, with an "Ask AI"
+   fallback in the bulk-edit dialog for whatever the rule pass found nothing for.
+7. Show review table: all rows, each row editable, checkbox to exclude (duplicates pre-unchecked)
+8. User reviews + confirms → batch insert transactions with `import_hash` set
+9. Show success summary: X imported, Y skipped (duplicates), Z excluded by user
 
 #### Dashboard
 - Date range selector (this month / last month / custom)
@@ -959,19 +1007,23 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 
 ### 9.3 Claude AI Layer
 
-> 🟡 **STATUS: MOSTLY NOT IMPLEMENTED — one slice shipped (PR #112).**
-> **What exists:** the API-key infrastructure below, and exactly one Claude
-> feature — the "Ask AI" fallback in the bulk edit dialog, which categorises
-> only the merchants the rule-based pass missed
+> 🟡 **STATUS: MOSTLY NOT IMPLEMENTED — two slices shipped (PR #112, R4).**
+> **What exists:** the API-key infrastructure below, plus two Claude features —
+> the "Ask AI" fallback in the bulk edit dialog, which categorises only the
+> merchants the rule-based pass missed
 > (`docs/ai-bulk-categorize-feature.md`, `worker/lib/anthropic.ts`,
-> `POST /api/transactions/suggest-categories-ai`).
+> `POST /api/transactions/suggest-categories-ai`); and AI-assisted merchant
+> name resolution for CSV import and bulk cleanup (docs/v1/flow-plan.md, §6's
+> `merchant_corrections` table, `resolveMerchantsWithAI`,
+> `POST /api/merchants/resolve`).
 > **What does not exist:** everything else here — no Claude panel, daily
-> briefing, natural-language task/transaction entry, CSV auto-categorisation, or
-> model routing. `src/components/claude/*`, `src/hooks/useClaude.ts`,
+> briefing, natural-language task/transaction entry, CSV auto-categorisation
+> beyond the two slices above, or model routing beyond the Haiku calls both
+> slices already make. `src/components/claude/*`, `src/hooks/useClaude.ts`,
 > `src/lib/claude.ts` and `src/lib/claude-prompts.ts` still do **not exist**;
-> the one shipped feature needed none of them. Treat the rest of this
-> subsection as design intent, not current behaviour, and get owner sign-off
-> per rule 10 before building any more of it.
+> neither shipped feature needed them. Treat the rest of this subsection as
+> design intent, not current behaviour, and get owner sign-off per rule 10
+> before building any more of it.
 
 #### API setup
 > **Shipped in PR #112, with one deviation.** There is no `ApiKeySetup`
@@ -1320,7 +1372,7 @@ git push origin vX.Y.Z
 | Phase | State |
 |---|---|
 | 0–4 (scaffold → home network) | ✅ shipped, v1.0 |
-| 5a (AI) | 🟡 partially started — one slice shipped (PR #112). See §9.3 and §14. |
+| 5a (AI) | 🟡 partially started — two slices shipped (PR #112; R4 merchant resolution). See §9.3 and §14. |
 | 5b (sharing), 5c (wallet UX) | ✅ shipped, v1.0.1 |
 | 6 (Workers + D1) | ✅ COMPLETE — 455/455 specs green against the Worker |
 | 7 (advanced) | ongoing; recurring rules, budgets, goals already shipped |
@@ -1423,12 +1475,17 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
   2026-08-08 (PR #112, AI fallback for bulk categorisation), which brought the
   API-key infrastructure §9.3 always assumed: per-user `anthropic_api_key` in
   `settings`, a Settings UI, masked reads, per-user rate limiting, and the first
-  outbound Worker call (`worker/lib/anthropic.ts`).
+  outbound Worker call (`worker/lib/anthropic.ts`). A second slice landed in
+  R4 (docs/v1/flow-plan.md): AI-assisted merchant name resolution for CSV
+  import and bulk cleanup, reusing that same foundation — a new
+  `merchant_corrections` cache table, its own rate-limit bucket, and
+  `resolveMerchantsWithAI` alongside the existing `suggestCategoriesWithAI`.
   **Any later 5a item reuses that foundation — do not rebuild it.** What is
   still deferred is everything else in §9.3: the Claude panel, daily briefing,
-  natural-language task/transaction entry, CSV auto-categorisation, prompt
-  caching, and the `ApiKeySetup` first-run screen (Settings now covers the key).
-  Each remaining item still needs its own owner sign-off under rule 10.
+  natural-language task/transaction entry, CSV auto-categorisation beyond the
+  two shipped slices, prompt caching, and the `ApiKeySetup` first-run screen
+  (Settings now covers the key). Each remaining item still needs its own owner
+  sign-off under rule 10.
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
 - **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/phase-5c-implementation-plan.md
 

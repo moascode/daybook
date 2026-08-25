@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
-import { parseCSV, detectColumns, buildImportRows } from '@/lib/csv'
+import { parseCSV, detectColumns, buildImportRows, resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestionFitsType } from '@/lib/merchantSuggestions'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
@@ -112,6 +112,46 @@ export function CsvImport() {
     if (!mapping.date || !mapping.amount) return
     try {
       const rows = await buildImportRows(rawRows, mapping)
+
+      // AI-assisted merchant name resolution ladder (docs/v1/flow-plan.md):
+      // regex guess -> corrections cache -> the user's own history -> AI on
+      // the raw narrative. Only rows split out of a narrative column
+      // participate (narrativeRaw set) — a real merchant column is untouched.
+      // Runs BEFORE category suggestion below: suggestion groups by the FINAL
+      // merchant name, so this ordering is load-bearing.
+      const narrativePairs = new Map<string, string>() // guess -> raw, deduped by guess
+      for (const row of rows) {
+        if (row.narrativeRaw) narrativePairs.set(row.merchant, row.narrativeRaw)
+      }
+      if (narrativePairs.size > 0) {
+        try {
+          const { resolutions, failedGuesses, failureReason } = await resolveMerchants(
+            [...narrativePairs.entries()].map(([guess, raw]) => ({ raw, guess })),
+          )
+          const byGuess = new Map(resolutions.map((r) => [r.guess, r.name]))
+          const failedSet = new Set(failedGuesses)
+          for (const row of rows) {
+            if (!row.narrativeRaw) continue
+            const resolvedName = byGuess.get(row.merchant)
+            if (resolvedName) {
+              row.merchant = resolvedName
+            } else if (failedSet.has(row.merchant)) {
+              row.merchantUnresolved = true
+            }
+          }
+          if (failedGuesses.length > 0) {
+            addToast({
+              message: `Couldn't clean up ${failedGuesses.length} merchant name${failedGuesses.length === 1 ? '' : 's'}${failureReason ? ` — ${failureReason}` : ''}.`,
+              duration: 5000,
+            })
+          }
+        } catch {
+          addToast({
+            message: 'Could not resolve merchant names — using the automatic guesses instead.',
+            duration: 4000,
+          })
+        }
+      }
 
       // Pre-fill a category per row from the caller's own history / the
       // builtin cold-start map (docs/auto-categorisation-plan.md §4.1).

@@ -197,3 +197,52 @@ test('the page shows an empty state when there is no messy merchant data', async
   await expect(emptyPage.getByRole('button', { name: 'Return to wallet' })).toBeVisible()
   await emptyPage.context().close()
 })
+
+// docs/v1/flow-plan.md step 9: /merchants/canonicalize reuses the same
+// resolve ladder as CSV import — a merchant the regex step alone leaves
+// unchanged (no card mask, no rail prefix, no separator to strip) can still
+// surface as a cleanup candidate via AI, with the preview naming the source.
+test('a merchant unchanged by regex alone resolves via AI, and the preview shows its source', async ({
+  browser,
+}) => {
+  const isoPage = await newAppPage(browser, '/wallet/accounts')
+  await isoPage.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(isoPage, { name: 'AI Cleanup Bank', type: 'bank' })
+  await expect(accountCardFor(isoPage, 'AI Cleanup Bank')).toBeVisible()
+
+  const rawMerchant = 'IBG FROM DODO KOREA SDN BHD REF 883921'
+  // canonicalizeMerchantForDisplay() strips the IBG rail prefix, the ref
+  // number, and "SDN BHD" but has no rule for a leading "FROM" or a trailing
+  // "REF" left after those strips — a genuine regex miss, distinct from the
+  // raw string, so the ladder's history stage (which would otherwise
+  // self-match a guess identical to the raw merchant) cannot short-circuit it.
+  const regexGuess = 'From Dodo Korea Sdn Bhd Ref'
+  const aiName = 'Dodo Korea Restaurant'
+
+  await isoPage.request.put('/api/settings/anthropic_api_key', { data: { value: 'sk-ant-test-dummy' } })
+  await isoPage.request.post('/api/test/mock-ai-response', {
+    data: { text: JSON.stringify({ resolutions: [{ guess: regexGuess, name: aiName }] }), feature: 'merchants' },
+  })
+
+  await navTo(isoPage, 'transactions')
+  await isoPage.getByRole('button', { name: 'Add Transaction' }).click()
+  const dialog = isoPage.getByRole('dialog')
+  const accountSelect = dialog.locator('#account')
+  await expect
+    .poll(async () => accountSelect.locator('option[value]:not([value=""])').count(), { timeout: 15_000 })
+    .toBeGreaterThan(0)
+  await dialog.getByLabel('Amount').fill('7.20')
+  await dialog.getByLabel('Merchant').fill(rawMerchant)
+  await dialog.getByRole('button', { name: /Add Transaction/ }).click()
+  await expect(dialog).toBeHidden()
+
+  await isoPage.goto('/wallet/canonicalize-merchants')
+  await expect(isoPage.getByTestId('canonicalize-merchants-table')).toBeVisible()
+
+  const row = isoPage.getByTestId('canonicalize-merchant-row').filter({ hasText: rawMerchant })
+  await expect(row).toBeVisible()
+  await expect(row).toContainText(aiName)
+  await expect(row.getByTestId('canonicalize-merchant-source')).toHaveText('AI-suggested')
+
+  await isoPage.context().close()
+})

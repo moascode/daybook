@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { AppEnv } from '../types.ts'
+import type { AppEnv, Env } from '../types.ts'
 import {
   businessDatePlus,
   normalizeBind,
@@ -18,9 +18,13 @@ import {
   visibleAccountIds,
   writableAccountIds,
 } from '../lib/sharing.ts'
-import { canonicalMerchant, canonicalizeMerchantForDisplay } from '../lib/merchant.ts'
+import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
-import { suggestCategoriesWithAI, type CategorySuggestion } from '../lib/anthropic.ts'
+import {
+  suggestCategoriesWithAI,
+  resolveMerchantsWithAI,
+  type CategorySuggestion,
+} from '../lib/anthropic.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
 // (1,461 lines, 68 .prepare() sites), it lands in increments:
@@ -983,6 +987,12 @@ const AI_RATE_LIMIT_KEY = 'ai_rate_limit_suggest_categories'
 const AI_RATE_LIMIT_MAX = 20
 const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 
+// Separate bucket for the merchant-name resolution ladder (POST /merchants/resolve
+// and the AI step inside POST /merchants/canonicalize) — a 400-row CSV import must
+// not consume the bulk-categorisation budget, and the two AI features should fail
+// independently of each other.
+const MERCHANT_AI_RATE_LIMIT_KEY = 'ai_rate_limit_merchant'
+
 // Per-user hourly cap, stored as a JSON blob in the settings key/value table —
 // the app owns no queue, KV namespace, or Durable Object today.
 //
@@ -998,7 +1008,11 @@ const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 // Note the counter still increments on a rejected request; that is harmless
 // (it is already over the cap) and the window start is preserved either way,
 // so it self-heals on the hour rather than sliding forward forever.
-async function overAiRateLimit(db: D1Database, userId: string): Promise<boolean> {
+async function overAiRateLimit(
+  db: D1Database,
+  userId: string,
+  key: string = AI_RATE_LIMIT_KEY,
+): Promise<boolean> {
   const now = Date.now()
   const row = await db
     .prepare(
@@ -1016,7 +1030,7 @@ async function overAiRateLimit(db: D1Database, userId: string): Promise<boolean>
          END
        RETURNING value`,
     )
-    .bind(userId, AI_RATE_LIMIT_KEY, now, now, AI_RATE_LIMIT_WINDOW_MS, now)
+    .bind(userId, key, now, now, AI_RATE_LIMIT_WINDOW_MS, now)
     .first<{ value: string }>()
 
   const count = Number(JSON.parse(row?.value ?? '{}')?.count ?? 1)
@@ -2815,7 +2829,190 @@ wallet.delete('/goals/:id', async (c) => {
   return c.body(null, 204)
 })
 
-// ── Merchant canonicalisation ───────────────────────────
+// ── Merchant name resolution ladder ─────────────────────
+//
+// docs/v1/flow-plan.md ("AI-assisted merchant name resolution for CSV
+// import"). Shared by POST /merchants/resolve (CSV import) and POST
+// /merchants/canonicalize (bulk cleanup) so the ladder logic exists exactly
+// once. Per guess (normalised via correctionKey): merchant_corrections table
+// hit -> the caller's own transaction history hit (case-insensitive) -> AI on
+// the raw narrative -> memoize the AI answer so every future occurrence of
+// the same regex guess resolves for free.
+
+type MerchantResolutionSource = 'correction' | 'history' | 'ai'
+
+interface MerchantLadderResult {
+  // Keyed by correctionKey(guess) — one entry per distinct guess resolved.
+  resolutions: Map<string, { name: string; source: MerchantResolutionSource }>
+  // correctionKey(guess) values that reached AI (key configured or not) and
+  // came back with no usable answer.
+  failedKeys: string[]
+  failureReason?: string
+}
+
+async function resolveMerchantLadder(
+  env: Env,
+  userId: string,
+  items: Array<{ raw: string; guess: string }>,
+): Promise<MerchantLadderResult> {
+  // Dedupe by normalised guess before any lookup or AI call — keep one
+  // representative raw narrative per key.
+  const repByKey = new Map<string, { raw: string; guess: string }>()
+  for (const item of items) {
+    const key = correctionKey(item.guess)
+    if (!repByKey.has(key)) repByKey.set(key, item)
+  }
+  const keys = [...repByKey.keys()]
+  const resolutions: MerchantLadderResult['resolutions'] = new Map()
+  if (keys.length === 0) return { resolutions, failedKeys: [] }
+
+  const db = env.DB
+
+  // Stage 1 — corrections cache.
+  const placeholders = keys.map(() => '?').join(',')
+  const { results: correctionRows } = await db
+    .prepare(
+      `SELECT regex_guess, corrected_name FROM merchant_corrections
+       WHERE user_id = ? AND regex_guess IN (${placeholders})`,
+    )
+    .bind(userId, ...keys)
+    .all<{ regex_guess: string; corrected_name: string }>()
+  for (const row of correctionRows) {
+    resolutions.set(row.regex_guess, { name: row.corrected_name, source: 'correction' })
+  }
+
+  let remaining = keys.filter((key) => !resolutions.has(key))
+  if (remaining.length === 0) return { resolutions, failedKeys: [] }
+
+  // Stage 2 — the caller's own transaction history, case-insensitive. Own
+  // rows only, never shared-in accounts.
+  const { results: historyRows } = await db
+    .prepare(`SELECT DISTINCT merchant FROM transactions WHERE user_id = ? AND merchant != ''`)
+    .bind(userId)
+    .all<{ merchant: string }>()
+  const historyKeys = new Set(historyRows.map((row) => correctionKey(row.merchant)))
+  for (const key of remaining) {
+    if (historyKeys.has(key)) {
+      resolutions.set(key, { name: repByKey.get(key)!.guess, source: 'history' })
+    }
+  }
+
+  remaining = remaining.filter((key) => !resolutions.has(key))
+  if (remaining.length === 0) return { resolutions, failedKeys: [] }
+
+  // Stage 3 — AI on the raw narrative. No key configured -> ladder stops
+  // here; every remaining guess is reported as failed with a reason.
+  const keyRow = await db
+    .prepare(`SELECT value FROM settings WHERE user_id = ? AND key = 'anthropic_api_key'`)
+    .bind(userId)
+    .first<{ value: string }>()
+  const apiKey = keyRow?.value?.trim()
+  if (!apiKey) {
+    return {
+      resolutions,
+      failedKeys: remaining,
+      failureReason: 'no API key configured — add one in Settings to enable AI merchant cleanup',
+    }
+  }
+
+  if (await overAiRateLimit(db, userId, MERCHANT_AI_RATE_LIMIT_KEY)) {
+    return {
+      resolutions,
+      failedKeys: remaining,
+      failureReason: `AI merchant cleanup limit reached (${AI_RATE_LIMIT_MAX} per hour) — try again later`,
+    }
+  }
+
+  const aiItems = remaining.map((key) => repByKey.get(key)!)
+  const chunks: Array<typeof aiItems> = []
+  for (let i = 0; i < aiItems.length; i += AI_CHUNK_SIZE) chunks.push(aiItems.slice(i, i + AI_CHUNK_SIZE))
+
+  const failedKeys: string[] = []
+  let failureReason: string | undefined
+  const toPersist: Array<{ key: string; name: string }> = []
+
+  for (let i = 0; i < chunks.length; i += AI_CHUNK_CONCURRENCY) {
+    const wave = chunks.slice(i, i + AI_CHUNK_CONCURRENCY)
+    const settled = await Promise.allSettled(
+      wave.map((chunk) => resolveMerchantsWithAI(env, userId, apiKey, chunk)),
+    )
+    settled.forEach((outcome, idx) => {
+      const chunk = wave[idx]
+      if (outcome.status === 'fulfilled') {
+        const byGuessKey = new Map(outcome.value.map((r) => [correctionKey(r.guess), r.name]))
+        for (const item of chunk) {
+          const key = correctionKey(item.guess)
+          const name = byGuessKey.get(key)
+          if (name) {
+            resolutions.set(key, { name, source: 'ai' })
+            toPersist.push({ key, name })
+          } else {
+            failedKeys.push(key)
+          }
+        }
+      } else {
+        failedKeys.push(...chunk.map((item) => correctionKey(item.guess)))
+        console.error('AI merchant resolution chunk failed', outcome.reason)
+        failureReason ??=
+          outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+      }
+    })
+  }
+
+  // Memoize: every future occurrence of the same regex guess resolves for
+  // free from Stage 1. INSERT OR IGNORE — a race with another request for the
+  // same guess just keeps whichever answer landed first.
+  if (toPersist.length > 0) {
+    const batch = toPersist.map(({ key, name }) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO merchant_corrections (user_id, regex_guess, corrected_name) VALUES (?, ?, ?)`,
+        )
+        .bind(userId, key, name),
+    )
+    await db.batch(batch)
+  }
+
+  return { resolutions, failedKeys, failureReason }
+}
+
+wallet.post('/merchants/resolve', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const input: unknown[] = Array.isArray(b.items) ? b.items : []
+  const items: Array<{ raw: string; guess: string }> = []
+  for (const it of input) {
+    if (
+      typeof it === 'object' &&
+      it !== null &&
+      typeof (it as { raw?: unknown }).raw === 'string' &&
+      typeof (it as { guess?: unknown }).guess === 'string'
+    ) {
+      items.push({ raw: (it as { raw: string }).raw, guess: (it as { guess: string }).guess })
+    }
+  }
+  if (items.length === 0) return c.json({ resolutions: [], failedGuesses: [] })
+  if (items.length > MAX_MERCHANTS) {
+    return c.json({ error: `cannot request more than ${MAX_MERCHANTS} merchants at once` }, 400)
+  }
+
+  const ladder = await resolveMerchantLadder(c.env, userId, items)
+
+  const resolutions: Array<{ guess: string; name: string; source: MerchantResolutionSource }> = []
+  for (const item of items) {
+    const hit = ladder.resolutions.get(correctionKey(item.guess))
+    if (hit) resolutions.push({ guess: item.guess, name: hit.name, source: hit.source })
+  }
+
+  const failedKeySet = new Set(ladder.failedKeys)
+  const failedGuesses = [
+    ...new Set(items.filter((item) => failedKeySet.has(correctionKey(item.guess))).map((item) => item.guess)),
+  ]
+
+  return c.json({ resolutions, failedGuesses, failureReason: ladder.failureReason })
+})
+
+// ── Merchant canonicalisation (bulk cleanup) ────────────
 
 wallet.post('/merchants/canonicalize', async (c) => {
   const userId = c.get('userId')
@@ -2829,15 +3026,37 @@ wallet.post('/merchants/canonicalize', async (c) => {
     .bind(userId)
     .all<{ merchant: string; count: number }>()
 
+  // The stored merchant is treated as the raw input; the regex canonical form
+  // is the first-stage guess. The ladder then runs corrections -> history ->
+  // AI on top of that guess exactly as CSV import does (docs/v1/flow-plan.md
+  // Q3) — a messy merchant with no direct regex win can still resolve via a
+  // prior correction, the user's own history, or AI.
+  const ladderItems = merchantRows.map((row) => ({
+    raw: row.merchant,
+    guess: canonicalizeMerchantForDisplay(row.merchant) ?? row.merchant,
+  }))
+  const ladder =
+    ladderItems.length > 0
+      ? await resolveMerchantLadder(c.env, userId, ladderItems)
+      : { resolutions: new Map<string, { name: string; source: MerchantResolutionSource }>(), failedKeys: [] }
+
   const changes = merchantRows
-    .map((row) => ({
-      current: row.merchant,
-      canonical: canonicalizeMerchantForDisplay(row.merchant),
-      transactionCount: row.count,
-    }))
+    .map((row) => {
+      const guess = canonicalizeMerchantForDisplay(row.merchant) ?? row.merchant
+      const hit = ladder.resolutions.get(correctionKey(guess))
+      const canonical = hit?.name ?? canonicalizeMerchantForDisplay(row.merchant)
+      const source: 'regex' | MerchantResolutionSource = hit?.source ?? 'regex'
+      return { current: row.merchant, canonical, transactionCount: row.count, source }
+    })
     .filter(
-      (row): row is { current: string; canonical: string; transactionCount: number } =>
-        !!row.canonical && row.canonical !== row.current,
+      (
+        row,
+      ): row is {
+        current: string
+        canonical: string
+        transactionCount: number
+        source: 'regex' | MerchantResolutionSource
+      } => !!row.canonical && row.canonical !== row.current,
     )
 
   if (!preview && !confirm) {
