@@ -18,4 +18,10 @@ export interface Task {
   dueTime: string | null
   assigneeId: string | null
   completedAt: string | null
+  // R5 PR-2: subtask progress, always present on rows from `GET /tasks`
+  // (worker/routes/tasks.ts derives them via correlated subqueries on every
+  // row) but not carried through the client mapping until now — see
+  // TaskListRow.tsx's subtask progress badge.
+  subtaskTotal: number
+  subtaskDone: number
 }

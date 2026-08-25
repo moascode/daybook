@@ -84,6 +84,7 @@ export const modules: ModuleDescriptor[] = [
       {
         items: [
           { to: '/tasks', label: 'Today', icon: CheckSquare, end: true, testid: 'nav-tasks-today' },
+          { to: '/tasks/all', label: 'All tasks', icon: List, end: false, testid: 'nav-tasks-all' },
           {
             to: '/tasks/upcoming',
             label: 'Upcoming',

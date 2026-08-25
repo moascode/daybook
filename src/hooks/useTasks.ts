@@ -54,6 +54,11 @@ interface TaskRow {
   due_time?: string | null
   assignee_id?: string | null
   completed_at?: string | null
+  // Only present on `view=`-filtered rows (worker/routes/tasks.ts derives
+  // them via correlated subqueries); the unfiltered outliner fetch omits
+  // them, so default to 0 rather than leaving them undefined.
+  subtask_total?: number
+  subtask_done?: number
 }
 
 /** Convert a DB row to the in-memory Task interface. */
@@ -74,6 +79,8 @@ function rowToTask(row: TaskRow): Task {
     dueTime: row.due_time ?? null,
     assigneeId: row.assignee_id ?? null,
     completedAt: row.completed_at ?? null,
+    subtaskTotal: row.subtask_total ?? 0,
+    subtaskDone: row.subtask_done ?? 0,
   }
 }
 
