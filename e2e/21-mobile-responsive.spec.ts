@@ -97,7 +97,7 @@ test('can add a task on mobile viewport', async ({ browser }: { browser: Browser
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
   await signUpOnPage(page)
-  await page.goto('/tasks')
+  await page.goto('/tasks/lists/unsorted')
   await waitForApp(page)
 
   await page.getByRole('button', { name: 'New task' }).first().click()
@@ -130,7 +130,7 @@ test('task content text is at least 14 px on mobile viewport', async ({ browser 
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
   await signUpOnPage(page)
-  await page.goto('/tasks')
+  await page.goto('/tasks/lists/unsorted')
   await waitForApp(page)
 
   // Add a task so there is something to measure

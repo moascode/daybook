@@ -14,7 +14,7 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/tasks')
+  page = await newAppPage(browser, '/tasks/lists/unsorted')
   // Seed a task to save as template
   await page.getByRole('button', { name: 'New task' }).first().click()
   await expect(page.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()

@@ -117,8 +117,11 @@ test.describe('69 — Tasks Today page', () => {
     await expect(assigned).toHaveAttribute('aria-disabled', 'true')
     await expect(assigned).toHaveAttribute('aria-label', 'Assigned to me — Coming in R10')
 
-    // Clicking does nothing — still on Today, not a 404.
-    await upcoming.click()
+    // Clicking does nothing — still on Today, not a 404. force:true because
+    // Playwright's actionability treats aria-disabled="true" on a button role
+    // as genuinely disabled and refuses a plain click (AppBar's disabled-tab
+    // tests use the same pattern, see e2e/65-app-shell.spec.ts).
+    await upcoming.click({ force: true })
     await expect(page).toHaveURL(/\/tasks$/)
   })
 })
