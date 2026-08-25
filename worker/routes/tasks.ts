@@ -58,7 +58,12 @@ tasks.get('/tasks', async (c) => {
   const q = c.req.query('q')
   const today = todayStr()
 
-  if (view === 'list') {
+  // The literal string "unsorted" is a reserved sentinel for "no list" (tasks
+  // with list_id IS NULL) — every user always has this bucket, so unlike a
+  // real list id it needs no ownership/sharing check against visibleListIds.
+  const isUnsortedSentinel = view === 'list' && listParam === 'unsorted'
+
+  if (view === 'list' && !isUnsortedSentinel) {
     if (!listParam) return c.json({ error: 'list is required for view=list' }, 400)
     const visible = await visibleListIds(c.env.DB, userId)
     if (!visible.includes(listParam)) return c.json({ error: 'list not found' }, 404)
@@ -90,8 +95,12 @@ tasks.get('/tasks', async (c) => {
       conditions.push('t.is_completed = 0')
       break
     case 'list':
-      conditions.push('t.is_completed = 0', 't.list_id = ?')
-      whereParams.push(listParam)
+      if (isUnsortedSentinel) {
+        conditions.push('t.is_completed = 0', 't.list_id IS NULL')
+      } else {
+        conditions.push('t.is_completed = 0', 't.list_id = ?')
+        whereParams.push(listParam)
+      }
       break
     case 'completed':
       conditions.push('t.is_completed = 1')

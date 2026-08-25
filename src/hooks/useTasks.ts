@@ -4,7 +4,7 @@ import { useTasksStore } from '@/stores/tasks.store'
 import type { DeletedSnapshot } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
-import type { Task } from '@/types/tasks.types'
+import type { Task, TaskPriority } from '@/types/tasks.types'
 
 /**
  * The Tasks store updates optimistically, so a failed server write would
@@ -47,6 +47,13 @@ interface TaskRow {
   due_date: string | null
   created_at: string
   updated_at: string
+  // R4 columns (docs/v2/tasks/01-data-model.md) — present on every row, but
+  // only populated by the caller when relevant; nullable/defaulted otherwise.
+  list_id?: string | null
+  priority?: TaskPriority | null
+  due_time?: string | null
+  assignee_id?: string | null
+  completed_at?: string | null
 }
 
 /** Convert a DB row to the in-memory Task interface. */
@@ -62,6 +69,11 @@ function rowToTask(row: TaskRow): Task {
     dueDate: row.due_date ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    listId: row.list_id ?? null,
+    priority: row.priority ?? 'none',
+    dueTime: row.due_time ?? null,
+    assigneeId: row.assignee_id ?? null,
+    completedAt: row.completed_at ?? null,
   }
 }
 
@@ -121,20 +133,38 @@ function sortParentsFirst(root: Task, descendants: Task[]): Task[] {
 export function useTasks() {
   const store = useTasksStore()
 
-  /** Load all tasks from the database into the Zustand store.
-   *  Also restores the last-used rootId from localStorage if that task still exists. */
-  const loadTasks = useCallback(async () => {
-    const rows = await api.get<TaskRow[]>('/tasks')
-    const tasks = rows.map(rowToTask)
-    store.setTasks(tasks)
+  /**
+   * Load tasks from the database.
+   *
+   * With no `view`, this is the outliner's original unfiltered fetch: it
+   * populates the Zustand store (used by BulletTree/TasksPage) and restores
+   * the last-used rootId from localStorage if that task still exists.
+   *
+   * With a `view` (e.g. 'today', 'all', 'completed' — see worker/routes/tasks.ts),
+   * it hits the filtered/derived endpoint and just returns the rows — it does
+   * NOT touch the outliner's store, since a Today-page fetch must never
+   * clobber what the outliner is showing.
+   */
+  const loadTasks = useCallback(
+    async (view?: string): Promise<Task[]> => {
+      const url = view ? `/tasks?view=${encodeURIComponent(view)}` : '/tasks'
+      const rows = await api.get<TaskRow[]>(url)
+      const tasks = rows.map(rowToTask)
 
-    const savedRootId = localStorage.getItem(ROOT_ID_KEY)
-    if (savedRootId && tasks.some((t) => t.id === savedRootId)) {
-      store.setRootId(savedRootId)
-    } else if (savedRootId) {
-      localStorage.removeItem(ROOT_ID_KEY)
-    }
-  }, [store])
+      if (!view) {
+        store.setTasks(tasks)
+        const savedRootId = localStorage.getItem(ROOT_ID_KEY)
+        if (savedRootId && tasks.some((t) => t.id === savedRootId)) {
+          store.setRootId(savedRootId)
+        } else if (savedRootId) {
+          localStorage.removeItem(ROOT_ID_KEY)
+        }
+      }
+
+      return tasks
+    },
+    [store],
+  )
 
   /** Set the zoom root and persist it to localStorage. */
   const setRootId = useCallback(
@@ -217,6 +247,49 @@ export function useTasks() {
     },
     [],
   )
+
+  /**
+   * Toggle a task's completion via POST /tasks/:id/complete — the only path
+   * that derives completedAt (D-3). Never use a raw PATCH { isCompleted } for
+   * this: that path (used elsewhere by the outliner) deliberately leaves
+   * completedAt untouched.
+   */
+  const completeTask = useCallback(async (id: string): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.post<TaskRow>(`/tasks/${id}/complete`, {})
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    // Only touch the outliner's store if this task is actually in it — a
+    // Today-page-only task (fetched via a `view` and never loaded into the
+    // store) has nothing there to update.
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /** Bulk-move due dates via POST /tasks/reschedule (the Overdue group's "Reschedule all"). */
+  const rescheduleTasks = useCallback(async (ids: string[], dueDate: string): Promise<Task[]> => {
+    let rows: TaskRow[]
+    try {
+      rows = await api.post<TaskRow[]>('/tasks/reschedule', { ids, dueDate })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rows.map(rowToTask)
+    const store2 = useTasksStore.getState()
+    for (const t of updated) {
+      if (store2.tasks.some((existing) => existing.id === t.id)) {
+        store2.updateTask(t.id, t)
+      }
+    }
+    return updated
+  }, [])
 
   /**
    * Delete a task. Saves a snapshot to the store for 5-second undo.
@@ -547,6 +620,8 @@ export function useTasks() {
     loadTasks,
     addTask,
     updateTask,
+    completeTask,
+    rescheduleTasks,
     deleteTask,
     restoreDeleted,
     bulkDeleteTasks,

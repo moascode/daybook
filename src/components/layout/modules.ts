@@ -12,6 +12,8 @@ import {
   Target,
   RefreshCw,
   BarChart2,
+  CalendarClock,
+  UserCheck,
 } from 'lucide-react'
 
 /**
@@ -30,6 +32,12 @@ export interface ModuleNavItem {
   icon: LucideIcon
   end: boolean
   testid: string
+  /** Renders as a real disabled `<button aria-disabled>` with a stated reason
+   *  (ModuleSidebar), matching AppBar's disabled-module-tab pattern — never a
+   *  bare 404 or a native `disabled` attribute (which would kill the tooltip). */
+  disabled?: boolean
+  /** Required alongside `disabled: true` — shown as `"{label} — {reason}"`. */
+  disabledReason?: string
 }
 
 export interface ModuleNavGroup {
@@ -75,9 +83,31 @@ export const modules: ModuleDescriptor[] = [
     navGroups: [
       {
         items: [
-          { to: '/tasks', label: 'All tasks', icon: CheckSquare, end: true, testid: 'nav-tasks-all' },
+          { to: '/tasks', label: 'Today', icon: CheckSquare, end: true, testid: 'nav-tasks-today' },
+          {
+            to: '/tasks/upcoming',
+            label: 'Upcoming',
+            icon: CalendarClock,
+            end: false,
+            testid: 'nav-tasks-upcoming',
+            disabled: true,
+            disabledReason: 'Coming in R10',
+          },
+          {
+            to: '/tasks/assigned',
+            label: 'Assigned to me',
+            icon: UserCheck,
+            end: false,
+            testid: 'nav-tasks-assigned',
+            disabled: true,
+            disabledReason: 'Coming in R10',
+          },
         ],
       },
+      // The dynamic per-user "Lists" group (task_lists rows + the fixed
+      // "Unsorted" bucket) is injected by ModuleSidebar itself, not listed
+      // here — this file stays static/pure, no per-user data (see the doc
+      // comment above ModuleDescriptor).
     ],
   },
   {

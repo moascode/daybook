@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-import { TasksPage } from '@/modules/tasks/TasksPage'
+import { TasksTodayPage } from '@/modules/tasks/TasksTodayPage'
+import { TasksOutlinerPage } from '@/modules/tasks/TasksOutlinerPage'
 import { WalletLayout } from '@/modules/wallet/WalletLayout'
 import { WalletPage } from '@/modules/wallet/WalletPage'
 import { AccountsPage } from '@/modules/wallet/AccountsPage'
@@ -24,7 +25,8 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to="/tasks" replace /> },
-      { path: 'tasks', element: <TasksPage /> },
+      { path: 'tasks', element: <TasksTodayPage /> },
+      { path: 'tasks/lists/:listId', element: <TasksOutlinerPage /> },
       {
         path: 'wallet',
         element: <WalletLayout />,

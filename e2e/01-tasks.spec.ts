@@ -14,7 +14,12 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/tasks')
+  // R5 relocated the outliner to /tasks/lists/:listId — /tasks itself is now
+  // the Today page (docs/v2/.flow/R5-foundation-today/flow-plan.md item 9).
+  // 'unsorted' is the reserved sentinel for list_id IS NULL, which every
+  // fresh user has (no tasks have been filed into a real list yet), so it's
+  // the outliner's stable landing spot for this suite.
+  page = await newAppPage(browser, '/tasks/lists/unsorted')
 })
 
 test.afterAll(async () => {
@@ -23,8 +28,11 @@ test.afterAll(async () => {
 
 // ── Navigation ─────────────────────────────────────────────────────────
 
-test('app redirects to /tasks by default', async () => {
-  await expect(page).toHaveURL(/\/tasks$/)
+test('outliner is reachable at its relocated URL', async () => {
+  // No redirect involved any more (only bare '/' redirects, to the new Today
+  // page) — this just confirms beforeAll actually landed the outliner, since
+  // every test below depends on that.
+  await expect(page).toHaveURL(/\/tasks\/lists\/unsorted$/)
 })
 
 test('sidebar shows Tasks, Wallet and UAT Tests nav items', async () => {

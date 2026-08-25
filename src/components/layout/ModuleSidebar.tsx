@@ -1,10 +1,13 @@
+import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { FlaskConical, Settings, X } from 'lucide-react'
-import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
+import { FlaskConical, Settings, X, Inbox } from 'lucide-react'
+import { cn, TEST_HOOKS_ENABLED, errorMessage } from '@/lib/utils'
 import { modules } from './modules'
 import { ModuleSwitcher } from './ModuleSwitcher'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
+import { useTaskLists } from '@/hooks/useTaskLists'
+import { useToastStore } from '@/stores/toast.store'
 
 interface ModuleSidebarProps {
   open: boolean
@@ -36,6 +39,19 @@ const navItemClass = ({ isActive }: { isActive: boolean }) => cn('nav-item', isA
 export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
   const location = useLocation()
   const activeModule = modules.find((m) => !m.disabled && location.pathname.startsWith(m.path))
+  const addToast = useToastStore((s) => s.addToast)
+  const { taskLists, loadTaskLists } = useTaskLists()
+
+  const isTasksModule = activeModule?.id === 'tasks'
+
+  // The dynamic Lists group is scoped to the Tasks module only — no need to
+  // fetch task_lists at all when it isn't showing.
+  useEffect(() => {
+    if (!isTasksModule) return
+    loadTaskLists().catch((err) => {
+      addToast({ message: errorMessage(err, 'Could not load your task lists.') })
+    })
+  }, [isTasksModule, loadTaskLists, addToast])
 
   if (!activeModule) return null
 
@@ -66,22 +82,83 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
         {activeModule.navGroups.map((group, i) => (
           <div className="nav-group" key={group.label ?? `group-${i}`}>
             {group.label && <span className="u-label">{group.label}</span>}
-            {group.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                onClick={onClose}
-                data-testid={item.testid}
-                className={navItemClass}
-              >
-                <item.icon className="icon" size={16} />
-                {item.label}
-                {item.to === '/wallet/shared' && <PendingClaimsBadge />}
-              </NavLink>
-            ))}
+            {group.items.map((item) =>
+              item.disabled ? (
+                // Real <button aria-disabled>, not the native `disabled`
+                // attribute (which would also suppress :hover and the
+                // tooltip it reveals) — mirrors AppBar's disabled module tab.
+                <button
+                  key={item.to}
+                  type="button"
+                  aria-disabled="true"
+                  onClick={(e) => e.preventDefault()}
+                  className={cn('nav-item', 'opacity-40 cursor-not-allowed')}
+                  aria-label={`${item.label} — ${item.disabledReason ?? 'Coming soon'}`}
+                  data-testid={item.testid}
+                >
+                  <item.icon className="icon" size={16} />
+                  {item.label}
+                  <span className="tip-label" aria-hidden="true">
+                    {item.disabledReason ?? 'Coming soon'}
+                  </span>
+                </button>
+              ) : (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  onClick={onClose}
+                  data-testid={item.testid}
+                  className={navItemClass}
+                >
+                  <item.icon className="icon" size={16} />
+                  {item.label}
+                  {item.to === '/wallet/shared' && <PendingClaimsBadge />}
+                </NavLink>
+              ),
+            )}
           </div>
         ))}
+
+        {/* Dynamic per-user "Lists" group (docs/v2/tasks/02-design-adoption.md
+            §Sidebar) — one item per task_lists row plus a fixed trailing
+            "Unsorted" bucket so orphaned (list_id NULL) tasks always have a
+            home. Injected here, not in modules.ts, which stays static/pure. */}
+        {isTasksModule && (
+          <div className="nav-group">
+            <span className="u-label">Lists</span>
+            {taskLists.map((list) => (
+              <NavLink
+                key={list.id}
+                to={`/tasks/lists/${list.id}`}
+                end
+                onClick={onClose}
+                data-testid={`nav-tasks-list-${list.id}`}
+                className={navItemClass}
+              >
+                {/* Per-list colour is user data (D-10), not a semantic token —
+                    an inline style is the correct, documented exception. */}
+                <span
+                  className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+                  style={{ background: list.color }}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                {list.openCount > 0 && <span className="nav-badge">{list.openCount}</span>}
+              </NavLink>
+            ))}
+            <NavLink
+              to="/tasks/lists/unsorted"
+              end
+              onClick={onClose}
+              data-testid="nav-tasks-list-unsorted"
+              className={navItemClass}
+            >
+              <Inbox className="icon" size={16} />
+              Unsorted
+            </NavLink>
+          </div>
+        )}
 
         <div className="sidebar-spacer" />
 
