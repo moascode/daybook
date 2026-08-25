@@ -105,14 +105,18 @@ test.post('/test/mock-ai-response', async (c) => {
   const userId = await readSession(c)
   if (!userId) return c.json({ error: 'not authenticated' }, 401)
 
-  const b: { text?: unknown } = await c.req.json().catch(() => ({}))
+  const b: { text?: unknown; feature?: unknown } = await c.req.json().catch(() => ({}))
   if (typeof b.text !== 'string') return c.json({ error: 'text is required' }, 400)
+  // 'merchants' targets resolveMerchantsWithAI's own mock slot (worker/lib/anthropic.ts
+  // TEST_MOCK_KEY_MERCHANTS) so a spec exercising both AI features in one run
+  // doesn't have one mock clobber the other. Anything else keeps the original key.
+  const settingsKey = b.feature === 'merchants' ? '_test_ai_mock_response_merchants' : '_test_ai_mock_response'
 
   await c.env.DB.prepare(
-    `INSERT INTO settings (user_id, key, value) VALUES (?, '_test_ai_mock_response', ?)
+    `INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)
      ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value`,
   )
-    .bind(userId, b.text)
+    .bind(userId, settingsKey, b.text)
     .run()
 
   return c.json({ status: 'mocked' })

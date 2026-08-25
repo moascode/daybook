@@ -9,6 +9,15 @@ interface MerchantCanonical {
   current: string
   canonical: string
   transactionCount: number
+  /** Which ladder step resolved the canonical name (docs/v1/flow-plan.md). */
+  source: 'regex' | 'correction' | 'history' | 'ai'
+}
+
+const SOURCE_LABEL: Record<MerchantCanonical['source'], string> = {
+  regex: 'Pattern match',
+  correction: 'Previously corrected',
+  history: 'From history',
+  ai: 'AI-suggested',
 }
 
 interface CanonicalizePreviewResponse {
@@ -164,6 +173,12 @@ export function CanonicalizeMerchantsPage() {
               </th>
               <th
                 scope="col"
+                className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
+              >
+                Source
+              </th>
+              <th
+                scope="col"
                 className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-fg-subtle"
               >
                 Count
@@ -179,6 +194,9 @@ export function CanonicalizeMerchantsPage() {
               >
                 <td className="px-3 py-2 text-fg">{m.current}</td>
                 <td className="px-3 py-2 text-fg-muted">{m.canonical}</td>
+                <td className="px-3 py-2 text-fg-subtle" data-testid="canonicalize-merchant-source">
+                  {SOURCE_LABEL[m.source]}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums text-fg-muted">{m.transactionCount}</td>
               </tr>
             ))}

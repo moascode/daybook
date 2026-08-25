@@ -879,3 +879,23 @@ Sequencing: PR1 hardening + PR2 offsite backups to
 Cloudflare R2 (10GB free, zero egress; fixes backups living
 on the same disk as the DB) are both path-independent and
 unblocked → PR3 access path. PR2 is the highest-value item.
+
+## R4 — AI-assisted merchant name resolution (2026-08-25)
+
+Completed the follow-up to PR #112: a resolution ladder for CSV-import
+merchant names, per docs/v1/flow-plan.md. Regex guess -> `merchant_corrections`
+cache -> the user's own transaction history (case-insensitive) -> AI on the
+raw narrative -> memoize. New table `merchant_corrections`
+(`server/migrations/0012_*.sql` / `worker/migrations/0013_*.sql`, byte-
+identical). `POST /merchants/resolve` (new) serves CSV import; `POST
+/merchants/canonicalize` (bulk cleanup) now runs the same shared ladder
+helper and returns a `source` per row. Separate rate-limit bucket
+(`ai_rate_limit_merchant`) so a large import can't spend the bulk-
+categorisation budget. Client: `CsvImport.tsx` calls the ladder after
+`buildImportRows` and before category suggestion (order is load-bearing —
+suggestion groups by the final name); an unresolved row keeps its regex guess
+and is marked in `CsvReviewTable.tsx`, with a toast naming the count/reason.
+New spec `e2e/64-merchant-ai-resolve.spec.ts` (server contract + one UI-flow
+case); extended `e2e/62-canonicalize-merchants.spec.ts` with an AI-resolves
+case. Regression set (45, 49, 51, 60, 61, 62, 63) green; `schema-diff.mjs`
+and the migration-pair diff both clean.

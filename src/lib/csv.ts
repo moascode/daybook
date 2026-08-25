@@ -32,6 +32,17 @@ export interface ImportRow {
   suggestedFrom?: { canonical: string; matchCount: number }
   /** True while the pre-filled categoryId is still the suggestion, unedited — for "Clear suggestions". */
   suggestionApplied?: boolean
+  /**
+   * The original bank narrative this row's `merchant` was split from (only set
+   * when a single narrative column was split into merchant + description —
+   * see `isNarrativeColumn` below). Used to round-trip {raw, guess} pairs to
+   * POST /merchants/resolve for the AI-assisted resolution ladder; never sent
+   * anywhere else, and never used for `importHash` (that stays keyed on the
+   * raw text captured before canonicalisation, docs/v1/flow-plan.md G11).
+   */
+  narrativeRaw?: string
+  /** True when /merchants/resolve could not improve on the regex guess for this row (no key, rate limit, or AI failure) — the guess is kept as-is. */
+  merchantUnresolved?: boolean
 }
 
 // ── Date patterns for auto-detection ────────────────
@@ -349,6 +360,30 @@ export async function checkDuplicates(hashes: string[]): Promise<Set<string>> {
   return new Set(existing)
 }
 
+// ── AI-assisted merchant name resolution ────────────
+// docs/v1/flow-plan.md. Only rows whose merchant was split out of a narrative
+// column (narrativeRaw set) participate — a real merchant column is left
+// untouched (spec 61's contract).
+
+export interface MerchantResolution {
+  guess: string
+  name: string
+  source: 'correction' | 'history' | 'ai'
+}
+
+export interface MerchantResolveResult {
+  resolutions: MerchantResolution[]
+  failedGuesses: string[]
+  failureReason?: string
+}
+
+export async function resolveMerchants(
+  items: Array<{ raw: string; guess: string }>,
+): Promise<MerchantResolveResult> {
+  if (items.length === 0) return { resolutions: [], failedGuesses: [] }
+  return api.post<MerchantResolveResult>('/merchants/resolve', { items })
+}
+
 // ── Parse date string to ISO format ─────────────────
 
 export function parseDateToISO(dateStr: string): string {
@@ -477,9 +512,11 @@ export async function buildImportRows(
 
     // If merchant came from a narrative column, split it: canonicalize for merchant,
     // preserve raw text in description.
+    let narrativeRaw: string | undefined
     if (isNarrativeColumn && merchant) {
       const canonical = canonicalizeMerchantForCsv(merchant)
       if (canonical) {
+        narrativeRaw = merchant // keep the raw text for the AI resolution ladder
         description = merchant // raw text → description
         merchant = canonical   // canonical → merchant
       }
@@ -498,6 +535,7 @@ export async function buildImportRows(
       isDuplicate: false,
       included: true,
       originalRow: row,
+      narrativeRaw,
     })
   }
 

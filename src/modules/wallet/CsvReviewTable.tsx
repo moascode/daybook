@@ -1,3 +1,4 @@
+import { AlertTriangle } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -130,24 +131,37 @@ export function CsvReviewTable({
 
               {/* Merchant — editable so a garbled bank column can be fixed here (U-14) */}
               <td className="px-3 py-2">
-                <Input
-                  value={row.merchant}
-                  onChange={(e) =>
-                    // A merchant edit invalidates the suggestion's provenance
-                    // (G11: it is never re-run under the cursor), so the
-                    // caption/tint drop even though the pre-filled category
-                    // itself is left alone.
-                    onRowChange(index, {
-                      merchant: e.target.value,
-                      suggestedFrom: undefined,
-                      suggestionApplied: false,
-                    })
-                  }
-                  className="w-40 text-xs"
-                  placeholder="—"
-                  disabled={!row.included}
-                  aria-label={`Merchant for row ${index + 1}`}
-                />
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={row.merchant}
+                    onChange={(e) =>
+                      // A merchant edit invalidates the suggestion's provenance
+                      // (G11: it is never re-run under the cursor), so the
+                      // caption/tint drop even though the pre-filled category
+                      // itself is left alone. It also resolves the "couldn't
+                      // clean up" marker — the user has fixed it by hand.
+                      onRowChange(index, {
+                        merchant: e.target.value,
+                        suggestedFrom: undefined,
+                        suggestionApplied: false,
+                        merchantUnresolved: false,
+                      })
+                    }
+                    className="w-40 text-xs"
+                    placeholder="—"
+                    disabled={!row.included}
+                    aria-label={`Merchant for row ${index + 1}`}
+                  />
+                  {row.merchantUnresolved && (
+                    <span
+                      className="flex shrink-0 items-center text-amber-600"
+                      title="Couldn't clean up this merchant name automatically — showing the automatic guess"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="sr-only">Merchant name not resolved automatically</span>
+                    </span>
+                  )}
+                </div>
               </td>
 
               {/* Description — raw bank narrative, editable for clarity */}
