@@ -151,10 +151,15 @@ export function useTasks() {
    * it hits the filtered/derived endpoint and just returns the rows — it does
    * NOT touch the outliner's store, since a Today-page fetch must never
    * clobber what the outliner is showing.
+   *
+   * `listId` is appended as `&list=<id>` — required by `view=list` (R5 PR-3,
+   * the list detail page's List mode); ignored server-side for every other
+   * view, so it's safe to pass only when actually needed.
    */
   const loadTasks = useCallback(
-    async (view?: string): Promise<Task[]> => {
-      const url = view ? `/tasks?view=${encodeURIComponent(view)}` : '/tasks'
+    async (view?: string, listId?: string): Promise<Task[]> => {
+      let url = view ? `/tasks?view=${encodeURIComponent(view)}` : '/tasks'
+      if (view && listId) url += `&list=${encodeURIComponent(listId)}`
       const rows = await api.get<TaskRow[]>(url)
       const tasks = rows.map(rowToTask)
 
