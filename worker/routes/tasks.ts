@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr } from '../lib.ts'
+import { updateRow, todayStr, nowStr } from '../lib.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
 // Port of server/routes/tasks.ts. Mounted behind requireAuth.
@@ -261,14 +261,18 @@ tasks.post('/tasks/:id/complete', async (c) => {
   if (!allowed) return c.json({ error: 'task not found' }, 404)
 
   const next = task.is_completed ? 0 : 1
+  // completed_at must land on the business timezone's "today" (nowStr), not
+  // SQL's own datetime('now') (UTC) — the client compares it against
+  // todayStr()-derived dates to group "done today", and those two clocks
+  // disagree for 8 hours every day (worker/lib.ts's nowStr doc comment).
   const row = await c.env.DB.prepare(
     `UPDATE tasks
-     SET is_completed = ?, completed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
+     SET is_completed = ?, completed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
          updated_at = datetime('now')
      WHERE id = ?
      RETURNING *`,
   )
-    .bind(next, next, id)
+    .bind(next, next, nowStr(), id)
     .first()
   return c.json(row)
 })

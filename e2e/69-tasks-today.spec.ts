@@ -71,7 +71,9 @@ test.describe('69 — Tasks Today page', () => {
 
     const overdueRow = page.getByTestId('today-task-row').filter({ hasText: 'Overdue thing' })
     await expect(overdueRow).toBeVisible()
-    await expect(page.getByText('Overdue', { exact: true })).toBeVisible()
+    // Scoped to the list section — the band also has an "Overdue" stat label
+    // (getByTestId('today-band')), so an unscoped getByText matches both.
+    await expect(page.locator('section').getByText('Overdue', { exact: true })).toBeVisible()
 
     const rescheduleBtn = page.getByTestId('reschedule-all-btn')
     await expect(rescheduleBtn).toBeVisible()
