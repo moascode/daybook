@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { businessToday, businessDatePlus } from './helpers'
 
 const API = '/api'
 
@@ -82,9 +83,14 @@ test.describe('68 — Tasks v2 API', () => {
     const mk = async (content: string, extra: Record<string, unknown> = {}) =>
       (await page.request.post(`${API}/tasks`, { data: { content, ...extra } })).json()
 
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
-    const today = new Date().toISOString().slice(0, 10)
-    const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
+    // businessDatePlus/businessToday, not toISOString() — the server derives
+    // due_state off business-timezone todayStr() (Asia/Kuala_Lumpur), so a
+    // UTC date here would make this spec fail on the clock rather than on a
+    // change for the eight hours a day the two dates disagree (CLAUDE.md §16
+    // trap 1).
+    const yesterday = businessDatePlus(-1)
+    const today = businessToday()
+    const nextWeek = businessDatePlus(7)
 
     const overdue = await mk('Overdue thing', { dueDate: yesterday })
     const dueToday = await mk('Due today thing', { dueDate: today })
@@ -113,17 +119,27 @@ test.describe('68 — Tasks v2 API', () => {
     const allIds = allView.map((t: { id: string }) => t.id)
     for (const t of [overdue, dueToday, upcoming, noDate]) expect(allIds).toContain(t.id)
 
-    await page.request.post(`${API}/tasks/${noDate.id}/complete`)
+    const completed = await (await page.request.post(`${API}/tasks/${noDate.id}/complete`)).json()
+    expect(completed.is_completed).toBe(1)
+    expect(completed.completed_at).toBeTruthy()
     const completedView = await (await page.request.get(`${API}/tasks?view=completed`)).json()
     expect(completedView.map((t: { id: string }) => t.id)).toContain(noDate.id)
     expect(allIds.includes(noDate.id)).toBe(true) // captured before completion
+
+    // The toggle's other direction: un-completing clears completed_at and
+    // drops the task back out of view=completed.
+    const uncompleted = await (await page.request.post(`${API}/tasks/${noDate.id}/complete`)).json()
+    expect(uncompleted.is_completed).toBe(0)
+    expect(uncompleted.completed_at).toBeNull()
+    const completedViewAfter = await (await page.request.get(`${API}/tasks?view=completed`)).json()
+    expect(completedViewAfter.map((t: { id: string }) => t.id)).not.toContain(noDate.id)
 
     await ctx.close()
   })
 
   test('subtask progress is served with the row', async ({ browser }) => {
     const { ctx, page } = await signup(browser, 'subtasks')
-    const parent = await (await page.request.post(`${API}/tasks`, { data: { content: 'Parent', dueDate: new Date().toISOString().slice(0, 10) } })).json()
+    const parent = await (await page.request.post(`${API}/tasks`, { data: { content: 'Parent', dueDate: businessToday() } })).json()
     const child1 = await (await page.request.post(`${API}/tasks`, { data: { content: 'Child 1', parentId: parent.id } })).json()
     await page.request.post(`${API}/tasks`, { data: { content: 'Child 2', parentId: parent.id } })
     await page.request.post(`${API}/tasks/${child1.id}/complete`)
@@ -234,6 +250,78 @@ test.describe('68 — Tasks v2 API', () => {
     const completed = await bobCompleteNow.json()
     expect(completed.is_completed).toBe(1)
     expect(completed.completed_at).toBeTruthy()
+
+    // Unshare (the revoke path) actually removes visibility, not just the
+    // ability to write — the row must disappear from Bob's view=list, not
+    // merely become read-only.
+    const unshare = await alice.page.request.delete(`${API}/task-lists/${list.id}/shares/${group.id}`)
+    expect(unshare.status()).toBe(204)
+    const bobAfterUnshare = await bob.page.request.get(`${API}/tasks?view=list&list=${list.id}`)
+    expect(bobAfterUnshare.status()).toBe(404)
+
+    await alice.ctx.close()
+    await bob.ctx.close()
+    await carol.ctx.close()
+  })
+
+  test('view=assigned lists a task assigned to the caller even across users', async ({ browser }) => {
+    const alice = await signup(browser, 'viewassigned_a')
+    const bob = await signup(browser, 'viewassigned_b')
+
+    const bobMe = await (await bob.page.request.get(`${API}/auth/me`)).json()
+    const task = await (await alice.page.request.post(`${API}/tasks`, { data: { content: 'For Bob' } })).json()
+    await alice.page.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId: bobMe.user.id } })
+
+    // Not just actionable by id (POST .../complete already allows this) —
+    // the assignee must be able to discover it via their own view.
+    const bobAssigned = await (await bob.page.request.get(`${API}/tasks?view=assigned`)).json()
+    expect(bobAssigned.map((t: { id: string }) => t.id)).toContain(task.id)
+
+    // Alice's own view=assigned is unaffected — she's the owner, not the assignee.
+    const aliceAssigned = await (await alice.page.request.get(`${API}/tasks?view=assigned`)).json()
+    expect(aliceAssigned.map((t: { id: string }) => t.id)).not.toContain(task.id)
+
+    await alice.ctx.close()
+    await bob.ctx.close()
+  })
+
+  // ── Write-scoping on list_id (the can_write gate applies to task filing too) ──
+
+  test('a read-only shared member cannot file a task into that list; a stranger cannot file into any list they cannot see', async ({ browser }) => {
+    const alice = await signup(browser, 'listwrite_a')
+    const bob = await signup(browser, 'listwrite_b')
+    const carol = await signup(browser, 'listwrite_c')
+
+    const group = await (await alice.page.request.post(`${API}/groups`, { data: { name: 'RO group' } })).json()
+    await alice.page.request.post(`${API}/groups/${group.id}/invites`, { data: { username: bob.username } })
+    const invites = await (await bob.page.request.get(`${API}/invites`)).json()
+    await bob.page.request.post(`${API}/invites/${invites[0].id}/accept`)
+
+    const list = await (await alice.page.request.post(`${API}/task-lists`, { data: { name: 'Alice RO list' } })).json()
+    await alice.page.request.post(`${API}/task-lists/${list.id}/shares`, { data: { groupId: group.id, canWrite: false } })
+
+    // Bob can see the list (it's shared to his group) but has no write access.
+    const bobCreate = await bob.page.request.post(`${API}/tasks`, { data: { content: 'Sneaked in', listId: list.id } })
+    expect(bobCreate.status()).toBe(404)
+
+    // Carol isn't in the group at all — same rejection, no existence oracle.
+    const carolCreate = await carol.page.request.post(`${API}/tasks`, { data: { content: 'Sneaked in', listId: list.id } })
+    expect(carolCreate.status()).toBe(404)
+
+    // The list must still show none of these injected rows.
+    const aliceView = await (await alice.page.request.get(`${API}/tasks?view=list&list=${list.id}`)).json()
+    expect(aliceView).toHaveLength(0)
+
+    // Moving an EXISTING (owned) task into that same read-only list via PATCH
+    // is the same bypass via a different route — also rejected.
+    const bobOwn = await (await bob.page.request.post(`${API}/tasks`, { data: { content: 'Bobs own task' } })).json()
+    const bobPatch = await bob.page.request.patch(`${API}/tasks/${bobOwn.id}`, { data: { listId: list.id } })
+    expect(bobPatch.status()).toBe(404)
+
+    // Granting write access lifts the restriction.
+    await alice.page.request.patch(`${API}/task-lists/${list.id}/shares/${group.id}`, { data: { canWrite: true } })
+    const bobCreateNow = await bob.page.request.post(`${API}/tasks`, { data: { content: 'Now allowed', listId: list.id } })
+    expect(bobCreateNow.status()).toBe(201)
 
     await alice.ctx.close()
     await bob.ctx.close()

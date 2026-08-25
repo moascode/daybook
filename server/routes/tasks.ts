@@ -56,10 +56,12 @@ tasksRouter.get('/tasks', (req, res) => {
     if (!visible.includes(listParam)) return res.status(404).json({ error: 'list not found' })
   }
 
-  // Visible tasks: the caller's own, plus tasks in any list shared into a
-  // group they belong to (D-15).
+  // Visible tasks: the caller's own, tasks assigned to the caller (D-15 —
+  // matches the access POST /tasks/:id/complete already grants an assignee,
+  // so the field is discoverable via view=assigned and not just actionable
+  // by id), plus tasks in any list shared into a group they belong to.
   const conditions: string[] = [
-    `(t.user_id = @userId OR t.list_id IN (
+    `(t.user_id = @userId OR t.assignee_id = @userId OR t.list_id IN (
        SELECT tls.list_id FROM task_list_shares tls
        JOIN group_members gm ON gm.group_id = tls.group_id
        WHERE gm.user_id = @userId
@@ -134,8 +136,21 @@ tasksRouter.get('/tasks', (req, res) => {
 // Create (or restore). id/timestamps are optional: provided on restore so the
 // original row is recreated verbatim; generated otherwise.
 tasksRouter.post('/tasks', (req, res) => {
+  const db = getDb()
+  const userId = req.session.userId!
   const b = req.body ?? {}
-  const row = getDb()
+
+  // A caller may only file a task into a list they can write to — their own,
+  // or one shared to them with can_write=1. Without this check any
+  // authenticated user could point a task at any list_id, including one they
+  // cannot see, making the task appear inside a stranger's list for every
+  // member it's shared with.
+  if (b.listId) {
+    const writable = writableListIds(db, userId)
+    if (!writable.has(String(b.listId))) return res.status(404).json({ error: 'list not found' })
+  }
+
+  const row = db
     .prepare(
       `INSERT INTO tasks
          (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
@@ -150,7 +165,7 @@ tasksRouter.post('/tasks', (req, res) => {
     )
     .get({
       id: b.id ?? null,
-      userId: req.session.userId!,
+      userId,
       parentId: b.parentId ?? null,
       content: b.content ?? '',
       note: b.note ?? '',
@@ -169,7 +184,19 @@ tasksRouter.post('/tasks', (req, res) => {
 })
 
 tasksRouter.patch('/tasks/:id', (req, res) => {
-  const row = updateRow(getDb(), 'tasks', req.params.id, req.session.userId!, TASK_COLS, req.body ?? {})
+  const db = getDb()
+  const userId = req.session.userId!
+  const body = req.body ?? {}
+
+  // Same write-scoping guard as POST /tasks — moving an existing (owned) task
+  // into a list the caller can't write to is the same bypass as creating one
+  // there directly. Clearing listId (null/'') is always allowed.
+  if ('listId' in body && body.listId) {
+    const writable = writableListIds(db, userId)
+    if (!writable.has(String(body.listId))) return res.status(404).json({ error: 'list not found' })
+  }
+
+  const row = updateRow(db, 'tasks', req.params.id, userId, TASK_COLS, body)
   if (!row) return res.status(404).json({ error: 'task not found' })
   res.json(row)
 })
@@ -375,8 +402,14 @@ tasksRouter.post('/task-lists/:id/shares', (req, res) => {
 
 tasksRouter.patch('/task-lists/:id/shares/:groupId', (req, res) => {
   const db = getDb()
+  const userId = req.session.userId!
   const id = req.params.id
-  if (!ownedList(db, id, req.session.userId!)) return res.status(404).json({ error: 'list not found' })
+  if (!ownedList(db, id, userId)) return res.status(404).json({ error: 'list not found' })
+  // Symmetric with POST/DELETE — an owner who has since left the group
+  // shouldn't be able to keep adjusting that group's access.
+  if (!isGroupMember(db, userId, req.params.groupId)) {
+    return res.status(403).json({ error: 'you are not a member of this group' })
+  }
   const b = req.body ?? {}
   const row = db
     .prepare(
