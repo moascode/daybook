@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr } from '../lib.ts'
+import { updateRow, todayStr, nowStr } from '../lib.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
 // Port of server/routes/tasks.ts. Mounted behind requireAuth.
@@ -58,7 +58,12 @@ tasks.get('/tasks', async (c) => {
   const q = c.req.query('q')
   const today = todayStr()
 
-  if (view === 'list') {
+  // The literal string "unsorted" is a reserved sentinel for "no list" (tasks
+  // with list_id IS NULL) — every user always has this bucket, so unlike a
+  // real list id it needs no ownership/sharing check against visibleListIds.
+  const isUnsortedSentinel = view === 'list' && listParam === 'unsorted'
+
+  if (view === 'list' && !isUnsortedSentinel) {
     if (!listParam) return c.json({ error: 'list is required for view=list' }, 400)
     const visible = await visibleListIds(c.env.DB, userId)
     if (!visible.includes(listParam)) return c.json({ error: 'list not found' }, 404)
@@ -90,8 +95,12 @@ tasks.get('/tasks', async (c) => {
       conditions.push('t.is_completed = 0')
       break
     case 'list':
-      conditions.push('t.is_completed = 0', 't.list_id = ?')
-      whereParams.push(listParam)
+      if (isUnsortedSentinel) {
+        conditions.push('t.is_completed = 0', 't.list_id IS NULL')
+      } else {
+        conditions.push('t.is_completed = 0', 't.list_id = ?')
+        whereParams.push(listParam)
+      }
       break
     case 'completed':
       conditions.push('t.is_completed = 1')
@@ -252,14 +261,18 @@ tasks.post('/tasks/:id/complete', async (c) => {
   if (!allowed) return c.json({ error: 'task not found' }, 404)
 
   const next = task.is_completed ? 0 : 1
+  // completed_at must land on the business timezone's "today" (nowStr), not
+  // SQL's own datetime('now') (UTC) — the client compares it against
+  // todayStr()-derived dates to group "done today", and those two clocks
+  // disagree for 8 hours every day (worker/lib.ts's nowStr doc comment).
   const row = await c.env.DB.prepare(
     `UPDATE tasks
-     SET is_completed = ?, completed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END,
+     SET is_completed = ?, completed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
          updated_at = datetime('now')
      WHERE id = ?
      RETURNING *`,
   )
-    .bind(next, next, id)
+    .bind(next, next, nowStr(), id)
     .first()
   return c.json(row)
 })

@@ -139,6 +139,31 @@ export function businessDatePlus(days: number): string {
   return dateFmt.format(new Date(Date.now() + days * 86_400_000))
 }
 
+const dateTimeFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+})
+
+/**
+ * `datetime('now')`'s SQLite shape ("YYYY-MM-DD HH:MM:SS"), but in the
+ * business timezone rather than the Worker's UTC clock. Use this for any
+ * timestamp column later compared against `todayStr()` (e.g. `completed_at`
+ * vs "did you finish this today") — SQL's own `datetime('now')` is UTC and
+ * drifts a day off `todayStr()` for 8 hours every day (same trap as
+ * `todayStr()` itself documents above).
+ */
+export function nowStr(): string {
+  const parts = dateTimeFmt.formatToParts(new Date())
+  const get = (type: string) => parts.find((p) => p.type === type)?.value
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`
+}
+
 /**
  * Convert a SQLite `datetime('now')` value (always UTC, 'YYYY-MM-DD HH:MM:SS')
  * to a calendar date in the business timezone.

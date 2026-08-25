@@ -14,7 +14,7 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/tasks')
+  page = await newAppPage(browser, '/tasks/lists/unsorted')
 })
 
 test.afterAll(async () => {

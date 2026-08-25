@@ -86,7 +86,7 @@ test('log out returns to the sign-in screen, and the same credentials log back i
 })
 
 test('session survives a page reload (cookie keeps you logged in)', async ({ browser }) => {
-  const page = await newAppPage(browser, '/tasks')
+  const page = await newAppPage(browser, '/tasks/lists/unsorted')
   // Create a marker so we can confirm the SAME user/session resolves after reload.
   const countBefore = await page.getByRole('textbox', { name: 'Task content' }).count()
   await page.getByRole('button', { name: 'New task' }).first().click()
@@ -126,7 +126,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   })
   await expect(transactionRowFor(pageA, 'Alice Coffee')).toBeVisible()
 
-  await navTo(pageA, 'tasks')
+  await pageA.goto('/tasks/lists/unsorted')
   await pageA.getByRole('button', { name: 'New task' }).first().click()
   await expect(pageA.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
   await pageA.keyboard.type('Alice secret task')
@@ -141,7 +141,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await navTo(pageB, 'transactions')
   await expect(transactionRowFor(pageB, 'Alice Coffee')).toHaveCount(0)
 
-  await navTo(pageB, 'tasks')
+  await pageB.goto('/tasks/lists/unsorted')
   await expect(bulletNodeFor(pageB, 'Alice secret task')).toHaveCount(0)
 
   // B still has their OWN per-user seeded default categories (not a shared table).
