@@ -47,6 +47,23 @@
     `suggestCategoriesAI`'s `failedMerchants`) — it does not swallow it.
     Applies to buttons above all: a click that changes nothing on screen and
     explains nothing is the single worst outcome any handler can produce.
+14. **v2 roadmap work always runs through `docs/v2/execution-playbook.md`.**
+    Any task that is one of `docs/v2/release-plan.md`'s releases (R1–R17) —
+    including a release named only by number, e.g. "start R4," "do R7" — is
+    orchestrated through that playbook, not by invoking the generic
+    `feature-flow` skill directly and not by doing the research/plan/implement
+    work free-hand in the main thread. Read `execution-playbook.md` first,
+    every time, even if it was used earlier in the same session: use its `start
+    <release>` framing, its Haiku/Opus/Sonnet subagent split (§2 of that doc),
+    and stop at both its gates (plan + acceptance criteria; review verdict)
+    rather than pushing straight through. **The playbook's merge default
+    applies too: I don't merge to `main` — `merge`/`ship it` at Gate 2 means
+    the PR is ready for the owner to merge, not an instruction to merge it
+    myself.** A direct, explicit instruction to merge a specific PR overrides
+    that default for that PR only; it does not change the default for the next
+    one. This rule governs work under `docs/v2/`; other tasks (bug fixes,
+    non-roadmap features, doc fixes) are unaffected and follow the rest of
+    this file as usual.
 
 ---
 
