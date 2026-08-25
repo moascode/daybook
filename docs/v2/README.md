@@ -55,14 +55,16 @@ modules — link to it.
 
 ## Status board
 
-Update the row when a release merges. `—` means not started.
+Update the row when a release merges. `—` means not started. **This board
+tracks releases, not tags** — none of R1–R3 has actually been tagged/deployed
+yet even though the code is merged to `main`; see the warning below.
 
 | Release | Tag | Scope | Status |
 |---|---|---|---|
-| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | [PR 125](https://github.com/moascode/daybook/pull/125) — in review |
-| R2 | v2.11.0 | Foundation — app shell | — |
-| R3 | v2.12.0 | Wallet — design adoption (8 pages) | — |
-| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | — |
+| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | ✅ merged [PR 125](https://github.com/moascode/daybook/pull/125) — **not tagged** |
+| R2 | v2.11.0 | Foundation — app shell | ✅ merged [PR 130](https://github.com/moascode/daybook/pull/130) — **not tagged** |
+| R3 | v2.12.0 | Wallet — design adoption (8 pages) | ✅ merged [PR 132](https://github.com/moascode/daybook/pull/132)–[135](https://github.com/moascode/daybook/pull/135) (4 PRs) — **not tagged** |
+| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | — not started |
 | R5 | v2.14.0 | Tasks — design adoption (4 pages) | — |
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | — |
 | R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | — |
@@ -76,6 +78,18 @@ Update the row when a release merges. `—` means not started.
 | R15 | v3.9.0 | Day D1 — timeline, hour ribbon, day figures | — |
 | R16 | v3.10.0 | Day D2 — Close the day, usual, on-this-day, month grid | — |
 | R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states | — |
+
+> ⚠️ **"R4" name collision, unrelated to this roadmap.** A same-named but
+> unrelated session shipped PR #136 ("AI-assisted merchant name resolution")
+> labeled "R4" — that work is on the older `docs/v1/flow-plan.md` track (PR
+> #112's follow-up), has nothing to do with the Tasks schema bump this table's
+> R4 row means, and did not advance this roadmap. See
+> `docs/v1/project-history.md`'s entry on PR #136 for detail. R4 in *this*
+> table is still not started.
+>
+> **Next tag due is `v2.10.0`**, covering R1 (already merged). Verify current
+> state before trusting this table — `git log --oneline v2.9.2..main` on
+> 2026-08-25 showed R1–R3 merged and unreleased.
 
 ---
 

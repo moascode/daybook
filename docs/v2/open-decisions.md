@@ -13,20 +13,20 @@ approved.
 
 | # | Decision | Blocks | Status |
 |---|---|---|---|
-| D-1 | CSS strategy: ported component layer vs Tailwind utilities | R1 | Recommendation below |
-| D-2 | `.dark` class vs `[data-theme]` | R1 | Recommendation below |
+| D-1 | CSS strategy: ported component layer vs Tailwind utilities | R1 | ✅ shipped in R1 (hybrid, as recommended) |
+| D-2 | `.dark` class vs `[data-theme]` | R1 | ✅ shipped in R1 — both selectors emitted, verified in `gen-theme-tokens.mjs` |
 | D-3 | Does the bullet outliner survive, and where? | R4, R5 | ✅ **KEEP** — as a list-detail view mode |
 | D-4 | Trips as a fourth module vs a lens | R6 | ✅ **MODULE** |
 | D-5 | Multi-currency — reverses the MYR-only decision | R14 | ✅ **FULL multi-currency** |
-| D-6 | Time of day on a transaction | R6 (interim), R15 (real) | Recommendation below |
+| D-6 | Time of day on a transaction | R6 (interim), R15 (real) | Recommendation below — R6 not started |
 | D-7 | Ledger switching (Household / Personal) | R2 | ✅ **DEFER** — no switch in R2 |
-| D-8 | Notifications — is there anything to notify about? | R2 (badge), R17 | Recommendation below |
-| D-9 | Number formatting: minus sign, cents in summaries | R1 | Recommendation below |
-| D-10 | Category colour: per-category or per-type | R7 | Recommendation below |
+| D-8 | Notifications — is there anything to notify about? | R2 (badge), R17 | 🟡 R2 badge shipped; R17 panel not started |
+| D-9 | Number formatting: minus sign, cents in summaries | R1 | ✅ shipped in R1 — `tabular-nums` verified in `src/index.css` |
+| D-10 | Category colour: per-category or per-type | R7 | Recommendation below — R7 not started |
 | D-11 | Composer parsing: rules or Claude | R7 | ✅ **CLAUDE HAIKU** — governed, rules-first |
-| D-12 | Currency in the mockups is `$`; the app is MYR | R1 | Recommendation below |
-| D-13 | e2e churn: convert selectors or accept rewrites | R1 | Recommendation below |
-| D-14 | Keep `/wallet/canonicalize-merchants` in the new IA? | R3 | Recommendation below |
+| D-12 | Currency in the mockups is `$`; the app is MYR | R1 | ✅ no change — app stayed MYR-only through R1 |
+| D-13 | e2e churn: convert selectors or accept rewrites | R1 | ✅ shipped in R1 — testid conversion PRs #126–#129 |
+| D-14 | Keep `/wallet/canonicalize-merchants` in the new IA? | R3 | ✅ shipped in R3 — moved into the account menu |
 | D-15 | Task sharing across the household | R4, R10 | ✅ **APPROVED** — share like transactions |
 
 ---

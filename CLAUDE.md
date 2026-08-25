@@ -192,7 +192,7 @@ function before any public deploy.
 
 > Phase 4 replaces the in-browser PGlite store with a Node + SQLite backend the
 > browser calls over `/api`. `bcrypt` and `express-session` land in the auth
-> stage. See `docs/phase-4-plan.md`.
+> stage. See `docs/v1/COMPLETED/phase-4-plan.md`.
 
 #### Backend (Phase 6 — Cloudflare Workers + D1) — **in progress**
 | Package | Version | Purpose |
@@ -201,7 +201,7 @@ function before any public deploy.
 | `wrangler` | ^4.114 | Cloudflare CLI — build, local dev, D1 migrations, deploy (dev) |
 | `@cloudflare/workers-types` | ^5 | Workers runtime type definitions (dev) |
 
-> Approved per `docs/option-2-workers-d1-plan.md` §7 and installed in Phase 1.
+> Approved per `docs/v1/option-2-workers-d1-plan.md` §7 and installed in Phase 1.
 > **Both backends coexist during the migration** — `server/` (Express + SQLite)
 > keeps serving production untouched until Phase 7's cutover, and `worker/` is
 > built alongside it. Nothing is removed before Phase 7.
@@ -216,7 +216,7 @@ function before any public deploy.
 
 #### Cloud (Phase 6 only — do not install before Phase 6)
 > ⛔ **Superseded.** Phase 6 is being built on Cloudflare Workers + D1 (the table
-> above), not Supabase + Vercel. See `docs/phase-6-online-plan.md` for the options
+> above), not Supabase + Vercel. See `docs/v1/phase-6-online-plan.md` for the options
 > analysis. Do not install these.
 
 | Package | Version | Purpose |
@@ -741,7 +741,7 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 
 ### CSV transfer linking additions (migration `0008_absorbed_import_hashes.sql`, PR #61)
 
-Supports "Link as transfer" (docs/csv-transfer-linking-plan.md): merging two
+Supports "Link as transfer" (docs/v1/csv-transfer-linking-plan.md): merging two
 imported rows into one transfer deletes the money-in row, so its `import_hash`
 is preserved here to keep duplicate detection working across statement
 re-imports. Deleting the merged transfer cascades the hash away, letting a
@@ -1011,7 +1011,7 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 > **What exists:** the API-key infrastructure below, plus two Claude features —
 > the "Ask AI" fallback in the bulk edit dialog, which categorises only the
 > merchants the rule-based pass missed
-> (`docs/ai-bulk-categorize-feature.md`, `worker/lib/anthropic.ts`,
+> (`docs/v1/ai-bulk-categorize-feature.md`, `worker/lib/anthropic.ts`,
 > `POST /api/transactions/suggest-categories-ai`); and AI-assisted merchant
 > name resolution for CSV import and bulk cleanup (docs/v1/flow-plan.md, §6's
 > `merchant_corrections` table, `resolveMerchantsWithAI`,
@@ -1318,7 +1318,7 @@ EOF
 **Update this section at the end of every Claude Code session.** Keep it to
 *current state* — what is live, what is blocked, what is next. The
 session-by-session narrative lives in
-[`docs/project-history.md`](docs/project-history.md); append there rather than
+[`docs/v1/project-history.md`](docs/v1/project-history.md); append there rather than
 growing this section back to the 871 lines it reached before 2026-08-08.
 
 ### Where the app runs
@@ -1331,8 +1331,8 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v2.9.0`** (2026-08-09). The full table with dates and contents
-is in [`docs/project-history.md`](docs/project-history.md#release-record).
+**Latest tag: `v2.9.2`** (2026-08-11). The full table with dates and contents
+is in [`docs/v1/project-history.md`](docs/v1/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
 > three times by being updated only by whichever PR happened to touch this
@@ -1344,12 +1344,19 @@ is in [`docs/project-history.md`](docs/project-history.md#release-record).
 > git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short)' refs/tags
 > ```
 
-**All code on `main` is released**, through `v2.9.0`. Rather than restating a
-commit SHA here — which is what made this section wrong four times — check it:
-
-```
-git log --oneline v2.9.0..main    # empty, or docs-only, means nothing is pending
-```
+> ⚠️ **As of 2026-08-25, `main` is NOT fully released.** It carries the v2
+> design-adoption work (R1–R3: `docs/v2/README.md`'s status board, PRs #125,
+> #130, #132–#135) plus PR #136, unreleased and untagged. **Do not assume "all
+> code on main is released" without checking** — that claim has been wrong
+> before and is wrong again right now:
+>
+> ```
+> git log --oneline v2.9.2..main    # NOT empty — 47+ commits pending as of this writing
+> ```
+>
+> The v2 design-adoption releases continue this same `v2.x.0` tag sequence
+> (R1 → `v2.10.0`, R2 → `v2.11.0`, …) per `docs/v2/release-plan.md` — cut them
+> the normal way when the owner is ready to ship.
 
 The earlier **HTTP 403 on tag refs** from a container agent proxy no
 longer reproduces — tags push normally. If it returns, the symptom is that
@@ -1409,11 +1416,11 @@ git push origin vX.Y.Z
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
 4. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
-   `docs/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
+   `docs/v1/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
    already exists).
 5. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
    per-group "we trust each other" setting; the parked D-items/C9 in
-   `docs/phase-5c-wallet-ux.md` §D.
+   `docs/v1/phase-5c-wallet-ux.md` §D.
 
 ### Standing notes
 
@@ -1467,7 +1474,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 | 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🟡 Partially started |
 | 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
 | 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | ✅ v1.0.1 |
-| 6 | Cloud Migration | Cloud | Cloudflare Workers + D1 + PBKDF2 auth (**not** Supabase/Vercel — see `docs/option-2-workers-d1-plan.md`) | ✅ v2 |
+| 6 | Cloud Migration | Cloud | Cloudflare Workers + D1 + PBKDF2 auth (**not** Supabase/Vercel — see `docs/v1/option-2-workers-d1-plan.md`) | ✅ v2 |
 | 7 | Advanced Features | v2+ | Recurring rules, budgets, goals, new modules | Planned |
 
 **Note**: Phase 5 has been split into three subtasks:
@@ -1487,7 +1494,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
   (Settings now covers the key). Each remaining item still needs its own owner
   sign-off under rule 10.
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
-- **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/phase-5c-implementation-plan.md
+- **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/v1/phase-5c-implementation-plan.md
 
 ### Delivery Milestones
 
