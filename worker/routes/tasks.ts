@@ -64,16 +64,18 @@ tasks.get('/tasks', async (c) => {
     if (!visible.includes(listParam)) return c.json({ error: 'list not found' }, 404)
   }
 
-  // Visible tasks: the caller's own, plus tasks in any list shared into a
-  // group they belong to (D-15).
+  // Visible tasks: the caller's own, tasks assigned to the caller (D-15 —
+  // matches the access POST /tasks/:id/complete already grants an assignee,
+  // so the field is discoverable via view=assigned and not just actionable
+  // by id), plus tasks in any list shared into a group they belong to.
   const conditions: string[] = [
-    `(t.user_id = ? OR t.list_id IN (
+    `(t.user_id = ? OR t.assignee_id = ? OR t.list_id IN (
        SELECT tls.list_id FROM task_list_shares tls
        JOIN group_members gm ON gm.group_id = tls.group_id
        WHERE gm.user_id = ?
      ))`,
   ]
-  const whereParams: unknown[] = [userId, userId]
+  const whereParams: unknown[] = [userId, userId, userId]
 
   switch (view) {
     case 'today':
@@ -151,7 +153,19 @@ tasks.get('/tasks', async (c) => {
 // Create (or restore). id/timestamps are optional: provided on restore so the
 // original row is recreated verbatim; generated otherwise.
 tasks.post('/tasks', async (c) => {
+  const userId = c.get('userId')
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+
+  // A caller may only file a task into a list they can write to — their own,
+  // or one shared to them with can_write=1. Without this check any
+  // authenticated user could point a task at any list_id, including one they
+  // cannot see, making the task appear inside a stranger's list for every
+  // member it's shared with.
+  if (b.listId) {
+    const writable = await writableListIds(c.env.DB, userId)
+    if (!writable.has(String(b.listId))) return c.json({ error: 'list not found' }, 404)
+  }
+
   const row = await c.env.DB.prepare(
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
@@ -169,7 +183,7 @@ tasks.post('/tasks', async (c) => {
     // listId, priority, dueTime, assigneeId, createdAt, updatedAt
     .bind(
       b.id ?? null,
-      c.get('userId'),
+      userId,
       b.parentId ?? null,
       b.content ?? '',
       b.note ?? '',
@@ -193,15 +207,18 @@ tasks.post('/tasks', async (c) => {
 })
 
 tasks.patch('/tasks/:id', async (c) => {
+  const userId = c.get('userId')
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const row = await updateRow(
-    c.env.DB,
-    'tasks',
-    c.req.param('id'),
-    c.get('userId'),
-    TASK_COLS,
-    body,
-  )
+
+  // Same write-scoping guard as POST /tasks — moving an existing (owned) task
+  // into a list the caller can't write to is the same bypass as creating one
+  // there directly. Clearing listId (null/'') is always allowed.
+  if ('listId' in body && body.listId) {
+    const writable = await writableListIds(c.env.DB, userId)
+    if (!writable.has(String(body.listId))) return c.json({ error: 'list not found' }, 404)
+  }
+
+  const row = await updateRow(c.env.DB, 'tasks', c.req.param('id'), userId, TASK_COLS, body)
   if (!row) return c.json({ error: 'task not found' }, 404)
   return c.json(row)
 })
@@ -415,9 +432,15 @@ tasks.post('/task-lists/:id/shares', async (c) => {
 })
 
 tasks.patch('/task-lists/:id/shares/:groupId', async (c) => {
+  const userId = c.get('userId')
   const id = c.req.param('id')
-  if (!(await ownedList(c.env.DB, id, c.get('userId')))) {
+  if (!(await ownedList(c.env.DB, id, userId))) {
     return c.json({ error: 'list not found' }, 404)
+  }
+  // Symmetric with POST/DELETE — an owner who has since left the group
+  // shouldn't be able to keep adjusting that group's access.
+  if (!(await isGroupMember(c.env.DB, userId, c.req.param('groupId')))) {
+    return c.json({ error: 'you are not a member of this group' }, 403)
   }
   const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
   const row = await c.env.DB.prepare(
