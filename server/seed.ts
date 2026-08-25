@@ -30,17 +30,34 @@ const INCOME_CATEGORIES: SeedCategory[] = [
   { name: 'Other Income', icon: 'plus-circle', color: '#6ee7b7', type: 'income' },
 ]
 
-/** Seed the default categories + settings for a freshly created user. */
+interface SeedTaskList {
+  name: string
+  color: string
+}
+
+// docs/v2/tasks/01-data-model.md §3 — matches the proposal's sidebar.
+const DEFAULT_TASK_LISTS: SeedTaskList[] = [
+  { name: 'Household', color: '#2F6FEB' },
+  { name: 'Work', color: '#8b5cf6' },
+  { name: 'Errands', color: '#f97316' },
+  { name: 'Someday', color: '#6b7280' },
+]
+
+/** Seed the default categories + task lists + settings for a freshly created user. */
 export function seedUserDefaults(db: DB, userId: string): void {
   const all = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
   const insertCategory = db.prepare(
     'INSERT INTO categories (user_id, name, icon, color, type) VALUES (?, ?, ?, ?, ?)',
+  )
+  const insertTaskList = db.prepare(
+    'INSERT INTO task_lists (user_id, name, color, sort_order) VALUES (?, ?, ?, ?)',
   )
   const insertSetting = db.prepare(
     'INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT (user_id, key) DO NOTHING',
   )
   const seed = db.transaction(() => {
     for (const c of all) insertCategory.run(userId, c.name, c.icon, c.color, c.type)
+    DEFAULT_TASK_LISTS.forEach((l, i) => insertTaskList.run(userId, l.name, l.color, i))
     insertSetting.run(userId, 'default_currency', 'MYR')
     insertSetting.run(userId, 'theme', 'light')
     insertSetting.run(userId, 'hide_completed', '0')

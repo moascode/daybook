@@ -34,6 +34,7 @@ alters tables that `0004_sharing` creates.
 | `0010_split_approved.sql` | `0011_split_approved.sql` |
 | `0011_settlement_netting.sql` | `0012_settlement_netting.sql` |
 | `0012_merchant_corrections.sql` | `0013_merchant_corrections.sql` |
+| `0013_tasks_v2.sql` | `0014_tasks_v2.sql` |
 
 Renumbering is safe precisely because D1 starts empty: no `d1_migrations` row
 refers to the old names, so there is no history to invalidate. **That stops being
