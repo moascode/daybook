@@ -20,7 +20,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-08-09. Regenerate with:
+Reconciled against `git tag` on 2026-08-25. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -28,6 +28,8 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v2.9.2 | 2026-08-11 | Dashboard: monthly average alongside multi-month totals (#122) |
+| v2.9.1 | 2026-08-11 | Release-record drift-proofing only (chore, #120, #121) |
 | v2.9.0 | 2026-08-09 | Split percentage auto-adjust + uniform bulk split (#119) |
 | v2.8.0 | 2026-08-08 | Split-by-percentage mode for wallet transactions |
 | v2.7.3 | 2026-08-08 | Surface AI categorisation errors (#115) |
@@ -49,6 +51,20 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 Releases are tag-triggered: `release.yml` gates on the full suite, applies
 pending D1 migrations, deploys the Worker, smoke-tests it, then publishes the
 GitHub Release. **The tag is the deploy.**
+
+> **`main` is currently ahead of `v2.9.2` and untagged — do not assume main is
+> released.** As of 2026-08-25, `main` carries the v2 design-adoption work
+> (`docs/v2/`: R1 tokens #125, R2 app shell #130, R3 wallet adoption #132–#135)
+> plus the AI-assisted merchant-resolution follow-up (#136) — 47+ commits, none
+> tagged. Verify before relying on this table:
+> ```
+> git log --oneline v2.9.2..main
+> ```
+> Cut a release the normal way (`git tag -a vX.Y.Z && git push origin vX.Y.Z`)
+> when the owner wants this live. The v2 design-adoption release plan
+> (`docs/v2/release-plan.md`) continues this same `v2.x.0` tag sequence — R1 is
+> due to ship as `v2.10.0`, R2 as `v2.11.0`, and so on — it is not a separate
+> numbering track.
 
 ---
 
@@ -880,7 +896,12 @@ Cloudflare R2 (10GB free, zero egress; fixes backups living
 on the same disk as the DB) are both path-independent and
 unblocked → PR3 access path. PR2 is the highest-value item.
 
-## R4 — AI-assisted merchant name resolution (2026-08-25)
+## AI-assisted merchant name resolution, PR #136 (2026-08-25)
+
+> Session label was "R4" at the time — do not confuse with `docs/v2/README.md`'s
+> R4 (Tasks schema bump), a same-named but unrelated release in the v2
+> design-adoption plan. This work is on the older docs/v1/flow-plan.md track
+> (PR #112's follow-up), not the v2 roadmap.
 
 Completed the follow-up to PR #112: a resolution ladder for CSV-import
 merchant names, per docs/v1/flow-plan.md. Regex guess -> `merchant_corrections`
