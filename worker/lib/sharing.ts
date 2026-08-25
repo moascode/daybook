@@ -162,6 +162,57 @@ export async function effectiveAmount(
   return txn?.amount ?? 0
 }
 
+/**
+ * All task_list IDs the user can see: their own lists plus any list shared
+ * into a group they belong to. Mirrors visibleAccountIds (D-15).
+ */
+export async function visibleListIds(db: D1Database, userId: string): Promise<string[]> {
+  const own = await db.prepare('SELECT id FROM task_lists WHERE user_id = ?').bind(userId).all<{
+    id: string
+  }>()
+
+  const shared = await db
+    .prepare(
+      `SELECT DISTINCT tl.id
+       FROM task_list_shares tls
+       JOIN group_members gm ON gm.group_id = tls.group_id AND gm.user_id = ?
+       JOIN task_lists tl ON tl.id = tls.list_id`,
+    )
+    .bind(userId)
+    .all<{ id: string }>()
+
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const r of [...own.results, ...shared.results]) {
+    if (!seen.has(r.id)) {
+      seen.add(r.id)
+      ids.push(r.id)
+    }
+  }
+  return ids
+}
+
+/**
+ * Every task_list ID the user may write tasks into: their own lists, plus any
+ * list shared into a group they belong to with can_write=1. Mirrors
+ * writableAccountIds (D-15) — one query, checked as a Set, rather than a
+ * per-row round trip.
+ */
+export async function writableListIds(db: D1Database, userId: string): Promise<Set<string>> {
+  const { results } = await db
+    .prepare(
+      `SELECT id FROM task_lists WHERE user_id = ?
+       UNION
+       SELECT tls.list_id AS id
+       FROM task_list_shares tls
+       JOIN group_members gm ON gm.group_id = tls.group_id
+       WHERE gm.user_id = ? AND tls.can_write = 1`,
+    )
+    .bind(userId, userId)
+    .all<{ id: string }>()
+  return new Set(results.map((r) => r.id))
+}
+
 /** True if `userId` is an owner-role member of `groupId`. */
 export async function isGroupOwner(
   db: D1Database,

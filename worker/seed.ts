@@ -37,21 +37,39 @@ const INCOME_CATEGORIES: SeedCategory[] = [
   { name: 'Other Income', icon: 'plus-circle', color: '#6ee7b7', type: 'income' },
 ]
 
-/** Seed the default categories + settings for a freshly created user. */
+interface SeedTaskList {
+  name: string
+  color: string
+}
+
+// docs/v2/tasks/01-data-model.md §3 — matches the proposal's sidebar. Keep in
+// sync with server/seed.ts.
+const DEFAULT_TASK_LISTS: SeedTaskList[] = [
+  { name: 'Household', color: '#2F6FEB' },
+  { name: 'Work', color: '#8b5cf6' },
+  { name: 'Errands', color: '#f97316' },
+  { name: 'Someday', color: '#6b7280' },
+]
+
+/** Seed the default categories + task lists + settings for a freshly created user. */
 export async function seedUserDefaults(db: D1Database, userId: string): Promise<void> {
   const all = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
 
   const insertCategory = db.prepare(
     'INSERT INTO categories (user_id, name, icon, color, type) VALUES (?, ?, ?, ?, ?)',
   )
+  const insertTaskList = db.prepare(
+    'INSERT INTO task_lists (user_id, name, color, sort_order) VALUES (?, ?, ?, ?)',
+  )
   const insertSetting = db.prepare(
     'INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT (user_id, key) DO NOTHING',
   )
 
-  // 18 statements, fixed size — well inside the batch limits S2 measured
+  // 22 statements, fixed size — well inside the batch limits S2 measured
   // (5,000 statements / 1.3 MB in a single batch, ~10× real-world headroom).
   await db.batch([
     ...all.map((c) => insertCategory.bind(userId, c.name, c.icon, c.color, c.type)),
+    ...DEFAULT_TASK_LISTS.map((l, i) => insertTaskList.bind(userId, l.name, l.color, i)),
     insertSetting.bind(userId, 'default_currency', 'MYR'),
     insertSetting.bind(userId, 'theme', 'light'),
     insertSetting.bind(userId, 'hide_completed', '0'),
