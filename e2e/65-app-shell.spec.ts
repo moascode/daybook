@@ -24,20 +24,20 @@ test.describe('module tabs', () => {
     await expect(tasksTab).not.toHaveAttribute('aria-current', 'page')
   })
 
-  test('Day and Trips tabs are disabled and do not navigate', async ({ browser }) => {
+  test('Day tab is disabled and does not navigate', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
-    // Both AppBar and MobileTabBar render a "modtab-day"/"modtab-trips" copy
-    // (only one visible per viewport) — same duplicate-testid convention as
-    // nav-tasks/nav-wallet (context map / e2e/helpers.ts navItem).
+    // Both AppBar and MobileTabBar render a "modtab-day" copy (only one
+    // visible per viewport) — same duplicate-testid convention as
+    // nav-tasks/nav-wallet (context map / e2e/helpers.ts navItem). Trips'
+    // equivalent coverage moved to e2e/73-trips.spec.ts once R6-trips made
+    // it a live tab — Day stays disabled until its own R6 flow.
     const dayTab = page.getByTestId('modtab-day').locator('visible=true')
-    const tripsTab = page.getByTestId('modtab-trips').locator('visible=true')
 
     await expect(dayTab).toHaveAttribute('aria-disabled', 'true')
-    await expect(tripsTab).toHaveAttribute('aria-disabled', 'true')
     await expect(dayTab).toContainText('Coming soon')
 
-    // Neither renders as a link (no href) — clicking must not change the route.
+    // Doesn't render as a link (no href) — clicking must not change the route.
     await dayTab.click({ force: true })
     await expect(page).toHaveURL(/\/tasks$/)
   })

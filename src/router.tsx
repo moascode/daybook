@@ -15,6 +15,7 @@ import { RecurringPage } from '@/modules/wallet/RecurringPage'
 import { GoalsPage } from '@/modules/wallet/GoalsPage'
 import { ReportsPage } from '@/modules/wallet/ReportsPage'
 import { SharedPage } from '@/modules/wallet/SharedPage'
+import { TripsPage } from '@/modules/trips/TripsPage'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { SharingPage } from '@/modules/settings/SharingPage'
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
       { path: 'tasks/all', element: <TasksAllPage /> },
       { path: 'tasks/lists/:listId', element: <TasksListDetailPage /> },
       { path: 'tasks/completed', element: <TasksCompletedPage /> },
+      { path: 'trips', element: <TripsPage /> },
       {
         path: 'wallet',
         element: <WalletLayout />,
