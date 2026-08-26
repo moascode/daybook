@@ -8,19 +8,18 @@ import { create } from 'zustand'
  * AppShell, not parent/child. Page-session UI state only — no server
  * persistence, same as every other Zustand store's ephemeral-UI slice.
  *
- * Notes has no toggle here — it stays sidebar-disabled until R15, so there is
- * nothing yet to show or hide.
+ * Only Tasks and Money are live toggles — R6 ships no "scheduled" or "notes"
+ * row kind in the merge, so those two stay sidebar-disabled (with a stated
+ * reason) rather than exist here as state with nothing to control.
  */
 interface DayState {
   showTasks: boolean
   showMoney: boolean
-  showScheduled: boolean
-  toggle: (key: 'showTasks' | 'showMoney' | 'showScheduled') => void
+  toggle: (key: 'showTasks' | 'showMoney') => void
 }
 
 export const useDayStore = create<DayState>((set) => ({
   showTasks: true,
   showMoney: true,
-  showScheduled: true,
   toggle: (key) => set((s) => ({ [key]: !s[key] })),
 }))

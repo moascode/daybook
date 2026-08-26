@@ -22,6 +22,30 @@ export function shiftDateISO(iso: string, days: number): string {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * A real, comparable epoch for a `'YYYY-MM-DD HH:MM:SS'` timestamp — needed
+ * because the two timestamps the timeline merges are stamped in DIFFERENT
+ * clocks and would otherwise sort ~8 hours apart from where they really
+ * happened: `tasks.completed_at` is business-timezone wall-clock
+ * (`worker/routes/tasks.ts`'s `nowStr()`, Asia/Kuala_Lumpur), while
+ * `transactions.created_at` is `datetime('now')`, i.e. UTC
+ * (`worker/routes/wallet.ts`). Both are naive strings with no offset, so a
+ * plain lexical comparison silently mis-orders them. Kuala Lumpur has no DST
+ * (a fixed UTC+8), so the offset is a constant.
+ */
+function businessEpoch(ts: string): number {
+  return new Date(`${ts.replace(' ', 'T')}+08:00`).getTime()
+}
+function utcEpoch(ts: string): number {
+  return new Date(`${ts.replace(' ', 'T')}Z`).getTime()
+}
+/** Zero-padded so same-length epoch strings still sort lexically within a
+ *  group — the two groups are sorted independently, so cross-group
+ *  comparability with `dueTime`'s 'HH:MM' key space is never needed. */
+function epochSortKey(epochMs: number): string {
+  return String(epochMs).padStart(15, '0')
+}
+
 export interface DayBand {
   doneCount: number
   totalCount: number
@@ -88,7 +112,7 @@ export interface TimelineItem {
    *  fabricated one. */
   sortKey: string
   status: TimelineStatus
-  amount?: { value: number; sign: 'pos' | 'neg' | 'neutral' }
+  amount?: { value: number; sign: 'pos' | 'neg' }
 }
 
 export interface DayTimeline {
@@ -123,7 +147,7 @@ export function dayTimeline(
         kind: 'task',
         title: t.content,
         time: formatHM(t.completedAt.slice(11, 16)),
-        sortKey: t.completedAt,
+        sortKey: epochSortKey(businessEpoch(t.completedAt)),
         status: 'done',
       })
     } else if (t.dueDate === date && !t.isCompleted) {
@@ -141,17 +165,22 @@ export function dayTimeline(
 
   for (const t of transactions) {
     if (t.date !== date || !ownAccountIds.has(t.accountId)) continue
+    // Transfers are excluded from the merge, not just from net (dayBand
+    // already excludes them there) — a transfer row would show only one leg
+    // with an unsigned amount that can't reconcile against the net figure
+    // directly above it (CLAUDE.md §9.2: never let a visible money figure
+    // disagree with the total next to it).
+    if (t.type !== 'income' && t.type !== 'expense') continue
     const amount = countableAmount(t)
-    const sign = t.type === 'income' ? 'pos' : t.type === 'expense' ? 'neg' : 'neutral'
     happened.push({
       id: `txn-${t.id}`,
       kind: 'money',
       title: t.merchant || t.description || 'Transaction',
       sub: t.description && t.merchant ? t.description : undefined,
       time: null,
-      sortKey: t.createdAt,
+      sortKey: epochSortKey(utcEpoch(t.createdAt)),
       status: 'done',
-      amount: { value: amount, sign },
+      amount: { value: amount, sign: t.type === 'income' ? 'pos' : 'neg' },
     })
   }
 

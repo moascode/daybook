@@ -40,6 +40,7 @@ export function DayPage() {
   const [completedTasks, setCompletedTasks] = useState<Task[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -52,6 +53,10 @@ export function DayPage() {
       })
       .catch((err) => {
         if (cancelled) return
+        // A failed load must never render as a confident "0 of 0 / RM0.00"
+        // — that's a false figure, not an absence of one (CLAUDE.md rule
+        // 13). See TripsPage's identical pattern.
+        setLoadFailed(true)
         addToast({ message: errorMessage(err, "Could not load today's data.") })
       })
       .finally(() => {
@@ -76,16 +81,16 @@ export function DayPage() {
   const isToday = date === today
   const goTo = (iso: string) => setSearchParams(iso === today ? {} : { date: iso })
 
-  const visibleHappened = timeline.happened.filter(
-    (item) => (item.kind === 'task' && showTasks) || (item.kind === 'money' && showMoney),
+  const visibleHappened = useMemo(
+    () => timeline.happened.filter((item) => (item.kind === 'task' && showTasks) || (item.kind === 'money' && showMoney)),
+    [timeline, showTasks, showMoney],
   )
-  const visiblePlanned = timeline.planned.filter(
-    (item) => (item.kind === 'task' && showTasks) || (item.kind === 'money' && showMoney),
+  const visiblePlanned = useMemo(
+    () => timeline.planned.filter((item) => (item.kind === 'task' && showTasks) || (item.kind === 'money' && showMoney)),
+    [timeline, showTasks, showMoney],
   )
-  // "Scheduled & bills" (day.store's showScheduled) has no row kind of its
-  // own yet — R6 ships no scheduled-row type in the merge, so the sidebar
-  // checkbox exists (forward wiring, matching the sidebar IA doc) but has
-  // nothing here to filter.
+  const hasAnyItems = timeline.happened.length > 0 || timeline.planned.length > 0
+  const hasVisibleItems = visibleHappened.length > 0 || visiblePlanned.length > 0
 
   return (
     <div className="content">
@@ -126,6 +131,10 @@ export function DayPage() {
       <div className="card card-pad mb-4" data-testid="day-band">
         {loading ? (
           <p className="text-sm text-fg-subtle">Loading your day…</p>
+        ) : loadFailed ? (
+          <p className="text-sm text-fg-subtle" data-testid="day-band-error">
+            Couldn't load your day — try reloading the page.
+          </p>
         ) : (
           <div className="dayfigs">
             <div className="dayfig">
@@ -147,7 +156,7 @@ export function DayPage() {
         )}
       </div>
 
-      {!loading && (
+      {!loading && !loadFailed && (
         <div className="tlist" data-testid="day-timeline">
           {visibleHappened.map((item) => (
             <TimelineRow key={item.id} item={item} />
@@ -162,9 +171,14 @@ export function DayPage() {
           {visiblePlanned.map((item) => (
             <TimelineRow key={item.id} item={item} />
           ))}
-          {visibleHappened.length === 0 && visiblePlanned.length === 0 && (
-            <p className="text-sm text-fg-subtle">Nothing on the timeline for this day yet.</p>
-          )}
+          {!hasVisibleItems &&
+            (hasAnyItems ? (
+              <p className="text-sm text-fg-subtle" data-testid="day-timeline-hidden">
+                Everything on this day is hidden — turn a filter back on in the sidebar.
+              </p>
+            ) : (
+              <p className="text-sm text-fg-subtle">Nothing on the timeline for this day yet.</p>
+            ))}
         </div>
       )}
     </div>
@@ -172,7 +186,7 @@ export function DayPage() {
 }
 
 function TimelineRow({ item }: { item: TimelineItem }) {
-  const dotClass = item.kind === 'task' ? 'calm' : item.amount?.sign === 'pos' ? 'pos' : item.amount?.sign === 'neg' ? 'neg' : 'info'
+  const dotClass = item.kind === 'task' ? 'calm' : item.amount?.sign === 'pos' ? 'pos' : 'neg'
   return (
     <div className={cn('tl', item.status === 'ahead' && 'ahead', item.status === 'done' && item.kind === 'task' && 'done')} data-testid="day-timeline-row">
       <span className="tl-time">{item.time ?? ''}</span>
@@ -184,8 +198,8 @@ function TimelineRow({ item }: { item: TimelineItem }) {
         {item.sub && <div className="tl-sub">{item.sub}</div>}
       </div>
       {item.amount && (
-        <span className={cn('tl-amt', item.amount.sign === 'pos' ? 'pos' : item.amount.sign === 'neg' ? 'neg' : undefined)}>
-          {item.amount.sign === 'pos' ? '+' : item.amount.sign === 'neg' ? '−' : ''}
+        <span className={cn('tl-amt', item.amount.sign)}>
+          {item.amount.sign === 'pos' ? '+' : '−'}
           {formatMYR(item.amount.value)}
         </span>
       )}

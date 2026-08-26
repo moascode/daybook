@@ -121,7 +121,13 @@ test.describe('74 — Day landing page', () => {
 
     const notesToggle = page.getByTestId('day-toggle-notes')
     await expect(notesToggle).toHaveAttribute('aria-disabled', 'true')
-    await expect(notesToggle).toHaveAttribute('aria-label', 'Notes — Coming in R15')
+    await expect(notesToggle).toHaveAttribute('aria-label', 'Notes on the timeline — Coming in R15')
+
+    // "Scheduled & bills" is disabled too — R6 ships no scheduled-row kind
+    // in the merge, so a live-looking checkbox here would be a click that
+    // changes nothing and explains nothing.
+    const scheduledToggle = page.getByTestId('day-toggle-scheduled')
+    await expect(scheduledToggle).toHaveAttribute('aria-disabled', 'true')
   })
 
   test('the "Tasks & habits" toggle hides task rows without touching money rows', async ({ browser }) => {
