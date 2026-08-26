@@ -16,6 +16,11 @@ import {
   UserCheck,
   CheckCircle2,
   Repeat,
+  MapPin,
+  CalendarRange,
+  ClipboardList,
+  Ticket,
+  Lightbulb,
 } from 'lucide-react'
 
 /**
@@ -23,9 +28,10 @@ import {
  *
  * AppBar (module tabs), ModuleSidebar (module-scoped nav), MobileTabBar (bottom
  * tab bar) and AccountMenu (MODULE SETTINGS rows) all read this list rather than
- * each owning a copy — see docs/v2/foundation/03-app-shell.md §7. Day and Trips
- * are `disabled: true` in R2 (R6 turns them on); their `navGroups` stay empty
- * since there is nothing to route to yet.
+ * each owning a copy — see docs/v2/foundation/03-app-shell.md §7. Day is still
+ * `disabled: true` (R6 turns Trips on; Day follows in its own R6 flow). Trips'
+ * `navGroups` below are all `disabled` placeholders — the `trips` schema that
+ * would make them real destinations doesn't land until R12.
  */
 
 export interface ModuleNavItem {
@@ -165,9 +171,71 @@ export const modules: ModuleDescriptor[] = [
     label: 'Trips',
     icon: Plane,
     path: '/trips',
-    disabled: true,
     headSub: 'Itinerary',
-    settingsBlurb: 'Itineraries, bookings and prep lists — coming in R6.',
-    navGroups: [],
+    settingsBlurb: 'Itineraries, bookings and prep lists — coming in R12.',
+    navGroups: [
+      {
+        items: [
+          {
+            to: '/trips/active',
+            label: 'Active trip',
+            icon: Plane,
+            end: false,
+            testid: 'nav-trips-active',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+          {
+            to: '/trips/itinerary',
+            label: 'Itinerary',
+            icon: CalendarRange,
+            end: false,
+            testid: 'nav-trips-itinerary',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+          {
+            to: '/trips/prep',
+            label: 'Prep',
+            icon: ClipboardList,
+            end: false,
+            testid: 'nav-trips-prep',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+          {
+            to: '/trips/bookings',
+            label: 'Bookings',
+            icon: Ticket,
+            end: false,
+            testid: 'nav-trips-bookings',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+        ],
+      },
+      {
+        items: [
+          {
+            to: '/trips/all',
+            label: 'All trips',
+            icon: MapPin,
+            end: false,
+            testid: 'nav-trips-all',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+          {
+            to: '/trips/wishlist',
+            label: 'Wishlist',
+            icon: Lightbulb,
+            end: false,
+            testid: 'nav-trips-wishlist',
+            disabled: true,
+            disabledReason: 'Coming in R12',
+          },
+        ],
+      },
+    ],
   },
 ]
