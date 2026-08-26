@@ -27,6 +27,7 @@ export function TripsPage() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -41,6 +42,10 @@ export function TripsPage() {
       })
       .catch((err) => {
         if (cancelled) return
+        // A failed load must never render as a confident RM0.00 — that's a
+        // false figure, not an absence of one (CLAUDE.md rule 13: "a broken
+        // service and a service with nothing to return render identically").
+        setLoadFailed(true)
         addToast({ message: errorMessage(err, 'Could not load your travel spending.') })
       })
       .finally(() => {
@@ -68,6 +73,10 @@ export function TripsPage() {
       <div className="card card-pad mb-4" data-testid="trips-travel-band">
         {loading ? (
           <p className="text-sm text-fg-subtle">Loading your travel spending…</p>
+        ) : loadFailed ? (
+          <p className="text-sm text-fg-subtle" data-testid="trips-travel-band-error">
+            Couldn't load your travel spending — try reloading the page.
+          </p>
         ) : (
           <div className="band">
             <div className="band-main">

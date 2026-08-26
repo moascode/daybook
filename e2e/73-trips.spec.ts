@@ -53,35 +53,46 @@ test.describe('73 — Trips landing page', () => {
     const page = await newAppPage(browser, '/trips')
 
     const account = await page.request.post(`${API}/accounts`, { data: { name: 'Trips Test Account' } })
+    expect(account.ok()).toBeTruthy()
     const { id: accountId } = (await account.json()) as { id: string }
 
     const categoriesRes = await page.request.get(`${API}/categories`)
+    expect(categoriesRes.ok()).toBeTruthy()
     const categories = (await categoriesRes.json()) as { id: string; name: string }[]
     const travel = categories.find((c) => c.name === 'Travel')
     if (!travel) throw new Error('Expected the seeded "Travel" category to exist')
 
     const today = businessToday()
-    const yesterday = businessDatePlus(-1)
+    const yearStart = `${today.slice(0, 4)}-01-01`
+    // Two travel-category expenses, ideally on two different days, to prove
+    // distinct-day counting rather than a transaction count. The page's
+    // window is [yearStart, today] inclusive, so "yesterday" isn't safe —
+    // on Jan 1 it falls in the PRIOR year and outside the window (§16 trap
+    // 2: never let a spec fail on a schedule). yearStart is always in-window
+    // and only collapses to the same day as `today` on that one date a year.
+    const secondDay = yearStart < today ? businessDatePlus(-1) : yearStart
+    const expectedDistinctDays = secondDay === today ? 1 : 2
 
-    // Two travel-category expenses on two different days — proves distinct-day
-    // counting, not just a transaction count.
-    await page.request.post(`${API}/transactions`, {
+    const txn1 = await page.request.post(`${API}/transactions`, {
       data: { accountId, date: today, amount: 100, type: 'expense', categoryId: travel.id, merchant: 'Flight' },
     })
-    await page.request.post(`${API}/transactions`, {
-      data: { accountId, date: yesterday, amount: 50, type: 'expense', categoryId: travel.id, merchant: 'Hotel' },
+    expect(txn1.ok()).toBeTruthy()
+    const txn2 = await page.request.post(`${API}/transactions`, {
+      data: { accountId, date: secondDay, amount: 50, type: 'expense', categoryId: travel.id, merchant: 'Hotel' },
     })
+    expect(txn2.ok()).toBeTruthy()
     // A non-travel expense — counts toward the denominator only.
-    await page.request.post(`${API}/transactions`, {
+    const txn3 = await page.request.post(`${API}/transactions`, {
       data: { accountId, date: today, amount: 200, type: 'expense', merchant: 'Groceries' },
     })
+    expect(txn3.ok()).toBeTruthy()
 
     await page.reload()
 
     // travelTotal = 150, totalExpense = 350, pct = 150/350*100 = 42.857...% → 42.9%
     await expect(page.getByTestId('trips-travel-total')).toContainText('150.00')
     await expect(page.getByTestId('trips-travel-pct')).toHaveText('42.9%')
-    await expect(page.getByTestId('trips-travel-days')).toHaveText('2')
+    await expect(page.getByTestId('trips-travel-days')).toHaveText(String(expectedDistinctDays))
   })
 
   test('sidebar destinations are disabled with a stated reason, not a dead link', async ({ browser }) => {
