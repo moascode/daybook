@@ -24,23 +24,9 @@ test.describe('module tabs', () => {
     await expect(tasksTab).not.toHaveAttribute('aria-current', 'page')
   })
 
-  test('Day tab is disabled and does not navigate', async ({ browser }) => {
-    const page = await newAppPage(browser, '/tasks')
-
-    // Both AppBar and MobileTabBar render a "modtab-day" copy (only one
-    // visible per viewport) — same duplicate-testid convention as
-    // nav-tasks/nav-wallet (context map / e2e/helpers.ts navItem). Trips'
-    // equivalent coverage moved to e2e/73-trips.spec.ts once R6-trips made
-    // it a live tab — Day stays disabled until its own R6 flow.
-    const dayTab = page.getByTestId('modtab-day').locator('visible=true')
-
-    await expect(dayTab).toHaveAttribute('aria-disabled', 'true')
-    await expect(dayTab).toContainText('Coming soon')
-
-    // Doesn't render as a link (no href) — clicking must not change the route.
-    await dayTab.click({ force: true })
-    await expect(page).toHaveURL(/\/tasks$/)
-  })
+  // Day and Trips are both live as of R6 — their tab coverage lives in
+  // e2e/74-day.spec.ts and e2e/73-trips.spec.ts respectively. Nothing left
+  // disabled in the app bar's module tabs at this point.
 
   test('the Tasks tab shows a live overdue+due-today count', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
@@ -196,12 +182,9 @@ test.describe('responsive chrome', () => {
     const menu = gapPage.getByTestId('modswitch-menu')
     await expect(menu).toBeVisible()
     await expect(menu.getByRole('button', { name: 'Wallet' })).toHaveClass(/active/)
-    const dayItem = menu.getByRole('button', { name: /Day — coming soon/ })
-    await expect(dayItem).toBeDisabled()
-
-    // Disabled items don't navigate.
-    await dayItem.click({ force: true })
-    await expect(gapPage).toHaveURL(/\/wallet$/)
+    // All four modules are live as of R6 — no disabled item left to assert
+    // against here (Day/Trips' own disabled-tab coverage moved to
+    // e2e/74-day.spec.ts / e2e/73-trips.spec.ts when each went live).
 
     // A live module navigates and closes the menu.
     await menu.getByRole('button', { name: 'Tasks' }).click()

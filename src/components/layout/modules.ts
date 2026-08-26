@@ -21,6 +21,10 @@ import {
   ClipboardList,
   Ticket,
   Lightbulb,
+  CalendarDays,
+  StickyNote,
+  ClipboardCheck,
+  History,
 } from 'lucide-react'
 
 /**
@@ -28,10 +32,11 @@ import {
  *
  * AppBar (module tabs), ModuleSidebar (module-scoped nav), MobileTabBar (bottom
  * tab bar) and AccountMenu (MODULE SETTINGS rows) all read this list rather than
- * each owning a copy — see docs/v2/foundation/03-app-shell.md §7. Day is still
- * `disabled: true` (R6 turns Trips on; Day follows in its own R6 flow). Trips'
- * `navGroups` below are all `disabled` placeholders — the `trips` schema that
- * would make them real destinations doesn't land until R12.
+ * each owning a copy — see docs/v2/foundation/03-app-shell.md §7. Both Day and
+ * Trips are live as of R6. Day's "Show on the timeline" toggles aren't listed
+ * here — they're interactive checkboxes bound to `day.store.ts`, not links, so
+ * ModuleSidebar injects them dynamically the same way it injects Tasks' Lists
+ * group.
  */
 
 export interface ModuleNavItem {
@@ -76,10 +81,68 @@ export const modules: ModuleDescriptor[] = [
     label: 'Day',
     icon: Calendar,
     path: '/day',
-    disabled: true,
     headSub: 'Timeline',
-    settingsBlurb: 'Timeline, notes and daily review — coming in R6.',
-    navGroups: [],
+    settingsBlurb: 'The daily timeline, notes and review.',
+    navGroups: [
+      {
+        items: [
+          { to: '/day', label: 'Today', icon: Calendar, end: true, testid: 'nav-day-today' },
+          {
+            to: '/day/week',
+            label: 'This week',
+            icon: CalendarDays,
+            end: false,
+            testid: 'nav-day-week',
+            disabled: true,
+            disabledReason: 'Coming in R16',
+          },
+          {
+            to: '/day/calendar',
+            label: 'Calendar',
+            icon: CalendarRange,
+            end: false,
+            testid: 'nav-day-calendar',
+            disabled: true,
+            disabledReason: 'Coming in R16',
+          },
+          {
+            to: '/day/notes',
+            label: 'Notes',
+            icon: StickyNote,
+            end: false,
+            testid: 'nav-day-notes',
+            disabled: true,
+            disabledReason: 'Coming in R15',
+          },
+        ],
+      },
+      // The dynamic "Show on the timeline" toggle group (Tasks & habits /
+      // Money / Scheduled & bills, plus a disabled Notes row) is injected by
+      // ModuleSidebar itself, not listed here — see the doc comment above.
+      {
+        label: 'Review',
+        items: [
+          {
+            to: '/day/weekly-review',
+            label: 'Weekly review',
+            icon: ClipboardCheck,
+            end: false,
+            testid: 'nav-day-weekly-review',
+            disabled: true,
+            disabledReason: 'Coming in R16',
+          },
+          {
+            to: '/day/on-this-day',
+            label: 'On this day',
+            icon: History,
+            end: false,
+            testid: 'nav-day-on-this-day',
+            disabled: true,
+            disabledReason: 'Coming in R16',
+          },
+        ],
+      },
+    ],
   },
   {
     id: 'tasks',

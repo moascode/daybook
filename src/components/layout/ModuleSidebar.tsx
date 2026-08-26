@@ -8,6 +8,7 @@ import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
+import { useDayStore } from '@/stores/day.store'
 
 interface ModuleSidebarProps {
   open: boolean
@@ -41,8 +42,10 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
   const activeModule = modules.find((m) => !m.disabled && location.pathname.startsWith(m.path))
   const addToast = useToastStore((s) => s.addToast)
   const { taskLists, loadTaskLists } = useTaskLists()
+  const { showTasks, showMoney, showScheduled, toggle } = useDayStore()
 
   const isTasksModule = activeModule?.id === 'tasks'
+  const isDayModule = activeModule?.id === 'day'
 
   // The dynamic Lists group is scoped to the Tasks module only — no need to
   // fetch task_lists at all when it isn't showing.
@@ -119,6 +122,59 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             )}
           </div>
         ))}
+
+        {/* Dynamic "Show on the timeline" toggle group (R6,
+            docs/v2/day/02-design-adoption.md §Sidebar) — checkboxes, not
+            links, so they can't be plain ModuleNavItems; state lives in
+            day.store.ts since ModuleSidebar and DayPage are siblings. */}
+        {isDayModule && (
+          <div className="nav-group">
+            <span className="u-label">Show on the timeline</span>
+            <label className="nav-item cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showTasks}
+                onChange={() => toggle('showTasks')}
+                className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
+                data-testid="day-toggle-tasks"
+              />
+              Tasks &amp; habits
+            </label>
+            <label className="nav-item cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showMoney}
+                onChange={() => toggle('showMoney')}
+                className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
+                data-testid="day-toggle-money"
+              />
+              Money
+            </label>
+            <label className="nav-item cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showScheduled}
+                onChange={() => toggle('showScheduled')}
+                className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
+                data-testid="day-toggle-scheduled"
+              />
+              Scheduled &amp; bills
+            </label>
+            <button
+              type="button"
+              aria-disabled="true"
+              onClick={(e) => e.preventDefault()}
+              className="nav-item opacity-40 cursor-not-allowed"
+              aria-label="Notes — Coming in R15"
+              data-testid="day-toggle-notes"
+            >
+              Notes
+              <span className="tip-label" aria-hidden="true">
+                Coming in R15
+              </span>
+            </button>
+          </div>
+        )}
 
         {/* Dynamic per-user "Lists" group (docs/v2/tasks/02-design-adoption.md
             §Sidebar) — one item per task_lists row plus a fixed trailing

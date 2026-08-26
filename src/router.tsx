@@ -16,6 +16,7 @@ import { GoalsPage } from '@/modules/wallet/GoalsPage'
 import { ReportsPage } from '@/modules/wallet/ReportsPage'
 import { SharedPage } from '@/modules/wallet/SharedPage'
 import { TripsPage } from '@/modules/trips/TripsPage'
+import { DayPage } from '@/modules/day/DayPage'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { SettingsPage } from '@/modules/settings/SettingsPage'
 import { SharingPage } from '@/modules/settings/SharingPage'
@@ -27,7 +28,8 @@ export const router = createBrowserRouter([
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to="/tasks" replace /> },
+      { index: true, element: <Navigate to="/day" replace /> },
+      { path: 'day', element: <DayPage /> },
       { path: 'tasks', element: <TasksTodayPage /> },
       { path: 'tasks/all', element: <TasksAllPage /> },
       { path: 'tasks/lists/:listId', element: <TasksListDetailPage /> },
