@@ -207,27 +207,32 @@ test('the movers sum to the headline difference', async () => {
 
 // ── Where it goes ───────────────────────────────────────────────────────
 
-test('category breakdown lists every category with a bar', async () => {
-  const rows = page.getByTestId('category-breakdown-row')
+test('category donut legend lists every category with its amount and share', async () => {
+  const rows = page.getByTestId('category-donut-legend-row')
   await expect(rows.filter({ hasText: 'Shopping' })).toContainText(/RM\s*200\.00/)
+  await expect(rows.filter({ hasText: 'Shopping' })).toContainText(/%/)
   await expect(rows.filter({ hasText: 'Transport' })).toContainText(/RM\s*150\.00/)
 })
 
-test('uncategorised spending is a visible row, not a silent omission', async () => {
+test('uncategorised spending is a visible legend row, not a silent omission', async () => {
   // The old pie dropped these rows, so it never summed to the expense total.
   const uncategorised = page
-    .getByTestId('category-breakdown-row')
+    .getByTestId('category-donut-legend-row')
     .filter({ hasText: 'Uncategorised' })
   await expect(uncategorised).toContainText(/RM\s*40\.00/)
+})
+
+test('the donut states the period total in words, matching the headline', async () => {
+  await expect(page.getByTestId('category-donut')).toHaveAccessibleName(/RM\s*530\.00/)
 })
 
 test('the breakdown reconciles to the headline figure', async () => {
   await expect(page.getByText(/Totals to\s*RM\s*530\.00/)).toBeVisible()
 })
 
-test('a category row opens the transactions behind it', async () => {
+test('a category legend row opens the transactions behind it', async () => {
   await page
-    .getByTestId('category-breakdown-row')
+    .getByTestId('category-donut-legend-row')
     .filter({ hasText: 'Shopping' })
     .getByRole('link')
     .click()
@@ -239,7 +244,7 @@ test('a category row opens the transactions behind it', async () => {
 
 test('the Uncategorised row filters to only unfiled transactions, not everything', async () => {
   await page
-    .getByTestId('category-breakdown-row')
+    .getByTestId('category-donut-legend-row')
     .filter({ hasText: 'Uncategorised' })
     .getByRole('link')
     .click()
@@ -290,10 +295,11 @@ test('a merchant seen every month is labelled as such', async () => {
 
 // ── Removed panels stay removed ─────────────────────────────────────────
 
-test('the pie chart and the account chart are gone', async () => {
-  // Bars rank accurately past three slices where a pie cannot, and spending by
-  // account is a bookkeeping fact rather than a behaviour.
-  await expect(page.locator('.recharts-pie')).toHaveCount(0)
+test('the account chart is gone; the category donut is the R7 design', async () => {
+  // R7 (2026-09-02): the owner reversed the earlier "bars, not a pie" call —
+  // "Where it goes" is a donut again, on purpose. Spending by account is still
+  // a bookkeeping fact rather than a behaviour, so that one stays gone.
+  await expect(page.getByTestId('category-donut').locator('.recharts-pie')).toHaveCount(1)
   await expect(page.getByText('Spending by Account')).toHaveCount(0)
 })
 

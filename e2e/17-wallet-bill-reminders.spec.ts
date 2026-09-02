@@ -78,6 +78,16 @@ test('bill due in 30 days does NOT appear as a reminder', async () => {
   ).not.toBeVisible()
 })
 
+// ── Total due footer ─────────────────────────────────────────────────
+
+test('Coming up totals only the bills actually shown, not every recurring rule', async () => {
+  // Electricity Bill (100, due in 3 days) is visible; Far Future Bill (200,
+  // due in 30 days) is filtered out above — the footer must agree with what's
+  // on screen, not with the full recurring_transactions table.
+  await expect(page.getByTestId('upcoming-bills-total')).toContainText(/100\.00/)
+  await expect(page.getByTestId('upcoming-bills-total')).not.toContainText(/300\.00/)
+})
+
 // ── Dismiss reminder ───────────────────────────────────────────────────
 
 test('dismissing a bill reminder hides it from the dashboard', async () => {
@@ -86,6 +96,9 @@ test('dismissing a bill reminder hides it from the dashboard', async () => {
   await expect(
     page.getByTestId('bill-reminder').filter({ hasText: 'Electricity Bill' }),
   ).not.toBeVisible()
+  // The only bill in the window is now dismissed — the whole card (footer
+  // included) unmounts rather than showing a stale or zeroed total.
+  await expect(page.getByTestId('upcoming-bills-total')).not.toBeVisible()
 })
 
 test('dismissed reminder does not reappear on page reload', async () => {

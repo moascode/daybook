@@ -15,7 +15,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { newAppPage, signUpOnPage, waitForApp, businessToday, fillAccountForm } from './helpers'
+import { newAppPage, signUpOnPage, waitForApp, businessToday, businessDatePlus, fillAccountForm } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 
@@ -156,6 +156,118 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await expect(featured).toHaveClass(/\bacct\b/)
     await expect(featured).toHaveClass(/\bacct-feature\b/)
     await expect(featured).toContainText('Big Account')
+    // No bills yet on the featured account — plain balance copy, not a
+    // manufactured "after RM0 of bills" sentence.
+    await expect(featured).toContainText('Largest balance')
+
+    // A bill due on the FEATURED account reduces what's safe to spend; the
+    // account's own balance (5000) minus that bill (800) is what should show.
+    // Due date must be a few days OUT, not today — a rule due today or
+    // earlier is auto-posted into a real transaction on the next app boot
+    // (worker/routes/wallet.ts's boot-time recurring processor), which would
+    // both change the balance itself and roll the rule's next_due_date
+    // forward out of the "upcoming" window before this assertion ever runs.
+    await page.request.post('/api/recurring-transactions', {
+      data: {
+        accountId: big.id,
+        amount: 800,
+        merchant: 'Rent',
+        type: 'expense',
+        frequency: 'monthly',
+        nextDueDate: businessDatePlus(3),
+      },
+    })
+    await page.goto('/wallet/dashboard')
+    await waitForApp(page)
+
+    const safeToSpend = page.getByTestId('featured-account-safe-to-spend')
+    await expect(safeToSpend).toBeVisible()
+    await expect(safeToSpend).toContainText(/4,200\.00 safe to spend after RM\s*800\.00 of bills/)
+
+    // Two things that must NOT move the figure: a bill on a DIFFERENT
+    // account (safeToSpend's whole reason to exist — a bill drawn from
+    // Small Account has no claim on Big Account's balance), and a recurring
+    // INCOME rule on the SAME account (money arriving isn't a bill; summing
+    // it in would flip the sign and make "safe to spend" go down right
+    // before money comes in — the exact bug this pair of rules regresses).
+    await page.request.post('/api/recurring-transactions', {
+      data: {
+        accountId: small.id,
+        amount: 999,
+        merchant: 'Someone Else’s Bill',
+        type: 'expense',
+        frequency: 'monthly',
+        nextDueDate: businessDatePlus(3),
+      },
+    })
+    await page.request.post('/api/recurring-transactions', {
+      data: {
+        accountId: big.id,
+        amount: 3000,
+        merchant: 'Payday',
+        type: 'income',
+        frequency: 'monthly',
+        nextDueDate: businessDatePlus(3),
+      },
+    })
+    await page.goto('/wallet/dashboard')
+    await waitForApp(page)
+    await expect(page.getByTestId('featured-account-safe-to-spend')).toContainText(
+      /4,200\.00 safe to spend after RM\s*800\.00 of bills/,
+    )
+    // Same bug, one card over: "Coming up" is account-agnostic (it lists
+    // every upcoming bill, not just the featured account's), so its total is
+    // Rent (800, Big Account) + Someone Else's Bill (999, Small Account) =
+    // 1,799 — the Payday INCOME rule (3000) must be excluded either way.
+    await expect(page.getByTestId('upcoming-bills-total')).toContainText(/1,799\.00/)
+    await expect(page.getByTestId('upcoming-bills-total')).not.toContainText(/4,799\.00/)
+    await expect(page.getByTestId('bill-reminder').filter({ hasText: 'Payday' })).toHaveCount(0)
+  })
+
+  test('the category donut folds spending past the top 6 into "Everything else", not silently', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet/accounts')
+    await page.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(page, { name: 'Donut Bank' })
+
+    const acctRes = await page.request.get('/api/accounts')
+    const [acct] = (await acctRes.json()) as Array<{ id: string }>
+    const catsRes = await page.request.get('/api/categories')
+    const categories = (await catsRes.json()) as Array<{ id: string; name: string; type: string }>
+    // 8 distinct categories — comfortably past MAX_DONUT_SLICES (6) — each with
+    // a DIFFERENT amount so the fold-point is unambiguous: the 2 smallest must
+    // be the ones missing from the individual legend rows.
+    const expenseCats = categories.filter((c) => c.type !== 'income').slice(0, 8)
+    expect(expenseCats.length).toBe(8)
+    for (const [i, cat] of expenseCats.entries()) {
+      await page.request.post('/api/transactions', {
+        data: {
+          accountId: acct.id,
+          date: businessToday(),
+          merchant: cat.name,
+          amount: 100 - i, // 100, 99, 98, ... 93 — strictly descending, no ties
+          type: 'expense',
+          categoryId: cat.id,
+        },
+      })
+    }
+
+    await page.goto('/wallet/dashboard')
+    await waitForApp(page)
+
+    const rows = page.getByTestId('category-donut-legend-row')
+    await expect(rows).toHaveCount(7) // top 6 individually + 1 "Everything else"
+    const everythingElse = rows.filter({ hasText: 'Everything else' })
+    await expect(everythingElse).toBeVisible()
+    // The 2 smallest categories (amounts 94, 93 → sum 187) are folded in; they
+    // must NOT also appear as their own row.
+    const smallest = expenseCats[6].name
+    const secondSmallest = expenseCats[7].name
+    await expect(rows.filter({ hasText: smallest })).toHaveCount(0)
+    await expect(rows.filter({ hasText: secondSmallest })).toHaveCount(0)
+    await expect(everythingElse).toContainText(/187\.00/)
+    // Unlike a real category row, "Everything else" has nowhere specific to
+    // link — it must render as plain text, not a broken transactions link.
+    await expect(everythingElse.getByRole('link')).toHaveCount(0)
   })
 
   test('recent-activity shows at most 5 rows, no day-net pill, no mutating actions, and links to /wallet', async ({ browser }) => {
