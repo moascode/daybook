@@ -37,10 +37,12 @@ import {
   precedingRange,
   priorMonths,
   projectMonthEnd,
+  safeToSpend,
   shiftMonth,
   spendThroughDay,
   summarise,
   trailingMonthsEndingAt,
+  UPCOMING_BILLS_WINDOW_DAYS,
   usualMonthTotal,
   usualThroughDay,
   weekdayAverages,
@@ -365,18 +367,6 @@ export function Dashboard() {
 
   const breakdown = useMemo(() => categorySpend(periodTxns, categories), [periodTxns, categories])
 
-  const previousByCategory = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      const prev = shiftMonth(monthPeriod.month, -1)
-      const rows = categorySpend(
-        transactions.filter((t) => monthKey(t.date) === prev && dayOfMonth(t.date) <= monthPeriod.day),
-        categories,
-      )
-      return new Map(rows.map((r) => [r.id, r.amount]))
-    }
-    return new Map(categorySpend(comparisonTxns, categories).map((r) => [r.id, r.amount]))
-  }, [isMonthMode, monthPeriod, transactions, categories, comparisonTxns])
-
   const weekday = useMemo(() => {
     if (isMonthMode && monthPeriod) {
       return weekdayAverages(transactions, priorMonths(monthPeriod.month, BASELINE_MONTHS))
@@ -529,13 +519,17 @@ export function Dashboard() {
   ])
 
   // ── Bill reminders ───────────────────────────────────────────────
+  // Only EXPENSE rules are bills — a recurring income rule (payday, a
+  // standing credit) due soon is money arriving, not owed, and must not
+  // inflate the "Total due" footer or read as something to pay.
   const upcomingBills = useMemo((): UpcomingBill[] => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     return recurringTransactions
       .filter((r) => {
+        if (r.type !== 'expense') return false
         if (dismissedIds.has(r.id)) return false
-        return differenceInDays(parseISO(r.nextDueDate), today) <= 7
+        return differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS
       })
       .map((r) => ({ ...r, daysUntilDue: differenceInDays(parseISO(r.nextDueDate), today) }))
   }, [recurringTransactions, dismissedIds])
@@ -573,6 +567,23 @@ export function Dashboard() {
       return c !== 0 ? c : a.id.localeCompare(b.id)
     })[0]
   }, [ownAccounts, balances])
+
+  // Safe-to-spend on the featured account: its own balance minus its own
+  // upcoming bills, using the SAME window as `upcomingBills` above (see
+  // `UPCOMING_BILLS_WINDOW_DAYS`) so the two cards never disagree about
+  // what "coming up" means.
+  const featuredSafeToSpend = useMemo(() => {
+    if (balances === null || !featuredAccount) return null
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return safeToSpend(
+      balances[featuredAccount.id] ?? 0,
+      featuredAccount.id,
+      recurringTransactions,
+      today,
+      dismissedIds,
+    )
+  }, [balances, featuredAccount, recurringTransactions, dismissedIds])
 
   // Most recent 5 rows of the period already scoped by the filter row above.
   const recentTxns = useMemo(
@@ -682,10 +693,21 @@ export function Dashboard() {
             <p className="acct-bal" data-testid="featured-account-balance">
               {formatMYR(balances[featuredAccount.id] ?? 0)}
             </p>
-            <p className="acct-foot">
-              <span>Largest balance</span>
-              <span>Accounts →</span>
-            </p>
+            {featuredSafeToSpend && featuredSafeToSpend.bills > 0 ? (
+              <p className="acct-foot" data-testid="featured-account-safe-to-spend">
+                <span>
+                  {featuredSafeToSpend.safe >= 0
+                    ? `${formatMYR(featuredSafeToSpend.safe)} safe to spend after ${formatMYR(featuredSafeToSpend.bills)} of bills`
+                    : `${formatMYR(Math.abs(featuredSafeToSpend.safe))} short of covering ${formatMYR(featuredSafeToSpend.bills)} of upcoming bills`}
+                </span>
+                <span>Accounts →</span>
+              </p>
+            ) : (
+              <p className="acct-foot">
+                <span>Largest balance</span>
+                <span>Accounts →</span>
+              </p>
+            )}
           </Link>
         ) : (
           <Link to="/wallet/accounts" className="acct add c4">
@@ -739,7 +761,6 @@ export function Dashboard() {
           <CategoryBreakdown
             className="c6"
             rows={breakdown}
-            previous={previousByCategory}
             total={summary.expense}
             dateFrom={periodBounds.from}
             dateTo={periodBounds.to}

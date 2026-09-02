@@ -20,7 +20,7 @@
  *    one place a Date is unavoidable is the weekday lookup, where `parseISO`
  *    of a date-only string yields LOCAL midnight and `getDay()` is stable.
  */
-import { parseISO } from 'date-fns'
+import { differenceInDays, parseISO } from 'date-fns'
 import { countableAmount } from '@/hooks/useWallet'
 import type { Category, RecurringTransaction, Transaction } from '@/types/wallet.types'
 
@@ -325,6 +325,50 @@ export function categorySpend(
       return { id, name: cat?.name ?? 'Deleted category', color: cat?.color ?? null, amount }
     })
     .sort((a, b) => b.amount - a.amount)
+}
+
+/** How many category slices the donut draws individually before folding the rest into "Everything else". */
+const MAX_DONUT_SLICES = 6
+
+/** Id of the synthetic "everything past the top N" slice — exported so the component doesn't redefine it. */
+export const EVERYTHING_ELSE_ID = '__everything_else__'
+
+export interface DonutSlice {
+  id: string
+  name: string
+  /** null for the uncategorised row and for the synthetic "Everything else" slice. */
+  color: string | null
+  amount: number
+  /** 0–100. */
+  share: number
+}
+
+/**
+ * `categorySpend` rows folded into a donut-sized set: the top slices kept
+ * individually, everything past `MAX_DONUT_SLICES` merged into a trailing
+ * "Everything else" slice so the chart never draws a sliver too thin to
+ * label. `rows` is already biggest-first, so "top N" and "largest-first with
+ * Everything else last" fall out of a plain slice.
+ */
+export function categoryDonutSlices(rows: CategorySpend[], total: number): DonutSlice[] {
+  if (total <= 0) return []
+  const top = rows.slice(0, MAX_DONUT_SLICES)
+  const rest = rows.slice(MAX_DONUT_SLICES)
+  const slices: DonutSlice[] = top
+    .filter((r) => r.amount > 0)
+    .map((r) => ({ id: r.id, name: r.name, color: r.color, amount: r.amount, share: (r.amount / total) * 100 }))
+
+  const restAmount = rest.reduce((sum, r) => sum + r.amount, 0)
+  if (restAmount > 0) {
+    slices.push({
+      id: EVERYTHING_ELSE_ID,
+      name: 'Everything else',
+      color: null,
+      amount: restAmount,
+      share: (restAmount / total) * 100,
+    })
+  }
+  return slices
 }
 
 export interface CategoryDelta extends CategorySpend {
@@ -679,4 +723,47 @@ export function committedSplitInRange(
 
 function countActive(perMonth: Map<string, number>, months: string[]): number {
   return months.reduce((n, m) => n + ((perMonth.get(m) ?? 0) > 0 ? 1 : 0), 0)
+}
+
+// ── Featured account ─────────────────────────────────────────────
+
+/** Bills within this many days count as "upcoming" — shared by the Coming-up card and safe-to-spend, so the two never disagree on what's included. */
+export const UPCOMING_BILLS_WINDOW_DAYS = 7
+
+export interface SafeToSpend {
+  balance: number
+  /** Sum of this account's own EXPENSE recurring amounts due within `UPCOMING_BILLS_WINDOW_DAYS` (including overdue). */
+  bills: number
+  /** `balance - bills`, can go negative if bills exceed the balance. */
+  safe: number
+}
+
+/**
+ * What's actually free to spend on one account: its balance minus its OWN
+ * upcoming bills, not every bill in the household. A bill drawn from a
+ * different account has no claim on this one.
+ *
+ * Only `type === 'expense'` rules count. A recurring INCOME rule (payday,
+ * a standing credit) due in the window is money arriving, not owed — summing
+ * it in would flip the sign and make safe-to-spend go DOWN right before money
+ * comes in. `dismissedIds` mirrors the same set the "Coming up" card already
+ * excludes, so the two cards can't disagree about what's upcoming.
+ */
+export function safeToSpend(
+  balance: number,
+  accountId: string,
+  recurring: RecurringTransaction[],
+  today: Date,
+  dismissedIds: Set<string> = new Set(),
+): SafeToSpend {
+  let bills = 0
+  for (const r of recurring) {
+    if (r.accountId !== accountId) continue
+    if (r.type !== 'expense') continue
+    if (dismissedIds.has(r.id)) continue
+    if (differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS) {
+      bills += r.amount
+    }
+  }
+  return { balance, bills, safe: balance - bills }
 }

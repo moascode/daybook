@@ -22,8 +22,10 @@ interface UpcomingBillsProps {
 export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProps) {
   if (bills.length === 0) return null
 
+  const totalDue = bills.reduce((sum, bill) => sum + bill.amount, 0)
+
   return (
-    <div className={cn('card card-pad', className)}>
+    <div className={cn('card card-pad flex flex-col', className)}>
       <div className="mb-3 flex items-center gap-2">
         <Bell className="h-4 w-4 text-warn-fg" />
         <h3 className="text-sm font-semibold text-warn-fg">Upcoming Bills</h3>
@@ -61,6 +63,9 @@ export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProp
           )
         })}
       </div>
+      <p data-testid="upcoming-bills-total" className="mt-auto pt-3 text-right text-sm font-semibold text-fg">
+        Total due: {formatMYR(totalDue)}
+      </p>
     </div>
   )
 }
