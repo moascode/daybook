@@ -115,31 +115,90 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
   // scrollWidth on an empty page or sign up a fresh accountless user, so
   // none of these three would have failed without a purpose-built test.
 
-  test('at 390px, a transaction row\'s actions are neither visible nor hittable', async ({ browser }: { browser: Browser }) => {
-    // Regression for: .trow-actions kept its Tailwind `flex` class, which
-    // (same specificity, later in Tailwind's utilities layer) always beat
-    // data.css's `@media (max-width:680px) { .trow-actions { display:none } }`
-    // — every row was ~115px tall with an invisible (opacity:0) but fully
-    // hittable Delete button sitting in the dead space below the visible
-    // content, deleting the transaction on any blind tap there.
+  test('at 390px with Split available (household group — both real users), the merchant name stays readable and all three actions are visible', async ({ browser }: { browser: Browser }) => {
+    // History: `.trow-actions` once had a Tailwind `flex` class beating
+    // data.css's mobile `display:none` on specificity — every row was
+    // ~115px tall with an invisible (opacity:0) but fully hittable Delete
+    // button sitting in dead space, deleting the transaction on a blind
+    // tap. THAT was fixed by hiding actions entirely below 680px — which
+    // then quietly became its own bug: TransactionForm's Edit modal has no
+    // delete action of its own, so Delete and Split became permanently
+    // unreachable on mobile, not just decluttered.
+    //
+    // A first R7-follow-up fix resized the grid to a 3rd `auto` column
+    // instead of removing it. That passed review's own first pass, but a
+    // SECOND pass measured it against the actual worst case — a user in a
+    // household group, where Split renders too — and found it crushed
+    // `.tname` to ~13-51px (a few characters) at real device widths,
+    // trading "unreachable" for "unreadable". Fixed by giving
+    // `.trow-actions` its own row (not a 3rd grid column) so line one keeps
+    // its full `1fr` for the name and amount. This test seeds a group (so
+    // Split renders — the worst case, and the ONLY case this app's two
+    // real production users are ever in, per CLAUDE.md §13) and a merchant
+    // name long enough to actually exercise truncation, then asserts a
+    // real readability floor rather than a geometric bounds check that
+    // can't fail by construction (CSS Grid's `min-width:0` on `.tlead`
+    // guarantees the `1fr` track never overflows its own column regardless
+    // of how little space is left for it).
     const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
     const page = await ctx.newPage()
     await signUpOnPage(page)
+    await page.request.post('/api/groups', { data: { name: 'Household' } })
     await page.request.post('/api/accounts', { data: { name: 'Mobile Row Bank', type: 'cash', openingBalance: 100 } })
     await page.request.post('/api/transactions', {
-      data: { accountId: (await (await page.request.get('/api/accounts')).json())[0].id, date: businessToday(), merchant: 'Mobile Coffee', amount: 5, type: 'expense' },
+      data: {
+        accountId: (await (await page.request.get('/api/accounts')).json())[0].id,
+        date: businessToday(),
+        merchant: 'Neighborhood Supermarket',
+        amount: 43.5,
+        type: 'expense',
+      },
     })
     await page.goto('/wallet')
     await waitForApp(page)
 
-    const row = transactionRowFor(page, 'Mobile Coffee')
+    const row = transactionRowFor(page, 'Neighborhood Supermarket')
     await expect(row).toBeVisible()
-    await expect(row.locator('.trow-actions')).toBeHidden()
+    const actions = row.locator('.trow-actions')
+    await expect(actions).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Split transaction' })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Edit transaction' })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Delete transaction' })).toBeVisible()
 
-    // The row itself must stay compact — no implicit second grid row from
-    // an action group the layout thinks is still flex-laid-out at full size.
+    // Readable floor: enough for a real merchant name, not a few characters
+    // truncated to nothing. 100px comfortably fits "Neighborhood Su…" at
+    // this row's font size — well short of the ~13-51px the crushed layout
+    // measured.
+    const nameBox = await row.locator('.tname').boundingBox()
+    expect(nameBox?.width).toBeGreaterThan(100)
+
+    // The row is now two lines by design (content+amount, then actions on
+    // their own line) — compact still means "not the old opacity:0 dead
+    // space" (~115px), but genuinely taller than the old single-line ~65px.
     const rowBox = await row.boundingBox()
-    expect(rowBox?.height).toBeLessThan(90)
+    expect(rowBox?.height).toBeGreaterThan(80)
+    expect(rowBox?.height).toBeLessThan(130)
+    await ctx.close()
+  })
+
+  test('at 390px, Delete is actually reachable and works — not just visible', async ({ browser }: { browser: Browser }) => {
+    // The layout-only check above would pass even if the button were
+    // visible but non-functional (e.g. covered by an invisible sibling at
+    // the same position) — this confirms the tap really deletes.
+    const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
+    const page = await ctx.newPage()
+    await signUpOnPage(page)
+    await page.request.post('/api/accounts', { data: { name: 'Mobile Delete Bank', type: 'cash', openingBalance: 100 } })
+    await page.request.post('/api/transactions', {
+      data: { accountId: (await (await page.request.get('/api/accounts')).json())[0].id, date: businessToday(), merchant: 'Mobile Snack', amount: 3, type: 'expense' },
+    })
+    await page.goto('/wallet')
+    await waitForApp(page)
+
+    const row = transactionRowFor(page, 'Mobile Snack')
+    await row.getByRole('button', { name: 'Delete transaction' }).click()
+    await expect(transactionRowFor(page, 'Mobile Snack')).toHaveCount(0)
+    await expect(page.getByText(/undo/i)).toBeVisible()
     await ctx.close()
   })
 

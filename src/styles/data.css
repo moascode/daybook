@@ -154,14 +154,58 @@ td:last-child, th:last-child { padding-right: 0; }
 }
 
 @media (max-width: 680px) {
-  /* transactions: two-line row, amount right — no 5-line stacked card */
+  /* transactions: content+amount on line one, actions on their own line
+     below, right-aligned — not a 3rd column squeezed in beside them.
+     Actions used to be `display:none` here, which was the EXACT bug the
+     comment two rules up (data.css:43-55) already warns against
+     reintroducing: Delete and Split have no other path to reach on mobile
+     (TransactionForm's Edit modal has no delete action of its own), so
+     hiding them wasn't a decluttered row, it was an unreachable one.
+     A first attempt resized the grid to `1fr auto auto` instead (matching
+     the 860px breakpoint's "resize, don't remove" shape) — but that
+     breakpoint drops a COLUMN to make room; this one was ADDING a column
+     of touch-sized buttons, and for any user in a household group (Split
+     shown — both of this app's real users) it crushed `.tname` to ~13-51px,
+     an unreadable few characters. Fixed by giving actions their own row
+     instead: `.trow-actions` isn't placed in the 2-column grid at all, so
+     it naturally flows onto a new implicit row spanning full width. */
   .trow {
-    grid-template-columns: 1fr auto; gap: var(--s3);
+    grid-template-columns: 1fr auto; gap: var(--s2);
     padding: var(--s3) var(--s2); align-items: center;
+    /* `.main-col`'s padding-bottom (shell.css) is what actually reserves
+       enough scroll range to clear the fixed .fab/.tabbar — verified
+       empirically that padding alone is sufficient (Chromium's real
+       auto-scroll-before-click is CDP's `scrollIntoViewIfNeeded`, a
+       center-if-needed strategy, not a flush/minimal one; it over-scrolls
+       into the padding and clamps at the true max). `scroll-margin-bottom`
+       here does no work for that specific path (there's comfortably more
+       trailing space in the real page than the .fab's 124px needs), but
+       costs nothing and is real defence-in-depth for native
+       scrollIntoView()/focus-scroll callers that behave differently.
+       Same 132px as .main-col's own clearance figure, for the same
+       .fab+.tabbar reasoning documented there. */
+    scroll-margin-bottom: 132px;
+  }
+  /* Scoped to .trow specifically — .lrow (a different, currently-unused row
+     type elsewhere in this file) has its own .trow-actions rule with an
+     opacity:0 hover-reveal; an unscoped selector here would hand it this
+     same full-row grid-column too, reproducing the exact "invisible but
+     hittable" class of bug this whole block exists to avoid, the moment
+     .lrow is ever wired up. */
+  .trow .trow-actions {
+    grid-column: 1 / -1;
+    /* `justify-self`, not `justify-content: flex-end` — the latter keeps
+       this flex container's BOX spanning the full row (it has
+       `onClick={stopPropagation}` in TransactionList.tsx), so the empty
+       space to the left of the buttons would silently swallow taps meant
+       for the row underneath. `justify-self: end` shrinks the box to its
+       own content and parks that at the row's end instead — same visual
+       result, no dead zone. */
+    justify-self: end;
+    margin-top: calc(var(--s2) * -1);
   }
   .trow .col-mobile-hide { display: none; }
   .tavatar { width: 38px; height: 38px; }
-  .trow-actions { display: none; }
   .tgroup-head { top: 0; }
 }
 

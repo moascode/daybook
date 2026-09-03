@@ -242,13 +242,15 @@ export function RecurringPage() {
                       {formatMYR(rule.amount)}
                     </span>
                     <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs font-medium text-brand-600 hover:bg-brand-50"
                         onClick={() => handlePostNow(rule)}
-                        disabled={postingId === rule.id}
+                        loading={postingId === rule.id}
                       >
-                        {postingId === rule.id ? 'Posting…' : 'Post now'}
-                      </button>
+                        Post now
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
