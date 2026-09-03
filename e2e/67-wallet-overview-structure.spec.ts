@@ -495,4 +495,61 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1)
     await ctx.close()
   })
+
+  test('Row D — "Where it goes" and "Your week" footers align across the row even when their content heights differ (docs/v2/wallet/02-design-adoption.md: "push it down with margin-top: auto so footers align")', async ({ browser }: { browser: Browser }) => {
+    const page = await newAppPage(browser, '/wallet/accounts')
+    await page.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(page, { name: 'Alignment Bank' })
+    const acctRes = await page.request.get('/api/accounts')
+    const [acct] = (await acctRes.json()) as Array<{ id: string }>
+    const catsRes = await page.request.get('/api/categories')
+    const cats = (await catsRes.json()) as Array<{ id: string; name: string }>
+    // Deliberately MANY categories, one transaction each — "Where it goes"'s
+    // legend grows a row per category while "Your week"'s chart stays a
+    // fixed height, so their MAIN content heights differ. Only margin-top:
+    // auto on each card's trailing summary line keeps the two footers level.
+    for (const cat of cats.slice(0, 8)) {
+      await page.request.post('/api/transactions', {
+        data: { accountId: acct.id, date: businessToday(), merchant: cat.name, amount: 20, type: 'expense', categoryId: cat.id },
+      })
+    }
+    // "Your week" (in the default "This month" view) draws its averages from
+    // the PRIOR 3 baseline months, not the current one — Dashboard.tsx's
+    // `weekday` memo calls `weekdayAverages(transactions,
+    // priorMonths(monthPeriod.month, BASELINE_MONTHS))`. Without baseline
+    // data every average is 0, `total` is 0, and the "heaviest day" sentence
+    // never renders at all — exactly what made this test hang the first
+    // time, waiting on text that could never appear.
+    for (const monthsBack of [1, 2, 3]) {
+      const d = businessDatePlus(-30 * monthsBack)
+      await page.request.post('/api/transactions', {
+        data: { accountId: acct.id, date: d, merchant: 'Baseline spend', amount: 15, type: 'expense' },
+      })
+    }
+    await page.goto('/wallet/dashboard')
+    await waitForApp(page)
+
+    const donutCard = page.locator('.card', { has: page.getByTestId('category-donut') })
+    const weekCard = page.locator('.card', { has: page.getByTestId('week-rhythm') })
+    await expect(donutCard).toBeVisible()
+    await expect(weekCard).toBeVisible()
+
+    const donutFooter = donutCard.getByText(/Totals to/)
+    const weekFooter = weekCard.getByText(/heaviest day/)
+    const [donutCardBox, weekCardBox, donutFooterBox, weekFooterBox] = await Promise.all([
+      donutCard.boundingBox(),
+      weekCard.boundingBox(),
+      donutFooter.boundingBox(),
+      weekFooter.boundingBox(),
+    ])
+
+    // The cards themselves already stretch to match row height (.dash's
+    // align-items: stretch) — the real assertion is where the FOOTER TEXT
+    // lands within that shared height. Both should sit flush with the
+    // bottom of their card (within a couple px of rounding), not wherever
+    // their own varying content happened to end.
+    const donutFooterDistanceFromBottom = (donutCardBox!.y + donutCardBox!.height) - (donutFooterBox!.y + donutFooterBox!.height)
+    const weekFooterDistanceFromBottom = (weekCardBox!.y + weekCardBox!.height) - (weekFooterBox!.y + weekFooterBox!.height)
+    expect(Math.abs(donutFooterDistanceFromBottom - weekFooterDistanceFromBottom)).toBeLessThan(3)
+  })
 })

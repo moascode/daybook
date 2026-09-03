@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatMYR } from '@/lib/utils'
+import { cn, formatMYR } from '@/lib/utils'
 import { DashboardCard } from './DashboardCard'
 import { transactionsLink } from './links'
 import { useDashboardChartColors } from './chartColors'
@@ -102,7 +102,7 @@ export function WhatChanged({
       subtitle={`Each category against ${comparisonDescription}. The bars add up to ${
         netDelta >= 0 ? '+' : '−'
       }${formatMYR(Math.abs(netDelta))}.`}
-      className={className}
+      className={cn('flex flex-col', className)}
     >
       <div className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
         <span className="inline-flex items-center gap-1.5">
@@ -174,15 +174,20 @@ export function WhatChanged({
         })}
       </ul>
 
-      <p className="mt-2 border-t border-line-subtle pt-3 text-center text-[11px] text-fg-faint">
-        your usual
-      </p>
-
-      {callout && (
-        <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
-          {callout}
+      {/* Pushed down as one unit — the caption and the optional callout must
+          move together so the callout (when present) never lands past the
+          card's own bottom edge. */}
+      <div className="mt-auto">
+        <p className="border-t border-line-subtle pt-3 text-center text-[11px] text-fg-faint">
+          your usual
         </p>
-      )}
+
+        {callout && (
+          <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
+            {callout}
+          </p>
+        )}
+      </div>
     </DashboardCard>
   )
 }
