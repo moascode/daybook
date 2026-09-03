@@ -95,6 +95,19 @@ function calendarMonthSpan(dateFrom: string, dateTo: string): number {
   return Math.max(1, months)
 }
 
+/** "Good morning/afternoon/evening" — the mockup's hero greeting is time-of-day
+ * aware, not a static "Hi". Boundaries: 5–11:59 morning, 12–16:59 afternoon,
+ * else evening (covers the late-night case too — nobody wants "good morning"
+ * at 2am). Reads the host's local clock — in production that's the viewer's
+ * own device, not necessarily Asia/Kuala_Lumpur; only the e2e harness pins
+ * both the browser and the test process to the business timezone (CLAUDE.md
+ * §16 trap 1), which is what keeps this deterministic in CI. */
+function timeOfDayGreeting(hour: number): string {
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export function Dashboard() {
   const {
     loadTransactions,
@@ -413,6 +426,39 @@ export function Dashboard() {
   const budgetElapsedLabel = isMonthMode && monthPeriod ? `day ${monthPeriod.day} of ${monthPeriod.length}` : ''
   const budgetDaysLeft = isMonthMode && monthPeriod ? monthPeriod.length - monthPeriod.day : undefined
 
+  // ── "Usual" net/discretionary — same baseline-average shape the rest of
+  // the dashboard already uses (day-matched against the baseline months, so
+  // a 4-day-old month is never compared against a full 31-day one). Hoisted
+  // out of the stat-tiles memo below so the hero greeting's own comparison
+  // reuses this EXACT figure rather than recomputing it — two numbers
+  // claiming to be "usual" can never disagree if there is only one of them.
+  const usualComparison = useMemo(() => {
+    let usualNet = 0
+    let usualDiscretionary = 0
+    if (isMonthMode && monthPeriod && monthPeriod.baselineMonths.length > 0) {
+      const n = monthPeriod.baselineMonths.length
+      usualNet =
+        monthPeriod.baselineMonths.reduce((sum, m) => {
+          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
+          return sum + summarise(rows).net
+        }, 0) / n
+      usualDiscretionary =
+        monthPeriod.baselineMonths.reduce((sum, m) => {
+          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
+          return (
+            sum +
+            committedSplit(rows, m, recurringTransactions, trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS), transactions)
+              .discretionary
+          )
+        }, 0) / n
+    } else if (effectiveRange?.hasComparison) {
+      usualNet = summarise(comparisonTxns).net
+      // usualDiscretionary intentionally left 0 for range mode — falls back
+      // to the generic "spending you chose in the moment" note below.
+    }
+    return { usualNet, usualDiscretionary }
+  }, [isMonthMode, monthPeriod, transactions, recurringTransactions, effectiveRange, comparisonTxns])
+
   // ── Stat tiles ───────────────────────────────────────────────────
   const tiles = useMemo((): StatTile[] => {
     const tileDateTo = isMonthMode && monthPeriod ? monthBounds(monthPeriod.month).to : (effectiveRange?.dateTo ?? todayISO())
@@ -439,31 +485,8 @@ export function Dashboard() {
       discretionaryTrend.push(split.discretionary)
     }
 
-    let usualNet = 0
-    let usualDiscretionary = 0
+    const { usualNet, usualDiscretionary } = usualComparison
     const periodLabel = isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel
-
-    if (isMonthMode && monthPeriod && monthPeriod.baselineMonths.length > 0) {
-      const n = monthPeriod.baselineMonths.length
-      usualNet =
-        monthPeriod.baselineMonths.reduce((sum, m) => {
-          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
-          return sum + summarise(rows).net
-        }, 0) / n
-      usualDiscretionary =
-        monthPeriod.baselineMonths.reduce((sum, m) => {
-          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
-          return (
-            sum +
-            committedSplit(rows, m, recurringTransactions, trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS), transactions)
-              .discretionary
-          )
-        }, 0) / n
-    } else if (effectiveRange?.hasComparison) {
-      usualNet = summarise(comparisonTxns).net
-      // usualDiscretionary intentionally left 0 for range mode — falls back
-      // to the generic "spending you chose in the moment" note below.
-    }
 
     const total = committed.committed + committed.discretionary
     const committedShare = total > 0 ? Math.round((committed.committed / total) * 100) : 0
@@ -515,7 +538,7 @@ export function Dashboard() {
     recurringTransactions,
     summary,
     committed,
-    comparisonTxns,
+    usualComparison,
   ])
 
   // ── Bill reminders ───────────────────────────────────────────────
@@ -544,6 +567,40 @@ export function Dashboard() {
   // ── Hero / featured account / recent activity — selections over figures
   // already displayed elsewhere on the page, not new aggregations. ──
   const username = useAppStore((s) => s.user?.username ?? '')
+
+  // Time-of-day greeting + a "kept vs usual" clause, matching the design
+  // mockup's dynamic hero ("Good afternoon 👋 — you're $1,012 ahead of last
+  // month") rather than the old static "Hi, {username}". Says "usual", not
+  // "last month" — `usualComparison` is a baseline-months AVERAGE (see its
+  // own comment above), and claiming a specific month here when the real
+  // comparison is an average would be exactly the copy/data mismatch
+  // CLAUDE.md's dashboard rules exist to prevent. Reuses `usualComparison`
+  // and `hasBaseline` — the SAME figures already driving the Discretionary
+  // stat tile and the "usual" framing elsewhere — so this can never disagree
+  // with a number already on screen. Silent (no comparison clause) until
+  // there's enough history to compare against, same gate SpendPace uses.
+  //
+  // `hasBaseline` alone is not enough: it checks whole-month expense
+  // (spendThroughDay through the FULL baseline month), while
+  // `usualComparison.usualNet` is day-matched net (only rows on-or-before
+  // today's day-of-month). A baseline month whose spending all landed after
+  // today's day-of-month satisfies `hasBaseline` but leaves `usualNet` at 0
+  // — checking `usualNet !== 0` too (the same guard the Net stat tile
+  // already uses) keeps the greeting from asserting a comparison against an
+  // empty baseline.
+  const heroGreeting = useMemo(() => {
+    const greeting = timeOfDayGreeting(new Date().getHours())
+    const who = username ? `, ${username}` : ''
+    const base = `${greeting}${who} 👋`
+    if (!hasBaseline || usualComparison.usualNet === 0) return base
+    const delta = summary.net - usualComparison.usualNet
+    if (Math.abs(delta) < 0.005) return base
+    const clause =
+      delta > 0
+        ? `you're ${formatMYR(delta)} ahead of usual`
+        : `you're ${formatMYR(Math.abs(delta))} behind usual`
+    return `${base} — ${clause}`
+  }, [username, hasBaseline, summary.net, usualComparison])
 
   // Net worth is what YOU own — byte-identical to AccountsPage.tsx:46-51 and
   // WalletPage.tsx's own ownAccounts reduce (README invariant 3 / PR #101).
@@ -634,7 +691,7 @@ export function Dashboard() {
             {isMonthMode && monthPeriod?.inProgress ? 'So far in' : 'In'}{' '}
             {isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel}
           </p>
-          <h2 className="hero-greeting">{username ? `Hi, ${username}` : 'Your money'}</h2>
+          <h2 className="hero-greeting" data-testid="hero-greeting">{heroGreeting}</h2>
           <div className="hero-body">
             <div className="hero-main">
               <div className="hero-figure-row">

@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { formatMYR } from '@/lib/utils'
+import { cn, formatMYR } from '@/lib/utils'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { DashboardCard } from './DashboardCard'
 import { useDashboardChartColors } from './chartColors'
@@ -78,7 +78,7 @@ export function WeekRhythm({ averages, months, className }: WeekRhythmProps) {
 
   return (
     <DashboardCard
-      className={className}
+      className={cn('flex flex-col', className)}
       title="Your week"
       subtitle={`Average spend per weekday over the last ${months} month${months === 1 ? '' : 's'}.`}
     >
@@ -145,7 +145,7 @@ export function WeekRhythm({ averages, months, className }: WeekRhythmProps) {
       </div>
 
       {total > 0 && (
-        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
+        <p className="mt-auto rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
           <span className="font-semibold">Fri–Sun is {weekendShare.toFixed(0)}%</span> of your
           weekly spending in {weekendDayShare.toFixed(0)}% of the days.{' '}
           {WEEKDAY_LABELS[busiest]} is your heaviest day at {formatMYR(averages[busiest])} on

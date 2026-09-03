@@ -82,7 +82,7 @@ export function BudgetPace({
     return (
       <DashboardCard
         className={className}
-        title="Budgets"
+        title="Budget pace"
         subtitle="Set a monthly limit on a category to track it here."
         action={{ label: 'Manage', to: '/wallet/budgets' }}
       >

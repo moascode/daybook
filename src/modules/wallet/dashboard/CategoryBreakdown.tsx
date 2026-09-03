@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
-import { formatMYR } from '@/lib/utils'
+import { cn, formatMYR } from '@/lib/utils'
 import { DashboardCard } from './DashboardCard'
 import { transactionsLink } from './links'
 import { useDashboardChartColors } from './chartColors'
@@ -52,7 +52,7 @@ export function CategoryBreakdown({
 
   return (
     <DashboardCard
-      className={className}
+      className={cn('flex flex-col', className)}
       title="Where it goes"
       subtitle="Spending by category this period."
       action={{ label: 'Transactions', to: transactionsLink({ dateFrom, dateTo }) }}
@@ -170,7 +170,7 @@ export function CategoryBreakdown({
         )}
       </div>
 
-      <p className="mt-3 border-t border-line-subtle pt-3 text-xs text-fg-subtle">
+      <p className="mt-auto border-t border-line-subtle pt-3 text-xs text-fg-subtle">
         Totals to <span className="font-semibold text-fg">{formatMYR(total)}</span> — the same
         figure as the headline, uncategorised included.
       </p>
