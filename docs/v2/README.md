@@ -67,7 +67,7 @@ yet even though the code is merged to `main`; see the warning below.
 | R4 | v2.13.0 | Tasks — minimum schema for the designed rows | ✅ merged [PR 138](https://github.com/moascode/daybook/pull/138) — **not tagged** |
 | R5 | v2.14.0 | Tasks — design adoption (4 pages) | ✅ merged [PR 142](https://github.com/moascode/daybook/pull/142)–[145](https://github.com/moascode/daybook/pull/145) (4 PRs) — **not tagged** |
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — tagging now |
-| R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | — |
+| R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151) (2 PRs) — **not tagged** |
 | R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — |
 | R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — |
 | R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — |
