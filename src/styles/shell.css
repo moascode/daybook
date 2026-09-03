@@ -167,8 +167,15 @@
   /* R2: the document (not <main>) is the scroll container here — .shell has
      no height constraint, so <main>'s own overflow-y-auto never engages.
      Without this, the fixed .tabbar permanently covers the last ~50px of
-     every page (last row, last button) with no way to scroll it clear. */
-  .main-col { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+     every page (last row, last button) with no way to scroll it clear.
+     132px, not 64px: the .fab sits ABOVE the tabbar (bottom: 72px, 52px
+     tall — its own top edge is 124px up), so 64px only cleared the tabbar
+     and left a dead zone from 64–124px where the FAB still intercepted
+     taps on whatever content scrolled to the bottom. Caught by an R7
+     mobile e2e test once transaction-row Delete became genuinely reachable
+     on mobile (it used to be display:none, so nothing real ever landed in
+     that dead zone before). */
+  .main-col { padding-bottom: calc(132px + env(safe-area-inset-bottom)); }
 }
 
 /* ---- module switcher (Daybook is multi-module: Tasks, Wallet, …) ---- */

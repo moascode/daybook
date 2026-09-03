@@ -18,6 +18,13 @@ export function formatMYR(amount: number): string {
 export const POSITIVE_MONEY_COLOR = '#1D9E75' // positive-500
 export const POSITIVE_MONEY_COLOR_FADED = '#86efb0' // positive-300 (prior-year series)
 
+// Chart-fill reds for money series — mirror the `text-red-600`/`bg-red-50`
+// pairing already used for expense everywhere else in the wallet (account
+// icons, transaction rows, the composer's shortcut row), so an expense bar
+// reads the same red as an expense anywhere else on the page.
+export const NEGATIVE_MONEY_COLOR = '#ef4444' // red-500
+export const NEGATIVE_MONEY_COLOR_FADED = '#fca5a5' // red-300 (prior-year series)
+
 // Chart axis ticks: plain ringgit below 10k ("2500"), thousands above ("12k").
 // Avoids the "0k" ticks a fixed /1000 formatter produces on typical amounts.
 export function formatAxisMYR(value: number): string {

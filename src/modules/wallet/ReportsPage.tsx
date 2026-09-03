@@ -3,7 +3,14 @@ import { BarChart2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
-import { formatMYR, formatAxisMYR, POSITIVE_MONEY_COLOR, POSITIVE_MONEY_COLOR_FADED } from '@/lib/utils'
+import {
+  formatMYR,
+  formatAxisMYR,
+  POSITIVE_MONEY_COLOR,
+  POSITIVE_MONEY_COLOR_FADED,
+  NEGATIVE_MONEY_COLOR,
+  NEGATIVE_MONEY_COLOR_FADED,
+} from '@/lib/utils'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { format, parseISO } from 'date-fns'
 import {
@@ -120,8 +127,8 @@ export function ReportsPage() {
               <YAxis stroke={chart.axis} tick={{ fill: chart.axis }} fontSize={11} tickLine={false} tickFormatter={formatAxisMYR} />
               <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle} formatter={(value: number) => formatMYR(value)} />
               <Legend />
-              <Bar dataKey={`${lastYear} expense`} fill="#fca5a5" radius={[3, 3, 0, 0]} />
-              <Bar dataKey={`${thisYear} expense`} fill="#ef4444" radius={[3, 3, 0, 0]} />
+              <Bar dataKey={`${lastYear} expense`} fill={NEGATIVE_MONEY_COLOR_FADED} radius={[3, 3, 0, 0]} />
+              <Bar dataKey={`${thisYear} expense`} fill={NEGATIVE_MONEY_COLOR} radius={[3, 3, 0, 0]} />
               <Bar dataKey={`${lastYear} income`} fill={POSITIVE_MONEY_COLOR_FADED} radius={[3, 3, 0, 0]} />
               <Bar dataKey={`${thisYear} income`} fill={POSITIVE_MONEY_COLOR} radius={[3, 3, 0, 0]} />
             </BarChart>

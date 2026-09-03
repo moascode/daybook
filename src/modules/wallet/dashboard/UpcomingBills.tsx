@@ -1,6 +1,7 @@
-import { Bell, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import type { RecurringTransaction } from '@/types/wallet.types'
+import { DashboardCard } from './DashboardCard'
 
 export interface UpcomingBill extends RecurringTransaction {
   daysUntilDue: number
@@ -13,11 +14,14 @@ interface UpcomingBillsProps {
 }
 
 /**
- * Bill reminders, lifted out of Dashboard.tsx unchanged.
+ * Bill reminders — "Coming up" in the R7 spec.
  *
  * The markup contract is load-bearing — spec 17 drives this by the
  * `bill-reminder` test id, the "due in N days" wording, the amount and the
- * Dismiss control — so the migration to theme tokens is the only edit here.
+ * Dismiss control — those stay unchanged. Uses `DashboardCard` for its
+ * header, same as every sibling Overview card, instead of a hand-rolled one
+ * (the hand-rolled version was the one card whose title/spacing visibly
+ * didn't match the rest of the restyled page).
  */
 export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProps) {
   if (bills.length === 0) return null
@@ -25,11 +29,11 @@ export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProp
   const totalDue = bills.reduce((sum, bill) => sum + bill.amount, 0)
 
   return (
-    <div className={cn('card card-pad flex flex-col', className)}>
-      <div className="mb-3 flex items-center gap-2">
-        <Bell className="h-4 w-4 text-warn-fg" />
-        <h3 className="text-sm font-semibold text-warn-fg">Upcoming Bills</h3>
-      </div>
+    <DashboardCard
+      className={cn('flex flex-col', className)}
+      title="Coming up"
+      subtitle="Recurring bills due soon."
+    >
       <div className="flex flex-col gap-2">
         {bills.map((bill) => {
           const days = bill.daysUntilDue
@@ -66,6 +70,6 @@ export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProp
       <p data-testid="upcoming-bills-total" className="mt-auto pt-3 text-right text-sm font-semibold text-fg">
         Total due: {formatMYR(totalDue)}
       </p>
-    </div>
+    </DashboardCard>
   )
 }
