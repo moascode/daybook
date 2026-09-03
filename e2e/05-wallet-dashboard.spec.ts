@@ -150,6 +150,24 @@ test('hero compares the spend against the usual, not against nothing', async () 
   await expect(delta).toContainText(/RM\s*200\.00\s*more than usual/i)
 })
 
+test('the greeting is time-of-day aware and compares NET (income included), not just the expense side', async () => {
+  // Deliberately NOT the same figure as spend-delta above — that chip
+  // compares EXPENSE only (530 vs a 330 baseline, "200 more than usual").
+  // The greeting compares NET, and this fixture's current month has real
+  // income the baseline months don't (Salary 6000 + Freelance 500 = 6500,
+  // seeded only in the current month): current net = 6500 − 530 = 5970,
+  // baseline net = 0 − 330 = −330/month → delta = 5970 − (−330) = 6300
+  // ahead. Both figures are individually correct and honest about what
+  // each one is measuring — this test exists to catch the two drifting to
+  // disagree about the SAME metric, not to assert they're equal (they
+  // aren't measuring the same thing).
+  const greeting = page.getByTestId('hero-greeting')
+  await expect(greeting).toBeVisible()
+  await expect(greeting).toContainText(/Good (morning|afternoon|evening)/)
+  await expect(greeting).toContainText('👋')
+  await expect(greeting).toContainText(/RM\s*6,300\.00\s*ahead of usual/i)
+})
+
 test('an in-progress month projects where it lands, once enough of it has passed', async () => {
   // The projection is withheld for the first week: a run-rate off three days
   // describes one purchase, not the month. Which branch shows depends on the
@@ -376,4 +394,21 @@ test('the Goals panel is always visible, even with none set', async () => {
   await expect(page.getByRole('heading', { name: 'Goals', exact: true })).toBeVisible()
   await expect(page.getByText('No goals set yet.')).toBeVisible()
   await expect(page.getByRole('link', { name: 'Manage' }).last()).toBeVisible()
+})
+
+// ── Hero greeting, no history ────────────────────────────────────────────
+
+test('with no baseline history, the greeting shows plainly — no comparison it can\'t back up', async ({ browser }: { browser: Browser }) => {
+  const freshPage = await newAppPage(browser, '/wallet/accounts')
+  await freshPage.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(freshPage, { name: 'Fresh Bank', type: 'bank' })
+
+  await freshPage.goto('/wallet/dashboard')
+  const greeting = freshPage.getByTestId('hero-greeting')
+  await expect(greeting).toBeVisible()
+  await expect(greeting).toContainText(/Good (morning|afternoon|evening)/)
+  // No "ahead of"/"behind usual" clause — there's no earlier period to
+  // compare against yet, same gate the spend-pace comparison chip uses.
+  await expect(greeting).not.toContainText(/usual/i)
+  await freshPage.context().close()
 })
