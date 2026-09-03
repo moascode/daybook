@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm } from './helpers'
+import { fillAccountForm, fillTransactionForm, openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -52,7 +52,7 @@ test.describe('34 — Shared accounts', () => {
     // Alice adds a transaction
     await alicePage.goto('/wallet')
     await expect(alicePage.locator('main')).toBeVisible()
-    await alicePage.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(alicePage)
     await fillTransactionForm(alicePage, { amount: '100', merchant: 'Supermarket' })
 
     // Alice edits the account and shares it with the group
@@ -148,7 +148,7 @@ test.describe('34 — Shared accounts', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.locator('main')).toBeVisible()
-    await alicePage.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(alicePage)
     await fillTransactionForm(alicePage, { amount: '80', merchant: 'Bakery' })
 
     await alicePage.goto('/wallet/accounts')

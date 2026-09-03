@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor, fillTransactionForm, transactionRowFor, navTo, navItem } from './helpers'
+import { newAppPage, fillAccountForm, accountCardFor, bulletNodeFor, fillTransactionForm, transactionRowFor, navTo, navItem, openBlankTransactionForm } from './helpers'
 
 let seq = 0
 // Monotonic counter (not Math.random) so two rapid calls can never collide.
@@ -116,7 +116,7 @@ test('two users have fully isolated data (the v1 guarantee)', async ({ browser }
   await expect(accountCardFor(pageA, 'Alice Private Bank')).toBeVisible()
 
   await navTo(pageA, 'transactions')
-  await pageA.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(pageA)
   await fillTransactionForm(pageA, {
     type: 'Expense',
     amount: '12.50',

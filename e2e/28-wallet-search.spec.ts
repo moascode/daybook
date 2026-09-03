@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -32,21 +32,21 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   // Clear date filters so all seeded transactions are visible
   await page.getByTestId('filter-clear-dates').click()
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '18',
     account: 'Search Account',
     merchant: 'Grab Ride',
   })
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '12.50',
     account: 'Search Account',
     merchant: 'Starbucks Coffee',
   })
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Income',
     amount: '3000',
@@ -73,7 +73,7 @@ test('typing a substring narrows the list to matching transactions', async () =>
 
 test('search matches the description field too', async () => {
   // Add a transaction whose match is in the description, not the merchant
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Amount').fill('7')
   await dialog.getByLabel('Merchant').fill('7-Eleven')

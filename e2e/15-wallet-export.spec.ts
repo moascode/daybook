@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -26,7 +26,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await page.goto('/wallet')
   // Clear date filters so our dated transactions are always visible
   await page.getByTestId('filter-clear-dates').click()
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '25',
@@ -34,7 +34,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
     merchant: 'Test Merchant',
     tags: ['groceries'],
   })
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Income',
     amount: '100',

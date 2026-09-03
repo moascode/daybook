@@ -21,6 +21,7 @@ import {
   businessToday,
   signUpOnPage,
   waitForApp,
+  openBlankTransactionForm,
 } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
@@ -33,7 +34,7 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await expect(accountCardFor(page, 'Structure Bank')).toBeVisible()
 
     await page.goto('/wallet')
-    await page.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(page)
     await fillTransactionForm(page, {
       type: 'Expense',
       date: businessToday(),
@@ -54,7 +55,7 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await expect(accountCardFor(page, 'Structure Income Bank')).toBeVisible()
 
     await page.goto('/wallet')
-    await page.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(page)
     // A single income transaction guarantees a strictly positive day net —
     // the negative case is symmetric (same pill, `pos` class simply absent)
     // and isn't re-tested here to keep this a structural, not a behavioural, spec.

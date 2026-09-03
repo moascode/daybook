@@ -20,6 +20,7 @@ import {
   fillTransactionForm,
   businessToday,
   navTo,
+  openBlankTransactionForm,
 } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
@@ -67,7 +68,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await expect(accountCardFor(page, 'Dashboard Bank')).toBeVisible()
 
   await navTo(page, 'transactions')
-  await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
+  await expect(page.getByLabel('Add a transaction')).toBeVisible()
 
   const thisMonth = monthOffset(0)
 
@@ -93,7 +94,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   ]
 
   for (const [date, amount, merchant, category] of [...baseline, ...current]) {
-    await page.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(page)
     await fillTransactionForm(page, { type: 'Expense', date, amount, account: 'Dashboard Bank', merchant, category })
   }
 
@@ -101,7 +102,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
     [`${thisMonth}-01`, '6000', 'Salary Corp', 'Salary'],
     [`${thisMonth}-01`, '500', 'Freelance Client', 'Freelance'],
   ] as const) {
-    await page.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(page)
     await fillTransactionForm(page, { type: 'Income', date, amount, account: 'Dashboard Bank', merchant, category })
   }
 

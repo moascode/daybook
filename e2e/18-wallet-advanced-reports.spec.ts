@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navItem } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -20,7 +20,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await fillAccountForm(page, { name: 'Reports Account', type: 'bank' })
 
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '300',
@@ -29,7 +29,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
     date: '2026-01-15',
   })
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '450',

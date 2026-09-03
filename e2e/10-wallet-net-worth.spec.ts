@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navTo } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -52,7 +52,7 @@ test('net worth label shows the account count', async () => {
 test('net worth increases after adding an income transaction', async () => {
   // Navigate to transactions and add income
   await navTo(page, 'transactions')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
 
   await fillTransactionForm(page, {
     type: 'Income',
@@ -73,7 +73,7 @@ test('net worth increases after adding an income transaction', async () => {
 
 test('net worth decreases after adding an expense transaction', async () => {
   await navTo(page, 'transactions')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
 
   await fillTransactionForm(page, {
     type: 'Expense',

@@ -8,7 +8,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { waitForApp, signUpOnPage, fillAccountForm, fillTransactionForm, navTo, navItem } from './helpers'
+import { waitForApp, signUpOnPage, fillAccountForm, fillTransactionForm, navTo, navItem , openBlankTransactionForm } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 // Short viewport for modal/drawer scroll checks (Wave 2 — B3/C11)
@@ -111,15 +111,21 @@ test('can add a task on mobile viewport', async ({ browser }: { browser: Browser
   await ctx.close()
 })
 
-test('wallet "Add Transaction" button is tappable on mobile viewport', async ({ browser }: { browser: Browser }) => {
+test('the composer\'s primary action is tappable on mobile viewport', async ({ browser }: { browser: Browser }) => {
   const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
   const page = await ctx.newPage()
   await signUpOnPage(page)
+  // R7: the composer (the "Add Transaction" button's replacement) only
+  // renders once an account exists — a fresh signup has none.
+  await page.goto('/wallet/accounts')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Mobile Bank' })
+
   await page.goto('/wallet')
   await waitForApp(page)
 
-  await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await expect(page.getByLabel('Add a transaction')).toBeVisible()
+  await openBlankTransactionForm(page)
   await expect(page.getByRole('dialog')).toBeVisible()
   await ctx.close()
 })
@@ -161,7 +167,7 @@ test('transaction form Type and Save are both reachable on a short mobile viewpo
 
   await page.goto('/wallet')
   await waitForApp(page)
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
@@ -192,9 +198,9 @@ test('dashboard reflows without horizontal scroll at 390 px with chart data', as
 
   await page.goto('/wallet')
   await waitForApp(page)
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, { amount: '80', merchant: 'Market' })
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, { type: 'Income', amount: '3200', merchant: 'Salary' })
 
   await page.goto('/wallet/dashboard')

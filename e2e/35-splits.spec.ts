@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm, businessToday } from './helpers'
+import { fillAccountForm, fillTransactionForm, businessToday, openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -42,7 +42,7 @@ test.describe('35 — Transaction splits', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.locator('main')).toBeVisible()
-    await alicePage.getByRole('button', { name: 'Add Transaction' }).click()
+    await openBlankTransactionForm(alicePage)
     await fillTransactionForm(alicePage, { amount: '200', merchant: 'Groceries' })
 
     // Alice clicks the split button on the Groceries transaction

@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -60,7 +60,7 @@ test('shows "No transactions" placeholder when list is empty', async () => {
 // ── Add expense ────────────────────────────────────────────────────────
 
 test('open Add Transaction modal', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'New Transaction' })).toBeVisible()
 })
@@ -83,7 +83,7 @@ test('account is pre-selected and amount must be > 0', async () => {
 
 test('add an expense transaction', async () => {
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     date: '2026-01-15',
@@ -111,7 +111,7 @@ test('expense shows category badge', async () => {
 // ── Add income ─────────────────────────────────────────────────────────
 
 test('add an income transaction', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Income',
     date: '2026-01-14',
@@ -142,7 +142,7 @@ test('summary row shows correct income, expense and net', async () => {
 // ── Add transfer ────────────────────────────────────────────────────────
 
 test('add a transfer between accounts', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Transfer',
     date: '2026-01-16',
@@ -271,7 +271,7 @@ test('filter by account: Test Cash shows only cash account transactions', async 
 
 test('filter by tag: "coffee" shows tagged transaction', async () => {
   // Add a new expense with tag first
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '12',
@@ -314,7 +314,7 @@ test('tag filter works standalone without other filters (no category/account req
 
 test('tag filter uses OR logic: selecting multiple tags shows transactions matching any', async () => {
   // Add a second transaction with a different tag
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '30',
@@ -467,7 +467,7 @@ test('tag filter works when Last Month date range is active', async () => {
   // Add two transactions dated last month: one tagged, one untagged.
   await page.getByTestId('filter-clear-dates').click()
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     date: lastMonthDate,
@@ -478,7 +478,7 @@ test('tag filter works when Last Month date range is active', async () => {
   })
   await expect(page.getByRole('dialog')).not.toBeVisible()
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     date: lastMonthDate,
