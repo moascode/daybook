@@ -9,7 +9,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo, navigateToImportCsv } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo, navigateToImportCsv , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -122,7 +122,7 @@ test('editing an imported income/expense row shows the transfer hint', async () 
 })
 
 test('the hint is not shown on a manually created transaction', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).first().click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   await expect(page.getByTestId('transfer-hint')).toHaveCount(0)

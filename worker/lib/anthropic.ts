@@ -14,6 +14,15 @@ export interface MerchantResolution {
   name: string
 }
 
+export interface ComposerParseResult {
+  merchant?: string
+  amount?: number
+  type?: 'income' | 'expense' | 'transfer'
+  account?: string // exact account name from the list given, or omitted if unsure
+  category?: string // exact category name from the list given, or omitted if unsure
+  date?: string // YYYY-MM-DD, only if the text implies a specific date — omit for "today"/unspecified
+}
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 // Classification, not reasoning — cheapest current model (§5 of the doc).
@@ -24,6 +33,11 @@ const MODEL = 'claude-haiku-4-5'
 // chunks instead (AI_CHUNK_SIZE in worker/routes/wallet.ts) so a truncation
 // costs one batch rather than the whole request.
 const MAX_TOKENS = 2000
+// The composer parses ONE free-text line into ONE small object — not a batch
+// like MAX_TOKENS above, whose size exists to cover many merchants in one
+// call. 150 comfortably covers {merchant, amount, type, account, category,
+// date} with no risk of the truncation trap MAX_TOKENS's comment describes.
+const COMPOSER_MAX_TOKENS = 150
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
 For each merchant string, choose exactly one category from the list provided.
@@ -45,6 +59,22 @@ Reply with raw JSON only — no markdown fence, no commentary.`
 
 function buildMerchantUserMessage(items: Array<{ raw: string; guess: string }>): string {
   return `Items:\n${items.map((item) => `- guess: "${item.guess}" | raw: "${item.raw}"`).join('\n')}`
+}
+
+const COMPOSER_SYSTEM_PROMPT = `You parse free-text transaction entries for a personal finance app used in Malaysia.
+Given one line of free text describing a transaction, extract as much of the following as you are reasonably confident about:
+- merchant: who the money went to/came from
+- amount: the numeric amount (no currency symbol)
+- type: one of "income", "expense", "transfer" — default to "expense" if the text gives no signal either way
+- account: the account name, chosen ONLY from the exact account names given below — never invent one
+- category: the category name, chosen ONLY from the exact category names given below — never invent one
+- date: a YYYY-MM-DD date, ONLY if the text implies a specific date (e.g. "yesterday", "last friday") — omit this field entirely for "today" or when unspecified
+Return JSON: {"merchant":"...","amount":0,"type":"expense","account":"...","category":"...","date":"YYYY-MM-DD"}
+Omit any field you are not reasonably confident about — omission is correct and expected; a wrong guess is worse than none.
+Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
+
+function buildComposerUserMessage(text: string, accountNames: string[], categoryNames: string[]): string {
+  return `Text: "${text}"\nAccounts: ${accountNames.join(', ')}\nCategories: ${categoryNames.join(', ')}`
 }
 
 async function fetchClaudeText(apiKey: string, categoryNames: string[], merchants: string[]): Promise<string> {
@@ -126,6 +156,50 @@ async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: strin
   return text
 }
 
+async function fetchClaudeComposerText(
+  apiKey: string,
+  text: string,
+  accountNames: string[],
+  categoryNames: string[],
+): Promise<string> {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: COMPOSER_MAX_TOKENS,
+      temperature: 0,
+      system: COMPOSER_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: buildComposerUserMessage(text, accountNames, categoryNames) }],
+    }),
+  })
+  if (!res.ok) {
+    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
+    // exhausted balance from a bad model id is on Anthropic's error body, and
+    // the caller can't guess which one it is otherwise.
+    const detail = await res
+      .text()
+      .then((body) => {
+        const parsed: unknown = JSON.parse(body)
+        const message =
+          typeof parsed === 'object' && parsed !== null
+            ? (parsed as { error?: { message?: unknown } }).error?.message
+            : undefined
+        return typeof message === 'string' ? message : body.slice(0, 200)
+      })
+      .catch(() => '')
+    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const resultText = data.content?.find((block) => block.type === 'text')?.text
+  if (!resultText) throw new Error('no text content in Anthropic response')
+  return resultText
+}
+
 // Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
 // with worker/routes/test.ts's default.
 const TEST_MOCK_KEY = '_test_ai_mock_response'
@@ -134,6 +208,9 @@ const TEST_MOCK_KEY = '_test_ai_mock_response'
 // resolution) doesn't have one clobber the other. In practice each e2e spec
 // only ever exercises one AI feature, so this separation is precautionary.
 const TEST_MOCK_KEY_MERCHANTS = '_test_ai_mock_response_merchants'
+// Separate key again for parseComposerWithAI, same rationale as
+// TEST_MOCK_KEY_MERCHANTS above.
+const TEST_MOCK_KEY_COMPOSER = '_test_ai_mock_response_composer'
 
 // e2e cannot intercept a Worker-to-Anthropic fetch the way Playwright
 // intercepts browser requests — `wrangler dev` makes that call from a
@@ -291,4 +368,64 @@ export async function resolveMerchantsWithAI(
       ? await fetchTestText(env, userId, TEST_MOCK_KEY_MERCHANTS)
       : await fetchClaudeMerchantText(apiKey, items)
   return parseMerchantResolutions(text)
+}
+
+/**
+ * Salvage a ComposerParseResult from Claude's reply text.
+ *
+ * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
+ * candidate (same contract as parseSuggestions/parseMerchantResolutions). A
+ * field that is missing or wrong-typed is dropped rather than treated as an
+ * error — Claude omitting a field it isn't confident about is the expected,
+ * correct case per the system prompt, not a failure.
+ */
+function parseComposerResult(text: string): ComposerParseResult {
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) throw lastError
+
+  const obj = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {}
+  const result: ComposerParseResult = {}
+
+  if (typeof obj.merchant === 'string') result.merchant = obj.merchant
+  if (typeof obj.amount === 'number' && Number.isFinite(obj.amount)) result.amount = obj.amount
+  if (obj.type === 'income' || obj.type === 'expense' || obj.type === 'transfer') result.type = obj.type
+  if (typeof obj.account === 'string') result.account = obj.account
+  if (typeof obj.category === 'string') result.category = obj.category
+  if (typeof obj.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(obj.date)) result.date = obj.date
+
+  return result
+}
+
+/**
+ * Ask Claude to parse ONE free-text composer entry into a partial transaction
+ * draft, choosing account/category only from the caller's own names.
+ *
+ * THROWS on any failure — network, non-2xx, malformed JSON. Same contract as
+ * suggestCategoriesWithAI/resolveMerchantsWithAI: the caller (the
+ * parse-composer-ai route) is responsible for turning a throw into a real
+ * error response, never a silent empty draft (CLAUDE.md rule 13).
+ */
+export async function parseComposerWithAI(
+  env: Env,
+  userId: string,
+  apiKey: string,
+  text: string,
+  accountNames: string[],
+  categoryNames: string[],
+): Promise<ComposerParseResult> {
+  const resultText =
+    env.DAYBOOK_TEST === '1'
+      ? await fetchTestText(env, userId, TEST_MOCK_KEY_COMPOSER)
+      : await fetchClaudeComposerText(apiKey, text, accountNames, categoryNames)
+  return parseComposerResult(resultText)
 }

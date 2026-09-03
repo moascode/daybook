@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Plus, Wallet, TrendingUp, TrendingDown, Download, Upload, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag, Filter } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Download, Upload, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
@@ -17,6 +17,8 @@ import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
 import { BulkEditDialog } from '@/modules/wallet/BulkEditDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
+import { Composer } from '@/modules/wallet/composer/Composer'
+import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -60,6 +62,13 @@ export function WalletPage() {
   const crud = useCrudModal<Transaction>()
   const [exportOpen, setExportOpen] = useState(false)
   const [netWorth, setNetWorth] = useState<number | null>(null)
+
+  // Composer (R7): the composer's shortcut row / preview-Edit / parse-fallback
+  // paths all open the SAME TransactionForm instance the row-edit flow uses,
+  // just pre-filled — composerDraft carries that pre-fill, cleared whenever
+  // the form closes so a stray draft can't leak into an unrelated open.
+  const composerInputRef = useRef<HTMLInputElement>(null)
+  const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
 
   // Category manager state
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
@@ -229,6 +238,40 @@ export function WalletPage() {
     await loadNetWorth()
     await loadTags()
   }, [addTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
+
+  // Composer's shortcut row / Edit / no-match fallback all funnel through
+  // here — opens the same create-mode TransactionForm, just pre-filled.
+  const openComposerForm = useCallback((initialDraft?: Partial<TransactionFormData>) => {
+    setComposerDraft(initialDraft ?? null)
+    crud.openCreate()
+  }, [crud])
+
+  // Composer's Confirm button: post directly, bypassing the modal entirely —
+  // this IS the "preview the user confirms" write path (flow plan criterion
+  // #9). Reuses handleAddTransaction's own submit/refresh/error-toast logic
+  // rather than duplicating it.
+  const handleComposerConfirm = useCallback(async (draft: ComposerPreviewDraft) => {
+    await handleAddTransaction({ ...draft, description: '', tags: [] })
+  }, [handleAddTransaction])
+
+  // `N` anywhere on the page focuses the composer — guarded so it never
+  // steals focus while the user is typing into an input/textarea/select/
+  // contenteditable elsewhere on the page (a literal "n" keystroke there
+  // must behave normally), and never fires alongside a modifier key (so
+  // e.g. Cmd+N is left to the browser).
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== 'n' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      if (crud.formOpen) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return
+      e.preventDefault()
+      composerInputRef.current?.focus()
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [crud.formOpen])
 
   const handleUpdateTransaction = useCallback(async (data: TransactionFormData) => {
     if (!crud.editingItem) return
@@ -572,14 +615,36 @@ export function WalletPage() {
               Import CSV
             </Button>
           </Link>
-          {!selectMode && (
-            <Button size="sm" onClick={crud.openCreate}>
-              <Plus className="h-3.5 w-3.5" />
-              Add Transaction
-            </Button>
-          )}
         </div>
       </div>
+
+      {/* R7: the composer replaces the old "Add Transaction" button as the
+          primary action — the first and largest interactive element on the
+          page. Hidden during bulk-select (composing a new row while
+          selecting existing ones for a bulk action would overlap two
+          different flows). Visibility is gated on ANY account (`accounts`,
+          own or shared-in) — a member with only writable shared-in accounts
+          is a supported case (the server allows writing to them) and must
+          still have an add-transaction entry point, even though the
+          composer's own smart-parsing can't help them: `ownAccounts` (not
+          `accounts`) is what's handed to the parser/AI matching below,
+          matching the parse-composer-ai route's restriction to owned
+          accounts only, so with zero own accounts every submission falls
+          through to the blank TransactionForm — which lists shared accounts
+          in its own dropdown regardless. */}
+      {!selectMode && accounts.length > 0 && (
+        <div className="mb-4">
+          <Composer
+            ref={composerInputRef}
+            accounts={ownAccounts}
+            categories={categories}
+            activeAccountId={filters.accountId ?? null}
+            hasAnthropicKey={hasAnthropicKey}
+            onConfirm={handleComposerConfirm}
+            onOpenBlankForm={openComposerForm}
+          />
+        </div>
+      )}
 
       {/* U-16: first-run orientation for a wallet with no accounts yet. */}
       {accounts.length === 0 && (
@@ -920,12 +985,13 @@ export function WalletPage() {
 
       <TransactionForm
         open={crud.formOpen}
-        onOpenChange={crud.closeForm}
+        onOpenChange={(open) => { crud.closeForm(open); if (!open) setComposerDraft(null) }}
         transaction={crud.editingItem}
         accounts={accounts}
         categories={categories}
         defaultAccountId={filters.accountId}
         availableTags={tags}
+        initialDraft={composerDraft ?? undefined}
         onSubmit={crud.editingItem ? handleUpdateTransaction : handleAddTransaction}
         onLinkTransfer={
           crud.editingItem && !crud.editingItem.hasSplits

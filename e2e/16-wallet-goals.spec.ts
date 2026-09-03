@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navItem } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -85,7 +85,7 @@ test('goal card shows a progress bar', async () => {
 test('goal progress increases after adding income to the linked account', async () => {
   // Add income to Savings Account to simulate saving towards the goal
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Income',
     amount: '2000',

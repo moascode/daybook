@@ -6,7 +6,7 @@
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -32,11 +32,11 @@ test.afterAll(async () => {
 
 test('create the two legs: expense in Bank A, income in Bank B', async () => {
   await navTo(page, 'transactions')
-  await page.getByRole('button', { name: 'Add Transaction' }).first().click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense', amount: '350', account: 'Bank A', merchant: 'CC Payment',
   })
-  await page.getByRole('button', { name: 'Add Transaction' }).first().click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Income', amount: '350', account: 'Bank B', merchant: 'Payment Received',
   })

@@ -120,4 +120,5 @@ Every approved call must satisfy all of these, or it is not wired:
 |---|---|---|
 | 2026-08-21 | D-11 composer parsing | Claude approved, **Haiku only**, rules-first, warn-before-wiring |
 | 2026-08-21 | A1 / A2 / A3 composer calls | approved in principle as part of D-11; each still confirmed here before its release wires it |
+| 2026-09-02 | A1 wired | confirmed in chat at R7-composer kickoff — proceed exactly as scoped above |
 | — | P1 CSV auto-categorise | **pending owner yes** |

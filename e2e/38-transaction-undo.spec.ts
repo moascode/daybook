@@ -5,7 +5,7 @@
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, transactionRowFor, fillAccountForm, fillTransactionForm } from './helpers'
+import { newAppPage, transactionRowFor, fillAccountForm, fillTransactionForm , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -18,7 +18,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
 
   await page.goto('/wallet')
   await expect(page.locator('main')).toBeVisible()
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, { amount: '42', merchant: 'Kopitiam' })
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })

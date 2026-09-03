@@ -20,7 +20,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -47,7 +47,7 @@ test('create a transaction with a messy merchant name', async () => {
   await navTo(page, 'transactions')
   await expect(page).toHaveURL(/\/wallet$/)
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
@@ -143,7 +143,7 @@ test('clean merchants are not flagged as needing cleanup', async ({ browser }) =
   await expect(accountCardFor(isoPage, 'Clean Merchant Test')).toBeVisible()
 
   await navTo(isoPage, 'transactions')
-  await isoPage.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(isoPage)
   const dialog = isoPage.getByRole('dialog')
   const accountSelect = dialog.locator('#account')
   await expect
@@ -170,7 +170,7 @@ test('Cancel leaves the merchant name unchanged', async ({ browser }) => {
   await expect(accountCardFor(isoPage, 'Cancel Test Bank')).toBeVisible()
 
   await navTo(isoPage, 'transactions')
-  await isoPage.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(isoPage)
   const dialog = isoPage.getByRole('dialog')
   const accountSelect = dialog.locator('#account')
   await expect
@@ -225,7 +225,7 @@ test('a merchant unchanged by regex alone resolves via AI, and the preview shows
   })
 
   await navTo(isoPage, 'transactions')
-  await isoPage.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(isoPage)
   const dialog = isoPage.getByRole('dialog')
   const accountSelect = dialog.locator('#account')
   await expect

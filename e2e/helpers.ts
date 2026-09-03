@@ -122,6 +122,18 @@ export async function fillAccountForm(
   await expect(dialog).toBeHidden()
 }
 
+/**
+ * Open a blank TransactionForm (create mode). R7 replaced the page header's
+ * "Add Transaction" button with the composer's shortcut row — this opens the
+ * same modal via the Expense shortcut (present whenever the page has at
+ * least one account), which callers then drive with `fillTransactionForm`
+ * exactly as before, including switching to a different `type` inside the
+ * dialog if needed.
+ */
+export async function openBlankTransactionForm(page: Page) {
+  await page.getByRole('button', { name: 'Expense' }).first().click()
+}
+
 /** Fill the TransactionForm modal and submit it */
 export async function fillTransactionForm(
   page: Page,

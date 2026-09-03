@@ -82,6 +82,19 @@
   color: rgb(var(--fg-faint)); transition: border-color .12s var(--ease);
 }
 .search:focus-within { border-color: rgb(var(--accent) / .6); box-shadow: 0 0 0 3px rgb(var(--accent) / .12); }
+
+.composer {
+  /* Same base look as .card (layout.css) — a multi-row bar (input row,
+     hairline, shortcut row) reads as a card, not a pill; --r-full was tried
+     first but looked wrong once the shortcut row was added beneath it. */
+  background: rgb(var(--surface) / .7); border: 1px solid rgb(var(--line));
+  border-radius: var(--r-lg); box-shadow: var(--e1);
+  transition: transform .15s var(--ease), box-shadow .15s var(--ease), background-color .15s var(--ease);
+}
+.composer:focus-within {
+  background: rgb(var(--surface)); transform: scale(1.01);
+  box-shadow: var(--e3), 0 0 0 3px rgb(var(--accent) / .16);
+}
 .search input { border: none; background: transparent; outline: none; flex: 1; font-size: var(--t-sm); color: rgb(var(--fg)); min-width: 0; }
 .search input::placeholder { color: rgb(var(--fg-faint)); }
 .kbd {

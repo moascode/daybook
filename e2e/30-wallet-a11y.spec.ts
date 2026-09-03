@@ -16,6 +16,7 @@ import {
   fillTransactionForm,
   accountCardFor,
   transactionRowFor,
+  openBlankTransactionForm,
 } from './helpers'
 
 test('transaction row is keyboard-accessible: focus, Enter and Space open the editor', async ({ browser }) => {
@@ -25,7 +26,7 @@ test('transaction row is keyboard-accessible: focus, Enter and Space open the ed
 
   await page.goto('/wallet')
   await waitForApp(page)
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, { amount: '12.50', merchant: 'Kopitiam' })
 
   const row = transactionRowFor(page, 'Kopitiam')

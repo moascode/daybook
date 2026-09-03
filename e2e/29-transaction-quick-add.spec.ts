@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, transactionRowFor , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -28,7 +28,7 @@ test.afterAll(async () => {
 })
 
 test('Save & Add Another keeps the modal open and retains date, account, and type', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
 
@@ -86,7 +86,7 @@ test('Save & Add Another is not shown when editing an existing transaction', asy
 })
 
 test('Save & Add Another validates before submitting (no silent empty save)', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
   // Amount left at 0 → validation error, nothing saved, modal stays open

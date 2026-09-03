@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, fillTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, fillTransactionForm , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -39,7 +39,7 @@ test('net worth includes the opening balance', async () => {
 
 test('opening balance feeds the running balance after a transaction', async () => {
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '100',

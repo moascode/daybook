@@ -9,7 +9,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, businessDatePlus } from './helpers'
+import { newAppPage, businessDatePlus , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -48,7 +48,7 @@ test('failed transaction save shows an error toast and keeps the form open', asy
   await page.goto('/wallet')
   await force500Once(page, `${API}/transactions`, 'POST', 'transaction save exploded')
 
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Amount').fill('25')
   await dialog.locator('#account').selectOption('Toast Bank')

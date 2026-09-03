@@ -14,6 +14,7 @@ import {
   fillAccountForm,
   fillTransactionForm,
   transactionRowFor,
+  openBlankTransactionForm,
 } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
@@ -31,8 +32,11 @@ test.afterAll(async () => {
 test('with no accounts the balance hero and filter bar are hidden', async () => {
   await expect(page.getByText('Total Net Worth')).toHaveCount(0)
   await expect(page.getByTestId('transaction-search')).toHaveCount(0)
-  // The primary action and the guiding empty state are still present.
-  await expect(page.getByRole('button', { name: 'Add Transaction' })).toBeVisible()
+  // R7: the composer replaced "Add Transaction" as the primary action, and
+  // needs an account to attach a transaction to — it stays hidden until one
+  // exists (owner-confirmed 2026-09-02, docs/v2/.flow/R7-composer). The
+  // guiding empty state is what leads a new user to create one.
+  await expect(page.getByLabel('Add a transaction')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Go to Accounts' })).toBeVisible()
 })
 
@@ -55,14 +59,14 @@ test('once an account exists the balance hero and filters appear', async () => {
 })
 
 test('the transaction form pre-selects the first account', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   const dialog = page.getByRole('dialog')
   await expect(dialog.locator('#account')).not.toHaveValue('')
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 })
 
 test('a transaction row exposes a visible Edit button that opens the editor', async () => {
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '10',

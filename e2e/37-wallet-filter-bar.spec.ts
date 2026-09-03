@@ -10,7 +10,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -21,7 +21,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Bar Account', type: 'cash' })
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '20',

@@ -19,6 +19,12 @@ interface TransactionFormProps {
   onSubmit: (data: TransactionFormData) => void | Promise<void>
   /** Edit mode only: opens the link-as-transfer picker for this transaction. */
   onLinkTransfer?: () => void
+  /**
+   * Create mode only: partial field values to pre-fill on top of the normal
+   * create-mode defaults (e.g. from a composer draft). Ignored entirely when
+   * `transaction` is provided (edit mode).
+   */
+  initialDraft?: Partial<TransactionFormData>
 }
 
 export interface TransactionFormData {
@@ -43,8 +49,9 @@ function getInitialState(
   transaction?: Transaction | null,
   defaultAccountId?: string | null,
   accounts: Account[] = [],
+  initialDraft?: Partial<TransactionFormData> | null,
 ): TransactionFormData {
-  return {
+  const base: TransactionFormData = {
     // Pre-select an account so the common single-account case needs no extra
     // click: the active account filter if set, otherwise the first account.
     accountId: transaction?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '',
@@ -57,6 +64,12 @@ function getInitialState(
     categoryId: transaction?.categoryId ?? null,
     tags: transaction?.tags ?? [],
   }
+  // Create mode only: a partial draft pre-fills over the defaults above.
+  // Edit mode (transaction set) never applies a draft.
+  if (!transaction && initialDraft) {
+    return { ...base, ...initialDraft }
+  }
+  return base
 }
 
 export function TransactionForm({
@@ -69,15 +82,17 @@ export function TransactionForm({
   availableTags,
   onSubmit,
   onLinkTransfer,
+  initialDraft,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
-    getInitialState(transaction, defaultAccountId, accounts)
+    getInitialState(transaction, defaultAccountId, accounts, initialDraft)
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
+  const [prevInitialDraft, setPrevInitialDraft] = useState(initialDraft)
   const amountRef = useRef<HTMLInputElement>(null)
 
   // Reset the form when the modal (re)opens or its inputs change — adjust state
@@ -85,13 +100,15 @@ export function TransactionForm({
   if (
     open !== prevOpen ||
     transaction !== prevTransaction ||
-    defaultAccountId !== prevDefaultAccountId
+    defaultAccountId !== prevDefaultAccountId ||
+    initialDraft !== prevInitialDraft
   ) {
     setPrevOpen(open)
     setPrevTransaction(transaction)
     setPrevDefaultAccountId(defaultAccountId)
+    setPrevInitialDraft(initialDraft)
     if (open) {
-      setForm(getInitialState(transaction, defaultAccountId, accounts))
+      setForm(getInitialState(transaction, defaultAccountId, accounts, initialDraft))
       setErrors({})
     }
   }

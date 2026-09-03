@@ -23,6 +23,7 @@ import { builtinCategory } from '../lib/merchant-map.ts'
 import {
   suggestCategoriesWithAI,
   resolveMerchantsWithAI,
+  parseComposerWithAI,
   type CategorySuggestion,
 } from '../lib/anthropic.ts'
 
@@ -993,6 +994,11 @@ const AI_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 // independently of each other.
 const MERCHANT_AI_RATE_LIMIT_KEY = 'ai_rate_limit_merchant'
 
+// Own bucket again for the composer's free-text parse — independent of both
+// buckets above so a burst of composer entries never eats into the bulk-
+// categorisation or merchant-cleanup budgets, and vice versa.
+const COMPOSER_AI_RATE_LIMIT_KEY = 'ai_rate_limit_composer'
+
 // Per-user hourly cap, stored as a JSON blob in the settings key/value table —
 // the app owns no queue, KV namespace, or Durable Object today.
 //
@@ -1151,6 +1157,90 @@ wallet.post('/transactions/suggest-categories-ai', async (c) => {
   }
 
   return c.json({ suggestions, askedMerchants: reps.length, failedMerchants, failureReason })
+})
+
+// R7 composer: parse ONE free-text entry the client's rules parser couldn't
+// handle (no extractable amount). Fires once per submit, never per keystroke
+// — see docs/v2/.flow/R7-composer/flow-plan.md criterion #7.
+wallet.post('/transactions/parse-composer-ai', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+  const text = typeof b.text === 'string' ? b.text.trim() : ''
+  if (!text) return c.json({ error: 'text is required' }, 400)
+  // A composer entry is one line, not a paste target — bound it well above
+  // any realistic input so a stray large paste can't inflate the prompt.
+  // max_tokens only bounds the OUTPUT; this bounds what's sent.
+  if (text.length > 300) return c.json({ error: 'text is too long (max 300 characters)' }, 400)
+
+  // Key is per user and read per request, same as suggest-categories-ai above.
+  const keyRow = await c.env.DB.prepare(
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'anthropic_api_key'`,
+  )
+    .bind(userId)
+    .first<{ value: string }>()
+  const apiKey = keyRow?.value?.trim()
+  if (!apiKey) return c.json({ error: 'no API key configured' }, 400)
+
+  // The user's OWN accounts and categories only — never a shared-in account
+  // or another user's category, matching GET /accounts' own/shared split.
+  // Fetched (and the no-accounts case rejected) BEFORE the rate-limit charge,
+  // same free-reject-before-charging order suggest-categories-ai uses for its
+  // own "nothing to choose from" case — a user with no accounts to attach a
+  // transaction to shouldn't spend a rate-limit slot finding that out.
+  const [accountsResult, categoriesResult] = await Promise.all([
+    c.env.DB.prepare('SELECT id, name FROM accounts WHERE user_id = ?').bind(userId).all<{
+      id: string
+      name: string
+    }>(),
+    c.env.DB.prepare('SELECT id, name FROM categories WHERE user_id = ?').bind(userId).all<{
+      id: string
+      name: string
+    }>(),
+  ])
+  if (accountsResult.results.length === 0) {
+    return c.json({ error: 'no accounts to attach a transaction to — add an account first' }, 400)
+  }
+  const accountByName = new Map(accountsResult.results.map((a) => [a.name, a]))
+  const categoryByName = new Map(categoriesResult.results.map((cat) => [cat.name, cat]))
+
+  // Last, so a request rejected above for a reason that spends nothing does
+  // not cost the caller a slot in their hourly budget.
+  if (await overAiRateLimit(c.env.DB, userId, COMPOSER_AI_RATE_LIMIT_KEY)) {
+    return c.json(
+      { error: `AI parse limit reached (${AI_RATE_LIMIT_MAX} per hour) — try again later` },
+      429,
+    )
+  }
+
+  let parsed
+  try {
+    parsed = await parseComposerWithAI(
+      c.env,
+      userId,
+      apiKey,
+      text,
+      [...accountByName.keys()],
+      [...categoryByName.keys()],
+    )
+  } catch (err) {
+    console.error('AI composer parse failed', err)
+    return c.json({ error: err instanceof Error ? err.message : 'AI parse failed' }, 502)
+  }
+
+  // Drop any account/category name Claude invented — exact match only, never
+  // fuzzy, same rule as suggest-categories-ai above.
+  const account = parsed.account ? accountByName.get(parsed.account) : undefined
+  const category = parsed.category ? categoryByName.get(parsed.category) : undefined
+
+  const draft: Record<string, unknown> = {}
+  if (parsed.merchant) draft.merchant = parsed.merchant
+  if (typeof parsed.amount === 'number') draft.amount = parsed.amount
+  if (parsed.type) draft.type = parsed.type
+  if (account) draft.accountId = account.id
+  if (category) draft.categoryId = category.id
+  if (parsed.date) draft.date = parsed.date
+
+  return c.json({ draft })
 })
 
 // Bulk insert (CSV import). Returns the created rows.

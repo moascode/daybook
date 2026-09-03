@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navItem } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -82,7 +82,7 @@ test('budget row contains a progress bar element', async () => {
 test('budget progress updates after adding a Food & Drink expense', async () => {
   // Add a transaction in the current month
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '120',
@@ -101,7 +101,7 @@ test('budget progress updates after adding a Food & Drink expense', async () => 
 test('over-budget alert appears when spending exceeds the limit', async () => {
   // Spend an additional 450 to exceed the 500 limit
   await page.goto('/wallet')
-  await page.getByRole('button', { name: 'Add Transaction' }).click()
+  await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
     amount: '450',
