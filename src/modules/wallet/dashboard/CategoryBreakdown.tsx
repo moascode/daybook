@@ -28,22 +28,41 @@ const FALLBACK_HUES = [
  * library. The centre carries the period total; the legend below ranks each
  * slice and still links into its transactions.
  */
+/** Geometry + colour for one donut slice, precomputed so rendering never mutates a running total. */
+interface SliceGeometry {
+  id: string
+  name: string
+  amount: number
+  share: number
+  color: string
+  len: number
+  dashoffset: number
+}
+
+function sliceGeometry(slices: ReturnType<typeof categoryDonutSlices>): SliceGeometry[] {
+  let fallbackIndex = 0
+  let offset = 0
+  return slices.map((slice) => {
+    const color = slice.color
+      ? slice.color
+      : slice.id === EVERYTHING_ELSE_ID
+        ? 'rgb(var(--fg-faint) / .55)'
+        : FALLBACK_HUES[fallbackIndex++ % FALLBACK_HUES.length]
+    const len = (slice.share / 100) * CIRCUMFERENCE
+    const dashoffset = -offset
+    offset += len
+    return { id: slice.id, name: slice.name, amount: slice.amount, share: slice.share, color, len, dashoffset }
+  })
+}
+
 export function CategoryBreakdown({ rows, total, className }: CategoryBreakdownProps) {
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const slices = categoryDonutSlices(rows, total)
-
-  let fallbackIndex = 0
-  const colorFor = (slice: (typeof slices)[number]) => {
-    if (slice.color) return slice.color
-    if (slice.id === EVERYTHING_ELSE_ID) return 'rgb(var(--fg-faint) / .55)'
-    return FALLBACK_HUES[fallbackIndex++ % FALLBACK_HUES.length]
-  }
+  const geometry = sliceGeometry(slices)
 
   const ariaLabel = `Spending by category: ${slices
     .map((s) => `${s.name} ${s.share.toFixed(1)}%`)
     .join(', ')}.`
-
-  let offset = 0
 
   return (
     <DashboardCard
@@ -60,10 +79,7 @@ export function CategoryBreakdown({ rows, total, className }: CategoryBreakdownP
             <div className="donut" data-testid="category-donut">
               <svg viewBox="0 0 176 176" role="img" aria-label={ariaLabel}>
                 <circle cx="88" cy="88" r={RADIUS} stroke="rgb(var(--track))" />
-                {slices.map((slice) => {
-                  const len = (slice.share / 100) * CIRCUMFERENCE
-                  const dashoffset = -offset
-                  offset += len
+                {geometry.map((slice) => {
                   const isHovered = hoveredId === slice.id
                   const faded = hoveredId !== null && !isHovered
                   return (
@@ -72,9 +88,9 @@ export function CategoryBreakdown({ rows, total, className }: CategoryBreakdownP
                       cx="88"
                       cy="88"
                       r={RADIUS}
-                      stroke={colorFor(slice)}
-                      strokeDasharray={`${len} ${CIRCUMFERENCE}`}
-                      strokeDashoffset={dashoffset}
+                      stroke={slice.color}
+                      strokeDasharray={`${slice.len} ${CIRCUMFERENCE}`}
+                      strokeDashoffset={slice.dashoffset}
                       opacity={faded ? 0.5 : 1}
                       onMouseEnter={() => setHoveredId(slice.id)}
                       onMouseLeave={() => setHoveredId(null)}
@@ -88,7 +104,7 @@ export function CategoryBreakdown({ rows, total, className }: CategoryBreakdownP
               </div>
             </div>
             <div className="donut-legend">
-              {slices.map((slice) => (
+              {geometry.map((slice) => (
                 <div
                   key={slice.id}
                   className="dl-row"
@@ -97,7 +113,7 @@ export function CategoryBreakdown({ rows, total, className }: CategoryBreakdownP
                   onMouseLeave={() => setHoveredId(null)}
                   style={{ opacity: hoveredId !== null && hoveredId !== slice.id ? 0.5 : 1 }}
                 >
-                  <i style={{ background: colorFor(slice) }} />
+                  <i style={{ background: slice.color }} />
                   <span className="n">{slice.name}</span>
                   <span className="a">{formatMYR(slice.amount)}</span>
                   <span className="p">{slice.share.toFixed(1)}%</span>
