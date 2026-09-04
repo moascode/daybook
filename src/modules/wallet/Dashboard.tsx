@@ -1,14 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LayoutDashboard } from 'lucide-react'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
-import { formatMYR, monthRange, todayISO, dateRangePreset } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
+import { useCrudModal } from '@/hooks/useCrudModal'
+import { formatMYR, monthRange, todayISO, dateRangePreset, errorMessage } from '@/lib/utils'
 import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
+import { Composer } from '@/modules/wallet/composer/Composer'
+import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
+import { TransactionForm, type TransactionFormData } from '@/modules/wallet/TransactionForm'
 import type { Transaction } from '@/types/wallet.types'
 
 import {
@@ -17,23 +22,17 @@ import {
   TREND_MONTHS,
   addDaysISO,
   baselineCurve,
-  categoryDeltas,
-  categoryDeltasBetween,
   categorySpend,
-  committedSplit,
-  committedSplitInRange,
   cumulativeByDay,
   cumulativeByDayOffset,
-  daysBetween,
   dayOfMonth,
   daysInMonth,
   inRange,
+  lastNDaysSpend,
   merchantSpend,
   merchantSpendInRange,
-  MIN_AVERAGE_DAYS,
   monthBounds,
   monthKey,
-  monthsSpanned,
   precedingRange,
   priorMonths,
   projectMonthEnd,
@@ -45,15 +44,10 @@ import {
   UPCOMING_BILLS_WINDOW_DAYS,
   usualMonthTotal,
   usualThroughDay,
-  weekdayAverages,
-  weekdayAveragesInRange,
 } from './dashboard/insights'
 import { SpendPace } from './dashboard/SpendPace'
-import { StatTiles, type StatTile } from './dashboard/StatTiles'
-import { WhatChanged } from './dashboard/WhatChanged'
 import { CategoryBreakdown } from './dashboard/CategoryBreakdown'
 import { WeekRhythm } from './dashboard/WeekRhythm'
-import { CommittedSpend } from './dashboard/CommittedSpend'
 import { BudgetPace } from './dashboard/BudgetPace'
 import { MerchantTable } from './dashboard/MerchantTable'
 import { DashboardCard } from './dashboard/DashboardCard'
@@ -63,29 +57,7 @@ import { transactionsLink } from './dashboard/links'
 import { ICON_MAP, ACCOUNT_TYPE_LABELS } from '@/lib/accountDisplay'
 import { TransactionList } from './TransactionList'
 
-/** Months of history behind the stat-tile sparklines, regardless of mode. */
-const TILE_TREND_MONTHS = 12
-
-// U-15: namespace dismissals per user so one account's dismissed reminders
-// don't carry over to another on a shared home-network browser.
-function dismissedKey(userId: string): string {
-  return `daybook:dismissed_reminders:${userId || 'anon'}`
-}
-
-function getDismissed(userId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(dismissedKey(userId))
-    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function saveDismissed(userId: string, ids: Set<string>) {
-  localStorage.setItem(dismissedKey(userId), JSON.stringify(Array.from(ids)))
-}
-
-/** How many calendar months a date range touches — used to scale monthly budget limits and to describe the weekday panel's window in range mode. */
+/** How many calendar months a date range touches — used to scale monthly budget limits. */
 function calendarMonthSpan(dateFrom: string, dateTo: string): number {
   const fromKey = monthKey(dateFrom)
   const toKey = monthKey(dateTo)
@@ -95,13 +67,7 @@ function calendarMonthSpan(dateFrom: string, dateTo: string): number {
   return Math.max(1, months)
 }
 
-/** "Good morning/afternoon/evening" — the mockup's hero greeting is time-of-day
- * aware, not a static "Hi". Boundaries: 5–11:59 morning, 12–16:59 afternoon,
- * else evening (covers the late-night case too — nobody wants "good morning"
- * at 2am). Reads the host's local clock — in production that's the viewer's
- * own device, not necessarily Asia/Kuala_Lumpur; only the e2e harness pins
- * both the browser and the test process to the business timezone (CLAUDE.md
- * §16 trap 1), which is what keeps this deterministic in CI. */
+/** "Good morning/afternoon/evening" — reads the host's local clock. */
 function timeOfDayGreeting(hour: number): string {
   if (hour >= 5 && hour < 12) return 'Good morning'
   if (hour >= 12 && hour < 17) return 'Good afternoon'
@@ -115,29 +81,32 @@ export function Dashboard() {
     loadAccounts,
     loadRecurringTransactions,
     loadBudgets,
-    loadGoals,
     getAccountBalances,
+    addTransaction,
+    loadTags,
     accounts,
     categories,
     recurringTransactions,
     budgets,
-    goals,
   } = useWallet()
-  const userId = useAppStore((s) => s.user?.id ?? '')
+  const username = useAppStore((s) => s.user?.username ?? '')
+  const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
+  const { addToast } = useToastStore()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [range, setRange] = useState<DateRangeValue>(() => monthRange(0))
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => getDismissed(userId))
   const [balances, setBalances] = useState<Record<string, number> | null>(null)
+  const [tags, setTags] = useState<string[]>([])
   const dataVersion = useWalletStore((s) => s.dataVersion)
+
+  const crud = useCrudModal<Transaction>()
+  const composerInputRef = useRef<HTMLInputElement>(null)
+  const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
 
   const { dateFrom, dateTo } = range
   const preset = dateRangePreset(range)
   const isMonthMode = preset === 'this-month' || preset === 'last-month'
   const isAllTime = preset === 'all-time'
 
-  // ── MONTH-MODE period — the original single-calendar-month model,
-  // completely unchanged. "This month" / "Last month" keep exactly the
-  // behaviour they had before ranges existed. ──
   const monthPeriod = useMemo(() => {
     if (!isMonthMode || !dateFrom) return null
     const month = monthKey(dateFrom)
@@ -161,27 +130,15 @@ export function Dashboard() {
     loadCategories()
     loadRecurringTransactions()
     loadBudgets()
-    loadGoals()
+    loadTags().then(setTags)
     getAccountBalances().then(setBalances)
-  }, [
-    loadAccounts,
-    loadCategories,
-    loadRecurringTransactions,
-    loadBudgets,
-    loadGoals,
-    getAccountBalances,
-    dataVersion,
-  ])
+  }, [loadAccounts, loadCategories, loadRecurringTransactions, loadBudgets, loadTags, getAccountBalances, dataVersion])
 
-  // One wide fetch rather than one per panel. Month mode keeps its original
-  // trailing-12-month window; range mode fetches enough to cover the
-  // comparison window AND the trend lookback the merchant/committed panels
-  // need, whichever starts earlier. All-time asks for everything.
   useEffect(() => {
     if (isMonthMode) {
       if (!dateFrom) return
       const month = monthKey(dateFrom)
-      const from = monthBounds(shiftMonth(month, -(TILE_TREND_MONTHS - 1))).from
+      const from = monthBounds(shiftMonth(month, -(TREND_MONTHS - 1))).from
       const to = monthBounds(month).to
       loadTransactions({ dateFrom: from, dateTo: to }).then(setTransactions)
       return
@@ -190,20 +147,16 @@ export function Dashboard() {
       loadTransactions({ dateFrom: '', dateTo: '' }).then(setTransactions)
       return
     }
-    if (!dateFrom || !dateTo || dateFrom > dateTo) return // custom, still mid-edit or inverted
+    if (!dateFrom || !dateTo || dateFrom > dateTo) return
     const comparison = precedingRange(dateFrom, dateTo)
     const trendStart = monthBounds(trailingMonthsEndingAt(dateTo, TREND_MONTHS)[0]).from
     const fetchFrom = comparison.dateFrom < trendStart ? comparison.dateFrom : trendStart
     loadTransactions({ dateFrom: fetchFrom, dateTo }).then(setTransactions)
   }, [isMonthMode, isAllTime, dateFrom, dateTo, loadTransactions, dataVersion])
 
-  // ── RANGE-MODE period: Last 3/12 months, All time, Custom. ──
   const effectiveRange = useMemo(() => {
     if (isMonthMode) return null
     if (isAllTime) {
-      // Resolved from the fetched data itself once it arrives, rather than
-      // from the (empty) dateFrom the "all time" preset stores — that keeps
-      // the fetch effect above free of a circular dependency on its own result.
       if (transactions.length === 0) return null
       const earliest = transactions.reduce((min, t) => (t.date < min ? t.date : min), transactions[0].date)
       return { dateFrom: earliest, dateTo: todayISO(), hasComparison: false }
@@ -230,20 +183,12 @@ export function Dashboard() {
   const rangeLabel = useMemo(() => {
     if (!effectiveRange) return '…'
     if (isAllTime) return 'all time'
-    return `${format(parseISO(effectiveRange.dateFrom), 'd MMM yyyy')} – ${format(
-      parseISO(effectiveRange.dateTo),
-      'd MMM yyyy',
-    )}`
+    return `${format(parseISO(effectiveRange.dateFrom), 'd MMM yyyy')} – ${format(parseISO(effectiveRange.dateTo), 'd MMM yyyy')}`
   }, [effectiveRange, isAllTime])
 
-  // ── The selected period's own rows, and its comparison window's rows —
-  // mode-agnostic from here on. Every panel below reads one or both of these
-  // rather than re-deriving its own filter. ──
   const periodTxns = useMemo(() => {
     if (isMonthMode && monthPeriod) {
-      return transactions.filter(
-        (t) => monthKey(t.date) === monthPeriod.month && dayOfMonth(t.date) <= monthPeriod.day,
-      )
+      return transactions.filter((t) => monthKey(t.date) === monthPeriod.month && dayOfMonth(t.date) <= monthPeriod.day)
     }
     if (effectiveRange) {
       return transactions.filter((t) => inRange(t.date, effectiveRange.dateFrom, effectiveRange.dateTo))
@@ -264,19 +209,14 @@ export function Dashboard() {
     return { from: '', to: '' }
   }, [isMonthMode, monthPeriod, effectiveRange])
 
-  // A comparison genuinely worth showing — there's a window AND it has some
-  // spend in it, not just an empty stretch before the account existed.
   const hasBaseline = useMemo(() => {
     if (isMonthMode && monthPeriod) {
       return monthPeriod.baselineMonths.some((m) => spendThroughDay(transactions, m, daysInMonth(m)) > 0)
     }
-    if (rangeComparison) {
-      return summarise(comparisonTxns).expense > 0
-    }
+    if (rangeComparison) return summarise(comparisonTxns).expense > 0
     return false
   }, [isMonthMode, monthPeriod, transactions, rangeComparison, comparisonTxns])
 
-  // ── Hero / pace ──
   const pace = useMemo(() => {
     if (isMonthMode && monthPeriod) {
       return {
@@ -294,9 +234,7 @@ export function Dashboard() {
       const usual = rangeComparison ? summarise(comparisonTxns).expense : 0
       return {
         curve: cumulativeByDayOffset(transactions, effectiveRange.dateFrom, effectiveRange.dateTo),
-        baseline: rangeComparison
-          ? cumulativeByDayOffset(transactions, rangeComparison.dateFrom, rangeComparison.dateTo)
-          : [],
+        baseline: rangeComparison ? cumulativeByDayOffset(transactions, rangeComparison.dateFrom, rangeComparison.dateTo) : [],
         usual,
         comparisonTotal: usual,
         projected: undefined,
@@ -306,304 +244,42 @@ export function Dashboard() {
   }, [isMonthMode, monthPeriod, effectiveRange, rangeComparison, transactions, comparisonTxns, summary.expense])
 
   const spendPaceComparisonClause = isMonthMode && monthPeriod
-    ? monthPeriod.inProgress
-      ? `usual by day ${monthPeriod.day}`
-      : 'your usual month'
+    ? monthPeriod.inProgress ? `usual by day ${monthPeriod.day}` : 'your usual month'
     : 'the same length before this period'
-
   const spendPaceComparisonDescription = isMonthMode && monthPeriod
     ? `${monthPeriod.baselineMonths.length}-month average`
     : 'same length before'
-
-  // A month-by-month rate only adds information once the period is long
-  // enough that "per month" isn't a shaky extrapolation (see
-  // MIN_AVERAGE_DAYS). Divides by the exact day count, not by how many
-  // calendar months the range happens to touch — the latter is a step
-  // function that lags a trailing window's own day-by-day growth and jumps
-  // sharply on the day the window rolls past a month boundary, even for
-  // perfectly steady spending.
-  const spendPaceMonthsSpanned =
-    !isMonthMode && effectiveRange && daysBetween(effectiveRange.dateFrom, effectiveRange.dateTo) >= MIN_AVERAGE_DAYS
-      ? monthsSpanned(effectiveRange.dateFrom, effectiveRange.dateTo)
-      : undefined
-
-  const spendPaceFormatDay =
-    !isMonthMode && effectiveRange
-      ? (offset: number) => format(parseISO(addDaysISO(effectiveRange.dateFrom, offset)), 'd MMM')
-      : undefined
-  const spendPaceFormatDayTooltipLabel = !isMonthMode ? (label: string | number) => String(label) : undefined
-
-  // ── What changed ──
-  const deltas = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      return categoryDeltas(transactions, categories, monthPeriod.month, monthPeriod.day, monthPeriod.baselineMonths)
-    }
-    if (effectiveRange) {
-      return categoryDeltasBetween(periodTxns, effectiveRange.hasComparison ? comparisonTxns : null, categories)
-    }
-    return []
-  }, [isMonthMode, monthPeriod, effectiveRange, transactions, categories, periodTxns, comparisonTxns])
-
-  const netDelta = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      return summary.expense - usualThroughDay(transactions, monthPeriod.baselineMonths, monthPeriod.day)
-    }
-    if (effectiveRange) {
-      return summary.expense - (effectiveRange.hasComparison ? summarise(comparisonTxns).expense : 0)
-    }
-    return 0
-  }, [isMonthMode, monthPeriod, effectiveRange, transactions, summary.expense, comparisonTxns])
-
-  // The FULL window behind a What-changed row — from the start of the
-  // earliest comparison period through the end of the current one. A link
-  // scoped to only the current period would land on a total that matches
-  // neither the delta shown nor the baseline it was compared against.
-  const whatChangedBounds = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      const earliestBaseline = monthPeriod.baselineMonths[0]
-      const from = earliestBaseline ? monthBounds(earliestBaseline).from : monthBounds(monthPeriod.month).from
-      return { from, to: monthBounds(monthPeriod.month).to }
-    }
-    if (effectiveRange) {
-      const from =
-        effectiveRange.hasComparison && rangeComparison ? rangeComparison.dateFrom : effectiveRange.dateFrom
-      return { from, to: effectiveRange.dateTo }
-    }
-    return { from: '', to: '' }
-  }, [isMonthMode, monthPeriod, effectiveRange, rangeComparison])
-
-  const comparisonDescription = isMonthMode && monthPeriod
-    ? monthPeriod.inProgress
-      ? `its own ${monthPeriod.baselineMonths.length}-month average for the first ${monthPeriod.day} days of a month`
-      : `its own ${monthPeriod.baselineMonths.length}-month average over a full month`
-    : 'the same length immediately before it'
+  const spendPaceFormatDay = !isMonthMode && effectiveRange
+    ? (offset: number) => format(parseISO(addDaysISO(effectiveRange.dateFrom, offset)), 'd MMM')
+    : undefined
 
   const breakdown = useMemo(() => categorySpend(periodTxns, categories), [periodTxns, categories])
 
-  const weekday = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      return weekdayAverages(transactions, priorMonths(monthPeriod.month, BASELINE_MONTHS))
-    }
-    if (effectiveRange) {
-      return weekdayAveragesInRange(transactions, effectiveRange.dateFrom, effectiveRange.dateTo)
-    }
-    return new Array(7).fill(0)
-  }, [isMonthMode, monthPeriod, effectiveRange, transactions])
-
-  const committed = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      return committedSplit(periodTxns, monthPeriod.month, recurringTransactions, monthPeriod.trendMonths, transactions)
-    }
-    if (effectiveRange) {
-      return committedSplitInRange(
-        transactions,
-        effectiveRange.dateFrom,
-        effectiveRange.dateTo,
-        recurringTransactions,
-        transactions,
-        rangeTrendMonths,
-      )
-    }
-    return { committed: 0, discretionary: 0, items: [] }
-  }, [isMonthMode, monthPeriod, effectiveRange, periodTxns, transactions, recurringTransactions, rangeTrendMonths])
+  // Week rhythm is anchored to the real "today", independent of the selected
+  // period filter — the mockup's card is always "the last 7 days", not scoped
+  // to whatever range is being browsed.
+  const last7Days = useMemo(() => lastNDaysSpend(transactions, todayISO(), 7), [transactions])
 
   const merchants = useMemo(() => {
-    if (isMonthMode && monthPeriod) {
-      return merchantSpend(transactions, monthPeriod.month, monthPeriod.trendMonths)
-    }
-    if (effectiveRange) {
-      return merchantSpendInRange(transactions, effectiveRange.dateFrom, effectiveRange.dateTo, rangeTrendMonths)
-    }
+    if (isMonthMode && monthPeriod) return merchantSpend(transactions, monthPeriod.month, monthPeriod.trendMonths)
+    if (effectiveRange) return merchantSpendInRange(transactions, effectiveRange.dateFrom, effectiveRange.dateTo, rangeTrendMonths)
     return []
   }, [isMonthMode, monthPeriod, effectiveRange, transactions, rangeTrendMonths])
 
-  // ── Budgets ──
   const budgetSpendingMap = useMemo(
     () => new Map(categorySpend(periodTxns, categories).map((r) => [r.id, r.amount])),
     [periodTxns, categories],
   )
   const budgetElapsed = isMonthMode && monthPeriod ? monthPeriod.day / monthPeriod.length : 1
-  const budgetElapsedLabel = isMonthMode && monthPeriod ? `day ${monthPeriod.day} of ${monthPeriod.length}` : ''
-  const budgetDaysLeft = isMonthMode && monthPeriod ? monthPeriod.length - monthPeriod.day : undefined
 
-  // ── "Usual" net/discretionary — same baseline-average shape the rest of
-  // the dashboard already uses (day-matched against the baseline months, so
-  // a 4-day-old month is never compared against a full 31-day one). Hoisted
-  // out of the stat-tiles memo below so the hero greeting's own comparison
-  // reuses this EXACT figure rather than recomputing it — two numbers
-  // claiming to be "usual" can never disagree if there is only one of them.
-  const usualComparison = useMemo(() => {
-    let usualNet = 0
-    let usualDiscretionary = 0
-    if (isMonthMode && monthPeriod && monthPeriod.baselineMonths.length > 0) {
-      const n = monthPeriod.baselineMonths.length
-      usualNet =
-        monthPeriod.baselineMonths.reduce((sum, m) => {
-          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
-          return sum + summarise(rows).net
-        }, 0) / n
-      usualDiscretionary =
-        monthPeriod.baselineMonths.reduce((sum, m) => {
-          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
-          return (
-            sum +
-            committedSplit(rows, m, recurringTransactions, trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS), transactions)
-              .discretionary
-          )
-        }, 0) / n
-    } else if (effectiveRange?.hasComparison) {
-      usualNet = summarise(comparisonTxns).net
-      // usualDiscretionary intentionally left 0 for range mode — falls back
-      // to the generic "spending you chose in the moment" note below.
-    }
-    return { usualNet, usualDiscretionary }
-  }, [isMonthMode, monthPeriod, transactions, recurringTransactions, effectiveRange, comparisonTxns])
-
-  // ── Stat tiles ───────────────────────────────────────────────────
-  const tiles = useMemo((): StatTile[] => {
-    const tileDateTo = isMonthMode && monthPeriod ? monthBounds(monthPeriod.month).to : (effectiveRange?.dateTo ?? todayISO())
-    const tileMonths = trailingMonthsEndingAt(tileDateTo, TILE_TREND_MONTHS)
-
-    const incomeTrend: number[] = []
-    const netTrend: number[] = []
-    const committedTrend: number[] = []
-    const discretionaryTrend: number[] = []
-
-    for (const m of tileMonths) {
-      const rows = transactions.filter((t) => monthKey(t.date) === m)
-      const s = summarise(rows)
-      incomeTrend.push(s.income)
-      netTrend.push(s.net)
-      const split = committedSplit(
-        rows,
-        m,
-        recurringTransactions,
-        trailingMonthsEndingAt(`${m}-01`, TREND_MONTHS),
-        transactions,
-      )
-      committedTrend.push(split.committed)
-      discretionaryTrend.push(split.discretionary)
-    }
-
-    const { usualNet, usualDiscretionary } = usualComparison
-    const periodLabel = isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel
-
-    const total = committed.committed + committed.discretionary
-    const committedShare = total > 0 ? Math.round((committed.committed / total) * 100) : 0
-    const discretionaryDelta = committed.discretionary - usualDiscretionary
-    const inProgress = isMonthMode && !!monthPeriod?.inProgress
-
-    return [
-      {
-        label: 'Income',
-        value: summary.income,
-        note: inProgress ? `so far in ${periodLabel}` : `in ${periodLabel}`,
-        trend: incomeTrend,
-        testId: 'tile-income',
-      },
-      {
-        label: inProgress ? 'Net so far' : 'Net',
-        value: summary.net,
-        signed: true,
-        note: usualNet !== 0 ? `usually ${formatMYR(usualNet)} by now` : 'income minus spending',
-        trend: netTrend,
-        testId: 'tile-net',
-      },
-      {
-        label: 'Committed',
-        value: committed.committed,
-        note: `${committedShare}% of spending`,
-        trend: committedTrend,
-        testId: 'tile-committed',
-      },
-      {
-        label: 'Discretionary',
-        value: committed.discretionary,
-        note:
-          usualDiscretionary > 0
-            ? `${formatMYR(Math.abs(discretionaryDelta))} ${
-                discretionaryDelta >= 0 ? 'above' : 'below'
-              } usual`
-            : 'spending you chose in the moment',
-        trend: discretionaryTrend,
-        testId: 'tile-discretionary',
-      },
-    ]
-  }, [
-    isMonthMode,
-    monthPeriod,
-    effectiveRange,
-    rangeLabel,
-    transactions,
-    recurringTransactions,
-    summary,
-    committed,
-    usualComparison,
-  ])
-
-  // ── Bill reminders ───────────────────────────────────────────────
-  // Only EXPENSE rules are bills — a recurring income rule (payday, a
-  // standing credit) due soon is money arriving, not owed, and must not
-  // inflate the "Total due" footer or read as something to pay.
   const upcomingBills = useMemo((): UpcomingBill[] => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     return recurringTransactions
-      .filter((r) => {
-        if (r.type !== 'expense') return false
-        if (dismissedIds.has(r.id)) return false
-        return differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS
-      })
+      .filter((r) => r.type === 'expense' && differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS)
       .map((r) => ({ ...r, daysUntilDue: differenceInDays(parseISO(r.nextDueDate), today) }))
-  }, [recurringTransactions, dismissedIds])
+  }, [recurringTransactions])
 
-  const handleDismiss = (id: string) => {
-    const next = new Set(dismissedIds)
-    next.add(id)
-    setDismissedIds(next)
-    saveDismissed(userId, next)
-  }
-
-  // ── Hero / featured account / recent activity — selections over figures
-  // already displayed elsewhere on the page, not new aggregations. ──
-  const username = useAppStore((s) => s.user?.username ?? '')
-
-  // Time-of-day greeting + a "kept vs usual" clause, matching the design
-  // mockup's dynamic hero ("Good afternoon 👋 — you're $1,012 ahead of last
-  // month") rather than the old static "Hi, {username}". Says "usual", not
-  // "last month" — `usualComparison` is a baseline-months AVERAGE (see its
-  // own comment above), and claiming a specific month here when the real
-  // comparison is an average would be exactly the copy/data mismatch
-  // CLAUDE.md's dashboard rules exist to prevent. Reuses `usualComparison`
-  // and `hasBaseline` — the SAME figures already driving the Discretionary
-  // stat tile and the "usual" framing elsewhere — so this can never disagree
-  // with a number already on screen. Silent (no comparison clause) until
-  // there's enough history to compare against, same gate SpendPace uses.
-  //
-  // `hasBaseline` alone is not enough: it checks whole-month expense
-  // (spendThroughDay through the FULL baseline month), while
-  // `usualComparison.usualNet` is day-matched net (only rows on-or-before
-  // today's day-of-month). A baseline month whose spending all landed after
-  // today's day-of-month satisfies `hasBaseline` but leaves `usualNet` at 0
-  // — checking `usualNet !== 0` too (the same guard the Net stat tile
-  // already uses) keeps the greeting from asserting a comparison against an
-  // empty baseline.
-  const heroGreeting = useMemo(() => {
-    const greeting = timeOfDayGreeting(new Date().getHours())
-    const who = username ? `, ${username}` : ''
-    const base = `${greeting}${who} 👋`
-    if (!hasBaseline || usualComparison.usualNet === 0) return base
-    const delta = summary.net - usualComparison.usualNet
-    if (Math.abs(delta) < 0.005) return base
-    const clause =
-      delta > 0
-        ? `you're ${formatMYR(delta)} ahead of usual`
-        : `you're ${formatMYR(Math.abs(delta))} behind usual`
-    return `${base} — ${clause}`
-  }, [username, hasBaseline, summary.net, usualComparison])
-
-  // Net worth is what YOU own — byte-identical to AccountsPage.tsx:46-51 and
-  // WalletPage.tsx's own ownAccounts reduce (README invariant 3 / PR #101).
   const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
 
   const netWorth = useMemo(
@@ -611,10 +287,17 @@ export function Dashboard() {
     [ownAccounts, balances],
   )
 
-  // Highest-balance own account. No default_account_id setting exists in this
-  // codebase to reuse (Decision 5), so this selection rule is the one being
-  // introduced. Ties broken by earlier createdAt, then id, so the pick is
-  // deterministic.
+  // The chip next to the hero figure — net worth's own change this period, as
+  // a % of what it started the period at. Not literally "vs last month" (that
+  // would need a stored historical balance we don't have); this is the honest
+  // equivalent computable from what's on screen already.
+  const netWorthChangePct = useMemo(() => {
+    if (netWorth === null) return null
+    const startingNetWorth = netWorth - summary.net
+    if (Math.abs(startingNetWorth) < 0.005) return null
+    return (summary.net / startingNetWorth) * 100
+  }, [netWorth, summary.net])
+
   const featuredAccount = useMemo(() => {
     if (balances === null || ownAccounts.length === 0) return null
     return [...ownAccounts].sort((a, b) => {
@@ -625,28 +308,41 @@ export function Dashboard() {
     })[0]
   }, [ownAccounts, balances])
 
-  // Safe-to-spend on the featured account: its own balance minus its own
-  // upcoming bills, using the SAME window as `upcomingBills` above (see
-  // `UPCOMING_BILLS_WINDOW_DAYS`) so the two cards never disagree about
-  // what "coming up" means.
   const featuredSafeToSpend = useMemo(() => {
     if (balances === null || !featuredAccount) return null
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    return safeToSpend(
-      balances[featuredAccount.id] ?? 0,
-      featuredAccount.id,
-      recurringTransactions,
-      today,
-      dismissedIds,
-    )
-  }, [balances, featuredAccount, recurringTransactions, dismissedIds])
+    return safeToSpend(balances[featuredAccount.id] ?? 0, featuredAccount.id, recurringTransactions, today, new Set())
+  }, [balances, featuredAccount, recurringTransactions])
 
-  // Most recent 5 rows of the period already scoped by the filter row above.
-  const recentTxns = useMemo(
-    () => [...periodTxns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
-    [periodTxns],
-  )
+  const recentTxns = useMemo(() => [...periodTxns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [periodTxns])
+
+  const heroGreeting = useMemo(() => {
+    const greeting = timeOfDayGreeting(new Date().getHours())
+    const who = username ? `, ${username}` : ''
+    return `${greeting}${who} 👋`
+  }, [username])
+
+  // ── Composer / add-transaction plumbing — mirrors WalletPage.tsx's wiring
+  // so the Overview page's composer bar behaves identically. ──
+  const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
+    try {
+      await addTransaction(data)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save transaction — please try again.'), duration: 4000 })
+      throw err
+    }
+    await getAccountBalances().then(setBalances)
+  }, [addTransaction, addToast, getAccountBalances])
+
+  const openComposerForm = useCallback((initialDraft?: Partial<TransactionFormData>) => {
+    setComposerDraft(initialDraft ?? null)
+    crud.openCreate()
+  }, [crud])
+
+  const handleComposerConfirm = useCallback(async (draft: ComposerPreviewDraft) => {
+    await handleAddTransaction({ ...draft, description: '', tags: [] })
+  }, [handleAddTransaction])
 
   if (transactions.length === 0 && accounts.length === 0) {
     return (
@@ -667,42 +363,53 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      {/* One filter row, scoping every panel below it. Year-on-year history
-          stays on Reports — a genuinely different lens (monthly bars, two
-          calendar years side by side) the dashboard doesn't replicate. */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <DateRangeControl
           value={range}
           onChange={setRange}
           presets={['this-month', 'last-month', 'last-3-months', 'last-12-months', 'all-time', 'custom']}
         />
-        <Link
-          to="/wallet/reports"
-          className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline"
-        >
+        <Link to="/wallet/reports" className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline">
           Year-on-year comparison →
         </Link>
       </div>
 
+      {accounts.length > 0 && (
+        <div className="mb-4">
+          <Composer
+            ref={composerInputRef}
+            accounts={ownAccounts}
+            categories={categories}
+            activeAccountId={featuredAccount?.id ?? null}
+            hasAnthropicKey={hasAnthropicKey}
+            onConfirm={handleComposerConfirm}
+            onOpenBlankForm={openComposerForm}
+          />
+        </div>
+      )}
+
       <div className="dash">
         {/* Row A — hero + featured account */}
         <section className="hero c8" data-testid="overview-hero">
-          <p className="hero-eyebrow">
-            {isMonthMode && monthPeriod?.inProgress ? 'So far in' : 'In'}{' '}
-            {isMonthMode && monthPeriod ? monthPeriod.label : rangeLabel}
-          </p>
-          <h2 className="hero-greeting" data-testid="hero-greeting">{heroGreeting}</h2>
+          <p className="hero-eyebrow">{isMonthMode && monthPeriod?.inProgress ? 'Household net worth' : rangeLabel}</p>
+          <h2 className="hero-greeting" data-testid="hero-greeting">
+            {heroGreeting}
+          </h2>
           <div className="hero-body">
             <div className="hero-main">
-              <div className="hero-figure-row">
+              <p className="hero-eyebrow" style={{ color: 'rgb(255 255 255 / .72)' }}>
+                Total net worth
+              </p>
+              <div className="hero-figure-row" style={{ marginTop: 'var(--s1)' }}>
                 <span className="hero-figure" data-testid="hero-net-worth">
                   {netWorth === null ? '…' : formatMYR(netWorth)}
                 </span>
-                <span className="chip chip-glass">Net worth</span>
+                {netWorthChangePct !== null && (
+                  <span className="chip chip-glass">
+                    {netWorthChangePct >= 0 ? '↑' : '↓'} {Math.abs(netWorthChangePct).toFixed(1)}% this period
+                  </span>
+                )}
               </div>
-              <p className="hero-eyebrow mt-2" data-testid="hero-account-count">
-                across {ownAccounts.length} account{ownAccounts.length !== 1 ? 's' : ''}
-              </p>
             </div>
             <div className="hero-stats">
               <div>
@@ -728,12 +435,8 @@ export function Dashboard() {
             <p className="acct-bal">…</p>
           </div>
         ) : featuredAccount ? (
-          <Link
-            to={`/wallet?account=${featuredAccount.id}`}
-            className="acct acct-feature c4"
-            data-testid="featured-account"
-          >
-            <div className="acct-top">
+          <section className="acct acct-feature c4" data-testid="featured-account" style={{ gap: 'var(--s4)' }}>
+            <Link to={`/wallet?account=${featuredAccount.id}`} className="acct-top">
               <div className="acct-mark">
                 {(() => {
                   const FeaturedIcon = ICON_MAP[featuredAccount.icon] ?? ICON_MAP.wallet
@@ -746,26 +449,37 @@ export function Dashboard() {
                   {ACCOUNT_TYPE_LABELS[featuredAccount.type]} · {featuredAccount.currency}
                 </span>
               </div>
-            </div>
-            <p className="acct-bal" data-testid="featured-account-balance">
-              {formatMYR(balances[featuredAccount.id] ?? 0)}
-            </p>
-            {featuredSafeToSpend && featuredSafeToSpend.bills > 0 ? (
-              <p className="acct-foot" data-testid="featured-account-safe-to-spend">
-                <span>
+            </Link>
+            <div>
+              <p className="acct-bal" data-testid="featured-account-balance" style={{ fontSize: 'var(--t-2xl)' }}>
+                {formatMYR(balances[featuredAccount.id] ?? 0)}
+              </p>
+              {featuredSafeToSpend && featuredSafeToSpend.bills > 0 && (
+                <p className="acct-sub" style={{ marginTop: 'var(--s1)' }} data-testid="featured-account-safe-to-spend">
                   {featuredSafeToSpend.safe >= 0
                     ? `${formatMYR(featuredSafeToSpend.safe)} safe to spend after ${formatMYR(featuredSafeToSpend.bills)} of bills`
                     : `${formatMYR(Math.abs(featuredSafeToSpend.safe))} short of covering ${formatMYR(featuredSafeToSpend.bills)} of upcoming bills`}
-                </span>
-                <span>Accounts →</span>
-              </p>
-            ) : (
-              <p className="acct-foot">
-                <span>Largest balance</span>
-                <span>Accounts →</span>
-              </p>
-            )}
-          </Link>
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--s2)', marginTop: 'auto' }}>
+              <button
+                type="button"
+                className="btn"
+                style={{ flex: 1, background: 'rgb(255 255 255 / .14)', color: '#fff' }}
+                onClick={() => openComposerForm({ type: 'transfer', accountId: featuredAccount.id })}
+              >
+                Transfer
+              </button>
+              <Link
+                to="/wallet/accounts"
+                className="btn"
+                style={{ flex: 1, background: 'rgb(255 255 255 / .14)', color: '#fff', textAlign: 'center' }}
+              >
+                All accounts
+              </Link>
+            </div>
+          </section>
         ) : (
           <Link to="/wallet/accounts" className="acct add c4">
             Add an account
@@ -773,17 +487,17 @@ export function Dashboard() {
         )}
 
         {/* Row B */}
-        <UpcomingBills className="c4" bills={upcomingBills} onDismiss={handleDismiss} />
+        <UpcomingBills className="c4" bills={upcomingBills} />
         <BudgetPace
           className="c4"
           budgets={budgets}
           spending={budgetSpendingMap}
           categories={categories}
           elapsed={budgetElapsed}
-          elapsedLabel={budgetElapsedLabel}
+          day={monthPeriod?.day}
+          periodStart={periodBounds.from}
           showPaceNotch={isMonthMode}
           limitMultiplier={isMonthMode ? 1 : rangeMonthSpan}
-          daysLeft={budgetDaysLeft}
         />
         <SharedSummary className="c4" />
 
@@ -802,113 +516,37 @@ export function Dashboard() {
           comparisonCount={hasBaseline ? (isMonthMode && monthPeriod ? monthPeriod.baselineMonths.length : 1) : 0}
           comparisonDescription={spendPaceComparisonDescription}
           comparisonClause={spendPaceComparisonClause}
-          monthsSpanned={spendPaceMonthsSpanned}
           formatDay={spendPaceFormatDay}
-          formatDayTooltipLabel={spendPaceFormatDayTooltipLabel}
         />
 
-        {/* Row C' — StatTiles keeps its own markup and mobile behaviour
-            untouched (Decision 3); it is the one child kept in a wrapper. */}
-        <div className="c12">
-          <StatTiles tiles={tiles} />
-        </div>
-
         {/* Row D */}
-        {breakdown.length > 0 && (
-          <CategoryBreakdown
-            className="c6"
-            rows={breakdown}
-            total={summary.expense}
-            dateFrom={periodBounds.from}
-            dateTo={periodBounds.to}
-          />
-        )}
-        <WeekRhythm className="c6" averages={weekday} months={isMonthMode ? BASELINE_MONTHS : rangeMonthSpan} />
+        {breakdown.length > 0 && <CategoryBreakdown className="c6" rows={breakdown} total={summary.expense} />}
+        <WeekRhythm className="c6" days={last7Days} />
 
         {/* Row E */}
         <DashboardCard
           className="c8"
           title="Recent activity"
-          action={{
-            label: 'See all',
-            to: transactionsLink({ dateFrom: periodBounds.from, dateTo: periodBounds.to }),
-          }}
+          action={{ label: 'All transactions', to: transactionsLink({ dateFrom: periodBounds.from, dateTo: periodBounds.to }) }}
         >
           <div data-testid="recent-activity">
-            <TransactionList
-              transactions={recentTxns}
-              accounts={accounts}
-              categories={categories}
-              readOnly
-              showDayTotals={false}
-            />
+            <TransactionList transactions={recentTxns} accounts={accounts} categories={categories} readOnly showDayTotals={false} />
           </div>
         </DashboardCard>
-        <MerchantTable
-          className="c4"
-          rows={merchants}
-          trendMonths={TREND_MONTHS}
-          dateFrom={periodBounds.from}
-          dateTo={periodBounds.to}
-        />
-
-        {/* Row F */}
-        <CommittedSpend className={hasBaseline ? 'c6' : 'c12'} split={committed} />
-        {hasBaseline && (
-          <WhatChanged
-            className="c6"
-            rows={deltas}
-            netDelta={netDelta}
-            comparisonDescription={comparisonDescription}
-            dateFrom={whatChangedBounds.from}
-            dateTo={whatChangedBounds.to}
-          />
-        )}
-
-        {/* Row G */}
-        <DashboardCard
-          className="c12"
-          title="Goals"
-          subtitle="Progress against target."
-          action={{ label: 'Manage', to: '/wallet/goals' }}
-        >
-          {goals.length === 0 ? (
-            <p className="py-6 text-center text-sm text-fg-subtle">No goals set yet.</p>
-          ) : (
-            <div data-testid="dashboard-goals">
-              {goals.map((goal) => {
-                const balance = balances?.[goal.accountId] ?? 0
-                const saved = Math.max(0, Math.min(balance, goal.targetAmount))
-                const percent = goal.targetAmount > 0 ? (saved / goal.targetAmount) * 100 : 0
-                return (
-                  <div
-                    key={goal.id}
-                    className="border-t border-line-subtle py-2.5 first:border-0 first:pt-0"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-[13px] font-medium text-fg">{goal.name}</span>
-                      <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">
-                        {formatMYR(saved)} of {formatMYR(goal.targetAmount)}
-                      </span>
-                    </div>
-                    <div
-                      className="mt-1.5 h-2 rounded-full bg-surface-hover"
-                      role="img"
-                      aria-label={`${goal.name}: ${Math.round(percent)}% of target saved.`}
-                    >
-                      <div
-                        className="h-2 rounded-full bg-brand-500"
-                        style={{ width: `${Math.min(100, percent)}%` }}
-                      />
-                    </div>
-                    <p className="mt-1 text-[11px] text-fg-subtle">{Math.round(percent)}%</p>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </DashboardCard>
+        <MerchantTable className="c4" rows={merchants} />
       </div>
+
+      <TransactionForm
+        open={crud.formOpen}
+        onOpenChange={(open) => { crud.closeForm(open); if (!open) setComposerDraft(null) }}
+        transaction={crud.editingItem}
+        accounts={accounts}
+        categories={categories}
+        defaultAccountId={featuredAccount?.id}
+        availableTags={tags}
+        initialDraft={composerDraft ?? undefined}
+        onSubmit={handleAddTransaction}
+      />
     </div>
   )
 }

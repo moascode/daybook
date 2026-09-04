@@ -1,9 +1,4 @@
-import { useMemo } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { TrendingDown, TrendingUp } from 'lucide-react'
-import { cn, formatMYR, formatAxisMYR } from '@/lib/utils'
-import { useChartTheme } from '@/hooks/useChartTheme'
-import { useDashboardChartColors } from './chartColors'
+import { formatMYR, formatAxisMYR } from '@/lib/utils'
 
 interface SpendPaceProps {
   /** Optional grid-span / layout class forwarded to the root `<section>`. */
@@ -23,30 +18,51 @@ interface SpendPaceProps {
   /** Days elapsed (equals the period length once it's complete or isn't "in progress"). */
   elapsedDays: number
   periodLabel: string
-  /** False whenever there is nothing left to project: a finished month, or any range period (a trailing window has no "end" to race toward). */
+  /** False whenever there is nothing left to project: a finished month, or any range period. */
   inProgress: boolean
   /** How many windows the comparison averages. 0 = no history yet. */
   comparisonCount: number
   /** e.g. "3-month average" or "same length before" — inserted into "Usual ({...})". */
   comparisonDescription: string
-  /**
-   * Continuous month count behind `spent`/`usual` (days spanned ÷ 30, see
-   * `monthsSpanned` in insights.ts) — undefined when the period is too short
-   * for "per month" to mean anything (see MIN_AVERAGE_DAYS). A single prop
-   * on purpose: `spent` and `usual` cover equal-length windows, so deriving
-   * both averages from the one number here — rather than accepting two
-   * pre-divided averages from the caller — makes it impossible for them to
-   * end up divided by different spans.
-   */
-  monthsSpanned?: number
   /** Full text for the delta chip and the "usual by ..." aria clause, e.g. "usual by day 18" or "your usual for this period". */
   comparisonClause: string
-  /** Maps a 0-based day offset to its axis/tooltip label. Defaults to 1-based day-of-period numbering. */
+  /** Maps a 0-based day offset to its axis label. Defaults to 1-based day-of-period numbering. */
   formatDay?: (offset: number) => string | number
-  /** Wraps the axis label into the tooltip's header line, e.g. "Day 18". Defaults to that exact wording. */
-  formatDayTooltipLabel?: (label: string | number) => string
 }
 
+const VB_W = 730
+const VB_H = 210
+const PLOT_LEFT = 44
+const PLOT_RIGHT = 712
+const PLOT_TOP = 10
+const PLOT_BOTTOM = 162
+
+/** Rounds up to a "nice" axis ceiling — 1/2/5 × a power of ten. */
+function niceCeil(value: number): number {
+  if (value <= 0) return 100
+  const magnitude = 10 ** Math.floor(Math.log10(value))
+  const normalized = value / magnitude
+  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10
+  return step * magnitude
+}
+
+function buildPath(values: (number | null)[], xOf: (i: number) => number, yOf: (v: number) => number): string {
+  let d = ''
+  let started = false
+  values.forEach((v, i) => {
+    if (v === null) return
+    d += `${started ? 'L' : 'M'}${xOf(i).toFixed(1)},${yOf(v).toFixed(1)} `
+    started = true
+  })
+  return d.trim()
+}
+
+/**
+ * "Spend pace" — a literal port of the mockup's hand-drawn SVG chart: a
+ * gradient-filled actual line, a dashed usual line running the full period,
+ * a dashed projection from today to month end, a "today" marker, and a
+ * floating tooltip pinned to the current point.
+ */
 export function SpendPace({
   className,
   spent,
@@ -61,203 +77,167 @@ export function SpendPace({
   comparisonCount,
   comparisonDescription,
   comparisonClause,
-  monthsSpanned,
   formatDay = (offset) => offset + 1,
-  formatDayTooltipLabel = (label) => `Day ${label}`,
 }: SpendPaceProps) {
-  const chart = useChartTheme()
-  const colors = useDashboardChartColors()
-
-  const data = useMemo(() => {
-    const length = Math.max(baseline.length, curve.length)
-    return Array.from({ length }, (_, i) => ({
-      day: formatDay(i),
-      // The actual series stops at today; Recharts breaks the line on null
-      // rather than dragging it down to zero for days that have not happened.
-      actual: i < curve.length ? curve[i] : null,
-      usual: baseline[i] ?? null,
-      // The projection starts ON today's point so the dashed segment joins the
-      // solid line instead of floating away from it.
-      projected:
-        inProgress && projected !== undefined && i >= curve.length - 1
-          ? spent + ((projected - spent) * (i + 1 - elapsedDays)) / Math.max(1, length - elapsedDays)
-          : null,
-    }))
-  }, [curve, baseline, projected, spent, elapsedDays, inProgress, formatDay])
-
-  const delta = spent - usual
-  const pct = usual > 0 ? (delta / usual) * 100 : 0
+  const length = Math.max(baseline.length, curve.length, 1)
   const hasComparison = comparisonCount > 0 && usual > 0
+  const delta = spent - usual
   const over = delta >= 0
-  // Both derived from the SAME monthsSpanned, so they can never disagree on
-  // what a "month" was for this period — see the prop doc comment.
-  const spentAverage = monthsSpanned !== undefined ? spent / monthsSpanned : undefined
-  const usualAverage = monthsSpanned !== undefined ? usual / monthsSpanned : undefined
+  const showProjection = inProgress && projected !== undefined
+
+  const xOf = (i: number) => PLOT_LEFT + (length <= 1 ? 0 : (i / (length - 1)) * (PLOT_RIGHT - PLOT_LEFT))
+  const yMax = niceCeil(Math.max(...curve, ...baseline, projected ?? 0, 1))
+  const yOf = (v: number) => PLOT_BOTTOM - Math.min(1, v / yMax) * (PLOT_BOTTOM - PLOT_TOP)
+
+  const actualValues: (number | null)[] = Array.from({ length }, (_, i) => (i < curve.length ? curve[i] : null))
+  const baselineValues: (number | null)[] = Array.from({ length }, (_, i) => baseline[i] ?? null)
+  const projectedValues: (number | null)[] = showProjection
+    ? Array.from({ length }, (_, i) =>
+        i === curve.length - 1 ? spent : i === length - 1 ? (projected as number) : null,
+      )
+    : []
+
+  const actualPath = buildPath(actualValues, xOf, yOf)
+  const baselinePath = hasComparison ? buildPath(baselineValues, xOf, yOf) : ''
+  const projectedPath = showProjection ? buildPath(projectedValues, xOf, yOf) : ''
+  const areaPath =
+    curve.length > 0
+      ? `${actualPath} L${xOf(curve.length - 1).toFixed(1)},${PLOT_BOTTOM} L${xOf(0).toFixed(1)},${PLOT_BOTTOM} Z`
+      : ''
+
+  const todayX = xOf(Math.max(0, elapsedDays - 1))
+  const todayY = curve.length > 0 ? yOf(curve[curve.length - 1]) : PLOT_BOTTOM
+
+  // Y-axis: 4 evenly spaced gridlines, 0 at the bottom.
+  const yTicks = [0, yMax / 3, (2 * yMax) / 3, yMax]
+
+  // X-axis: ~6 evenly spaced day labels, always including the first and last.
+  const tickCount = Math.min(7, length)
+  const xTickIndices = Array.from({ length: tickCount }, (_, i) => Math.round((i / (tickCount - 1 || 1)) * (length - 1)))
 
   return (
-    <section className={cn('card card-pad', className)}>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+    <section className={`card card-pad ${className ?? ''}`}>
+      <div className="card-head">
         <div>
-          <p className="text-sm font-medium text-fg-muted">
-            {inProgress ? `Spent so far in ${periodLabel}` : `Spent in ${periodLabel}`}
-          </p>
-          <p
-            data-testid="spend-hero"
-            className="mt-1 text-4xl font-bold tracking-tight text-fg"
-          >
-            {formatMYR(spent)}
-          </p>
-          {spentAverage !== undefined && (
-            <p className="mt-0.5 text-xs text-fg-subtle" data-testid="spend-monthly-average">
-              {formatMYR(spentAverage)}/mo average
-            </p>
-          )}
-
-          {hasComparison ? (
-            <>
-              <span
-                data-testid="spend-delta"
-                className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  over
-                    ? 'bg-red-50 text-red-700'
-                    : 'bg-blue-50 text-blue-700'
-                }`}
-              >
-                {over ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                {formatMYR(Math.abs(delta))} {over ? 'more' : 'less'} than {comparisonClause}
-              </span>
-              <p className="mt-2 text-xs text-fg-subtle">
-                Usual by this point: {formatMYR(usual)}
-                {usualAverage !== undefined && ` (${formatMYR(usualAverage)}/mo)`} · that’s{' '}
-                {over ? '+' : '−'}
-                {Math.abs(pct).toFixed(1)}%
-              </p>
-            </>
-          ) : (
-            <p className="mt-3 text-xs text-fg-subtle">
-              No earlier period to compare against yet — the comparison appears
-              once you have history before this one.
-            </p>
-          )}
+          <h3 className="card-title">Spend pace</h3>
+          <p className="card-sub">Running total this period vs. your usual</p>
         </div>
+      </div>
 
-        <div>
-          <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-fg-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <i className="h-0.5 w-3.5 rounded" style={{ background: colors.actual }} />
-              This period
+      <div className="mb-4 flex flex-wrap items-baseline gap-3">
+        <div className="tabular-nums" style={{ fontSize: 'var(--t-xl)', fontWeight: 660, letterSpacing: '-.028em' }}>
+          {formatMYR(spent)}
+        </div>
+        {hasComparison && (
+          <span className={`chip ${over ? 'chip-warn' : 'chip-pos'}`}>
+            {formatMYR(Math.abs(delta))} {over ? 'above' : 'below'} usual
+          </span>
+        )}
+        {showProjection && comparisonTotal > 0 && (
+          <span className="hide-mobile text-sm text-fg-subtle">
+            tracking to <b className="tabular-nums font-semibold text-fg-muted">{formatMYR(projected as number)}</b> by
+            period end
+          </span>
+        )}
+        <div className="legend ml-auto">
+          <span>
+            <i style={{ background: 'rgb(var(--accent))' }} />
+            This period
+          </span>
+          {hasComparison && (
+            <span style={{ color: 'rgb(var(--fg-faint))' }}>
+              <i className="dash" />
+              <span style={{ color: 'rgb(var(--fg-subtle))' }}>Usual ({comparisonDescription})</span>
             </span>
-            {hasComparison && (
-              <span className="inline-flex items-center gap-1.5">
-                <i className="h-0.5 w-3.5 rounded" style={{ background: colors.usual }} />
-                Usual ({comparisonDescription})
-              </span>
-            )}
-            {inProgress && projected !== undefined && (
-              <span className="inline-flex items-center gap-1.5">
-                <i
-                  className="h-0 w-3.5"
-                  style={{ borderTop: `2px dashed ${colors.actual}` }}
-                />
-                On current pace
-              </span>
-            )}
-          </div>
-
-          <div
-            role="img"
-            aria-label={
-              `Cumulative spending through ${periodLabel}. ` +
-              `${formatMYR(spent)} so far` +
-              (hasComparison ? `, against ${comparisonClause} of ${formatMYR(usual)}` : '') +
-              (inProgress && projected !== undefined
-                ? `. On the current rate the period ends near ${formatMYR(projected)}`
-                : '') +
-              (comparisonTotal > 0 ? `, versus a ${formatMYR(comparisonTotal)} usual total.` : '.')
-            }
-          >
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  stroke={chart.axis}
-                  tick={{ fill: chart.axis }}
-                  fontSize={11}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={24}
-                />
-                <YAxis
-                  stroke={chart.axis}
-                  tick={{ fill: chart.axis }}
-                  fontSize={11}
-                  tickLine={false}
-                  width={48}
-                  tickFormatter={formatAxisMYR}
-                />
-                <Tooltip
-                  contentStyle={chart.tooltip.contentStyle}
-                  labelStyle={chart.tooltip.labelStyle}
-                  itemStyle={chart.tooltip.itemStyle}
-                  labelFormatter={formatDayTooltipLabel}
-                  formatter={(value: number) => formatMYR(value)}
-                />
-                {hasComparison && (
-                  <Line
-                    type="monotone"
-                    dataKey="usual"
-                    name="Usual"
-                    stroke={colors.usual}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                )}
-                {inProgress && projected !== undefined && (
-                  <Line
-                    type="linear"
-                    dataKey="projected"
-                    name="On current pace"
-                    stroke={colors.actual}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                )}
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="This period"
-                  stroke={colors.actual}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {inProgress && projected !== undefined && comparisonTotal > 0 && (
-            <p className="mt-2 text-xs text-fg-subtle" data-testid="pace-projection">
-              Keep this up and {periodLabel} closes at about{' '}
-              <span className="font-semibold text-fg">{formatMYR(projected)}</span> —{' '}
-              {formatMYR(Math.abs(projected - comparisonTotal))}{' '}
-              {projected >= comparisonTotal ? 'above' : 'below'} your{' '}
-              {formatMYR(comparisonTotal)} monthly average.
-            </p>
           )}
-
-          {inProgress && projected === undefined && (
-            <p className="mt-2 text-xs text-fg-subtle" data-testid="pace-too-early">
-              Too early in {periodLabel} to project a total — a few days of
-              spending multiplied out says more about one purchase than about
-              the month.
-            </p>
+          {showProjection && (
+            <span>
+              <i style={{ background: 'rgb(var(--accent))', opacity: 0.45 }} />
+              Projected
+            </span>
           )}
         </div>
       </div>
+
+      <div className="chart" data-testid="spend-hero-wrap">
+        <svg
+          viewBox={`0 0 ${VB_W} ${VB_H}`}
+          style={{ height: 280 }}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label={
+            `Cumulative spending through ${periodLabel}. ${formatMYR(spent)} so far` +
+            (hasComparison ? `, against ${comparisonClause} of ${formatMYR(usual)}` : '') +
+            (showProjection ? `. On the current rate the period ends near ${formatMYR(projected as number)}.` : '.')
+          }
+        >
+          <g className="chart-grid">
+            {yTicks.map((t) => (
+              <line key={t} x1={PLOT_LEFT} y1={yOf(t)} x2={PLOT_RIGHT} y2={yOf(t)} strokeDasharray={t === 0 ? undefined : '2 4'} />
+            ))}
+          </g>
+          <g className="chart-axis" textAnchor="end">
+            {yTicks.map((t) => (
+              <text key={t} x={PLOT_LEFT - 8} y={yOf(t) + 4}>
+                {formatAxisMYR(t)}
+              </text>
+            ))}
+          </g>
+          <g className="chart-axis" textAnchor="middle">
+            {xTickIndices.map((i) => (
+              <text key={i} x={xOf(i)} y={182}>
+                {formatDay(i)}
+              </text>
+            ))}
+          </g>
+          <defs>
+            <linearGradient id="spend-pace-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgb(var(--accent))" stopOpacity=".14" />
+              <stop offset="100%" stopColor="rgb(var(--accent))" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {areaPath && <path d={areaPath} fill="url(#spend-pace-gradient)" />}
+          {baselinePath && (
+            <path d={baselinePath} fill="none" stroke="rgb(var(--fg-faint))" strokeWidth="1.5" strokeDasharray="4 4" strokeLinecap="round" />
+          )}
+          {actualPath && (
+            <path d={actualPath} fill="none" stroke="rgb(var(--accent))" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+          )}
+          {projectedPath && (
+            <path d={projectedPath} fill="none" stroke="rgb(var(--accent))" strokeWidth="2" strokeDasharray="5 5" strokeOpacity=".45" strokeLinecap="round" />
+          )}
+          {inProgress && curve.length > 0 && (
+            <>
+              <line x1={todayX} y1={PLOT_TOP} x2={todayX} y2={PLOT_BOTTOM} stroke="rgb(var(--line-strong))" strokeWidth="1" />
+              <text x={todayX} y={200} className="chart-axis" textAnchor="middle" style={{ fill: 'rgb(var(--fg-subtle))', fontWeight: 600 }}>
+                today
+              </text>
+              <circle cx={todayX} cy={todayY} r="4.5" fill="rgb(var(--surface))" stroke="rgb(var(--accent))" strokeWidth="2.5" />
+            </>
+          )}
+        </svg>
+        {inProgress && curve.length > 0 && (
+          <div className="tip" style={{ left: `${(todayX / VB_W) * 100}%`, top: `${(todayY / VB_H) * 100}%` }}>
+            <div className="big">{formatMYR(spent)}</div>
+            <div className="sub">
+              Day {elapsedDays}
+              {hasComparison && ` · usual is ${formatMYR(usual)}`}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!hasComparison && (
+        <p className="mt-2 text-xs text-fg-subtle">
+          No earlier period to compare against yet — the comparison appears once you have history before this one.
+        </p>
+      )}
+      {inProgress && projected === undefined && (
+        <p className="mt-2 text-xs text-fg-subtle" data-testid="pace-too-early">
+          Too early in {periodLabel} to project a total — a few days of spending multiplied out says more about one
+          purchase than about the month.
+        </p>
+      )}
     </section>
   )
 }

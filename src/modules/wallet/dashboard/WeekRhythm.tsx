@@ -1,155 +1,70 @@
-import { useMemo, useState } from 'react'
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  LabelList,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import { cn, formatMYR } from '@/lib/utils'
-import { useChartTheme } from '@/hooks/useChartTheme'
 import { DashboardCard } from './DashboardCard'
-import { useDashboardChartColors } from './chartColors'
-import { WEEKDAY_LABELS } from './insights'
+import type { DailySpend } from './insights'
 
 interface WeekRhythmProps {
-  /** Seven averages, Monday first. */
-  averages: number[]
-  months: number
+  /** The last 7 calendar days, oldest first. */
+  days: DailySpend[]
   className?: string
 }
 
-/** Bars are nudged up by this many px on hover — see `renderBar` below. */
-const HOVER_LIFT = 3
-
-interface WeekRhythmDatum {
-  day: string
-  value: number
-}
+/** Bar height is capped at this many px, matching the mockup's fixed-height track. */
+const MAX_BAR_HEIGHT = 160
 
 /**
- * Average spend by weekday, as a real column chart — the timing axis nothing
- * else in the app touches. A reference line marks the weekly average so each
- * bar reads against a fixed baseline rather than only against each other.
+ * "Week rhythm" — a literal port of the mockup's hand-drawn bar chart: seven
+ * columns for the actual last 7 calendar days (not an average), a dashed
+ * line at the daily average, and the heaviest days called out in bold.
  */
-export function WeekRhythm({ averages, months, className }: WeekRhythmProps) {
-  const chart = useChartTheme()
-  const colors = useDashboardChartColors()
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
-
-  const total = averages.reduce((a, b) => a + b, 0)
+export function WeekRhythm({ days, className }: WeekRhythmProps) {
+  const total = days.reduce((sum, d) => sum + d.amount, 0)
   const average = total / 7
-  const weekend = averages[4] + averages[5] + averages[6]
-  const weekendShare = total > 0 ? (weekend / total) * 100 : 0
-  const weekendDayShare = (3 / 7) * 100
-  const busiest = averages.indexOf(Math.max(...averages))
+  const max = Math.max(...days.map((d) => d.amount), average, 1)
+  const highThreshold = average * 1.3
 
-  const data = useMemo<WeekRhythmDatum[]>(
-    () => WEEKDAY_LABELS.map((day, i) => ({ day, value: averages[i] })),
-    [averages],
-  )
-
-  const renderBar = (props: unknown) => {
-    const { x, y, width, height, index } = props as {
-      x: number
-      y: number
-      width: number
-      height: number
-      index: number
-    }
-    const lifted = index === hoveredIndex
-    return (
-      <rect
-        x={x}
-        y={lifted ? y - HOVER_LIFT : y}
-        width={width}
-        height={height}
-        fill={colors.magnitude}
-        rx={4}
-        data-testid="week-rhythm-bar"
-        style={{ transition: 'y 0.15s ease-out' }}
-      />
-    )
-  }
+  const weekendTotal = days
+    .filter((d) => d.label === 'Sat' || d.label === 'Sun')
+    .reduce((sum, d) => sum + d.amount, 0)
+  const weekdayCount = days.filter((d) => d.label !== 'Sat' && d.label !== 'Sun').length || 1
+  const weekdayAverage = (total - weekendTotal) / weekdayCount
+  const weekendMultiplier = weekdayAverage > 0 ? weekendTotal / weekdayCount / weekdayAverage : 0
+  const busiest = days.reduce((a, b) => (b.amount > a.amount ? b : a), days[0])
 
   return (
-    <DashboardCard
-      className={cn('flex flex-col', className)}
-      title="Your week"
-      subtitle={`Average spend per weekday over the last ${months} month${months === 1 ? '' : 's'}.`}
-    >
+    <DashboardCard className={cn('flex flex-col', className)} title="Week rhythm" subtitle="Daily spend, last 7 days">
       <div
+        className="bars"
+        style={{ height: MAX_BAR_HEIGHT + 40 }}
         role="img"
-        aria-label={`Average spend by weekday. ${WEEKDAY_LABELS.map(
-          (d, i) => `${d}: ${formatMYR(averages[i])}`,
-        ).join('; ')}. Weekly average: ${formatMYR(average)} per day.`}
         data-testid="week-rhythm"
+        aria-label={`Daily spend, last 7 days. ${days.map((d) => `${d.label}: ${formatMYR(d.amount)}`).join('; ')}. Daily average: ${formatMYR(average)}.`}
       >
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={data} margin={{ top: 16, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-            <XAxis
-              dataKey="day"
-              stroke={chart.axis}
-              tick={{ fill: chart.axis }}
-              fontSize={11}
-              tickLine={false}
-            />
-            <YAxis
-              stroke={chart.axis}
-              tick={{ fill: chart.axis }}
-              fontSize={11}
-              tickLine={false}
-              width={48}
-              tickFormatter={(value: number) => formatMYR(value)}
-            />
-            <Tooltip
-              contentStyle={chart.tooltip.contentStyle}
-              labelStyle={chart.tooltip.labelStyle}
-              itemStyle={chart.tooltip.itemStyle}
-              formatter={(value: number) => formatMYR(value)}
-            />
-            <ReferenceLine
-              y={average}
-              stroke={colors.usual}
-              strokeDasharray="4 4"
-              label={{
-                value: 'Avg',
-                position: 'insideTopRight',
-                fill: chart.axis,
-                fontSize: 11,
-              }}
-            />
-            <Bar
-              dataKey="value"
-              name="Average spend"
-              shape={renderBar}
-              isAnimationActive={false}
-              onMouseEnter={(_, index) => setHoveredIndex(index)}
-              onMouseLeave={() => setHoveredIndex(null)}
-            >
-              <LabelList
-                dataKey="value"
-                position="top"
-                fill={chart.axis}
-                fontSize={11}
-                formatter={(value: number) => Math.round(value)}
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {total > 0 && (
+          <div className="bars-avg" style={{ bottom: (average / max) * MAX_BAR_HEIGHT + 24 }}>
+            <span>Avg</span>
+          </div>
+        )}
+        {days.map((d) => {
+          const hi = d.amount >= highThreshold && d.amount > 0
+          return (
+            <div key={d.date} className={cn('bar', hi && 'hi')} data-testid="week-rhythm-bar">
+              <span className="bar-val">{formatMYR(d.amount).replace('.00', '')}</span>
+              <div className="bar-fill" style={{ height: Math.max(2, (d.amount / max) * MAX_BAR_HEIGHT) }} />
+              <span className="bar-day">{d.label}</span>
+            </div>
+          )
+        })}
       </div>
 
       {total > 0 && (
         <p className="mt-auto rounded-lg bg-brand-50 px-3 py-2.5 text-xs leading-relaxed text-fg">
-          <span className="font-semibold">Fri–Sun is {weekendShare.toFixed(0)}%</span> of your
-          weekly spending in {weekendDayShare.toFixed(0)}% of the days.{' '}
-          {WEEKDAY_LABELS[busiest]} is your heaviest day at {formatMYR(averages[busiest])} on
-          average.
+          Daily average <b className="text-fg">{formatMYR(average)}</b> (dashed).
+          {weekendMultiplier > 1 && (
+            <>
+              {' '}Weekends run <b className="text-fg">{weekendMultiplier.toFixed(1)}×</b> higher —{' '}
+              {busiest.label} alone was <b className="text-fg">{formatMYR(busiest.amount)}</b>.
+            </>
+          )}
         </p>
       )}
     </DashboardCard>
