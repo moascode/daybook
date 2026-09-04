@@ -72,12 +72,11 @@ test.describe('36 — Settlement', () => {
     // Bob navigates to the Wallet Shared page and settles
     await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // R1: the page is organised person first — the section is headed by the
-    // counterparty, and the group name is a subtitle shown only when there is
-    // more than one group. The direction lives on the balance, not in a heading.
-    await expect(bobPage.getByRole('heading', { name: aliceName })).toBeVisible({ timeout: 5000 })
-    await expect(bobPage.getByTestId('section-balance')).toContainText('you owe', { timeout: 5000 })
-    await bobPage.getByRole('button', { name: 'Settle Up' }).click()
+    // Person-first: the Balances tile is headed by the counterparty's name,
+    // with the direction in the tile's amount/footer, not in a heading.
+    const bobBalRow = bobPage.getByTestId('bal-row').filter({ hasText: aliceName })
+    await expect(bobBalRow).toContainText('You owe them', { timeout: 5000 })
+    await bobBalRow.getByRole('button', { name: 'Settle Up' }).click()
 
     // Fill settle up form
     const settleDialog = bobPage.getByRole('dialog')
@@ -85,9 +84,9 @@ test.describe('36 — Settlement', () => {
     await settleDialog.getByRole('button', { name: 'Record Settlement' }).click()
 
     // W4: recording the payment is a claim, not a clearance. Bob's money has
-    // left, but the debt stands until Alice says it arrived — otherwise he could
-    // zero her books on his own say-so.
-    await expect(bobPage.getByTestId('section-balance')).toContainText('you owe', { timeout: 5000 })
+    // left, but the debt stands until Alice says it arrived — the tile now
+    // shows "Waiting on <Alice>" instead of an actionable Settle Up.
+    await expect(bobBalRow).toContainText(`Waiting on ${aliceName}`, { timeout: 5000 })
 
     // Bob's Cash shows the expense immediately — his cash really did go.
     await bobPage.goto('/wallet')
@@ -98,7 +97,7 @@ test.describe('36 — Settlement', () => {
     await alicePage.goto('/wallet/shared')
     await expect(alicePage.locator('main')).toBeVisible({ timeout: 20_000 })
     await expect(alicePage.getByTestId('awaiting-confirmation')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByTestId('open-confirm').click()
+    await alicePage.getByTestId('bal-row').filter({ hasText: bobName }).getByRole('button', { name: 'Review' }).click()
     const confirmDialog = alicePage.getByRole('dialog')
     await expect(confirmDialog.locator('option', { hasText: aliceAcct.name })).toHaveCount(1, { timeout: 10_000 })
     await confirmDialog.locator('select').selectOption(aliceAcct.name)
@@ -169,10 +168,9 @@ test.describe('36 — Settlement', () => {
     // Bob settles via UI
     await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // R1: person-first sections — see the note in the first test.
-    await expect(bobPage.getByRole('heading', { name: aliceName })).toBeVisible({ timeout: 5000 })
-    await expect(bobPage.getByTestId('section-balance')).toContainText('you owe', { timeout: 5000 })
-    await bobPage.getByRole('button', { name: 'Settle Up' }).click()
+    const bobBalRow = bobPage.getByTestId('bal-row').filter({ hasText: aliceName })
+    await expect(bobBalRow).toContainText('You owe them', { timeout: 5000 })
+    await bobBalRow.getByRole('button', { name: 'Settle Up' }).click()
 
     const settleDialog = bobPage.getByRole('dialog')
     await settleDialog.locator('select').first().selectOption(bobAcct.name)
@@ -180,7 +178,7 @@ test.describe('36 — Settlement', () => {
 
     // W4: the claim leaves the balance standing until Alice confirms — so Bob's
     // undo here withdraws an unconfirmed payment, which is the common case.
-    await expect(bobPage.getByTestId('section-balance')).toContainText('you owe', { timeout: 5000 })
+    await expect(bobBalRow).toContainText(`Waiting on ${aliceName}`, { timeout: 5000 })
 
     // Bob clicks Undo on the settlement row — now requires confirmation modal
     await expect(bobPage.getByText('Recent settlements')).toBeVisible({ timeout: 5000 })
@@ -188,8 +186,8 @@ test.describe('36 — Settlement', () => {
     await expect(bobPage.getByRole('dialog', { name: /Undo Settlement/ })).toBeVisible({ timeout: 3000 })
     await bobPage.getByRole('button', { name: 'Confirm Undo' }).click()
 
-    // Balance should be restored
-    await expect(bobPage.getByTestId('section-balance')).toContainText('you owe', { timeout: 5000 })
+    // Balance should be restored to actionable (no longer "waiting")
+    await expect(bobBalRow).toContainText('You owe them', { timeout: 5000 })
 
     await aliceCtx.close()
     await bobCtx.close()
@@ -329,9 +327,8 @@ test.describe('36 — Settlement', () => {
     // Bob reloads the Shared page and checks history
     await bobPage.goto('/wallet/shared')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // R1: person-first sections; the group name is a subtitle only when there
-    // is more than one group, so the section is headed by the counterparty.
-    await expect(bobPage.getByRole('heading', { name: aliceName })).toBeVisible({ timeout: 5000 })
+    // Person-first: the counterparty's name is on their Balances tile.
+    await expect(bobPage.getByTestId('bal-row').filter({ hasText: aliceName })).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByText('Recent settlements')).toBeVisible({ timeout: 5000 })
     await expect(bobPage.getByText('cash')).toBeVisible({ timeout: 3000 })
 

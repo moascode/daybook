@@ -243,13 +243,16 @@ test.describe('54 — A person card is two-way', () => {
     return f
   }
 
+  // The rebuilt Shared page has no per-person toggle to net a direction out of
+  // existence in the first place: Shared activity lists every claim as its own
+  // row regardless of direction, so both the RM100 he's owed and the RM15 he
+  // owes are simply two rows on screen at once. What replaces the old
+  // "total-owed-to-me"/"total-i-owe" pair is the page headline (still gross
+  // both ways) and the Balances tile's single net figure for the counterparty.
   test('shows both directions and the net, not just the netted side', async ({ browser }) => {
     const f = await bothWays(browser, 'twoway')
 
     await f.payer.goto('/wallet/shared')
-    await expect(f.payer.getByTestId('total-owed-to-me')).toHaveText(/100\.00/)
-    await expect(f.payer.getByTestId('total-i-owe')).toHaveText(/15\.00/)
-    await expect(f.payer.getByTestId('section-balance')).toContainText('owes you')
 
     // The page headline is gross both ways, so neither direction can be netted
     // out of existence.
@@ -257,21 +260,34 @@ test.describe('54 — A person card is two-way', () => {
     await expect(f.payer.getByTestId('headline-i-owe')).toHaveText(/15\.00/)
     await expect(f.payer.getByTestId('headline-net')).toHaveText(/85\.00/)
 
+    // The Balances tile nets the pair to the RM85 he's owed overall.
+    await expect(f.payer.getByTestId('bal-row')).toContainText('85.00')
+
     await close(f)
   })
 
-  test('the claim that used to be unreachable has a row, and can be agreed to', async ({ browser }) => {
+  test('both claims have their own row and their own action, at once', async ({ browser }) => {
     const f = await bothWays(browser, 'reach')
 
     await f.payer.goto('/wallet/shared')
-    // Opens on the side with something waiting on him — the RM15 he owes.
-    await f.payer.getByTestId('direction-i-owe').click()
-    const row = f.payer.getByTestId('split-row').filter({ hasText: 'TUMPA_PAID' })
-    await expect(row).toBeVisible()
-    await expect(row.getByTestId('claim-approve')).toBeVisible()
+    await f.payer.getByRole('tab', { name: 'All' }).click()
 
-    await row.getByTestId('claim-approve').click()
-    await expect(f.payer.getByTestId('split-tab-approved')).toBeVisible()
+    // The claim he holds on Tumpa (she owes him RM100): his to cancel.
+    const theirs = f.payer.getByTestId('split-row').filter({ hasText: 'KAKON_PAID' })
+    await expect(theirs).toBeVisible()
+    await expect(theirs.getByTestId('claim-cancel')).toBeVisible()
+    await expect(theirs.getByTestId('claim-approve')).toHaveCount(0)
+
+    // The claim she holds on him (he owes her RM15): his to agree to — the
+    // exact row that used to be unreachable when only the netted direction
+    // was fetched.
+    const mine = f.payer.getByTestId('split-row').filter({ hasText: 'TUMPA_PAID' })
+    await expect(mine).toBeVisible()
+    await expect(mine.getByTestId('claim-approve')).toBeVisible()
+    await expect(mine.getByTestId('claim-cancel')).toHaveCount(0)
+
+    await mine.getByTestId('claim-approve').click()
+    await expect(mine.getByTestId('activity-row-status')).toHaveText('Agreed', { timeout: 10_000 })
 
     const agreed = await f.payer.request
       .get(`${API}/transactions/splits/mine?state=approved`)
@@ -281,31 +297,13 @@ test.describe('54 — A person card is two-way', () => {
     await close(f)
   })
 
-  test('the toggle switches direction, and each side carries its own action', async ({ browser }) => {
-    const f = await bothWays(browser, 'toggle')
-
-    await f.payer.goto('/wallet/shared')
-
-    await f.payer.getByTestId('direction-owed-to-me').click()
-    const theirs = f.payer.getByTestId('split-row').filter({ hasText: 'KAKON_PAID' })
-    await expect(theirs).toBeVisible()
-    // A claim he made: his to withdraw, not to agree to.
-    await expect(theirs.getByTestId('claim-cancel')).toBeVisible()
-    await expect(theirs.getByTestId('claim-approve')).toHaveCount(0)
-
-    await f.payer.getByTestId('direction-i-owe').click()
-    const mine = f.payer.getByTestId('split-row').filter({ hasText: 'TUMPA_PAID' })
-    await expect(mine).toBeVisible()
-    await expect(mine.getByTestId('claim-approve')).toBeVisible()
-    await expect(mine.getByTestId('claim-cancel')).toHaveCount(0)
-
-    await close(f)
-  })
-
-  // Resolving the last claim on your side used to flip the card to the other
-  // direction, taking the row you just acted on and the tab you were heading for
-  // with it.
-  test('the direction stays put after you resolve the last claim on it', async ({ browser }) => {
+  // Resolving the last claim on your side used to flip the old per-person card
+  // to the other direction, taking the row you just acted on and the tab you
+  // were heading for with it. The rebuilt page has no per-person card or
+  // direction to flip — this asserts the replacement guarantee: rejecting the
+  // only claim leaves the page in a sane state (empty under the default
+  // filter, still reachable under "All" with its reason intact).
+  test('rejecting the only claim leaves the page in a sane state, reason intact', async ({ browser }) => {
     const f = await fixture(browser, 'stay')
 
     await f.recip.goto('/wallet/shared')
@@ -313,24 +311,31 @@ test.describe('54 — A person card is two-way', () => {
     await f.recip.locator('#reject-reason').fill('mine alone')
     await f.recip.getByTestId('claim-reject-confirm').click()
 
-    // Still on "You owe …", with the Rejected tab reachable.
-    await expect(f.recip.getByTestId('direction-i-owe')).toHaveAttribute('aria-selected', 'true')
-    await f.recip.getByTestId('split-tab-rejected').click()
-    await expect(f.recip.getByTestId('split-row-rejected')).toContainText('mine alone')
+    // Gone from "Open" (the default) — not stuck mid-transition.
+    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
+
+    // Still reachable, with its reason, under "All".
+    await f.recip.getByRole('tab', { name: 'All' }).click()
+    const row = f.recip.getByTestId('split-row')
+    await expect(row).toHaveCount(1, { timeout: 10_000 })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Rejected')
+    await row.click()
+    await expect(f.recip.getByRole('dialog')).toContainText('mine alone', { timeout: 10_000 })
 
     await close(f)
   })
 
-  test('a bar segment opens its tab', async ({ browser }) => {
+  // The proportional per-state bar this exercised is gone with the rest of
+  // the old per-person card — status filtering is now the page-level Open/
+  // Settled/All segment, which this asserts still reaches an approved claim.
+  test('the status segment reaches an approved claim', async ({ browser }) => {
     const f = await fixture(browser, 'segtab')
     await f.recip.request.post(`${API}/transactions/splits/${f.splitId}/approve`, { data: {} })
 
     await f.recip.goto('/wallet/shared')
-    const segment = f.recip.getByTestId('split-state-segment').first()
-    await expect(segment).toHaveAttribute('data-state', 'approved')
-    await segment.click()
-    await expect(f.recip.getByTestId('split-tab-approved')).toHaveAttribute('aria-selected', 'true')
+    // Approved claims are already grouped into "Open" by default.
     await expect(f.recip.getByTestId('split-row')).toHaveCount(1)
+    await expect(f.recip.getByTestId('split-row').getByTestId('activity-row-status')).toHaveText('Agreed')
 
     await close(f)
   })
@@ -460,31 +465,27 @@ test.describe('54 — The undo window is a week', () => {
   })
 })
 
+// The proportional per-state bar (with hover tooltips naming the state, the
+// amount and the counterparty) is gone with the rest of the old per-person
+// card. The same information — state, amount, who it's with — is still on
+// screen, just as a plain row rather than a visualisation: this asserts the
+// replacement carries the same facts, not the bar itself.
 test.describe('54 — State bar', () => {
-  test('draws each direction over the states its money is in', async ({ browser }) => {
+  test('the row carries the state, the amount and who it is with', async ({ browser }) => {
     const f = await fixture(browser, 'bar')
 
     // Creditor's side: one unreviewed claim for the full 100.
     await f.payer.goto('/wallet/shared')
-    const bar = f.payer.getByTestId('state-bar-owed-to-me')
-    await expect(bar).toBeVisible()
-    const segment = bar.getByTestId('split-state-segment')
-    await expect(segment).toHaveCount(1)
-    await expect(segment).toHaveAttribute('data-state', 'pending')
-    await expect(bar.getByTestId('split-state-legend')).toContainText('To review')
-    await expect(bar.getByTestId('split-state-legend')).toContainText('100.00')
-
-    // Hover names the state and who the money is with.
-    await segment.hover()
-    const tip = bar.getByTestId('split-state-tooltip')
-    await expect(tip).toBeVisible()
-    await expect(tip).toContainText('To review')
-    await expect(tip).toContainText('rec_bar')
+    const row = f.payer.getByTestId('split-row').first()
+    await expect(row).toBeVisible()
+    await expect(row.getByTestId('activity-row-status')).toHaveText('To review')
+    await expect(row).toContainText('100.00')
+    await expect(f.payer.getByTestId('bal-row')).toContainText('rec_bar')
 
     await close(f)
   })
 
-  test('splits into two segments once part of the money is agreed', async ({ browser }) => {
+  test('shows each claim at its own state once part of the money is agreed', async ({ browser }) => {
     const f = await fixture(browser, 'bar2')
 
     // A second transaction so the two states can coexist.
@@ -498,11 +499,10 @@ test.describe('54 — State bar', () => {
     await f.recip.request.post(`${API}/transactions/splits/${second}/approve`, { data: {} })
 
     await f.payer.goto('/wallet/shared')
-    const bar = f.payer.getByTestId('state-bar-owed-to-me')
-    await expect(bar.getByTestId('split-state-segment')).toHaveCount(2)
-    // Lifecycle order, left to right.
-    await expect(bar.getByTestId('split-state-segment').nth(0)).toHaveAttribute('data-state', 'pending')
-    await expect(bar.getByTestId('split-state-segment').nth(1)).toHaveAttribute('data-state', 'approved')
+    const rowPending = f.payer.getByTestId('split-row').filter({ hasText: 'M_bar2' }).filter({ hasNotText: 'M_bar2b' })
+    const rowApproved = f.payer.getByTestId('split-row').filter({ hasText: 'M_bar2b' })
+    await expect(rowPending.getByTestId('activity-row-status')).toHaveText('To review')
+    await expect(rowApproved.getByTestId('activity-row-status')).toHaveText('Agreed')
 
     await close(f)
   })
@@ -518,24 +518,25 @@ test.describe('54 — State bar', () => {
     })
 
     await f.payer.goto('/wallet/shared')
-    await expect(f.payer.getByTestId('total-owed-to-me')).toHaveText(/50\.00/)
+    await expect(f.payer.getByTestId('headline-owed-to-me')).toHaveText(/50\.00/)
     // Nothing flows the other way at all — not even the payer's own share row,
     // which is the whole point.
-    await expect(f.payer.getByTestId('total-i-owe')).toHaveText(/0\.00/)
     await expect(f.payer.getByTestId('headline-i-owe')).toHaveText(/0\.00/)
 
     await close(f)
   })
 
-  test('settled money is a caption, not a segment that swallows the bar', async ({ browser }) => {
+  test('settled money shows as its own row, not folded into the outstanding total', async ({ browser }) => {
     const f = await fixture(browser, 'barsettled')
     await settleAndConfirm(f, 100)
 
     await f.payer.goto('/wallet/shared')
-    const bar = f.payer.getByTestId('state-bar-owed-to-me')
-    await expect(bar).toBeVisible()
-    await expect(bar.getByTestId('split-state-segment')).toHaveCount(0)
-    await expect(bar.getByTestId('split-state-settled')).toContainText('100.00')
+    await f.payer.getByRole('tab', { name: 'All' }).click()
+    const row = f.payer.getByTestId('split-row').filter({ hasText: 'M_bar' })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Settled')
+    await expect(row.getByTestId('split-row-amount')).toContainText('100.00')
+    // Settled money is not still owed — the headline no longer counts it.
+    await expect(f.payer.getByTestId('headline-owed-to-me')).toHaveText(/0\.00/)
 
     await close(f)
   })
