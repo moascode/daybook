@@ -33,6 +33,23 @@ export function MultiSelect({
   const rootRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // Reset the search query synchronously during render — on open, and on a
+  // reset that happens without closing this panel (e.g. the Filters popup's
+  // own "Clear all"), which must also drop a leftover search query or the
+  // just-cleared list stays hidden behind a stale filter with no visible
+  // cause. Compared against tracked previous values rather than done in an
+  // effect, per https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevOpen, setPrevOpen] = useState(open)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
+    if (open) setQuery('')
+  }
+  const [prevSelectedCount, setPrevSelectedCount] = useState(selected.length)
+  if (selected.length !== prevSelectedCount) {
+    setPrevSelectedCount(selected.length)
+    if (selected.length === 0) setQuery('')
+  }
+
   useEffect(() => {
     if (!open) return
     function handleOutsideMouseDown(e: MouseEvent) {
@@ -43,18 +60,8 @@ export function MultiSelect({
   }, [open])
 
   useEffect(() => {
-    if (open) {
-      setQuery('')
-      requestAnimationFrame(() => searchInputRef.current?.focus())
-    }
+    if (open) requestAnimationFrame(() => searchInputRef.current?.focus())
   }, [open])
-
-  // A reset that happens without closing this panel — e.g. the Filters
-  // popup's own "Clear all" — must also drop a leftover search query, or the
-  // just-cleared list stays hidden behind a stale filter with no visible cause.
-  useEffect(() => {
-    if (selected.length === 0) setQuery('')
-  }, [selected.length])
 
   const filteredOptions = useMemo(() => {
     if (!query) return options
