@@ -10,6 +10,8 @@ interface ModalProps {
   description?: string
   children: ReactNode
   className?: string
+  /** Extra control rendered in the header, between the title and the close (×) button. */
+  headerAction?: ReactNode
 }
 
 export function Modal({
@@ -19,6 +21,7 @@ export function Modal({
   description,
   children,
   className,
+  headerAction,
 }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -48,9 +51,12 @@ export function Modal({
                 </Dialog.Description>
               )}
             </div>
-            <Dialog.Close className="rounded-lg p-1.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted">
-              <X className="h-4 w-4" />
-            </Dialog.Close>
+            <div className="flex flex-shrink-0 items-center gap-1">
+              {headerAction}
+              <Dialog.Close className="rounded-lg p-1.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted">
+                <X className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
           </div>
           {children}
         </Dialog.Content>
