@@ -251,11 +251,12 @@ test.describe('55 — Netting in the UI', () => {
       data: { accountId: f.kakon.accountId },
     })
 
+    // The rebuilt Shared page has no per-claim netted/paid breakdown hint —
+    // Shared activity just shows the claim settled, at its full share amount.
     await f.kakon.page.goto('/wallet/shared')
-    await f.kakon.page.getByTestId('direction-owed-to-me').click()
-    await f.kakon.page.getByTestId('split-tab-settled').click()
-    await expect(f.kakon.page.getByTestId('split-row-hint').first())
-      .toContainText(/15\.00 paid, RM\s?15\.00 netted/)
+    await f.kakon.page.getByRole('tab', { name: 'Settled' }).click()
+    await expect(f.kakon.page.getByTestId('split-row').filter({ hasText: 'AEON' })
+      .getByTestId('activity-row-status')).toHaveText('Settled')
 
     await close(f)
   })

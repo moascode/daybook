@@ -81,6 +81,18 @@ tbody tr:hover { background: rgb(var(--surface-hover)); }
 td:first-child, th:first-child { padding-left: 0; }
 td:last-child, th:last-child { padding-right: 0; }
 
+/* Wallet → Shared: activity rows carry up to three 28px quick-action icons in
+   their trailing column, not the single "…" button .lrow's base 32px slot
+   was sized for — widened just enough for three (28px*3 + 4px*2 gap ≈ 92px,
+   +8px breathing room) here rather than on .lrow itself, which
+   Recurring/Reports also use with a single icon. Always visible (no
+   hover-reveal): the actions are the point of the row, not a hover reward.
+   .lhead--activity carries the exact same columns so the header stays lined
+   up with the data rows under it. */
+.lrow--activity, .lhead--activity { grid-template-columns: 1fr 128px 116px 104px 92px 100px; }
+.lrow--activity .trow-actions { opacity: 1; }
+@media (max-width: 1080px) { .lrow--activity, .lhead--activity { grid-template-columns: 1fr 110px 96px 100px; } }
+@media (max-width: 680px) { .lrow--activity, .lhead--activity { grid-template-columns: 1fr auto; } }
 
 .filters { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .filters .search { max-width: 260px; }

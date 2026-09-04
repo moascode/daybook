@@ -33,7 +33,7 @@ interface AccountRow {
   can_write?: number
 }
 
-interface TransactionRow {
+export interface TransactionRow {
   id: string
   account_id: string
   destination_account_id: string | null
@@ -93,7 +93,7 @@ function mapAccount(row: AccountRow): Account {
   }
 }
 
-function mapTransaction(row: TransactionRow): Transaction {
+export function mapTransaction(row: TransactionRow): Transaction {
   return {
     id: row.id,
     accountId: row.account_id,

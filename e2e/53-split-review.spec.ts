@@ -569,32 +569,33 @@ test.describe('53 — Split review (W5: review queue)', () => {
     // Debtor's side: the claim is on the page, no disclosure needed.
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    await expect(f.recip.getByTestId('splits-section')).toBeVisible({ timeout: 10_000 })
+    await expect(f.recip.getByTestId('shared-activity')).toBeVisible({ timeout: 10_000 })
     await expect(f.recip.getByTestId('split-row')).toHaveCount(1)
-    await expect(f.recip.getByTestId('splits-section')).toContainText(f.merchant)
+    await expect(f.recip.getByTestId('shared-activity')).toContainText(f.merchant)
 
     // Creditor's side: the same underlying transaction, read from the other end.
     await f.payer.goto('/wallet/shared')
     await expect(f.payer.locator('main')).toBeVisible({ timeout: 20_000 })
-    await expect(f.payer.getByTestId('splits-section')).toBeVisible({ timeout: 10_000 })
-    await expect(f.payer.getByTestId('splits-section')).toContainText(f.merchant)
+    await expect(f.payer.getByTestId('shared-activity')).toBeVisible({ timeout: 10_000 })
+    await expect(f.payer.getByTestId('shared-activity')).toContainText(f.merchant)
 
     await f.payerCtx.close()
     await f.recipCtx.close()
   })
 
-  // The queue must not repeat the original bug: it starts at All time, and
-  // narrowing is a deliberate act.
-  test('the review queue starts at all time and can be narrowed', async ({ browser }) => {
+  // The queue must not repeat the original bug: a claim from an earlier month
+  // must not be hidden by a default date filter. Shared activity now carries
+  // no date filter at all (member + status only) — the narrow-then-widen UI
+  // this test used to exercise no longer exists, so the guarantee is now
+  // structural rather than a default-state check: the row is simply always
+  // there, whatever month the transaction fell in.
+  test('the review queue shows claims from any month, with no date filter to narrow it', async ({ browser }) => {
     const f = await splitFixture(browser, 'bdrange', priorMonthDate(), 100)
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    // Visible by default even though the transaction is two months old.
+    // Visible even though the transaction is two months old — no date filter
+    // exists on this list, so there is nothing that could be hiding it.
     await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
-
-    // Narrowing to this month hides it, and says so rather than showing nothing.
-    await f.recip.getByTestId('splits-section').getByTestId('filter-this-month').click()
-    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -663,13 +664,16 @@ test.describe('53 — Split review (R1: unified list)', () => {
     await f.recip.locator('#reject-reason').fill('this one was mine alone')
     await f.recip.getByTestId('claim-reject-confirm').click()
 
-    // Gone from the default tab...
+    // Gone from the default "Open" status filter...
     await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
-    // ...and present, with the reason, under Rejected.
-    await f.recip.getByTestId('split-tab-rejected').click()
-    await expect(f.recip.getByTestId('split-row-rejected')).toContainText('this one was mine alone', {
-      timeout: 10_000,
-    })
+    // ...and present, with the "Rejected" status, under "All".
+    await f.recip.getByRole('tab', { name: 'All' }).click()
+    const row = f.recip.getByTestId('split-row')
+    await expect(row).toHaveCount(1, { timeout: 10_000 })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Rejected')
+    // The reason itself is in the row's detail modal.
+    await row.click()
+    await expect(f.recip.getByRole('dialog')).toContainText('this one was mine alone', { timeout: 10_000 })
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -684,8 +688,11 @@ test.describe('53 — Split review (R1: unified list)', () => {
 
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    await expect(f.recip.getByTestId('split-row-link')).toBeVisible({ timeout: 10_000 })
-    await f.recip.getByTestId('split-row-link').click()
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
+    // The debtor's row opens the detail modal, which links out to the
+    // transaction (recip does not own it, so no "Edit transaction" here).
+    await f.recip.getByTestId('split-row').click()
+    await f.recip.getByRole('link', { name: 'View transaction' }).click()
 
     // Lands on a populated list — not the empty state a month filter would give.
     const row = f.recip.locator('[data-testid="transaction-row"]').filter({ hasText: f.merchant })
@@ -700,10 +707,13 @@ test.describe('53 — Split review (R1: unified list)', () => {
   // paid figure existed only inside the balance breakdown, so the queue said
   // RM100 for a claim with RM40 left on it.
   //
-  // Since R2 it does not sit in the review queue at all — paying is agreeing, so
-  // the remainder rests in Agreed. A claim someone has put money against is not
-  // something the recipient still has to make their mind up about.
-  test('a partly-paid claim shows what is left and what is paid', async ({ browser }) => {
+  // Paying is agreeing (D-1), so the claim rests in 'approved' — which the
+  // rebuilt Shared page's "Open" filter groups together with pending and
+  // awaiting-confirmation claims (not a separate "Agreed" tab any more), so
+  // the claim stays visible under Open rather than moving to its own tab.
+  // What matters is the row shows what is actually still owed (RM40, the
+  // outstanding remainder) rather than the original RM100 share.
+  test('a partly-paid claim shows the outstanding remainder, not the original share', async ({ browser }) => {
     const f = await splitFixture(browser, 'partial', priorMonthDate(), 100)
     const recipAcct = await f.recip.request.post(`${API}/accounts`, {
       data: { name: 'R', type: 'card', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
@@ -713,13 +723,10 @@ test.describe('53 — Split review (R1: unified list)', () => {
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
 
-    // Not in To review — the O-3 regression this closes.
-    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
-
-    await f.recip.getByTestId('split-tab-approved').click()
     const row = f.recip.getByTestId('split-row').first()
+    await expect(row).toBeVisible({ timeout: 10_000 })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Agreed')
     await expect(row.getByTestId('split-row-amount')).toContainText('40.00', { timeout: 10_000 })
-    await expect(row.getByTestId('split-row-paid')).toContainText('60.00')
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -908,13 +915,14 @@ test.describe('53 — Split review (R2: approved)', () => {
     await f.recipCtx.close()
   })
 
-  // Acting on one claim must not throw away where you were. The refresh after an
-  // action used to be forced by remounting the section, which discarded its tab
-  // and date-range state — so agreeing to a claim while working through the
-  // Agreed tab bounced you back to To review.
-  test('acting on a claim keeps you on the tab you were working in', async ({ browser }) => {
+  // Acting on one claim must not throw away where you were. The rebuilt
+  // Shared page's list refreshes via a plain refetch (onChanged), not a
+  // remount, so this regression is now structural rather than a specific
+  // per-section tab/date-range state that could be discarded — this asserts
+  // the status filter (Open/Settled/All) survives an action, which is the
+  // remaining piece of "where you were" the new page still has state for.
+  test('acting on a claim keeps the status filter you had selected', async ({ browser }) => {
     const f = await splitFixture(browser, 'tabkeep', priorMonthDate(), 100)
-    // A second claim, so the Agreed tab has something to stay put on.
     const txn2 = await f.payer.request.post(`${API}/transactions`, {
       data: { accountId: f.acct.id, date: priorMonthDate(), merchant: 'SecondM', amount: 60, type: 'expense', tag: '[]' },
     }).then((r) => r.json()) as { id: string }
@@ -926,19 +934,15 @@ test.describe('53 — Split review (R2: approved)', () => {
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
     await expect(f.recip.getByTestId('split-row')).toHaveCount(2, { timeout: 10_000 })
 
-    // Agree to one, then move to the Agreed tab and reject it from there.
-    await f.recip.getByTestId('claim-approve').first().click()
-    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
-    await f.recip.getByTestId('split-tab-approved').click()
-    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
-
-    await f.recip.getByTestId('claim-reject').click()
+    // Switch to "All" before acting.
+    await f.recip.getByRole('tab', { name: 'All' }).click()
+    await f.recip.getByTestId('claim-reject').first().click()
     await f.recip.getByTestId('claim-reject-confirm').click()
 
-    // Still on Agreed — now empty — rather than yanked back to To review.
-    await expect(f.recip.getByTestId('split-tab-approved')).toHaveAttribute(
-      'aria-selected', 'true', { timeout: 10_000 },
-    )
+    // Still on "All" — not bounced back to the default "Open" — with both
+    // claims visible (one rejected, one still pending).
+    await expect(f.recip.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true', { timeout: 10_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(2, { timeout: 10_000 })
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -956,8 +960,9 @@ test.describe('53 — Split review (R2: approved)', () => {
     await f.recip.getByTestId('claim-approve').click()
     await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0, { timeout: 10_000 })
 
-    // The money is untouched — the claim moved tab, not state of payment.
-    await f.recip.getByTestId('split-tab-approved').click()
+    // The money is untouched — the claim moved status, not state of payment.
+    // "Open" already covers approved claims, so the row stays visible with
+    // its full amount, no tab switch needed.
     await expect(f.recip.getByTestId('split-row-amount')).toContainText('100.00', { timeout: 10_000 })
 
     await f.payerCtx.close()
@@ -1086,16 +1091,25 @@ test.describe('53 — Split review (R3: bulk + rejection loop)', () => {
 
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
-    await expect(f.recip.getByTestId('split-row')).toHaveCount(3, { timeout: 10_000 })
+    const rows = f.recip.getByTestId('split-row')
+    await expect(rows).toHaveCount(3, { timeout: 10_000 })
 
+    // Checking one row's box reveals the floating bulk bar (matching
+    // WalletPage's own bulk-select pattern) — "Select all" lives inside it,
+    // not as a standalone control available with nothing selected yet.
+    await rows.first().locator('input[type="checkbox"]').click()
     await f.recip.getByTestId('split-select-all').click()
     await expect(f.recip.getByTestId('split-bulk-bar')).toContainText('3 selected')
     await f.recip.getByTestId('split-bulk-approve').click()
 
-    // Queue empty, badge clear, and the debt entirely intact.
-    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
+    // Badge clear and the debt entirely intact — all three rows stay visible
+    // under "Open" (which groups pending + approved together), now all "Agreed".
     await expect(f.recip.getByTestId('pending-claims-badge')).toHaveCount(0, { timeout: 10_000 })
-    await expect(f.recip.getByTestId('section-balance')).toContainText('165.00')
+    await expect(rows).toHaveCount(3, { timeout: 10_000 })
+    for (const row of await rows.all()) {
+      await expect(row.getByTestId('activity-row-status')).toHaveText('Agreed')
+    }
+    await expect(f.recip.getByTestId('bal-row')).toContainText('165.00')
 
     await f.payerCtx.close()
     await f.recipCtx.close()
@@ -1113,14 +1127,20 @@ test.describe('53 — Split review (R3: bulk + rejection loop)', () => {
 
     await f.payer.goto('/wallet/shared')
     await expect(f.payer.locator('main')).toBeVisible({ timeout: 20_000 })
-    await f.payer.getByTestId('split-tab-rejected').click()
+    // Rejected claims are excluded from "Open"/"Settled" — only "All" shows them.
+    await f.payer.getByRole('tab', { name: 'All' }).click()
+    const row = f.payer.getByTestId('split-row')
+    await expect(row).toHaveCount(1, { timeout: 10_000 })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Rejected')
 
-    const row = f.payer.getByTestId('split-row-rejected')
-    await expect(row).toContainText('rejected this', { timeout: 10_000 })
-    await expect(row).toContainText('this one was mine alone')
+    // The owner's detail modal surfaces the rejection reason and a re-split link.
+    await row.click()
+    const dialog = f.payer.getByRole('dialog')
+    await expect(dialog).toContainText('Someone rejected this split', { timeout: 10_000 })
+    await expect(dialog).toContainText('this one was mine alone')
 
     // Re-split lands on the transaction with the split dialog already open.
-    await f.payer.getByTestId('split-row-resplit').click()
+    await dialog.getByRole('link', { name: 'Re-split this transaction' }).click()
     await expect(f.payer.getByRole('dialog')).toBeVisible({ timeout: 15_000 })
     await expect(f.payer.getByRole('dialog')).toContainText('Split')
 

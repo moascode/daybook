@@ -1,97 +1,70 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { format } from 'date-fns'
-import { Users, ExternalLink } from 'lucide-react'
+import { Users, ExternalLink, Check, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { SettleUpDialog } from './SettleUpDialog'
-import { SplitsSection } from './SplitsSection'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
+import { SharedBalances, type Pairing } from './shared/SharedBalances'
+import { SharedActivity } from './shared/SharedActivity'
+import { MarkAllSettledDialog } from './shared/MarkAllSettledDialog'
 import { useAppStore } from '@/stores/app.store'
+import { useWallet } from '@/hooks/useWallet'
+import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
-import { cn, formatMYR } from '@/lib/utils'
+import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
 import type { Group, GroupBalance, GroupMember, Settlement, SplitClaim } from '@/types/household.types'
-
-interface SettleAccount {
-  id: string
-  name: string
-  isShared?: boolean
-  sharedByUsername?: string
-}
-
-/** One rendered section: a person, within a group. */
-interface Pairing {
-  groupId: string
-  groupName: string
-  counterpartyId: string
-  counterpartyUsername: string
-  balance: GroupBalance | null
-}
+import type { TransactionFormData } from './TransactionForm'
 
 /**
  * Wallet → Shared (/wallet/shared): everything standing between you and the
  * people you split with — what is owed, what is waiting on whom, and the
  * settlements that cleared it. Group administration lives in Settings → Sharing.
  *
- * Organised person first. A balance is one number standing in for a pile of
- * claims, and the failure this page was rebuilt around was someone being shown
- * that number with no way to reach what it was made of.
+ * Rebuilt against proposal-v2/shared.html: Balances and Settle-up merged into
+ * one summary card with an inline, settlement-aware action per person (owner
+ * direction — the mockup's two cards duplicated the same people). Shared
+ * activity is the literal mockup list (filterable by member/status), sourced
+ * from claim data rather than the transaction-level view the mockup shows,
+ * since the schema has no split "method" (equal/by-income/etc.) to display —
+ * see SharedActivity's doc comment.
  */
 export function SharedPage() {
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
+  const { addToast } = useToastStore()
+  const { loadAccounts, loadCategories, accounts, categories, updateTransaction } = useWallet()
   const [groups, setGroups] = useState<Group[]>([])
   const [pairings, setPairings] = useState<Pairing[]>([])
   const [historyByGroup, setHistoryByGroup] = useState<Record<string, Settlement[]>>({})
-  const [accounts, setAccounts] = useState<SettleAccount[]>([])
+  const [memberCountByGroup, setMemberCountByGroup] = useState<Record<string, number>>({})
   const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
-  // Every claim in each direction, kept rather than discarded after the pairing
-  // pass: the state bars break the two headline numbers down by where the money
-  // has got to, and these are the rows that say. No extra request — the page was
-  // already fetching both sides to work out who to render a section for.
   const [claimsIOwe, setClaimsIOwe] = useState<SplitClaim[]>([])
   const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
-  // The section's date range travels with the settle target, so the dialog
-  // settles the period you were looking at rather than all time.
   const [settleTarget, setSettleTarget] = useState<
     { groupId: string; balance: GroupBalance; range: { dateFrom: string; dateTo: string } } | null
   >(null)
   const [confirmTarget, setConfirmTarget] = useState<Settlement | null>(null)
   const [undoTarget, setUndoTarget] = useState<string | null>(null)
   const [undoError, setUndoError] = useState<string | null>(null)
-  // Bumped after any action that changes a claim, to re-run the sections' own
-  // fetches. They own their data (each has its own tab and date range); this is
-  // how the page tells them the world moved underneath — as a prop, never as
-  // part of their key, because remounting would discard that state and bounce
-  // the user out of whatever tab they were working in.
-  const [revision, setRevision] = useState(0)
+  const [markAllOpen, setMarkAllOpen] = useState(false)
+
+  useEffect(() => { loadAccounts(); loadCategories() }, [loadAccounts, loadCategories])
 
   const loadAll = useCallback(async () => {
     setLoadError(false)
     try {
-      const [groupRows, accountRows, mine, theirs] = await Promise.all([
+      const [groupRows, mine, theirs] = await Promise.all([
         api.get<Record<string, unknown>[]>('/groups'),
-        api.get<SettleAccount[]>('/accounts'),
-        // Which people you have any history with, in either direction. Sections
-        // are driven by this rather than by balances alone: once a balance is
-        // cleared it disappears, and with it the only route back to the settled
-        // claims behind it. Two requests for the whole page, not per section.
         api.get<Record<string, unknown>[]>('/transactions/splits/mine?state=pending,approved,awaiting_confirmation,settled,rejected'),
         api.get<Record<string, unknown>[]>('/transactions/splits/mine?role=creditor&state=pending,approved,awaiting_confirmation,settled,rejected'),
       ])
       const mapped = groupRows.map(mapGroup)
-      // Who I hold claims against, and who holds claims against me. Kept apart
-      // rather than merged into one "people" set: once a balance is fully
-      // cleared there is nothing left to read a direction from, and defaulting
-      // to one made a section fetch the wrong side of itself and render empty.
-      // `splits/mine` matches on ts.user_id alone, so an equal or custom split
-      // returns the payer's OWN share row alongside real claims — you, owing
-      // yourself. Harmless while these arrays only fed a set of counterparty
-      // ids (the pairing loop skips itself), but the bars sum them, and a
-      // self-row showed up as money to review in the "You owe" direction.
       const claimsAgainstMe = mine.map(mapSplitClaim).filter((c) => c.ownerId !== c.debtorId)
       const claimsIHold = theirs.map(mapSplitClaim)
       const peopleWhoOweMe = new Set(claimsIHold.map((c) => c.debtorId))
@@ -112,21 +85,12 @@ export function SharedPage() {
       for (const { group, balances, members } of perGroup) {
         for (const member of members as GroupMember[]) {
           if (member.userId === currentUserId) continue
-          const owedToMe = balances.find(
-            (b) => b.toUserId === currentUserId && b.fromUserId === member.userId,
-          )
-          const iOwe = balances.find(
-            (b) => b.fromUserId === currentUserId && b.toUserId === member.userId,
-          )
+          const owedToMe = balances.find((b) => b.toUserId === currentUserId && b.fromUserId === member.userId)
+          const iOwe = balances.find((b) => b.fromUserId === currentUserId && b.toUserId === member.userId)
           const balance = owedToMe ?? iOwe ?? null
           const owesMe = peopleWhoOweMe.has(member.userId)
           const iOweThem = peopleIOwe.has(member.userId)
-          // A co-member with no balance and no claims has nothing to show.
           if (!balance && !owesMe && !iOweThem) continue
-          // No direction is chosen here any more. Picking one — from the netted
-          // balance, which is what this used to do — is exactly how the other
-          // direction's claims became unreachable. The card renders both and
-          // decides which to open on from what is actually waiting.
           nextPairings.push({
             groupId: group.id,
             groupName: group.name,
@@ -136,23 +100,18 @@ export function SharedPage() {
           })
         }
       }
-      // Largest outstanding first — the thing most worth acting on, at the top.
       nextPairings.sort((a, b) => (b.balance?.amount ?? 0) - (a.balance?.amount ?? 0))
 
       const allBalances = perGroup.flatMap((p) => p.balances)
       setGroups(mapped)
-      setAccounts(accountRows)
       setPairings(nextPairings)
       setClaimsIOwe(claimsAgainstMe)
       setClaimsOwedToMe(claimsIHold)
       setHistoryByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.history])))
+      setMemberCountByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.members.length])))
       setTotals({
-        owedToMe: allBalances
-          .filter((b) => b.toUserId === currentUserId)
-          .reduce((s, b) => s + b.amount, 0),
-        iOwe: allBalances
-          .filter((b) => b.fromUserId === currentUserId)
-          .reduce((s, b) => s + b.amount, 0),
+        owedToMe: allBalances.filter((b) => b.toUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
+        iOwe: allBalances.filter((b) => b.fromUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
       })
     } catch {
       setLoadError(true)
@@ -163,52 +122,77 @@ export function SharedPage() {
 
   useEffect(() => { loadAll() }, [loadAll]) // eslint-disable-line react-hooks/set-state-in-effect
 
-  const refresh = useCallback(async () => {
-    await loadAll()
-    setRevision((r) => r + 1)
-  }, [loadAll])
+  const handleUpdateTransaction = useCallback(async (id: string, data: TransactionFormData) => {
+    try {
+      const updated = await updateTransaction(id, data)
+      await loadAll()
+      return updated
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not save changes — please try again.'), duration: 4000 })
+      throw err
+    }
+  }, [updateTransaction, loadAll, addToast])
 
   const handleUndoSettlement = async (id: string) => {
     setUndoError(null)
     try {
       await api.delete(`/settlements/${id}`)
-      await refresh()
+      await loadAll()
       setUndoTarget(null)
     } catch (err: unknown) {
       setUndoError((err as Error)?.message ?? 'Failed to undo settlement')
     }
   }
 
-  // Payments claimed by someone else and waiting on me. These are money in my
-  // direction that has not landed in my books yet, so they belong at the top —
-  // not buried in the settlement history below. Settlement-shaped on purpose:
-  // one payment can clear several claims, so the action belongs to the payment.
-  const awaitingMyConfirmation = Object.values(historyByGroup)
-    .flat()
-    .filter((h) => h.status === 'awaiting_confirmation' && h.toUserId === currentUserId)
+  const allHistory = Object.values(historyByGroup).flat()
+  const awaitingMyConfirmation = allHistory.filter((h) => h.status === 'awaiting_confirmation' && h.toUserId === currentUserId)
 
-  const anyHistory = Object.values(historyByGroup).some((h) => h.length > 0)
-  // "Settled up" is a statement about outstanding money, not about whether any
-  // sections are on screen. Sections now persist after a balance clears — that
-  // is how the settled claims behind it stay reachable — so keying the message
-  // off their absence would have hidden it in exactly the case it exists for.
-  // Gross, not netted — see the headline card below for why.
+  const anyHistory = allHistory.length > 0
   const outstandingOf = (claims: SplitClaim[]) =>
-    claims.reduce(
-      (sum, c) => (c.state === 'settled' || c.state === 'rejected' ? sum : sum + c.outstanding),
-      0,
-    )
+    claims.reduce((sum, c) => (c.state === 'settled' || c.state === 'rejected' ? sum : sum + c.outstanding), 0)
   const grossOwedToMe = outstandingOf(claimsOwedToMe)
   const grossIOwe = outstandingOf(claimsIOwe)
-
-  // The claim check is not redundant with the balance one: group balances are
-  // netted, so two people owing each other the same amount nets to zero on both
-  // sides while every one of those claims is still open. Without this the page
-  // would congratulate them on being settled up with a review queue full of work.
   const nothingOutstanding =
-    totals.owedToMe < 0.005 && totals.iOwe < 0.005
-    && grossOwedToMe < 0.005 && grossIOwe < 0.005
+    totals.owedToMe < 0.005 && totals.iOwe < 0.005 && grossOwedToMe < 0.005 && grossIOwe < 0.005
   const allSettled = nothingOutstanding && (anyHistory || pairings.length > 0)
+
+  // How many distinct transactions each counterparty appears on, for the
+  // Balances row subtitle — derived from claims already fetched above rather
+  // than a per-person request.
+  const txnsByCounterparty = new Map<string, Set<string>>()
+  for (const c of [...claimsIOwe, ...claimsOwedToMe]) {
+    const counterpartyId = c.ownerId === currentUserId ? c.debtorId : c.ownerId
+    const set = txnsByCounterparty.get(counterpartyId) ?? new Set<string>()
+    set.add(c.transactionId)
+    txnsByCounterparty.set(counterpartyId, set)
+  }
+  const countByCounterparty: Record<string, number> = Object.fromEntries(
+    [...txnsByCounterparty.entries()].map(([id, set]) => [id, set.size]),
+  )
+
+  // Most recent awaiting_confirmation settlement per counterparty, either
+  // direction — drives which action a Balances row shows (see SharedBalances).
+  const pendingSettlementByCounterparty: Record<string, Settlement> = {}
+  for (const s of allHistory) {
+    if (s.status !== 'awaiting_confirmation') continue
+    if (s.fromUserId !== currentUserId && s.toUserId !== currentUserId) continue
+    const otherId = s.fromUserId === currentUserId ? s.toUserId : s.fromUserId
+    pendingSettlementByCounterparty[otherId] = s
+  }
+
+  const settleablePairings = pairings.filter((p): p is Pairing & { balance: GroupBalance } => !!p.balance && p.balance.amount > 0.005 && !pendingSettlementByCounterparty[p.counterpartyId])
+
+  // SettleUpDialog/ConfirmReceiptDialog's SettleAccount type predates useWallet's
+  // typed Account (sharedByUsername: string | null) — normalize null to undefined
+  // rather than widen those shared dialogs' prop type for this one caller.
+  const settleAccounts = accounts.map((a) => ({ ...a, sharedByUsername: a.sharedByUsername ?? undefined }))
+
+  const groupSubtitle =
+    groups.length === 0
+      ? ''
+      : groups.length === 1
+        ? `${groups[0].name} · ${memberCountByGroup[groups[0].id] ?? 0} members`
+        : `${groups.length} groups`
 
   if (!currentUserId) return null
 
@@ -249,207 +233,165 @@ export function SharedPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Shared</h2>
-          <p className="mt-0.5 text-xs text-fg-subtle">Balances and settlements across your groups</p>
-        </div>
-        {/* range=all is not optional decoration: the balances above are
-            all-time, but Transactions defaults to the current month. Without it
-            a split from an earlier month lands on an empty list, which reads as
-            "sharing is broken" rather than "a date filter is active". */}
-        <Link
-          to="/wallet?view=shared-with-me&range=all"
-          className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
-        >
-          View split transactions
-          <ExternalLink className="h-3 w-3" />
-        </Link>
-      </div>
-
-      {/* The quick overview: what is coming to you, what is going out, and which
-          way you are up overall. Gross both ways rather than netted, so it agrees
-          with the person cards below and so a direction can never go missing from
-          it — a netted zero once hid a whole pile of claims from this page.
-
-          The per-state breakdown lives inside each person card, where the date
-          filter that scopes it also lives. */}
-      <div className="card card-pad flex flex-wrap gap-4" data-testid="shared-headline">
-        <div className="min-w-[7rem] flex-1">
-          <p className="text-xs text-fg-subtle">Owed to you</p>
-          <p className="text-lg font-bold text-positive-700" data-testid="headline-owed-to-me">
-            {formatMYR(grossOwedToMe)}
-          </p>
-        </div>
-        <div className="min-w-[7rem] flex-1">
-          <p className="text-xs text-fg-subtle">You owe</p>
-          <p className="text-lg font-bold text-red-700" data-testid="headline-i-owe">
-            {formatMYR(grossIOwe)}
-          </p>
-        </div>
-        {/* The rule separates Net from the two gross figures, but only while it
-            is beside them — once it wraps to its own line it is a stray mark. */}
-        <div className="min-w-[7rem] flex-1 sm:border-l sm:border-line-subtle sm:pl-4">
-          <p className="text-xs text-fg-subtle">Net</p>
-          <p
-            className={cn(
-              'text-lg font-bold',
-              Math.abs(grossOwedToMe - grossIOwe) < 0.005
-                ? 'text-fg-subtle'
-                : grossOwedToMe > grossIOwe
-                  ? 'text-positive-700'
-                  : 'text-red-700',
-            )}
-            data-testid="headline-net"
+    <div className="mx-auto max-w-5xl">
+      <div className="page-head">
+        <h1 className="page-title">Shared</h1>
+        <span className="page-sub hide-mobile">{groupSubtitle}</span>
+        <div className="page-actions">
+          <Link
+            to="/wallet?view=shared-with-me&range=all"
+            className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
           >
-            {/* An explicit sign, so "up overall" and "down overall" are legible
-                without reading the colour — the same rule the dashboard's Net
-                figure follows (B9/C13). */}
-            {Math.abs(grossOwedToMe - grossIOwe) < 0.005
-              ? formatMYR(0)
-              : `${grossOwedToMe > grossIOwe ? '+' : '−'}${formatMYR(Math.abs(grossOwedToMe - grossIOwe))}`}
-          </p>
+            View split transactions
+            <ExternalLink className="h-3 w-3" />
+          </Link>
         </div>
       </div>
 
-      {awaitingMyConfirmation.length > 0 && (
-        <div className="card" data-testid="awaiting-confirmation">
-          <div className="border-b border-line-subtle px-5 py-3">
-            <h3 className="card-title">
-              Payments to confirm
-              <span className="ml-2 rounded-full bg-warn-bg px-2 py-0.5 text-xs font-medium text-warn-fg">
-                {awaitingMyConfirmation.length}
-              </span>
-            </h3>
-            <p className="card-sub mt-0.5">
-              Someone says they have paid you. Confirming books it into your account and clears the balance.
+      <div className="dash">
+        <div className="card card-pad c12 flex flex-wrap gap-4" data-testid="shared-headline">
+          <div className="min-w-[7rem] flex-1">
+            <p className="text-xs text-fg-subtle">Owed to you</p>
+            <p className="text-lg font-bold text-positive-700" data-testid="headline-owed-to-me">{formatMYR(grossOwedToMe)}</p>
+          </div>
+          <div className="min-w-[7rem] flex-1">
+            <p className="text-xs text-fg-subtle">You owe</p>
+            <p className="text-lg font-bold text-red-700" data-testid="headline-i-owe">{formatMYR(grossIOwe)}</p>
+          </div>
+          <div className="min-w-[7rem] flex-1 sm:border-l sm:border-line-subtle sm:pl-4">
+            <p className="text-xs text-fg-subtle">Net</p>
+            <p
+              className={cn(
+                'text-lg font-bold',
+                Math.abs(grossOwedToMe - grossIOwe) < 0.005 ? 'text-fg-subtle' : grossOwedToMe > grossIOwe ? 'text-positive-700' : 'text-red-700',
+              )}
+              data-testid="headline-net"
+            >
+              {Math.abs(grossOwedToMe - grossIOwe) < 0.005
+                ? formatMYR(0)
+                : `${grossOwedToMe > grossIOwe ? '+' : '−'}${formatMYR(Math.abs(grossOwedToMe - grossIOwe))}`}
             </p>
           </div>
-          <ul className="divide-y divide-line-subtle">
-            {awaitingMyConfirmation.map((sx) => (
-              <li key={sx.id} className="flex items-center gap-3 px-5 py-3" data-testid="awaiting-row">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-fg">{sx.fromUsername} paid you</p>
-                  {sx.note && <p className="mt-0.5 truncate text-xs text-fg-subtle">{sx.note}</p>}
-                </div>
-                <span className="text-sm font-semibold text-positive-700">{formatMYR(sx.amount)}</span>
-                <Button size="sm" onClick={() => setConfirmTarget(sx)} data-testid="open-confirm">
-                  Review
-                </Button>
-              </li>
-            ))}
-          </ul>
         </div>
-      )}
 
-      {allSettled && (
-        <p className="py-2 text-center text-sm text-fg-subtle" data-testid="all-settled">
-          All settled up! 🎉
-        </p>
-      )}
-      {pairings.length === 0 && !allSettled && (
-        <p className="py-2 text-center text-sm text-fg-subtle">
-          No splits yet — split your first expense from Transactions
-        </p>
-      )}
+        {/* A notice, not a second Balances — the row-level detail (who, how
+            much, the Review action) already lives on that person's Balances
+            row below. Showing both was the same payment twice on one page. */}
+        {awaitingMyConfirmation.length > 0 && (
+          <div
+            className="c12 flex items-center gap-2 rounded-lg bg-warn-bg px-4 py-2.5 text-sm text-warn-fg"
+            data-testid="awaiting-confirmation"
+          >
+            <Bell className="h-4 w-4 shrink-0" />
+            <span>
+              {awaitingMyConfirmation.length} payment{awaitingMyConfirmation.length === 1 ? '' : 's'} waiting for your confirmation
+              {' — '}see Balances below.
+            </span>
+            <a
+              href="#shared-balances"
+              className="ml-auto shrink-0 font-medium underline underline-offset-2 hover:no-underline"
+              onClick={(e) => { e.preventDefault(); document.getElementById('shared-balances')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }}
+            >
+              Review
+            </a>
+          </div>
+        )}
 
-      {pairings.map((p) => (
-        <SplitsSection
-          key={`${p.groupId}:${p.counterpartyId}`}
-          groupId={p.groupId}
-          groupName={p.groupName}
-          showGroupName={groups.length > 1}
-          counterpartyId={p.counterpartyId}
-          counterpartyUsername={p.counterpartyUsername}
+        {allSettled && (
+          <p className="c12 py-2 text-center text-sm text-fg-subtle" data-testid="all-settled">All settled up! 🎉</p>
+        )}
+        {pairings.length === 0 && !allSettled && (
+          <p className="c12 py-2 text-center text-sm text-fg-subtle">No splits yet — split an expense from Transactions</p>
+        )}
+
+        <SharedBalances
+          pairings={pairings}
+          countByCounterparty={countByCounterparty}
+          pendingSettlementByCounterparty={pendingSettlementByCounterparty}
           currentUserId={currentUserId}
-          balance={p.balance}
-          revision={revision}
-          onSettle={(range) => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance, range })}
-          onChanged={refresh}
+          onSettleOne={(p) => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance, range: { dateFrom: '', dateTo: '' } })}
+          onReviewPayment={(s) => setConfirmTarget(s)}
+          onMarkAll={() => setMarkAllOpen(true)}
         />
-      ))}
 
-      {/* Settlement history, per group. Settlement-shaped, like the confirm
-          block above: one row is one payment, whatever it cleared. */}
-      {groups.map((group) => {
-        const history = historyByGroup[group.id] ?? []
-        if (history.length === 0) return null
-        return (
-          <div key={group.id} className="card card-pad" data-testid="settlement-history">
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-              Recent settlements{groups.length > 1 ? ` · ${group.name}` : ''}
-            </h4>
-            <ul className="divide-y divide-line-subtle">
+        {pairings.length > 0 && (
+          <SharedActivity
+            claimsIOwe={claimsIOwe}
+            claimsOwedToMe={claimsOwedToMe}
+            currentUserId={currentUserId}
+            accounts={accounts}
+            categories={categories}
+            onUpdateTransaction={handleUpdateTransaction}
+            onChanged={loadAll}
+          />
+        )}
+
+        <section className="card card-pad c6" data-testid="split-rules">
+          <div className="card-head">
+            <div>
+              <div className="card-title">Split rules</div>
+              <div className="card-sub">Applied automatically when a transaction is marked shared</div>
+            </div>
+            <Tooltip label="Split rules aren't configurable yet">
+              <span style={{ marginLeft: 'auto' }}>
+                <Button variant="secondary" size="sm" disabled>Edit</Button>
+              </span>
+            </Tooltip>
+          </div>
+          <div className="kv"><span className="k">Rent &amp; utilities</span><span className="v">By income · 45 / 35 / 20</span></div>
+          <div className="kv"><span className="k">Groceries</span><span className="v">Equal split</span></div>
+          <div className="kv"><span className="k">Subscriptions</span><span className="v">Equal split</span></div>
+          <div className="kv"><span className="k">Everything else</span><span className="v">Not shared</span></div>
+          <div className="divider" style={{ marginTop: 'auto' }} />
+          <div style={{ fontSize: 'var(--t-sm)', color: 'rgb(var(--fg-subtle))' }}>Not configurable yet — every split is set per transaction.</div>
+        </section>
+
+        {groups.map((group) => {
+          const history = historyByGroup[group.id] ?? []
+          if (history.length === 0) return null
+          return (
+            <section key={group.id} className="card card-pad c6" data-testid="settlement-history">
+              <div className="card-head">
+                <div className="card-title">Recent settlements{groups.length > 1 ? ` · ${group.name}` : ''}</div>
+              </div>
               {history.slice(0, 10).map((s) => (
-                <li
-                  key={s.id}
-                  className="flex items-start justify-between gap-3 py-2.5 text-sm"
-                  data-testid="settlement-row"
-                >
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {/* break-words for the wrap (usernames have no spaces to
-                          wrap at) and min-w-0 to let it happen — a flex item
-                          defaults to min-width:auto, so it refuses to shrink
-                          below its content and the clip takes the difference. */}
-                      <span className="min-w-0 break-words">
-                        <span className="font-medium">{s.fromUsername}</span>
-                        <span className="mx-1 text-fg-subtle">→</span>
-                        <span className="font-medium">{s.toUsername}</span>
-                      </span>
-                      <span className="font-semibold text-fg">{formatMYR(s.amount)}</span>
+                <div className="prow" key={s.id} data-testid="settlement-row">
+                  <div className="tavatar" style={{ background: 'rgb(var(--pos-bg))', color: 'rgb(var(--pos-fg))' }}>
+                    <Check className="icon-sm" />
+                  </div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="pname" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.375rem' }}>
+                      <span>{s.fromUsername} paid {s.toUsername}</span>
                       <SettlementStatus status={s.status} />
                     </div>
-                    {/* When it happened. A settlement history with no dates is a
-                        list of amounts you have to take on trust — and with the
-                        undo window now a week rather than a day, the date is
-                        also what says whether Undo is still on the table. */}
-                    <p className="mt-0.5 text-xs text-fg-subtle" data-testid="settlement-row-date">
-                      {settlementDate(s.settledAt)}
-                    </p>
-                    {/* The note the payer wrote, and — when the creditor said the
-                        money never arrived — their reason. Both were being
-                        stored and shown in a dim parenthetical or not at all. */}
-                    {s.note && (
-                      <p className="mt-1 break-words text-xs italic text-fg-muted" data-testid="settlement-row-note">
-                        &ldquo;{s.note}&rdquo;
-                      </p>
-                    )}
+                    <div className="psub">
+                      <span data-testid="settlement-row-date">{settlementDate(s.settledAt)}</span>
+                      {s.note && <span data-testid="settlement-row-note"> · {s.note}</span>}
+                    </div>
                     {s.status === 'rejected' && s.rejectedReason && (
                       <p className="mt-1 break-words text-xs text-red-600" data-testid="settlement-row-reason">
                         {s.toUsername} rejected this &mdash; &ldquo;{s.rejectedReason}&rdquo;
                       </p>
                     )}
                   </div>
-                  {/* C-3: use fromUserId (not fromUser).
-                      Hidden once the window has clearly passed rather than
-                      offered and refused — a button whose only outcome is a 409
-                      is worse than no button. Near the boundary it stays visible
-                      and the server has the final say, since only it knows the
-                      business-timezone date. */}
+                  <div className="pamt">{formatMYR(s.amount)}</div>
                   {s.fromUserId === currentUserId && withinUndoWindow(s.settledAt) && (
-                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>
-                      Undo
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => { setUndoError(null); setUndoTarget(s.id) }}>Undo</Button>
                   )}
-                </li>
+                </div>
               ))}
-            </ul>
-          </div>
-        )
-      })}
+            </section>
+          )
+        })}
+      </div>
 
-      {/* U-10: Undo settlement confirmation modal */}
       <Modal open={!!undoTarget} onOpenChange={() => setUndoTarget(null)} title="Undo Settlement?">
         <div className="space-y-4">
           <p className="text-sm text-fg-muted">Undo this settlement? Balances will be restored.</p>
           {undoError && <p className="text-sm text-red-600">{undoError}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setUndoTarget(null)}>Cancel</Button>
-            <Button onClick={() => undoTarget && handleUndoSettlement(undoTarget)}>
-              Confirm Undo
-            </Button>
+            <Button onClick={() => undoTarget && handleUndoSettlement(undoTarget)}>Confirm Undo</Button>
           </div>
         </div>
       </Modal>
@@ -459,29 +401,30 @@ export function SharedPage() {
         balance={settleTarget?.balance ?? null}
         range={settleTarget?.range}
         currentUserId={currentUserId}
-        accounts={accounts}
+        accounts={settleAccounts}
         onClose={() => setSettleTarget(null)}
-        onSettled={() => { setSettleTarget(null); refresh() }}
+        onSettled={() => { setSettleTarget(null); loadAll() }}
       />
 
       <ConfirmReceiptDialog
         settlement={confirmTarget}
-        accounts={accounts}
+        accounts={settleAccounts}
         onClose={() => setConfirmTarget(null)}
-        onDone={() => { setConfirmTarget(null); refresh() }}
+        onDone={() => { setConfirmTarget(null); loadAll() }}
+      />
+
+      <MarkAllSettledDialog
+        open={markAllOpen}
+        pairings={settleablePairings}
+        currentUserId={currentUserId}
+        accounts={accounts}
+        onClose={() => setMarkAllOpen(false)}
+        onDone={() => { setMarkAllOpen(false); loadAll(); addToast({ message: 'Payments recorded', duration: 4000 }) }}
       />
     </div>
   )
 }
 
-/**
- * `settled_at` as a readable date.
- *
- * SQLite writes it with `datetime('now')` — a space separator, no zone, always
- * UTC. Handing that to parseISO as-is gets it parsed as local time, which slides
- * the date by 8 hours here; making the zone explicit is what keeps a settlement
- * recorded at 07:00 MYT from being shown as the previous day.
- */
 function settlementDate(settledAt: string): string {
   if (!settledAt) return ''
   const parsed = new Date(`${settledAt.replace(' ', 'T')}${settledAt.includes('Z') ? '' : 'Z'}`)
@@ -489,15 +432,6 @@ function settlementDate(settledAt: string): string {
   return format(parsed, 'dd MMM yyyy, HH:mm')
 }
 
-/**
- * Whether Undo is still worth offering, matching the server's window
- * (worker/routes/settlements.ts UNDO_WINDOW_DAYS).
- *
- * Deliberately generous at the edge: this compares instants, the server compares
- * business-timezone calendar dates, and the two disagree by up to a day. Erring
- * towards showing the button means the worst case is a clear 409 rather than a
- * silently missing action on a settlement that was still undoable.
- */
 const UNDO_WINDOW_DAYS = 7
 function withinUndoWindow(settledAt: string): boolean {
   if (!settledAt) return true
@@ -513,10 +447,7 @@ function SettlementStatus({ status }: { status: Settlement['status'] }) {
     rejected: { label: 'Rejected', cls: 'bg-red-50 text-red-700' },
   }[status] ?? { label: status, cls: 'bg-surface-hover text-fg-muted' }
   return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style.cls}`}
-      data-testid="settlement-row-status"
-    >
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style.cls}`} data-testid="settlement-row-status">
       {style.label}
     </span>
   )
