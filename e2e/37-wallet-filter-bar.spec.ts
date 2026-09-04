@@ -102,22 +102,19 @@ test('Clear resets every filter and disappears when nothing is active', async ()
   await expect(transactionRowFor(page, 'Bar Cafe')).toBeVisible()
 })
 
-// ── Manage categories from the Category dropdown ───────────────────────
-
-test('the Category dropdown footer option opens the category manager', async () => {
-  await page.getByTestId('filter-toggle').click()
-  await page.getByTestId('filter-category').selectOption('__manage__')
-  await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(page.getByRole('dialog')).not.toBeVisible()
-  // The active category filter is unchanged (still All Categories)
-  await expect(page.getByTestId('filter-category')).toHaveValue('')
-  await expect(page.getByTestId('filter-count')).toHaveCount(0)
-})
+// Category management moved off this dropdown's footer entirely — it now
+// lives at Settings → Wallet (see e2e/56-wallet-bug-fixes.spec.ts), the app's
+// single canonical entry point, as part of the mockup-parity rebuild of the
+// Transactions page. The Category filter select is a plain filter again.
 
 // ── Sharing view visibility ────────────────────────────────────────────
 
 test('the Sharing view filter is hidden for users with no groups', async () => {
+  // The previous test left the panel collapsed again (Clear-all doesn't
+  // reopen it) — open it here rather than relying on carried-over state.
+  if (!(await page.getByTestId('filter-panel').isVisible())) {
+    await page.getByTestId('filter-toggle').click()
+  }
   await expect(page.getByTestId('filter-panel')).toBeVisible()
   await expect(page.getByText('Sharing', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Shared with me' })).toHaveCount(0)

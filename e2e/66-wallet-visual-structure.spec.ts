@@ -89,7 +89,13 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
   })
 
   test('import-csv-btn is visible on /wallet and navigates to /wallet/import', async ({ browser }) => {
-    const page = await newAppPage(browser, '/wallet')
+    // The entry point now lives in the Composer's own shortcut row (mockup
+    // parity — the header no longer duplicates it), which only renders once
+    // there's an account to add a transaction against.
+    const page = await newAppPage(browser, '/wallet/accounts')
+    await page.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(page, { name: 'Structure Import Bank', type: 'bank' })
+    await page.goto('/wallet')
 
     const importBtn = page.getByTestId('import-csv-btn')
     await expect(importBtn).toBeVisible()

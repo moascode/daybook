@@ -19,6 +19,18 @@ async function ensureFiltersOpen() {
   }
 }
 
+/**
+ * Export lives inside select mode now (moved off the toolbar so the
+ * page-head stays as clean as the mockup's — docs/v2 wallet-transactions
+ * rebuild). Entering select mode is a client-side state, so it's lost on
+ * every navigation and must be re-entered after each `page.goto('/wallet')`.
+ */
+async function ensureSelectMode() {
+  if (!(await page.getByTestId('select-mode-bar').isVisible())) {
+    await page.getByRole('button', { name: 'Select transactions' }).click()
+  }
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
@@ -52,6 +64,7 @@ test.afterAll(async () => {
 test('Export button is visible on the wallet transactions page', async () => {
   await page.goto('/wallet')
   await page.getByTestId('filter-clear-dates').click()
+  await ensureSelectMode()
   await expect(page.getByRole('button', { name: /Export/i })).toBeVisible()
 })
 
@@ -192,8 +205,9 @@ test('export modal only shows transactions matching the active type filter', asy
   // Only the expense should appear
   await expect(list.getByText('Test Merchant')).toBeVisible()
   await expect(list.getByText('Income Source')).not.toBeVisible()
-  // Close and reset filter
-  await page.getByRole('button', { name: 'Cancel' }).click()
+  // Close and reset filter — scoped to the dialog: select mode's own bar also
+  // has a "Cancel" button, and this must not exit select mode.
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   await page.getByTestId('filter-type').selectOption('all')
 })
 
@@ -273,6 +287,7 @@ test('exported rows match the on-screen selection when shared-in rows are select
   await page.goto('/wallet')
   await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByText('Shared Spend')).toBeVisible()
+  await ensureSelectMode()
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByText(/3 of 3 selected/)).toBeVisible()

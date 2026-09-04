@@ -258,7 +258,7 @@ export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Com
             {label}
           </button>
         ))}
-        <Link to="/wallet/import" className="composer-act">
+        <Link to="/wallet/import" className="composer-act" data-testid="import-csv-btn">
           <span className="cdot" style={{ background: 'rgb(var(--surface-sunk))', color: 'rgb(var(--fg-muted))' }}>
             <Upload className="icon-sm" aria-hidden="true" />
           </span>

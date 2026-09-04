@@ -28,9 +28,14 @@ interface TransactionListProps {
    *  disagree with the same date's total on the full /wallet list.
    *  Day headers (the date itself) still render either way. */
   showDayTotals?: boolean
+  /** Day-group order — and, since groups are built by iterating `transactions`
+   *  in the order given, the order of rows within each day too. Callers that
+   *  want oldest-first must pass an already-reversed `transactions` array;
+   *  this only controls which end of the date range groups sort to. */
+  sortDir?: 'newest' | 'oldest'
 }
 
-function groupByDay(transactions: Transaction[]): DailyGroup[] {
+function groupByDay(transactions: Transaction[], sortDir: 'newest' | 'oldest' = 'newest'): DailyGroup[] {
   const grouped = new Map<string, Transaction[]>()
 
   for (const t of transactions) {
@@ -57,8 +62,7 @@ function groupByDay(transactions: Transaction[]): DailyGroup[] {
     groups.push({ date, transactions: txns, totalIncome, totalExpense })
   }
 
-  // Sort by date descending
-  groups.sort((a, b) => b.date.localeCompare(a.date))
+  groups.sort((a, b) => (sortDir === 'oldest' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)))
   return groups
 }
 
@@ -314,8 +318,9 @@ export function TransactionList({
   highlightId,
   readOnly,
   showDayTotals = true,
+  sortDir = 'newest',
 }: TransactionListProps) {
-  const dailyGroups = useMemo(() => groupByDay(transactions), [transactions])
+  const dailyGroups = useMemo(() => groupByDay(transactions, sortDir), [transactions, sortDir])
 
   if (dailyGroups.length === 0) {
     return (

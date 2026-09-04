@@ -1,18 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
-import { Wallet, TrendingUp, TrendingDown, Download, Upload, CheckSquare, Trash2, SlidersHorizontal, X, Users, Tag, Filter } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, ArrowUpDown, X, Users, Tag, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { TagInput } from '@/components/ui/TagInput'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
-import { NetWorthBanner } from '@/components/ui/NetWorthBanner'
 import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
-import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
 import { BulkEditDialog } from '@/modules/wallet/BulkEditDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
@@ -50,10 +49,6 @@ export function WalletPage() {
     bulkUpdateTransactions,
     linkTransfer,
     exportTransactions,
-    getAccountBalances,
-    addCategory,
-    deleteCategory,
-    getCategoryUsage,
   } = useWallet()
   const { addToast, removeToast } = useToastStore()
 
@@ -61,7 +56,30 @@ export function WalletPage() {
   const [searchParams] = useSearchParams()
   const crud = useCrudModal<Transaction>()
   const [exportOpen, setExportOpen] = useState(false)
-  const [netWorth, setNetWorth] = useState<number | null>(null)
+
+  // List footer (mockup: "Showing X of Y" + Load more) — a client-side reveal
+  // over the already-fetched filtered set, not server pagination (the API has
+  // none). Resets whenever the filtered set or sort direction changes.
+  const PAGE_SIZE = 20
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
+  const [sortDir, setSortDir] = useState<'newest' | 'oldest'>('newest')
+
+  // The sticky filter bar's real rendered height (it wraps to two lines on
+  // narrow viewports), fed to the list's day-header sticky offset below —
+  // measured rather than guessed, since a fixed px guess would either gap or
+  // overlap the moment the row wraps or the font scale changes.
+  const filterBarRef = useRef<HTMLDivElement>(null)
+  const [filterBarHeight, setFilterBarHeight] = useState(58)
+  useEffect(() => {
+    const el = filterBarRef.current
+    if (!el) return
+    const observer = new ResizeObserver((entries) => {
+      const h = entries[0]?.contentRect.height
+      if (h) setFilterBarHeight(Math.round(h))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Composer (R7): the composer's shortcut row / preview-Edit / parse-fallback
   // paths all open the SAME TransactionForm instance the row-edit flow uses,
@@ -69,9 +87,6 @@ export function WalletPage() {
   // the form closes so a stray draft can't leak into an unrelated open.
   const composerInputRef = useRef<HTMLInputElement>(null)
   const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
-
-  // Category manager state
-  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 
   // §6.4 filter bar: the occasional filters live in a collapsible section; the
   // sharing view only renders for users who are actually in a group (it stays
@@ -135,13 +150,78 @@ export function WalletPage() {
   const summary = useMemo(() => {
     let totalIncome = 0
     let totalExpense = 0
+    let depositsCount = 0
+    let paymentsCount = 0
+    const expenseAmounts: number[] = []
     for (const t of transactions) {
       const amt = countableAmount(t)
-      if (t.type === 'income') totalIncome += amt
-      else if (t.type === 'expense') totalExpense += amt
+      if (t.type === 'income') {
+        totalIncome += amt
+        depositsCount += 1
+      } else if (t.type === 'expense') {
+        totalExpense += amt
+        paymentsCount += 1
+        expenseAmounts.push(amt)
+      }
     }
-    return { totalIncome, totalExpense, net: totalIncome - totalExpense }
+    // Footnote medians — honest, derived-from-the-filtered-set figures only.
+    // No period-over-period comparison here (the mockup's "+4.2% vs July" /
+    // "Best month since March"): that needs a prior period this page never
+    // fetches, and CLAUDE.md rule 13 says drop a metric rather than fake it.
+    expenseAmounts.sort((a, b) => a - b)
+    const mid = Math.floor(expenseAmounts.length / 2)
+    const medianExpense =
+      expenseAmounts.length === 0
+        ? 0
+        : expenseAmounts.length % 2
+          ? expenseAmounts[mid]
+          : (expenseAmounts[mid - 1] + expenseAmounts[mid]) / 2
+    return {
+      totalIncome,
+      totalExpense,
+      net: totalIncome - totalExpense,
+      depositsCount,
+      paymentsCount,
+      medianExpense,
+    }
   }, [transactions])
+
+  // Page-head subtitle: "{N} in range · {date label}" — the label mirrors
+  // Overview's headerSub treatment (docs: PR #157) but without the "Wallet ·"
+  // prefix, since this page IS Wallet.
+  const dateRangeSubtitle = useMemo(() => {
+    const preset = dateRangePreset({ dateFrom: filters.dateFrom, dateTo: filters.dateTo })
+    if (preset === 'all-time') return 'All time'
+    if (!filters.dateFrom || !filters.dateTo) return '…'
+    const from = parseISO(filters.dateFrom)
+    const to = parseISO(filters.dateTo)
+    const sameMonth = format(from, 'yyyy-MM') === format(to, 'yyyy-MM')
+    return sameMonth
+      ? `${format(from, 'd')}–${format(to, 'd MMMM')}`
+      : `${format(from, 'd MMM')} – ${format(to, 'd MMM yyyy')}`
+  }, [filters.dateFrom, filters.dateTo])
+
+  // Reset the "Load more" reveal whenever the filtered set or sort direction
+  // changes — otherwise a narrower re-filter could leave visibleCount pointed
+  // past the end of a shorter list (harmless — slice clamps — but the counter
+  // should read like a fresh view, not a carried-over one). Adjusted during
+  // render (ExportModal.tsx's own pattern) rather than in an effect, so it
+  // doesn't trigger a second, cascading render.
+  const visibleCountResetKey = `${JSON.stringify(filters)}|${dataVersion}|${sortDir}`
+  const [prevVisibleCountResetKey, setPrevVisibleCountResetKey] = useState(visibleCountResetKey)
+  if (visibleCountResetKey !== prevVisibleCountResetKey) {
+    setPrevVisibleCountResetKey(visibleCountResetKey)
+    setVisibleCount(PAGE_SIZE)
+  }
+
+  const orderedTransactions = useMemo(
+    () => (sortDir === 'oldest' ? [...transactions].reverse() : transactions),
+    [transactions, sortDir],
+  )
+  const visibleTransactions = useMemo(
+    () => orderedTransactions.slice(0, visibleCount),
+    [orderedTransactions, visibleCount],
+  )
 
   useEffect(() => {
     const accountParam = searchParams.get('account')
@@ -205,27 +285,12 @@ export function WalletPage() {
     loadTransactions({ ...filters, view: filters.view })
   }, [filters, loadTransactions, dataVersion])
 
-  // Net worth is what YOU own, so shared-in accounts are excluded: `accounts`
-  // carries co-members' accounts too, and summing those reported a partner's
-  // money as ours. They stay in the filters and the list — only the total is
-  // ours alone. Mirrors AccountsPage, which had the same defect.
+  // Not the total-balance hero anymore (that lived in NetWorthBanner, dropped
+  // per the mockup — Transactions shows only the filtered range's in/out/net,
+  // never a whole-account-book total). `ownAccounts` still feeds the composer
+  // below: shared-in accounts (`accounts` carries co-members' too) can't be
+  // parsed/matched by the composer's own account lookup.
   const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
-
-  // Balances are independent of the active filters, so this is keyed on
-  // `ownAccounts` (and dataVersion) — NOT on the filtered transaction list.
-  // Mutations refresh it explicitly below.
-  const loadNetWorth = useCallback(async () => {
-    const balances = await getAccountBalances()
-    setNetWorth(ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
-  }, [ownAccounts, getAccountBalances])
-
-  useEffect(() => {
-    let cancelled = false
-    getAccountBalances().then((balances) => {
-      if (!cancelled) setNetWorth(ownAccounts.reduce((sum, a) => sum + (balances[a.id] ?? 0), 0))
-    })
-    return () => { cancelled = true }
-  }, [ownAccounts, getAccountBalances, dataVersion])
 
   const handleAddTransaction = useCallback(async (data: TransactionFormData) => {
     try {
@@ -235,9 +300,8 @@ export function WalletPage() {
       throw err // keep the form open so the user can retry
     }
     await loadTransactions(filtersRef.current)
-    await loadNetWorth()
     await loadTags()
-  }, [addTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
+  }, [addTransaction, loadTransactions, loadTags, addToast])
 
   // Composer's shortcut row / Edit / no-match fallback all funnel through
   // here — opens the same create-mode TransactionForm, just pre-filled.
@@ -283,9 +347,8 @@ export function WalletPage() {
       throw err
     }
     await loadTransactions(filtersRef.current)
-    await loadNetWorth()
     await loadTags()
-  }, [crud, updateTransaction, loadTransactions, loadNetWorth, loadTags, addToast])
+  }, [crud, updateTransaction, loadTransactions, loadTags, addToast])
 
   // Single-transaction delete: no confirm dialog — delete immediately and offer
   // a 5-second undo toast, matching the tasks module. The row object is captured
@@ -299,7 +362,6 @@ export function WalletPage() {
       return
     }
     await loadTransactions(filtersRef.current)
-    await loadNetWorth()
 
     if (undoToastIdRef.current) removeToast(undoToastIdRef.current)
     undoToastIdRef.current = addToast({
@@ -325,12 +387,11 @@ export function WalletPage() {
             addToast({ message: errorMessage(err, 'Could not restore transaction — please try again.'), duration: 4000 })
           }
           await loadTransactions(filtersRef.current)
-          await loadNetWorth()
         },
       },
       duration: 5000,
     })
-  }, [deleteTransaction, addTransaction, loadTransactions, loadNetWorth, addToast, removeToast])
+  }, [deleteTransaction, addTransaction, loadTransactions, addToast, removeToast])
 
   const handleLinkTransfer = useCallback(async (twinId: string) => {
     if (!linkTarget) return
@@ -343,8 +404,7 @@ export function WalletPage() {
     setLinkTarget(null)
     addToast({ message: 'Linked as one transfer', duration: 4000 })
     await loadTransactions(filtersRef.current)
-    await loadNetWorth()
-  }, [linkTarget, linkTransfer, loadTransactions, loadNetWorth, addToast])
+  }, [linkTarget, linkTransfer, loadTransactions, addToast])
 
   const handleBulkDelete = useCallback(async () => {
     try {
@@ -358,8 +418,7 @@ export function WalletPage() {
     setSelectMode(false)
     setBulkDeleteOpen(false)
     await loadTransactions(filtersRef.current)
-    await loadNetWorth()
-  }, [selectedIds, deleteTransaction, loadTransactions, loadNetWorth, addToast])
+  }, [selectedIds, deleteTransaction, loadTransactions, addToast])
 
   const handleBulkEdit = useCallback(
     async (changes: {
@@ -473,15 +532,11 @@ export function WalletPage() {
     ...accounts.map((a) => ({ value: a.id, label: a.name })),
   ]
 
-  // The Category dropdown doubles as the entry point to category management —
-  // the "Manage categories…" footer option opens the manager without changing
-  // the active filter (the select is controlled, so it snaps back).
-  const MANAGE_CATEGORIES = '__manage__'
+  // Category management lives at Settings → Wallet now, not here.
   const categoryOptions = [
     { value: '', label: 'All Categories' },
     { value: UNCATEGORISED, label: 'Uncategorised' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
-    { value: MANAGE_CATEGORIES, label: 'Manage categories…' },
   ]
 
   // Count of active occasional filters — shown on the Filters toggle so
@@ -570,14 +625,22 @@ export function WalletPage() {
   const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
 
   return (
-    <div className="max-w-5xl mx-auto">
-      {/* Page sub-header */}
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Transactions</h2>
-          <p className="text-xs text-fg-subtle mt-0.5">Track income, expenses, and transfers</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+    <div
+      className="max-w-5xl mx-auto wallet-transactions"
+      style={{ '--tx-filterbar-h': `${filterBarHeight}px` } as React.CSSProperties}
+    >
+      {/* Literal port of proposal-v2/transactions.html's page-head: a plain
+          title/subtitle, with only "Select" (real bulk-action functionality
+          the mockup has no equivalent for) as a page-head action. Categories
+          moved to Settings → Wallet; Export moved into the select-mode bar
+          below; Import CSV was already reachable via the composer's own
+          shortcut row (removed here as a redundant second entry point). */}
+      <div className="page-head">
+        <h1 className="page-title">Transactions</h1>
+        <span className="page-sub hide-mobile">
+          {transactions.length} in range · {dateRangeSubtitle}
+        </span>
+        <div className="page-actions">
           {accounts.length > 0 && !selectMode && (
             <Button
               variant="secondary"
@@ -589,32 +652,6 @@ export function WalletPage() {
               Select
             </Button>
           )}
-          {/* Category management had exactly one entry point: a "Manage
-              categories…" option inside the Category filter dropdown, itself
-              inside the collapsed filter panel. Nobody looks three levels down
-              a filter to create something, so adding a category read as
-              impossible. Same modal, surfaced in the toolbar. */}
-          {!selectMode && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setCategoryManagerOpen(true)}
-              data-testid="manage-categories"
-            >
-              <Tag className="h-3.5 w-3.5" />
-              Categories
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
-            <Download className="h-3.5 w-3.5" />
-            Export
-          </Button>
-          <Link to="/wallet/import">
-            <Button variant="secondary" size="sm" data-testid="import-csv-btn">
-              <Upload className="h-3.5 w-3.5" />
-              Import CSV
-            </Button>
-          </Link>
         </div>
       </div>
 
@@ -660,18 +697,16 @@ export function WalletPage() {
         </WelcomeCard>
       )}
 
-      {/* Total balance hero — the caption must count the same set the figure
-          was summed over, i.e. owned accounts only. */}
-      {ownAccounts.length > 0 && (
-        <NetWorthBanner netWorth={netWorth} accountCount={ownAccounts.length} className="mb-4" />
-      )}
-
       {/* Filter bar + summary — hidden until there's an account to work with
           (or a group: members can view shared transactions with no accounts). */}
       {(accounts.length > 0 || hasGroups) && (
       <>
-      <div className="card card-pad mb-4">
-        {/* Search-first single row: search, date range, Filters toggle, Clear */}
+      {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
+          convention below — .wallet-transactions bumps that offset in
+          data.css so the two don't overlap while scrolling). Only the
+          single-row search/date/filters/sort stays pinned; chips and the
+          collapsible advanced panel scroll away normally. */}
+      <div className="tx-filterbar-sticky" ref={filterBarRef}>
         <div className="filters">
           <div className="filter-field">
             <Filter className="h-3.5 w-3.5" />
@@ -709,6 +744,19 @@ export function WalletPage() {
               </span>
             )}
           </button>
+          {/* Real toggle (not a decorative mockup button — CLAUDE.md rule 13:
+              a click that changes nothing is the worst outcome a handler can
+              produce). Flips both the day-group order and each day's row
+              order. */}
+          <button
+            type="button"
+            onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
+            data-testid="sort-direction-toggle"
+            className="filter-btn hide-mobile"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            {sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
+          </button>
           {anyFilterActive && (
             <button
               type="button"
@@ -717,123 +765,132 @@ export function WalletPage() {
               className="btn btn-quiet"
             >
               <X className="h-3.5 w-3.5" />
-              Clear
+              Clear all
             </button>
           )}
         </div>
-
-        {/* U-10: removable chips for the active occasional filters */}
-        {filterChips.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="active-filter-chips">
-            {filterChips.map((chip) => (
-              <span
-                key={chip.key}
-                data-testid="filter-chip"
-                className="chip chip-mute"
-              >
-                {chip.label}
-                <button
-                  type="button"
-                  onClick={chip.onClear}
-                  aria-label="Remove filter"
-                  title={`Remove ${chip.label}`}
-                  className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Collapsible occasional filters */}
-        {filtersOpen && (
-          <div data-testid="filter-panel" className="mt-3 border-t border-line-subtle pt-3">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Select
-                label="Type"
-                data-testid="filter-type"
-                options={typeOptions}
-                value={filters.type}
-                onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
-              />
-              <Select
-                label="Account"
-                data-testid="filter-account"
-                options={accountOptions}
-                value={filters.accountId ?? ''}
-                onChange={(e) => setFilters({ accountId: e.target.value || null })}
-              />
-              <Select
-                label="Category"
-                data-testid="filter-category"
-                options={categoryOptions}
-                value={filters.categoryId ?? ''}
-                onChange={(e) => {
-                  if (e.target.value === MANAGE_CATEGORIES) {
-                    setCategoryManagerOpen(true)
-                    return
-                  }
-                  setFilters({ categoryId: e.target.value || null })
-                }}
-              />
-              <TagInput
-                id="filter-tags"
-                testId="filter-tags"
-                label="Tags"
-                value={filters.tags}
-                onChange={(tags) => setFilters({ tags })}
-                suggestions={tags}
-                allowCreate={false}
-                placeholder="Filter by tags..."
-              />
-            </div>
-            {hasGroups && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
-                {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setFilters({ view: v })}
-                    className={cn(
-                      'rounded-full border px-3 py-1 text-xs transition-colors',
-                      filters.view === v
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
-                    )}
-                  >
-                    {v === 'shared-with-me'
-                      ? 'Shared with me'
-                      : v === 'shared-with-others'
-                        ? 'Shared with others'
-                        : v.charAt(0).toUpperCase() + v.slice(1)}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Summary row */}
+      {/* U-10: removable chips for the active occasional filters */}
+      {filterChips.length > 0 && (
+        <div className="filters mb-4" data-testid="active-filter-chips">
+          {filterChips.map((chip) => (
+            <span
+              key={chip.key}
+              data-testid="filter-chip"
+              className="chip chip-mute"
+            >
+              {chip.label}
+              <button
+                type="button"
+                onClick={chip.onClear}
+                aria-label="Remove filter"
+                title={`Remove ${chip.label}`}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsible occasional filters — real functionality the mockup
+          doesn't show; kept as its own bordered panel rather than crammed
+          into the mockup's plain filter row. */}
+      {filtersOpen && (
+        <div data-testid="filter-panel" className="mb-4 rounded-lg border border-line-subtle bg-surface p-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Select
+              label="Type"
+              data-testid="filter-type"
+              options={typeOptions}
+              value={filters.type}
+              onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
+            />
+            <Select
+              label="Account"
+              data-testid="filter-account"
+              options={accountOptions}
+              value={filters.accountId ?? ''}
+              onChange={(e) => setFilters({ accountId: e.target.value || null })}
+            />
+            <Select
+              label="Category"
+              data-testid="filter-category"
+              options={categoryOptions}
+              value={filters.categoryId ?? ''}
+              onChange={(e) => setFilters({ categoryId: e.target.value || null })}
+            />
+            <TagInput
+              id="filter-tags"
+              testId="filter-tags"
+              label="Tags"
+              value={filters.tags}
+              onChange={(tags) => setFilters({ tags })}
+              suggestions={tags}
+              allowCreate={false}
+              placeholder="Filter by tags..."
+            />
+          </div>
+          {hasGroups && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
+              {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setFilters({ view: v })}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs transition-colors',
+                    filters.view === v
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
+                  )}
+                >
+                  {v === 'shared-with-me'
+                    ? 'Shared with me'
+                    : v === 'shared-with-others'
+                      ? 'Shared with others'
+                      : v.charAt(0).toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Three stat cards reading off the filtered set — literal port of the
+          mockup's Money in / Money out / Net row (replaces the old
+          whole-account-book NetWorthBanner, which the mockup doesn't show on
+          this page at all). Footnotes are honestly computed from this page's
+          own data only; no period-over-period comparison (see summary
+          useMemo's comment). */}
       <div className="grid g3 g-1-on-mobile mb-4">
         <div className="card stat-card">
           <div className="stat-topline">
             <span className="stat-icon bg-pos-bg text-pos-fg">
               <TrendingUp className="h-3.5 w-3.5" />
             </span>
-            <span className="stat-label">Income</span>
+            <span className="stat-label">Money in</span>
           </div>
           <p className={cn('stat-value', 'pos')} data-testid="summary-income">{formatMYR(summary.totalIncome)}</p>
+          <div className="stat-foot">
+            <span>{summary.depositsCount} deposit{summary.depositsCount !== 1 ? 's' : ''}</span>
+          </div>
         </div>
         <div className="card stat-card">
           <div className="stat-topline">
             <span className="stat-icon bg-neg-bg text-neg-fg">
               <TrendingDown className="h-3.5 w-3.5" />
             </span>
-            <span className="stat-label">Expense</span>
+            <span className="stat-label">Money out</span>
           </div>
           <p className={cn('stat-value', 'neg')} data-testid="summary-expense">{formatMYR(summary.totalExpense)}</p>
+          <div className="stat-foot">
+            <span>
+              {summary.paymentsCount} payment{summary.paymentsCount !== 1 ? 's' : ''} · {formatMYR(summary.medianExpense)} median
+            </span>
+          </div>
         </div>
         <div className="card stat-card">
           <div className="stat-topline">
@@ -847,6 +904,11 @@ export function WalletPage() {
             {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
           </p>
+          <div className="stat-foot">
+            <span>
+              {summary.depositsCount + summary.paymentsCount} transaction{summary.depositsCount + summary.paymentsCount !== 1 ? 's' : ''} counted
+            </span>
+          </div>
         </div>
       </div>
       </>
@@ -902,6 +964,16 @@ export function WalletPage() {
                 </Button>
               </>
             )}
+            {/* Export moved here from the header toolbar — reachable via
+                Select, scoped to the same active-filters set as before
+                (ExportModal gets the full `transactions`, not just the
+                checked rows; its own internal multiselect still lets you
+                narrow further). Not gated on selectedIds.size — exporting
+                the whole filtered range doesn't require checking every row. */}
+            <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+              <Download className="h-3.5 w-3.5" />
+              Export
+            </Button>
             <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
               Cancel
             </Button>
@@ -968,18 +1040,47 @@ export function WalletPage() {
             )}
           </div>
         ) : (
-          <TransactionList
-            transactions={transactions}
-            accounts={accounts}
-            categories={categories}
-            onEdit={crud.openEdit}
-            onDelete={handleDeleteTransaction}
-            onSplit={hasGroups ? openSplitDialog : undefined}
-            selectMode={selectMode}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            highlightId={searchParams.get('txn') ?? undefined}
-          />
+          <>
+            {/* Select mode shows the whole filtered set — a bulk action
+                (select all, Categorise N) operating on fewer rows than are
+                actually in range would be a surprising, silent narrowing. The
+                "Showing X of Y" reveal is a read-only browsing aid, so it only
+                applies outside select mode. */}
+            <TransactionList
+              transactions={selectMode ? orderedTransactions : visibleTransactions}
+              accounts={accounts}
+              categories={categories}
+              onEdit={crud.openEdit}
+              onDelete={handleDeleteTransaction}
+              onSplit={hasGroups ? openSplitDialog : undefined}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              highlightId={searchParams.get('txn') ?? undefined}
+              sortDir={sortDir}
+            />
+            {!selectMode && (
+              <>
+                <div className="divider" />
+                <div className="flex items-center gap-3 pb-3">
+                  <span className="text-sm text-fg-subtle">
+                    Showing {visibleTransactions.length} of {transactions.length}
+                  </span>
+                  {visibleCount < transactions.length && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="ml-auto"
+                      onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                      data-testid="load-more-transactions"
+                    >
+                      Load more
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -1023,15 +1124,6 @@ export function WalletPage() {
         accounts={accounts}
         categories={categories}
         onExport={handleExport}
-      />
-
-      <CategoryManager
-        open={categoryManagerOpen}
-        onOpenChange={setCategoryManagerOpen}
-        categories={categories}
-        onAdd={async (data) => { await addCategory(data) }}
-        onDelete={async (id) => { await deleteCategory(id) }}
-        onGetUsage={getCategoryUsage}
       />
 
       {/* Bulk delete confirmation */}
