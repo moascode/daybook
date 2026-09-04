@@ -83,51 +83,23 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await waitForApp(viewerPage)
 
     // 100, not 10,099 — the shared 9,999 must not leak into the hero total.
+    // (The R7 restyle dropped the "across N accounts" caption and its
+    // hero-account-count test id entirely — the net-worth figure alone still
+    // covers the PR #101 regression this test exists for.)
     await expect(viewerPage.getByTestId('hero-net-worth')).toHaveText('RM 100.00')
-    await expect(viewerPage.getByTestId('hero-account-count')).toHaveText('across 1 account')
 
     await ownerCtx.close()
     await viewerCtx.close()
   })
 
-  test('hero money-in/out/kept match the existing stat-tile and spend-pace figures', async ({ browser }) => {
-    const page = await newAppPage(browser, '/wallet/accounts')
-    await page.getByRole('button', { name: 'Add Account' }).first().click()
-    await fillAccountForm(page, { name: 'Hero Parity Bank' })
-
-    const acctRes = await page.request.get('/api/accounts')
-    const [acct] = (await acctRes.json()) as Array<{ id: string }>
-    await page.request.post('/api/transactions', {
-      data: { accountId: acct.id, date: businessToday(), merchant: 'Salary', amount: 3000, type: 'income' },
-    })
-    await page.request.post('/api/transactions', {
-      data: { accountId: acct.id, date: businessToday(), merchant: 'Rent', amount: 1200, type: 'expense' },
-    })
-
-    await page.goto('/wallet/dashboard')
-    await waitForApp(page)
-
-    // Wait for the async data load to actually settle before reading any
-    // value — hero-money-in renders "RM 0.00" during the initial fetch, and
-    // a plain .textContent() snapshot (unlike `expect(locator).toHaveText`)
-    // does not retry, so an early read can compare two different moments.
-    await expect(page.getByTestId('hero-money-in')).toHaveText(/RM\s*3,000\.00/)
-
-    // tile-income's testid is on the whole tile (label + value + note), not
-    // an isolated value span, so pull just the money-shaped substring out
-    // rather than comparing full tile text against the hero's bare figure.
-    const moneyPattern = /[+-]?RM\s*[\d,]+\.\d{2}/
-    const heroIn = (await page.getByTestId('hero-money-in').textContent())?.trim()
-    const heroOut = (await page.getByTestId('hero-money-out').textContent())?.trim()
-    const heroKept = (await page.getByTestId('hero-kept').textContent())?.trim()
-    const tileIncomeText = await page.getByTestId('tile-income').textContent()
-    const spendHeroText = await page.getByTestId('spend-hero').textContent()
-    const tileNetText = await page.getByTestId('tile-net').textContent()
-
-    expect(heroIn).toBe(tileIncomeText?.match(moneyPattern)?.[0])
-    expect(heroOut).toBe(spendHeroText?.match(moneyPattern)?.[0])
-    expect(heroKept).toBe(tileNetText?.match(moneyPattern)?.[0])
-  })
+  // NOTE: the old "hero money-in/out/kept match the existing stat-tile and
+  // spend-pace figures" cross-check test was removed rather than rewritten —
+  // its whole premise was that the same income/expense/net figures were
+  // rendered redundantly in the (now-deleted) StatTiles row and the (now
+  // test-id-less) Spend pace headline, so the two displays could be compared
+  // against the hero. The R7 restyle removed both of those redundant
+  // displays; nothing else on the page repeats these figures to cross-check
+  // the hero against.
 
   test('featured-account carries .acct and .acct-feature, and names the higher-balance own account', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet/accounts')
@@ -156,9 +128,6 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await expect(featured).toHaveClass(/\bacct\b/)
     await expect(featured).toHaveClass(/\bacct-feature\b/)
     await expect(featured).toContainText('Big Account')
-    // No bills yet on the featured account — plain balance copy, not a
-    // manufactured "after RM0 of bills" sentence.
-    await expect(featured).toContainText('Largest balance')
 
     // A bill due on the FEATURED account reduces what's safe to spend; the
     // account's own balance (5000) minus that bill (800) is what should show.
@@ -294,7 +263,7 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await expect(recent.getByRole('button', { name: 'Delete transaction' })).toHaveCount(0)
     await expect(recent.getByRole('button', { name: 'Split transaction' })).toHaveCount(0)
 
-    const seeAll = page.getByRole('link', { name: 'See all' })
+    const seeAll = page.getByRole('link', { name: 'All transactions' })
     await expect(seeAll).toBeVisible()
     const href = await seeAll.getAttribute('href')
     expect(href?.startsWith('/wallet')).toBe(true)
@@ -496,60 +465,16 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await ctx.close()
   })
 
-  test('Row D — "Where it goes" and "Your week" footers align across the row even when their content heights differ (docs/v2/wallet/02-design-adoption.md: "push it down with margin-top: auto so footers align")', async ({ browser }: { browser: Browser }) => {
-    const page = await newAppPage(browser, '/wallet/accounts')
-    await page.getByRole('button', { name: 'Add Account' }).first().click()
-    await fillAccountForm(page, { name: 'Alignment Bank' })
-    const acctRes = await page.request.get('/api/accounts')
-    const [acct] = (await acctRes.json()) as Array<{ id: string }>
-    const catsRes = await page.request.get('/api/categories')
-    const cats = (await catsRes.json()) as Array<{ id: string; name: string }>
-    // Deliberately MANY categories, one transaction each — "Where it goes"'s
-    // legend grows a row per category while "Your week"'s chart stays a
-    // fixed height, so their MAIN content heights differ. Only margin-top:
-    // auto on each card's trailing summary line keeps the two footers level.
-    for (const cat of cats.slice(0, 8)) {
-      await page.request.post('/api/transactions', {
-        data: { accountId: acct.id, date: businessToday(), merchant: cat.name, amount: 20, type: 'expense', categoryId: cat.id },
-      })
-    }
-    // "Your week" (in the default "This month" view) draws its averages from
-    // the PRIOR 3 baseline months, not the current one — Dashboard.tsx's
-    // `weekday` memo calls `weekdayAverages(transactions,
-    // priorMonths(monthPeriod.month, BASELINE_MONTHS))`. Without baseline
-    // data every average is 0, `total` is 0, and the "heaviest day" sentence
-    // never renders at all — exactly what made this test hang the first
-    // time, waiting on text that could never appear.
-    for (const monthsBack of [1, 2, 3]) {
-      const d = businessDatePlus(-30 * monthsBack)
-      await page.request.post('/api/transactions', {
-        data: { accountId: acct.id, date: d, merchant: 'Baseline spend', amount: 15, type: 'expense' },
-      })
-    }
-    await page.goto('/wallet/dashboard')
-    await waitForApp(page)
-
-    const donutCard = page.locator('.card', { has: page.getByTestId('category-donut') })
-    const weekCard = page.locator('.card', { has: page.getByTestId('week-rhythm') })
-    await expect(donutCard).toBeVisible()
-    await expect(weekCard).toBeVisible()
-
-    const donutFooter = donutCard.getByText(/Totals to/)
-    const weekFooter = weekCard.getByText(/heaviest day/)
-    const [donutCardBox, weekCardBox, donutFooterBox, weekFooterBox] = await Promise.all([
-      donutCard.boundingBox(),
-      weekCard.boundingBox(),
-      donutFooter.boundingBox(),
-      weekFooter.boundingBox(),
-    ])
-
-    // The cards themselves already stretch to match row height (.dash's
-    // align-items: stretch) — the real assertion is where the FOOTER TEXT
-    // lands within that shared height. Both should sit flush with the
-    // bottom of their card (within a couple px of rounding), not wherever
-    // their own varying content happened to end.
-    const donutFooterDistanceFromBottom = (donutCardBox!.y + donutCardBox!.height) - (donutFooterBox!.y + donutFooterBox!.height)
-    const weekFooterDistanceFromBottom = (weekCardBox!.y + weekCardBox!.height) - (weekFooterBox!.y + weekFooterBox!.height)
-    expect(Math.abs(donutFooterDistanceFromBottom - weekFooterDistanceFromBottom)).toBeLessThan(3)
-  })
+  // NOTE: "Row D — 'Where it goes' and 'Your week' footers align..." was
+  // removed rather than rewritten. It asserted that CategoryBreakdown's
+  // "Totals to RM..." footer sentence and WeekRhythm's "heaviest day"
+  // sentence both sat flush with their shared row's bottom via
+  // margin-top: auto. The literal mockup port dropped CategoryBreakdown's
+  // footer entirely — "Where it goes" now ends at the legend, with no
+  // reconciliation sentence — so there is no second footer left on that row
+  // to align against WeekRhythm's, and WeekRhythm's own footer text changed
+  // (no "heaviest day" phrase in the new copy either). No other pair of
+  // cards on this page shares the same "variable content height, pinned
+  // footer" shape cheaply enough to retarget this test at, so it was
+  // dropped rather than skipped.
 })

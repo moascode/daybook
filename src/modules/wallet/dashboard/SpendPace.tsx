@@ -232,12 +232,6 @@ export function SpendPace({
           No earlier period to compare against yet — the comparison appears once you have history before this one.
         </p>
       )}
-      {inProgress && projected === undefined && (
-        <p className="mt-2 text-xs text-fg-subtle" data-testid="pace-too-early">
-          Too early in {periodLabel} to project a total — a few days of spending multiplied out says more about one
-          purchase than about the month.
-        </p>
-      )}
     </section>
   )
 }

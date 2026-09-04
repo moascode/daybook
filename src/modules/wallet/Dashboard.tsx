@@ -7,8 +7,8 @@ import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { useCrudModal } from '@/hooks/useCrudModal'
-import { formatMYR, monthRange, todayISO, dateRangePreset, errorMessage } from '@/lib/utils'
-import { DateRangeControl, type DateRangeValue } from '@/components/ui/DateRangeControl'
+import { formatMYR, monthRange, trailingRange, todayISO, dateRangePreset, errorMessage } from '@/lib/utils'
+import type { DateRangeValue } from '@/components/ui/DateRangeControl'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { Composer } from '@/modules/wallet/composer/Composer'
@@ -317,11 +317,39 @@ export function Dashboard() {
 
   const recentTxns = useMemo(() => [...periodTxns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5), [periodTxns])
 
+  // Same baseline-months-average NET used to be the Discretionary tile's
+  // "usual" figure before that row was dropped — kept here as the one place
+  // that still needs it, day-matched against the baseline months so a 4-day-
+  // old month is never compared against a full one.
+  const usualNet = useMemo(() => {
+    if (isMonthMode && monthPeriod && monthPeriod.baselineMonths.length > 0) {
+      const n = monthPeriod.baselineMonths.length
+      return (
+        monthPeriod.baselineMonths.reduce((sum, m) => {
+          const rows = transactions.filter((t) => monthKey(t.date) === m && dayOfMonth(t.date) <= monthPeriod.day)
+          return sum + summarise(rows).net
+        }, 0) / n
+      )
+    }
+    if (rangeComparison) return summarise(comparisonTxns).net
+    return 0
+  }, [isMonthMode, monthPeriod, transactions, rangeComparison, comparisonTxns])
+
+  // Matches the mockup's dynamic hero ("Good afternoon 👋 — you're $1,012
+  // ahead of last month"). Says "usual" — a baseline-months average — rather
+  // than claiming a specific past period, since that's the same figure the
+  // rest of the page already uses (CLAUDE.md dashboard rules on agreement).
   const heroGreeting = useMemo(() => {
     const greeting = timeOfDayGreeting(new Date().getHours())
     const who = username ? `, ${username}` : ''
-    return `${greeting}${who} 👋`
-  }, [username])
+    const base = `${greeting}${who} 👋`
+    if (!hasBaseline || usualNet === 0) return base
+    const delta = summary.net - usualNet
+    if (Math.abs(delta) < 0.005) return base
+    return delta > 0
+      ? `${base} — you're ${formatMYR(delta)} ahead of usual`
+      : `${base} — you're ${formatMYR(Math.abs(delta))} behind usual`
+  }, [username, hasBaseline, usualNet, summary.net])
 
   // ── Composer / add-transaction plumbing — mirrors WalletPage.tsx's wiring
   // so the Overview page's composer bar behaves identically. ──
@@ -361,17 +389,37 @@ export function Dashboard() {
     )
   }
 
+  const headerSub = isMonthMode && monthPeriod
+    ? monthPeriod.inProgress
+      ? `Wallet · 1–${monthPeriod.day} ${monthPeriod.label}`
+      : `Wallet · ${monthPeriod.label}`
+    : `Wallet · ${rangeLabel}`
+
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <DateRangeControl
-          value={range}
-          onChange={setRange}
-          presets={['this-month', 'last-month', 'last-3-months', 'last-12-months', 'all-time', 'custom']}
-        />
-        <Link to="/wallet/reports" className="text-sm font-medium text-brand-600 hover:text-brand-700 hover:underline">
-          Year-on-year comparison →
-        </Link>
+      <div className="page-head">
+        <h1 className="page-title">Overview</h1>
+        <span className="page-sub hide-mobile">{headerSub}</span>
+        <div className="page-actions">
+          <div className="segment" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={preset !== 'last-12-months'}
+              onClick={() => setRange(monthRange(0))}
+            >
+              Month
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={preset === 'last-12-months'}
+              onClick={() => setRange(trailingRange(12))}
+            >
+              Year
+            </button>
+          </div>
+        </div>
       </div>
 
       {accounts.length > 0 && (
@@ -391,7 +439,7 @@ export function Dashboard() {
       <div className="dash">
         {/* Row A — hero + featured account */}
         <section className="hero c8" data-testid="overview-hero">
-          <p className="hero-eyebrow">{isMonthMode && monthPeriod?.inProgress ? 'Household net worth' : rangeLabel}</p>
+          <p className="hero-eyebrow">Household net worth</p>
           <h2 className="hero-greeting" data-testid="hero-greeting">
             {heroGreeting}
           </h2>

@@ -48,11 +48,13 @@ export function SharedSummary({ className }: { className?: string }) {
           return
         }
         // Subtitle mirrors the mockup's "Household · N members" — read off the
-        // first group, the common case of exactly one household.
+        // first group, the common case of exactly one household. Unlike
+        // `/groups/members` (co-members across all groups, caller excluded),
+        // this per-group route includes the caller, so no +1 here.
         api
           .get<unknown[]>(`/groups/${groups[0].id}/members`)
           .then((members) => {
-            if (!cancelled) setSubtitle(`${groups[0].name} · ${members.length + 1} members`)
+            if (!cancelled) setSubtitle(`${groups[0].name} · ${members.length} members`)
           })
           .catch(() => {})
         const balancesByGroup = await Promise.all(
