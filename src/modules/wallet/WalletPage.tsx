@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns'
 import { Wallet, TrendingUp, TrendingDown, Download, Trash2, SlidersHorizontal, ArrowUpDown, X, Users, Tag, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { MultiSelect } from '@/components/ui/MultiSelect'
+import { TagInput } from '@/components/ui/TagInput'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { WelcomeCard } from '@/components/ui/WelcomeCard'
@@ -811,10 +812,10 @@ export function WalletPage() {
           the collapsible advanced panel scroll away normally. */}
       <div className="tx-filterbar-sticky" ref={filterBarRef}>
         <div className="filters">
-          <div className="segment" role="tablist">
-            <button type="button" role="tab" aria-selected={dateRangePreset(filters) === 'this-month'} onClick={() => setFilters(monthRange(0))}>This month</button>
-            <button type="button" role="tab" aria-selected={dateRangePreset(filters) === 'last-month'} onClick={() => setFilters(monthRange(-1))}>Last month</button>
-          </div>
+          <DateRangeControl
+            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+            onChange={(range) => setFilters(range)}
+          />
           <div className="ml-auto flex items-center gap-2">
           {anyFilterActive && (
             <button
@@ -924,15 +925,10 @@ export function WalletPage() {
                 data-testid="filter-panel"
                 className="absolute right-0 top-full z-20 mt-2 w-[min(90vw,420px)] rounded-xl border border-line bg-surface-raised p-4 shadow-xl shadow-line/60"
               >
-                <div className="mb-3">
-                  <DateRangeControl
-                    value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
-                    onChange={(range) => setFilters(range)}
-                  />
-                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <MultiSelect
                     label="Type"
+                    testId="filter-type"
                     allLabel="All Types"
                     options={typeOptions}
                     selected={filters.type}
@@ -940,6 +936,7 @@ export function WalletPage() {
                   />
                   <MultiSelect
                     label="Account"
+                    testId="filter-account"
                     allLabel="All Accounts"
                     searchPlaceholder="Search accounts…"
                     options={accountOptions}
@@ -948,15 +945,27 @@ export function WalletPage() {
                   />
                   <MultiSelect
                     label="Category"
+                    testId="filter-category"
                     allLabel="All Categories"
                     searchPlaceholder="Search categories…"
                     options={categoryOptions}
                     selected={filters.categoryId}
                     onChange={(values) => setFilters({ categoryId: values })}
                   />
+                  <TagInput
+                    id="filter-tags"
+                    testId="filter-tags"
+                    label="Tags"
+                    value={filters.tags}
+                    onChange={(tags) => setFilters({ tags })}
+                    suggestions={tags}
+                    allowCreate={false}
+                    placeholder="Filter by tags..."
+                  />
                   {hasGroups && (
                     <MultiSelect
                       label="Sharing"
+                      testId="filter-view"
                       allLabel="All"
                       options={viewOptions}
                       selected={filters.view}
@@ -1139,16 +1148,16 @@ export function WalletPage() {
             </button>
           )}
           <div className="mx-1 h-5 w-px bg-line" />
-          <Button variant="secondary" size="sm" onClick={() => setBulkEditOpen(true)}>
-            <Tag className="h-3.5 w-3.5" /> Categorise
+          <Button data-testid="bulk-edit-btn" variant="secondary" size="sm" onClick={() => setBulkEditOpen(true)}>
+            <Tag className="h-3.5 w-3.5" /> Categorise {selectedIds.size}
           </Button>
-          <Button variant="primary" size="sm" onClick={() => setBulkSplitOpen(true)}>
+          <Button data-testid="bulk-split-btn" variant="primary" size="sm" onClick={() => setBulkSplitOpen(true)}>
             <Users className="h-3.5 w-3.5" /> Split
           </Button>
-          <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+          <Button data-testid="bulk-delete-btn" variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
-          <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+          <Button data-testid="bulk-export-btn" variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
             <Download className="h-3.5 w-3.5" /> Export
           </Button>
           <button

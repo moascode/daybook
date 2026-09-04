@@ -121,6 +121,54 @@ export async function openTransactionRowMenu(page: Page, merchant: string) {
   await row.getByRole('button', { name: 'Transaction options' }).click()
 }
 
+/**
+ * Select one option in a src/components/ui/MultiSelect.tsx filter, identified
+ * by its trigger's `testId` prop (e.g. 'filter-type'). Opens the dropdown if
+ * closed and clicks the option matching `value` (the option's `value`, not
+ * its label — matches the `data-testid="${testId}-option-${value}"` the
+ * component renders).
+ */
+export async function selectFilterOption(page: Page, testId: string, value: string) {
+  const trigger = page.getByTestId(testId)
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click()
+  await page.getByTestId(`${testId}-option-${value}`).click()
+}
+
+/** Same as {@link selectFilterOption}, but matches an option by its visible
+ *  label instead of its underlying value — for filters (e.g. Account,
+ *  Category) whose options are keyed by database id rather than a name the
+ *  test can spell out directly. */
+export async function selectFilterOptionByLabel(page: Page, testId: string, label: string) {
+  const trigger = page.getByTestId(testId)
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click()
+  await page.getByRole('button', { name: label, exact: true }).click()
+}
+
+/** Clear every selection in a MultiSelect filter (back to its "All" state).
+ *  A no-op if nothing is selected — the component only renders its "Clear"
+ *  button once `selected.length > 0`. */
+export async function clearFilterOption(page: Page, testId: string) {
+  const trigger = page.getByTestId(testId)
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click()
+  const clearBtn = page.getByTestId(`${testId}-clear`)
+  if (await clearBtn.isVisible().catch(() => false)) await clearBtn.click()
+}
+
+/**
+ * Select every currently-visible transaction on the Transactions page.
+ * Every row's checkbox is always visible — there's no separate "select
+ * mode" to enter first — so this checks the first row (surfacing the
+ * floating bulk-action bar and its own "Select all N" shortcut), then
+ * clicks that shortcut to pick up the rest.
+ */
+export async function selectAllVisibleTransactions(page: Page) {
+  if (!(await page.getByTestId('bulk-action-bar').isVisible())) {
+    await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
+  }
+  const selectAllBtn = page.getByRole('button', { name: /^Select all \d+$/ })
+  if (await selectAllBtn.isVisible().catch(() => false)) await selectAllBtn.click()
+}
+
 /** Fill the AccountForm modal and submit it */
 export async function fillAccountForm(
   page: Page,

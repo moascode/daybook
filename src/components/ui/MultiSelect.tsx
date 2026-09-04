@@ -17,6 +17,8 @@ interface MultiSelectProps {
   searchPlaceholder?: string
   /** Below ~6 options a search box adds friction without adding value. */
   searchThreshold?: number
+  /** e2e hook on the trigger button; each option gets `${testId}-option-${value}`. */
+  testId?: string
 }
 
 export function MultiSelect({
@@ -27,6 +29,7 @@ export function MultiSelect({
   allLabel = 'All',
   searchPlaceholder = 'Search…',
   searchThreshold = 6,
+  testId,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -85,6 +88,7 @@ export function MultiSelect({
       {label && <span className="text-sm font-medium text-fg-muted">{label}</span>}
       <button
         type="button"
+        data-testid={testId}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => {
           if (e.key === 'Escape') setOpen(false)
@@ -127,6 +131,8 @@ export function MultiSelect({
                 <button
                   key={opt.value}
                   type="button"
+                  data-testid={testId ? `${testId}-option-${opt.value}` : undefined}
+                  aria-pressed={isChecked}
                   onClick={() => toggle(opt.value)}
                   className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm text-fg-muted hover:bg-surface-sunken"
                 >
@@ -147,6 +153,7 @@ export function MultiSelect({
             <div className="border-t border-line px-2.5 py-1.5">
               <button
                 type="button"
+                data-testid={testId ? `${testId}-clear` : undefined}
                 onClick={() => onChange([])}
                 className="text-xs font-medium text-brand-600 hover:underline"
               >
