@@ -1,12 +1,13 @@
 /**
  * Wallet: §6.4 filter-bar reorganisation.
- * The Transactions bar is a single search-first row: search input, a Filters
- * toggle with an active-count badge, and a Clear button that only appears when
- * something is active. The occasional filters — the segmented date-range
- * control, Type/Account/Category/Tags, and the Sharing view for group members
- * — live in a collapsible popup opened by the Filters toggle (owner call:
- * date range moved in alongside the others rather than staying always-visible
- * in the row); category management is reachable from the Category dropdown's
+ * The Transactions bar is a single search-first row: search input, the
+ * everyday date-range presets (This month/Last month — always visible), a
+ * Filters toggle with an active-count badge, and a Clear button that only
+ * appears when something is active. The rarer date presets (All time/
+ * Custom…) plus Type/Account/Category/Tags and the Sharing view for group
+ * members live in a collapsible popup opened by the Filters toggle (owner
+ * call: split the date-range control rather than moving all of it either
+ * way); category management is reachable from the Category dropdown's
  * footer option.
  */
 
@@ -37,24 +38,27 @@ test.afterAll(async () => {
 })
 
 // ── Date-range control active state ─────────────────────────────────────
-// Now inside the Filters popup — open it once here; it stays open through
-// the rest of this block (nothing here closes it) and is explicitly closed
-// again at the end so the "collapsed by default" tests below still hold.
+// This month/Last month are always-visible; All time/Custom… live in the
+// Filters popup — opened where needed. Clicking an always-visible preset
+// counts as an outside click on the popup, so it closes the popup too.
 
 test('the default "This month" range is shown as active', async () => {
-  await ensureFiltersOpen(page)
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
   await expect(page.getByTestId('filter-last-month')).not.toHaveClass(/bg-brand/)
 })
 
 test('selecting another range moves the active state', async () => {
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByTestId('filter-clear-dates')).toHaveClass(/bg-brand/)
   await expect(page.getByTestId('filter-this-month')).not.toHaveClass(/bg-brand/)
 })
 
 test('"Custom…" reveals From/To pre-filled with the current range', async () => {
+  // Reset via the always-visible preset — this also closes the popup opened
+  // by the previous test (outside click).
   await page.getByTestId('filter-this-month').click()
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-custom-range').click()
   await expect(page.getByTestId('filter-custom-range')).toHaveClass(/bg-brand/)
   // Custom does not change the range — the editors show this month's bounds
@@ -65,13 +69,9 @@ test('"Custom…" reveals From/To pre-filled with the current range', async () =
   // e2e/03-wallet-transactions.spec.ts (localISO); the app is not involved.
   const firstDay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   await expect(page.getByTestId('filter-from')).toHaveValue(firstDay)
-  // Picking a preset closes the editors again
+  // Picking the always-visible preset again closes the editors AND the
+  // popup (outside click) — the tests below rely on it starting collapsed.
   await page.getByTestId('filter-this-month').click()
-  await expect(page.getByTestId('filter-from')).toHaveCount(0)
-
-  // Close the Filters popup again — the tests below assert it's collapsed
-  // by default, and nothing above this point closed it.
-  await page.getByTestId('filter-toggle').click()
   await expect(page.getByTestId('filter-panel')).toHaveCount(0)
 })
 
@@ -108,7 +108,6 @@ test('Clear resets every filter and disappears when nothing is active', async ()
   // Defaults restored: no badge, search empty, This month active again
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
   await expect(page.getByTestId('transaction-search')).toHaveValue('')
-  await ensureFiltersOpen(page)
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
   await expect(page.getByTestId('filter-clear-all')).toHaveCount(0)
   await expect(transactionRowFor(page, 'Bar Cafe')).toBeVisible()
