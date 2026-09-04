@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
 import { api } from '@/lib/api'
 
@@ -49,4 +50,51 @@ export async function fetchTransferCandidates(transaction: {
         Math.abs(differenceInCalendarDays(parseISO(a.date), base)) -
         Math.abs(differenceInCalendarDays(parseISO(b.date), base)),
     )
+}
+
+const DEBOUNCE_MS = 400
+
+/**
+ * Debounced version of fetchTransferCandidates, re-running whenever the
+ * inputs change. Shared by TransferLinkHint (the banner shown when a match
+ * exists) and TransactionForm (which needs to know whether a match exists at
+ * all, to decide between the banner and the header's manual-search button —
+ * see PR #161 discussion on where that fallback should live).
+ */
+export function useTransferLinkCandidates(input: {
+  id: string
+  accountId: string
+  amount: number
+  date: string
+  wantType: 'income' | 'expense'
+} | null): TransferCandidateRow[] {
+  const [candidates, setCandidates] = useState<TransferCandidateRow[]>([])
+
+  const id = input?.id ?? null
+  const accountId = input?.accountId ?? null
+  const wantType = input?.wantType ?? null
+  const amount = input?.amount ?? 0
+  const date = input?.date ?? null
+
+  const searchKey = id && accountId && wantType && amount > 0 && date
+    ? `${id}|${accountId}|${wantType}|${amount}|${date}`
+    : null
+  const [prevSearchKey, setPrevSearchKey] = useState<string | null>(searchKey)
+  if (searchKey !== prevSearchKey) {
+    setPrevSearchKey(searchKey)
+    setCandidates([])
+  }
+
+  useEffect(() => {
+    if (!searchKey || !id || !accountId || !wantType || !date) return
+    let cancelled = false
+    const timer = setTimeout(() => {
+      fetchTransferCandidates({ id, accountId, amount, date, wantType })
+        .then((matches) => { if (!cancelled) setCandidates(matches) })
+        .catch(() => { if (!cancelled) setCandidates([]) })
+    }, DEBOUNCE_MS)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [searchKey, id, accountId, wantType, amount, date])
+
+  return candidates
 }

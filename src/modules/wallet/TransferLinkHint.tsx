@@ -1,68 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { ArrowRightLeft } from 'lucide-react'
 import { formatMYR } from '@/lib/utils'
-import {
-  fetchTransferCandidates,
-  type TransferCandidateRow,
-} from '@/modules/wallet/transferCandidates'
+import type { TransferCandidateRow } from '@/modules/wallet/transferCandidates'
 import type { Account } from '@/types/wallet.types'
 
-const DEBOUNCE_MS = 400
-
 interface TransferLinkHintProps {
-  transactionId: string
-  accountId: string
-  type: 'expense' | 'income'
-  amount: number
-  date: string
+  candidates: TransferCandidateRow[]
+  /** The opposite type being searched for — only used for the banner's copy. */
+  wantType: 'income' | 'expense'
   accounts: Account[]
-  /** Link `transactionId` directly to this candidate — skips the manual picker. */
+  /** Link the edited transaction directly to this candidate — skips the manual picker. */
   onLink: (candidateId: string) => Promise<void>
-  /** Manual fallback when no match is found automatically. */
-  onOpenPicker: () => void
 }
 
 /**
- * Edit mode's proactive twin: as soon as an expense/income transaction is
- * open for editing, silently checks whether an unlinked opposite-type row on
- * another account already matches it (same search LinkTransferDialog runs on
- * click, just run eagerly). A match renders as a prominent inline banner the
- * user can act on with one click; no match falls back to the quieter manual
- * "Link as transfer" button (onOpenPicker) so a wider manual search is still
- * reachable.
+ * Edit mode's proactive banner: TransactionForm already ran the same search
+ * LinkTransferDialog runs on click (via useTransferLinkCandidates) and found
+ * at least one unlinked opposite-type row on another account matching this
+ * transaction. Render it as a one-click suggestion. When nothing matches,
+ * TransactionForm shows the manual "Link as transfer" button in the modal
+ * header instead of this component (PR #161: banner when a match exists,
+ * header button when it doesn't).
  */
-export function TransferLinkHint({
-  transactionId,
-  accountId,
-  type,
-  amount,
-  date,
-  accounts,
-  onLink,
-  onOpenPicker,
-}: TransferLinkHintProps) {
-  const [candidates, setCandidates] = useState<TransferCandidateRow[]>([])
+export function TransferLinkHint({ candidates, wantType, accounts, onLink }: TransferLinkHintProps) {
   const [linkingId, setLinkingId] = useState<string | null>(null)
-
-  const wantType = type === 'expense' ? 'income' : 'expense'
-  const searchKey = amount > 0 && date ? `${transactionId}|${accountId}|${type}|${amount}|${date}` : null
-  const [prevSearchKey, setPrevSearchKey] = useState<string | null>(searchKey)
-  if (searchKey !== prevSearchKey) {
-    setPrevSearchKey(searchKey)
-    setCandidates([])
-  }
-
-  useEffect(() => {
-    if (!searchKey) return
-    let cancelled = false
-    const timer = setTimeout(() => {
-      fetchTransferCandidates({ id: transactionId, accountId, amount, date, wantType })
-        .then((matches) => { if (!cancelled) setCandidates(matches) })
-        .catch(() => { if (!cancelled) setCandidates([]) })
-    }, DEBOUNCE_MS)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [searchKey, transactionId, accountId, amount, date, wantType])
 
   const accountName = (id: string) => accounts.find((a) => a.id === id)?.name ?? 'Unknown account'
 
@@ -74,20 +36,6 @@ export function TransferLinkHint({
     } finally {
       setLinkingId(null)
     }
-  }
-
-  if (candidates.length === 0) {
-    return (
-      <button
-        type="button"
-        onClick={onOpenPicker}
-        data-testid="link-transfer-open"
-        className="flex items-center gap-1.5 self-start rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-fg-muted transition-colors hover:border-brand-300 hover:text-brand-600"
-      >
-        <ArrowRightLeft className="h-3.5 w-3.5" />
-        Link as transfer…
-      </button>
-    )
   }
 
   return (
@@ -125,13 +73,6 @@ export function TransferLinkHint({
           </li>
         ))}
       </ul>
-      <button
-        type="button"
-        onClick={onOpenPicker}
-        className="text-xs font-medium text-fg-faint hover:text-fg-muted hover:underline"
-      >
-        Not it? Search manually…
-      </button>
     </div>
   )
 }

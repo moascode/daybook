@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { ArrowRightLeft } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -8,6 +9,7 @@ import { TagInput } from '@/components/ui/TagInput'
 import { cn, todayISO } from '@/lib/utils'
 import { TransferMatchHint, type TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
 import { TransferLinkHint } from '@/modules/wallet/TransferLinkHint'
+import { useTransferLinkCandidates } from '@/modules/wallet/transferCandidates'
 import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
 
 interface TransactionFormProps {
@@ -111,6 +113,15 @@ export function TransactionForm({
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
   const [prevInitialDraft, setPrevInitialDraft] = useState(initialDraft)
   const amountRef = useRef<HTMLInputElement>(null)
+
+  const isEdit = !!transaction
+  const transferWantType =
+    form.type === 'expense' ? 'income' : form.type === 'income' ? 'expense' : null
+  const transferLinkCandidates = useTransferLinkCandidates(
+    isEdit && transaction && transferWantType && onLinkTransfer
+      ? { id: transaction.id, accountId: form.accountId, amount: form.amount, date: form.date, wantType: transferWantType }
+      : null,
+  )
 
   // Reset the form when the modal (re)opens or its inputs change — adjust state
   // during render rather than in an effect.
@@ -221,7 +232,12 @@ export function TransactionForm({
     }
   }
 
-  const isEdit = !!transaction
+  // Header button (PR #161, option C): the manual "Link as transfer" entry
+  // point next to the modal's close (×), shown only once the proactive
+  // search below has come back with nothing — a match instead renders the
+  // inline banner (option B) further down.
+  const showLinkTransferButton =
+    isEdit && form.type !== 'transfer' && !!onLinkTransfer && transferLinkCandidates.length === 0
 
   return (
     <Modal
@@ -229,6 +245,19 @@ export function TransactionForm({
       onOpenChange={onOpenChange}
       title={isEdit ? 'Edit Transaction' : 'New Transaction'}
       className="max-w-md"
+      headerAction={
+        showLinkTransferButton && (
+          <button
+            type="button"
+            onClick={onLinkTransfer}
+            data-testid="link-transfer-open"
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-hover hover:text-brand-600"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+            Link as transfer…
+          </button>
+        )
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Type selector */}
@@ -256,19 +285,15 @@ export function TransactionForm({
           {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
             <p className="text-xs text-fg-faint" data-testid="transfer-hint">
               Moved money between your own accounts? Switch Type to Transfer, or
-              link it to the other side below.
+              link it to the other side{onLinkTransfer ? ' above' : ''}.
             </p>
           )}
-          {isEdit && form.type !== 'transfer' && onLinkTransfer && (
+          {isEdit && form.type !== 'transfer' && onLinkTransfer && transferWantType && transferLinkCandidates.length > 0 && (
             <TransferLinkHint
-              transactionId={transaction!.id}
-              accountId={form.accountId}
-              type={form.type as 'expense' | 'income'}
-              amount={form.amount}
-              date={form.date}
+              candidates={transferLinkCandidates}
+              wantType={transferWantType}
               accounts={accounts}
               onLink={onQuickLinkTransfer ?? (async () => onLinkTransfer())}
-              onOpenPicker={onLinkTransfer}
             />
           )}
         </div>
