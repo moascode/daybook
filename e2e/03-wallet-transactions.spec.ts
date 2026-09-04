@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo, selectFilterOption, selectFilterOptionByLabel, clearFilterOption } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo, selectFilterOption, selectFilterOptionByLabel, clearFilterOption, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -16,14 +16,6 @@ let page: Page
  *  back in UTC+ timezones, which is not how the app computes month bounds. */
 function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/** The occasional filters (Type/Account/Category/Tags) live in the collapsible
- *  Filters section of the §6.4 bar — open it if it isn't already. */
-async function ensureFiltersOpen() {
-  if (!(await page.getByTestId('filter-panel').isVisible())) {
-    await page.getByTestId('filter-toggle').click()
-  }
 }
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
@@ -49,6 +41,7 @@ test('navigate to Transactions tab', async () => {
   await expect(page).toHaveURL(/\/wallet$/)
   await expect(page.locator('main').getByRole('heading', { name: 'Transactions' })).toBeVisible()
   // Clear the default current-month date filters so transactions with past dates are visible
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 })
 
@@ -219,7 +212,7 @@ test('deleted transaction stays gone when the undo toast is not used', async () 
 // ── Filters ─────────────────────────────────────────────────────────────
 
 test('filter by type: Income shows only income transactions', async () => {
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await selectFilterOption(page, 'filter-type', 'income')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
@@ -249,7 +242,9 @@ test('reset type filter to All Types', async () => {
 })
 
 test('filter by date range: future From date yields no results', async () => {
-  // From/To live behind the Custom… segment of the date-range control
+  // From/To live behind the Custom… segment of the date-range control, which
+  // itself lives inside the Filters popup.
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-custom-range').click()
   await page.getByTestId('filter-from').fill('2030-01-01')
   // The empty state names the active range and offers to widen it, rather than
@@ -259,16 +254,16 @@ test('filter by date range: future From date yields no results', async () => {
 })
 
 test('clear date filter restores transactions', async () => {
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-from').fill('')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
 })
 
 test('filter by account: Test Cash shows only cash account transactions', async () => {
-  // The Filters popup closes on any outside click (search, chips, the
-  // date-range control above all reopen the panel-free, so it doesn't
-  // silently stay up across unrelated actions) — reopen it here rather than
-  // assuming it survived from an earlier test.
-  await ensureFiltersOpen()
+  // The Filters popup closes on any outside click (search, chips reopen it
+  // panel-free, so it doesn't silently stay up across unrelated actions) —
+  // reopen it here rather than assuming it survived from an earlier test.
+  await ensureFiltersOpen(page)
   await selectFilterOptionByLabel(page, 'filter-account', 'Test Cash')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
@@ -288,7 +283,7 @@ test('filter by tag: "coffee" shows tagged transaction', async () => {
   // Wait for dialog to fully close before touching the filter bar
   await expect(page.getByRole('dialog')).not.toBeVisible()
   // TagInput filter bar: type to filter suggestions, arrow-down to highlight, Enter to select
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   const tagFilterInput = page.getByPlaceholder('Filter by tags...')
   await tagFilterInput.click()
   await tagFilterInput.fill('coffee')
@@ -306,7 +301,7 @@ test('clear tag filter restores all transactions', async () => {
 
 test('tag filter works standalone without other filters (no category/account required)', async () => {
   // Ensure no category or account filter is active
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await clearFilterOption(page, 'filter-account')
   await clearFilterOption(page, 'filter-category')
   // Filter by coffee tag alone — should return only Kopitiam
@@ -333,7 +328,7 @@ test('tag filter uses OR logic: selecting multiple tags shows transactions match
   await expect(page.getByRole('dialog')).not.toBeVisible()
 
   // The placeholder disappears after the first tag is selected, so anchor on testid.
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   const filterTagInput = page.getByTestId('filter-tags')
 
   // Select 'coffee' tag
@@ -386,6 +381,7 @@ test('account balance updates to reflect transactions', async () => {
 
 test('date range "This month" is applied and shown as active', async () => {
   await navTo(page, 'transactions')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-this-month').click()
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
 
@@ -469,6 +465,7 @@ test('tag filter works when Last Month date range is active', async () => {
   const lastMonthDate = lastMonth.toISOString().slice(0, 10)
 
   // Add two transactions dated last month: one tagged, one untagged.
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 
   await openBlankTransactionForm(page)
@@ -497,12 +494,13 @@ test('tag filter works when Last Month date range is active', async () => {
   await expect(transactionRowFor(page, 'Monthly Grocery')).toBeVisible()
 
   // Apply Last Month date filter.
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-last-month').click()
   await expect(transactionRowFor(page, 'Brewers Coffee')).toBeVisible()
   await expect(transactionRowFor(page, 'Monthly Grocery')).toBeVisible()
 
   // Now apply the tag filter — only the tagged transaction should remain.
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
@@ -515,6 +513,7 @@ test('tag filter works when Last Month date range is active', async () => {
 
   // Clean up: remove tag filter and clear date range so later tests see all rows.
   await page.getByLabel('Remove lastmonthtag').click()
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 })
 
@@ -528,13 +527,14 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
   // "This Month" on reload, so immediately switch to All Time to see all rows.
   await page.reload()
   await page.waitForSelector('main')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 
   // The injected row ("Legacy Row") should be visible in All Time view.
   await expect(transactionRowFor(page, 'Legacy Row')).toBeVisible()
 
   // Applying any tag filter must NOT crash (if it did, the list would stay unchanged).
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
   await filterTagInput.fill('lastmonthtag')
@@ -589,6 +589,7 @@ test('default From/To equal the current month bounds in a UTC+8 timezone', async
     return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` }
   })
   // Custom… opens the From/To editors pre-filled with the active (default) range.
+  await ensureFiltersOpen(pg)
   await pg.getByTestId('filter-custom-range').click()
   await expect(pg.getByTestId('filter-from')).toHaveValue(expected.from)
   await expect(pg.getByTestId('filter-to')).toHaveValue(expected.to)

@@ -18,6 +18,7 @@ import {
   fillTransactionForm,
   openTransactionRowMenu,
   openBlankTransactionForm,
+  ensureFiltersOpen,
 } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
@@ -55,10 +56,12 @@ test('once an account exists the summary and filters appear', async () => {
 
   await page.goto('/wallet')
   await expect(page.getByTestId('summary-income')).toBeVisible()
-  // §6.4 single-row bar: search first, then the date-range control and Filters toggle
+  // §6.4 single-row bar: search and the Filters toggle. Date range lives
+  // inside the Filters popup (owner call) rather than always-visible.
   await expect(page.getByTestId('transaction-search')).toBeVisible()
-  await expect(page.getByTestId('filter-this-month')).toBeVisible()
   await expect(page.getByTestId('filter-toggle')).toBeVisible()
+  await ensureFiltersOpen(page)
+  await expect(page.getByTestId('filter-this-month')).toBeVisible()
 })
 
 test('the transaction form pre-selects the first account', async () => {

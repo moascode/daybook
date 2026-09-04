@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, clearFilterOption } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, clearFilterOption, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -30,6 +30,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await fillAccountForm(page, { name: 'Search Account', type: 'cash' })
   await page.goto('/wallet')
   // Clear date filters so all seeded transactions are visible
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 
   await openBlankTransactionForm(page)
