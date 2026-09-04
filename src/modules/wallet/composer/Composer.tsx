@@ -1,7 +1,6 @@
 import { forwardRef, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  CircleUser,
   Send,
   TrendingDown,
   TrendingUp,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, todayISO } from '@/lib/utils'
 import { api } from '@/lib/api'
+import { useAppStore } from '@/stores/app.store'
 import type { Account, Category, TransactionType } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 import { parseComposerInput } from './parseComposerInput'
@@ -53,12 +53,12 @@ const SHORTCUTS: {
   label: string
   icon: typeof TrendingDown
   type: TransactionType
-  colorClass: string
+  dotClass: string
 }[] = [
-  { key: 'expense', label: 'Expense', icon: TrendingDown, type: 'expense', colorClass: 'text-red-600' },
-  { key: 'income', label: 'Income', icon: TrendingUp, type: 'income', colorClass: 'text-positive-600' },
-  { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, type: 'transfer', colorClass: 'text-blue-600' },
-  { key: 'split', label: 'Split', icon: Split, type: 'expense', colorClass: 'text-purple-600' },
+  { key: 'expense', label: 'Expense', icon: TrendingDown, type: 'expense', dotClass: 'bg-neg-bg text-neg-fg' },
+  { key: 'income', label: 'Income', icon: TrendingUp, type: 'income', dotClass: 'bg-pos-bg text-pos-fg' },
+  { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, type: 'transfer', dotClass: 'bg-info-bg text-info-fg' },
+  { key: 'split', label: 'Split', icon: Split, type: 'expense', dotClass: 'bg-alt-bg text-alt-fg' },
 ]
 
 /**
@@ -111,6 +111,7 @@ export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Com
   { accounts, categories, activeAccountId, hasAnthropicKey, onConfirm, onOpenBlankForm },
   ref,
 ) {
+  const username = useAppStore((s) => s.user?.username ?? '')
   const [text, setText] = useState('')
   const [previewDraft, setPreviewDraft] = useState<ComposerPreviewDraft | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -212,33 +213,33 @@ export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Com
     setPreviewDraft(null)
   }
 
+  const initial = (username || '?').charAt(0).toUpperCase()
+
   return (
-    <div className="composer flex flex-col gap-2 px-4 py-3">
-      <div className="flex items-center gap-3">
-        <CircleUser className="h-6 w-6 shrink-0 text-fg-faint" aria-hidden="true" />
-        <input
-          ref={ref}
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder='Add a transaction — try "coffee 4.20 cash"'
-          aria-label="Add a transaction"
-          disabled={submitting}
-          className={cn(
-            'min-w-0 flex-1 rounded-full border-none bg-transparent px-1 py-1.5 text-sm text-fg outline-none',
-            'placeholder:text-fg-faint disabled:opacity-60',
-          )}
-        />
+    <div className="composer">
+      <div className="composer-top">
+        <span className="avatar" style={{ background: 'rgb(var(--accent-bg))', color: 'rgb(var(--accent-fg))' }}>
+          {initial}
+        </span>
+        <label className="composer-field">
+          <input
+            ref={ref}
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder='Add a transaction — try "coffee 4.20 cash"'
+            aria-label="Add a transaction"
+            disabled={submitting}
+          />
+          <span className="kbd">N</span>
+        </label>
         <button
           type="button"
+          className="composer-send"
           onClick={() => void handleSubmit()}
           disabled={submitting || !text.trim()}
           aria-label="Send"
-          className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-fg-on-accent',
-            'transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40',
-          )}
         >
           {submitting ? (
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -248,28 +249,19 @@ export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Com
         </button>
       </div>
 
-      <hr className="border-line-subtle" />
-
-      <div className="flex flex-wrap items-center gap-1.5">
-        {SHORTCUTS.map(({ key, label, icon: Icon, type, colorClass }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onOpenBlankForm({ type })}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-fg-muted',
-              'hover:bg-surface-hover',
-            )}
-          >
-            <Icon className={cn('h-3.5 w-3.5', colorClass)} aria-hidden="true" />
+      <div className="composer-acts">
+        {SHORTCUTS.map(({ key, label, icon: Icon, type, dotClass }) => (
+          <button key={key} type="button" className="composer-act" onClick={() => onOpenBlankForm({ type })}>
+            <span className={cn('cdot', dotClass)}>
+              <Icon className="icon-sm" aria-hidden="true" />
+            </span>
             {label}
           </button>
         ))}
-        <Link
-          to="/wallet/import"
-          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-fg-muted hover:bg-surface-hover"
-        >
-          <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+        <Link to="/wallet/import" className="composer-act">
+          <span className="cdot" style={{ background: 'rgb(var(--surface-sunk))', color: 'rgb(var(--fg-muted))' }}>
+            <Upload className="icon-sm" aria-hidden="true" />
+          </span>
           Import CSV
         </Link>
       </div>
