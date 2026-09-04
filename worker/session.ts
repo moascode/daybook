@@ -39,21 +39,28 @@ function newSid(): string {
 /**
  * Cookie attributes.
  *
- * `secure: true` is unconditional — the Express server had to leave it false
- * because the home network is plain HTTP (server/index.ts:52). On Workers, TLS
- * is always terminated at the edge, so there is no HTTP case to accommodate.
- * This is the "blocker 4.1 disappears" property from the plan: no
- * `trust proxy`, no environment-dependent cookie flags, nothing to get wrong.
+ * `secure` follows the incoming request's own scheme rather than being a flat
+ * `true`. In production, TLS is always terminated at Cloudflare's edge before
+ * the Worker ever sees the request, so `c.req.url` reads `https:` there and
+ * this is unconditionally secure — no `trust proxy`, no environment-dependent
+ * flag to get wrong, exactly the "blocker 4.1 disappears" property from the
+ * plan. But `wrangler dev` (local dev, e2e) serves plain `http://localhost`,
+ * where a hardcoded `secure: true` cookie is silently dropped by the browser:
+ * login returns 200, the session is created server-side, but the `Set-Cookie`
+ * never gets stored, so the very next request reads as logged-out. Reading
+ * the scheme off the request itself fixes both cases with no new env var.
  *
- * `sameSite: 'Lax'` matches today and is sufficient because the SPA and the API
- * share one origin.
+ * `sameSite: 'Lax'` matches today and is sufficient because the SPA and the
+ * API share one origin.
  */
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'Lax',
-  path: '/',
-} as const
+function cookieOpts(c: Context<AppEnv>) {
+  return {
+    httpOnly: true,
+    secure: new URL(c.req.url).protocol === 'https:',
+    sameSite: 'Lax',
+    path: '/',
+  } as const
+}
 
 /** The authenticated user id for this request, or null. */
 export async function readSession(c: Context<AppEnv>): Promise<string | null> {
@@ -121,7 +128,7 @@ export async function createSession(c: Context<AppEnv>, userId: string): Promise
       .bind(sid, JSON.stringify({ userId }), expire),
   ])
 
-  await setSignedCookie(c, COOKIE, sid, secret, { ...COOKIE_OPTS, maxAge: TTL_MS / 1000 })
+  await setSignedCookie(c, COOKIE, sid, secret, { ...cookieOpts(c), maxAge: TTL_MS / 1000 })
 }
 
 /** Delete the session row and clear the cookie. */
@@ -130,5 +137,5 @@ export async function destroySession(c: Context<AppEnv>): Promise<void> {
   if (sid) {
     await c.env.DB.prepare('DELETE FROM sessions WHERE sid = ?').bind(sid).run()
   }
-  deleteCookie(c, COOKIE, COOKIE_OPTS)
+  deleteCookie(c, COOKIE, cookieOpts(c))
 }
