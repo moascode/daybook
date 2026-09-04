@@ -189,7 +189,7 @@ export function AccountMenu() {
             Log out
           </button>
 
-          <div className="menu-foot">Daybook · On your hardware</div>
+          <div className="menu-foot">Daybook · v3.0.0</div>
         </div>
 
         {/* ── Settings pane ─────────────────────────────────────── */}
