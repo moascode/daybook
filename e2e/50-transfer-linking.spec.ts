@@ -79,6 +79,34 @@ test('balances reflect the transfer on both accounts', async () => {
   await expect(accountCardFor(page, 'Bank B').getByTestId('account-card-balance')).toHaveText(/RM\s?350\.00/)
 })
 
+// ── Proactive suggestion from the create form ────────────────────────────
+
+test('creating a transfer suggests linking an existing unlinked leg instead', async () => {
+  await navTo(page, 'transactions')
+  // An unlinked income sitting in Bank B, not yet paired with anything.
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, {
+    type: 'Income', amount: '120', account: 'Bank B', merchant: 'Refund In',
+  })
+  await expect(transactionRowFor(page, 'Refund In')).toBeVisible()
+
+  // Now start a transfer from Bank A to Bank B for the same amount — the hint
+  // should surface the existing income as a candidate to link instead.
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, {
+    type: 'Transfer', amount: '120', account: 'Bank A', toAccount: 'Bank B', submit: false,
+  })
+  const hint = page.getByTestId('transfer-match-hint')
+  await expect(hint).toBeVisible()
+  await hint.getByRole('button', { name: /Refund In/ }).click()
+
+  await expect(page.getByText('Linked as one transfer')).toBeVisible()
+  // The pre-existing income leg is gone, replaced by one surviving transfer —
+  // no third, redundant row was created.
+  await expect(transactionRowFor(page, 'Refund In')).toHaveCount(0)
+  await expect(page.locator('[data-testid="transaction-row"]')).toHaveCount(2) // CC Payment (merged earlier) + the new merged transfer
+})
+
 // ── Guard cases via the API (same session user) ──────────────────────────
 
 test('guards: same account, mismatched amount, same direction are rejected', async () => {

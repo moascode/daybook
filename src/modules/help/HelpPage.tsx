@@ -179,6 +179,11 @@ const SECTIONS: Section[] = [
             another account, within a few days) and merges the two rows into one transfer.
             Re-importing either statement later still detects the merged rows as duplicates.
           </li>
+          <li>
+            <strong>New Transaction → Transfer</strong> also checks for this automatically: if
+            an unlinked expense or income already matches the accounts, amount and date you've
+            entered, a suggestion appears to link it instead of adding a second, duplicate row.
+          </li>
         </UL>
         <P>
           If the two legs differ in amount (a fee or FX spread), they can&apos;t be linked as a
