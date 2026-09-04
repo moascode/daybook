@@ -157,7 +157,7 @@ export function DayPage() {
       </div>
 
       {!loading && !loadFailed && (
-        <div className="tlist" data-testid="day-timeline">
+        <div className="daytimeline" data-testid="day-timeline">
           {visibleHappened.map((item) => (
             <TimelineRow key={item.id} item={item} />
           ))}

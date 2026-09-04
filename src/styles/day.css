@@ -1,5 +1,5 @@
 /* Ported from proposal-v2/theme.css §4-5 (component + responsive layer).
-   Concern: .datenav, .dayfigs, .ribbon, .tlist/.tl, .tl-note, .tl-now.
+   Concern: .datenav, .dayfigs, .ribbon, .daytimeline/.tl, .tl-note, .tl-now.
    See docs/v2/foundation/02-component-layer.md.
    DORMANT in R1 - defined here, applied to components starting R2+. */
 
@@ -113,8 +113,8 @@
 }
 
 /* ---- the timeline itself ---- */
-.tlist { position: relative; }
-.tlist::before {                                  /* the spine */
+.daytimeline { position: relative; }
+.daytimeline::before {                                  /* the spine */
   content: ""; position: absolute; left: 73px; top: 14px; bottom: 14px;
   width: 2px; border-radius: 2px; background: rgb(var(--line));
 }
@@ -196,7 +196,7 @@
 
 /* ---- responsive ---- */
 @media (max-width: 680px) {
-  .tlist::before { left: 47px; }
+  .daytimeline::before { left: 47px; }
   .tl { grid-template-columns: 34px 20px 1fr auto; gap: var(--s2); }
   .tl-now { grid-template-columns: 34px 20px 1fr; gap: var(--s2); }
   .dayfig + .dayfig { padding-left: var(--s4); }

@@ -526,6 +526,32 @@ export function weekdayAveragesInRange(txns: Transaction[], dateFrom: string, da
   return totals.map((total, i) => (occurrences[i] > 0 ? total / occurrences[i] : 0))
 }
 
+export interface DailySpend {
+  date: string
+  label: string
+  amount: number
+}
+
+/**
+ * Literal per-day spend for the last `n` calendar days ending at `dateTo`
+ * (inclusive), oldest first. Unlike `weekdayAverages` (a multi-month average
+ * per weekday), this is the actual total for each of the real last `n` days —
+ * the "Week rhythm" card's mockup shows a specific week's numbers, not an
+ * average.
+ */
+export function lastNDaysSpend(txns: Transaction[], dateTo: string, n: number): DailySpend[] {
+  const byDate = new Map<string, number>()
+  for (const t of txns) {
+    const amount = expenseOf(t)
+    if (amount === 0) continue
+    byDate.set(t.date, (byDate.get(t.date) ?? 0) + amount)
+  }
+  return Array.from({ length: n }, (_, i) => {
+    const date = addDaysISO(dateTo, i - (n - 1))
+    return { date, label: WEEKDAY_LABELS[mondayFirstIndex(date)], amount: byDate.get(date) ?? 0 }
+  })
+}
+
 // ── Merchants ─────────────────────────────────────────────────────
 
 export interface MerchantSpend {

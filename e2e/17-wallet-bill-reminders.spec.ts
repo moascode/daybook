@@ -89,22 +89,9 @@ test('Coming up totals only the bills actually shown, not every recurring rule',
 })
 
 // ── Dismiss reminder ───────────────────────────────────────────────────
-
-test('dismissing a bill reminder hides it from the dashboard', async () => {
-  const reminder = page.getByTestId('bill-reminder').filter({ hasText: 'Electricity Bill' })
-  await reminder.getByRole('button', { name: /Dismiss/i }).click()
-  await expect(
-    page.getByTestId('bill-reminder').filter({ hasText: 'Electricity Bill' }),
-  ).not.toBeVisible()
-  // The only bill in the window is now dismissed — the whole card (footer
-  // included) unmounts rather than showing a stale or zeroed total.
-  await expect(page.getByTestId('upcoming-bills-total')).not.toBeVisible()
-})
-
-test('dismissed reminder does not reappear on page reload', async () => {
-  await page.reload()
-  await page.waitForTimeout(500)
-  await expect(
-    page.getByTestId('bill-reminder').filter({ hasText: 'Electricity Bill' }),
-  ).not.toBeVisible()
-})
+//
+// The literal mockup port (docs/v2) has no dismiss affordance on "Coming up"
+// rows — UpcomingBills.tsx no longer accepts an `onDismiss` prop and renders
+// no per-row button. There is no adjacent behaviour left to test here, so the
+// dismiss coverage that used to live in this section was removed rather than
+// rewritten.

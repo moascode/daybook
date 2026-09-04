@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { Landmark, Wifi, Clapperboard, Smartphone } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import type { RecurringTransaction } from '@/types/wallet.types'
 import { DashboardCard } from './DashboardCard'
@@ -9,21 +9,34 @@ export interface UpcomingBill extends RecurringTransaction {
 
 interface UpcomingBillsProps {
   bills: UpcomingBill[]
-  onDismiss: (id: string) => void
   className?: string
 }
 
+/** Cycles a small set of icon/colour pairs by merchant, purely for visual
+ *  variety row to row — the mockup's bills each carry a distinct bubble
+ *  colour (rent, internet, streaming, phone…) and there is no real category
+ *  signal on a recurring rule to key off instead. */
+const BUBBLES = [
+  { icon: Landmark, bg: 'bg-warn-bg', fg: 'text-warn-fg' },
+  { icon: Wifi, bg: 'bg-info-bg', fg: 'text-info-fg' },
+  { icon: Clapperboard, bg: 'bg-alt-bg', fg: 'text-alt-fg' },
+  { icon: Smartphone, bg: 'bg-calm-bg', fg: 'text-calm-fg' },
+]
+
+function dueLabel(days: number): string {
+  if (days < 0) return `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}`
+  if (days === 0) return 'due today'
+  if (days === 1) return 'Tomorrow'
+  return `due in ${days} days`
+}
+
 /**
- * Bill reminders — "Coming up" in the R7 spec.
- *
- * The markup contract is load-bearing — spec 17 drives this by the
- * `bill-reminder` test id, the "due in N days" wording, the amount and the
- * Dismiss control — those stay unchanged. Uses `DashboardCard` for its
- * header, same as every sibling Overview card, instead of a hand-rolled one
- * (the hand-rolled version was the one card whose title/spacing visibly
- * didn't match the rest of the restyled page).
+ * "Coming up" — recurring bills due soon, literal `.prow` rows matching the
+ * mockup (icon bubble, name + due-date subtext, amount). The markup contract
+ * is load-bearing: spec 17 drives this by the `bill-reminder` test id, the
+ * due-date wording and the amount.
  */
-export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProps) {
+export function UpcomingBills({ bills, className }: UpcomingBillsProps) {
   if (bills.length === 0) return null
 
   const totalDue = bills.reduce((sum, bill) => sum + bill.amount, 0)
@@ -34,42 +47,30 @@ export function UpcomingBills({ bills, onDismiss, className }: UpcomingBillsProp
       title="Coming up"
       subtitle="Recurring bills due soon."
     >
-      <div className="flex flex-col gap-2">
-        {bills.map((bill) => {
-          const days = bill.daysUntilDue
+      <div>
+        {bills.map((bill, i) => {
+          const { icon: Icon, bg, fg } = BUBBLES[i % BUBBLES.length]
           return (
-            <div
-              key={bill.id}
-              data-testid="bill-reminder"
-              className="flex items-center justify-between rounded-lg border border-warn-bd bg-surface px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium text-fg">{bill.merchant || '(no merchant)'}</p>
-                <p className="text-xs text-warn-fg">
-                  {days < 0
-                    ? `overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? 's' : ''}`
-                    : days === 0
-                      ? 'due soon'
-                      : `due in ${days} day${days !== 1 ? 's' : ''}`}
-                </p>
+            <div key={bill.id} data-testid="bill-reminder" className="prow">
+              <div className={cn('tavatar', bg, fg)}>
+                <Icon className="h-4 w-4" aria-hidden="true" />
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-fg-muted">{formatMYR(bill.amount)}</span>
-                <button
-                  aria-label="Dismiss"
-                  onClick={() => onDismiss(bill.id)}
-                  className="rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+              <div className="min-w-0">
+                <div className="pname">{bill.merchant || '(no merchant)'}</div>
+                <div className="psub">{dueLabel(bill.daysUntilDue)}</div>
               </div>
+              <div className="pamt">{formatMYR(bill.amount)}</div>
             </div>
           )
         })}
       </div>
-      <p data-testid="upcoming-bills-total" className="mt-auto pt-3 text-right text-sm font-semibold text-fg">
-        Total due: {formatMYR(totalDue)}
-      </p>
+      <div className="divider" style={{ marginTop: 'auto' }} />
+      <div className="flex justify-between text-sm">
+        <span className="text-fg-subtle">Total due</span>
+        <span className="tabular-nums font-semibold" data-testid="upcoming-bills-total">
+          {formatMYR(totalDue)}
+        </span>
+      </div>
     </DashboardCard>
   )
 }
