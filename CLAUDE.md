@@ -1452,12 +1452,12 @@ git push origin vX.Y.Z
   `gh run rerun <ci-run-id> --failed`, wait for green, **then**
   `gh run rerun <release-run-id>`. Re-tagging is not needed. Confirm it is the
   flake and not a real break by running the failing shard locally
-  (`npx playwright test --shard=N/6`) before re-running anything.
+  (`npx playwright test --shard=N/8`) before re-running anything.
 - A local `wrangler … --remote` still fails from the owner's Mac (account not
   authorised). Only CI holds a token — verify remote D1 from the release log.
 - D1 migrations are additive-only; rename via `ALTER TABLE … RENAME TO` is
   lossless and allowed with owner sign-off. Applied in lexicographic order.
-- e2e uses a fresh DB per context; CI shards across 6 jobs.
+- e2e uses a fresh DB per context; CI shards across 8 jobs.
 - Pre-existing lint: 38 warnings (react-hooks, test-only shims).
 
 ---
@@ -1596,10 +1596,11 @@ requirement (below) makes it fragile there, a subagent misreported a
 targeted 16-spec count as if it were the ~450-680-test full suite, and a
 full local run partially crashed mid-way and returned inflated, garbled
 numbers — none of which added signal beyond CI, all of which burned real
-time. **GitHub Actions already shards the whole suite** (6 jobs, exactly what
-`test:e2e:parallel` reproduces locally) — after pushing, poll the PR's check
-runs (or read the `check_suite.completed` webhook event on a subscribed PR)
-for the authoritative result instead of reproducing it yourself.
+time. **GitHub Actions already shards the whole suite** (8 jobs — pass `8` to
+`test:e2e:parallel` to match exactly; its own default stays a lower,
+core-capped number for local resource safety) — after pushing, poll the PR's
+check runs (or read the `check_suite.completed` webhook event on a subscribed
+PR) for the authoritative result instead of reproducing it yourself.
 
 ```bash
 npx playwright test e2e/01-tasks   # Targeted — the specs touching what you changed. This is the default.

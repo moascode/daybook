@@ -58,11 +58,12 @@
 # Usage:
 #   scripts/e2e-parallel.sh [N]
 #
-#   N   Number of shards. Defaults to min(nproc, 6) — 6 to match CI's own
-#       shard count, capped by actual cores since this all runs on one
-#       machine (workerd + Chromium per shard is real CPU/memory, unlike
-#       CI's one-shard-per-runner). If you see the crash in (1) above even
-#       at the default, pass a smaller N, e.g. `scripts/e2e-parallel.sh 2`.
+#   N   Number of shards. Defaults to min(nproc, 6) — capped well below CI's
+#       own shard count (8, see .github/workflows/ci.yml) since this all runs
+#       on one machine (workerd + Chromium per shard is real CPU/memory,
+#       unlike CI's one-shard-per-runner). Pass `scripts/e2e-parallel.sh 8` to
+#       match CI exactly on a machine with the cores to spare, or a smaller N
+#       if you see the crash in (1) above even at the default.
 #
 # Output: pass/fail per shard on stdout; full logs under .e2e-parallel-logs/
 # (one {shard}.server.log / {shard}.migrate.log / {shard}.test.log each,
