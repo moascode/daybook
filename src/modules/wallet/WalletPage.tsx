@@ -442,6 +442,23 @@ export function WalletPage() {
     await loadTransactions(filtersRef.current)
   }, [linkTarget, linkTransfer, loadTransactions, addToast])
 
+  // TransferLinkHint's one-click pick, from the EDIT form: it already found the
+  // twin itself, so this skips the manual LinkTransferDialog picker entirely —
+  // link straight away and close the edit form, same end state as
+  // handleLinkTransfer above.
+  const handleQuickLinkTransfer = useCallback(async (candidateId: string) => {
+    if (!crud.editingItem) return
+    try {
+      await linkTransfer(crud.editingItem.id, candidateId)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not link the transactions — please try again.'), duration: 4000 })
+      throw err // keep the form open so the user can retry
+    }
+    crud.closeForm(false)
+    addToast({ message: 'Linked as one transfer', duration: 4000 })
+    await loadTransactions(filtersRef.current)
+  }, [crud, linkTransfer, loadTransactions, addToast])
+
   // TransferMatchHint's pick, from the CREATE form: the candidate is already
   // one real leg (an unlinked expense on the source account, or an unlinked
   // income on the destination account) — only the other leg is missing. Create
@@ -1222,6 +1239,7 @@ export function WalletPage() {
             ? () => { setLinkTarget(crud.editingItem); crud.closeForm(false) }
             : undefined
         }
+        onQuickLinkTransfer={crud.editingItem && !crud.editingItem.hasSplits ? handleQuickLinkTransfer : undefined}
         onLinkExistingTransfer={crud.editingItem ? undefined : handleLinkExistingTransfer}
       />
 

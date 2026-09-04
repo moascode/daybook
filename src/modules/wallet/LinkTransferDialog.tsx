@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react'
-import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { ArrowRightLeft } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { api } from '@/lib/api'
 import { formatMYR } from '@/lib/utils'
+import {
+  fetchTransferCandidates,
+  CANDIDATE_WINDOW_DAYS,
+  type TransferCandidateRow,
+} from '@/modules/wallet/transferCandidates'
 import type { Account, Transaction } from '@/types/wallet.types'
-
-// Candidate window (plan §Open decisions: start at ±5 days, tune after use).
-const CANDIDATE_WINDOW_DAYS = 5
-
-// Raw row from GET /transactions — only the fields the picker needs.
-interface CandidateRow {
-  id: string
-  account_id: string
-  date: string
-  merchant: string | null
-  description: string | null
-  amount: number
-  type: string
-  has_splits: number
-}
 
 interface LinkTransferDialogProps {
   open: boolean
@@ -41,7 +30,7 @@ export function LinkTransferDialog({
   // null = still loading; the list is reset during render when the dialog
   // (re)opens for a transaction — same adjust-during-render pattern as
   // TransactionForm, which also keeps the linter's no-setState-in-effect rule.
-  const [candidates, setCandidates] = useState<CandidateRow[] | null>(null)
+  const [candidates, setCandidates] = useState<TransferCandidateRow[] | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
 
   const wantType = transaction?.type === 'expense' ? 'income' : 'expense'
@@ -56,29 +45,14 @@ export function LinkTransferDialog({
   useEffect(() => {
     if (!open || !transaction) return
     let cancelled = false
-    const base = parseISO(transaction.date)
-    const dateFrom = format(addDays(base, -CANDIDATE_WINDOW_DAYS), 'yyyy-MM-dd')
-    const dateTo = format(addDays(base, CANDIDATE_WINDOW_DAYS), 'yyyy-MM-dd')
-    api
-      .get<CandidateRow[]>(`/transactions?dateFrom=${dateFrom}&dateTo=${dateTo}&type=${wantType}`)
-      .then((rows) => {
-        if (cancelled) return
-        const matches = rows
-          .filter(
-            (r) =>
-              r.id !== transaction.id &&
-              r.account_id !== transaction.accountId &&
-              Math.abs(r.amount - transaction.amount) <= 0.01 &&
-              !r.has_splits,
-          )
-          // Best match first: closest date wins.
-          .sort(
-            (a, b) =>
-              Math.abs(differenceInCalendarDays(parseISO(a.date), base)) -
-              Math.abs(differenceInCalendarDays(parseISO(b.date), base)),
-          )
-        setCandidates(matches)
-      })
+    fetchTransferCandidates({
+      id: transaction.id,
+      accountId: transaction.accountId,
+      amount: transaction.amount,
+      date: transaction.date,
+      wantType,
+    })
+      .then((matches) => { if (!cancelled) setCandidates(matches) })
       .catch(() => { if (!cancelled) setCandidates([]) })
     return () => { cancelled = true }
   }, [open, transaction, wantType])

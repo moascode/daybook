@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { TagInput } from '@/components/ui/TagInput'
 import { cn, todayISO } from '@/lib/utils'
 import { TransferMatchHint, type TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
+import { TransferLinkHint } from '@/modules/wallet/TransferLinkHint'
 import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
 
 interface TransactionFormProps {
@@ -20,6 +21,12 @@ interface TransactionFormProps {
   onSubmit: (data: TransactionFormData) => void | Promise<void>
   /** Edit mode only: opens the link-as-transfer picker for this transaction. */
   onLinkTransfer?: () => void
+  /**
+   * Edit mode only: links this transaction directly to `candidateId` — the
+   * one-click path when TransferLinkHint's proactive search already found the
+   * twin, skipping the manual picker onLinkTransfer opens.
+   */
+  onQuickLinkTransfer?: (candidateId: string) => Promise<void>
   /**
    * Create mode only, type=transfer: creates the missing leg from the form's
    * current fields and links it to `candidate` instead of inserting a new
@@ -89,6 +96,7 @@ export function TransactionForm({
   availableTags,
   onSubmit,
   onLinkTransfer,
+  onQuickLinkTransfer,
   onLinkExistingTransfer,
   initialDraft,
 }: TransactionFormProps) {
@@ -247,21 +255,21 @@ export function TransactionForm({
               point at the fix without changing any behaviour. */}
           {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
             <p className="text-xs text-fg-faint" data-testid="transfer-hint">
-              Moved money between your own accounts? Switch Type to Transfer
-              {onLinkTransfer
-                ? ', or use "Link as transfer" to pair it with the other side.'
-                : ' to keep it out of income and expense totals.'}
+              Moved money between your own accounts? Switch Type to Transfer, or
+              link it to the other side below.
             </p>
           )}
           {isEdit && form.type !== 'transfer' && onLinkTransfer && (
-            <button
-              type="button"
-              onClick={onLinkTransfer}
-              data-testid="link-transfer-open"
-              className="self-start text-xs font-medium text-brand-600 hover:underline"
-            >
-              Link as transfer…
-            </button>
+            <TransferLinkHint
+              transactionId={transaction!.id}
+              accountId={form.accountId}
+              type={form.type as 'expense' | 'income'}
+              amount={form.amount}
+              date={form.date}
+              accounts={accounts}
+              onLink={onQuickLinkTransfer ?? (async () => onLinkTransfer())}
+              onOpenPicker={onLinkTransfer}
+            />
           )}
         </div>
 

@@ -174,10 +174,12 @@ const SECTIONS: Section[] = [
             transfer instead of an expense or income.
           </li>
           <li>
-            <strong>Link as transfer</strong> — already imported both sides? Edit either row and
-            use <em>Link as transfer</em>: Daybook finds the matching opposite leg (same amount,
-            another account, within a few days) and merges the two rows into one transfer.
-            Re-importing either statement later still detects the merged rows as duplicates.
+            <strong>Link as transfer</strong> — already imported both sides? Edit either row:
+            Daybook checks automatically for the matching opposite leg (same amount, another
+            account, within a few days) and offers to merge the two rows into one transfer. If
+            nothing matches automatically, a <em>Link as transfer…</em> button still lets you
+            search by hand. Re-importing either statement later still detects the merged rows as
+            duplicates.
           </li>
           <li>
             <strong>New Transaction → Transfer</strong> also checks for this automatically: if
