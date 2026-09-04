@@ -79,9 +79,17 @@
   flex: 1; max-width: 380px; display: flex; align-items: center; gap: var(--s2);
   background: rgb(var(--surface)); border: 1px solid rgb(var(--line));
   border-radius: var(--r-sm); padding: 0 var(--s3); height: 34px;
-  color: rgb(var(--fg-faint)); transition: border-color .12s var(--ease);
+  color: rgb(var(--fg-faint));
+  transition: border-color .12s var(--ease), transform .12s var(--ease);
 }
-.search:focus-within { border-color: rgb(var(--accent) / .6); box-shadow: 0 0 0 3px rgb(var(--accent) / .12); }
+/* Same slight-zoom-on-focus language as .composer:focus-within (scale 1.01) —
+   every box that opens up for typing gets the same feel, not a bespoke one
+   per surface. Applies here to both the app-bar "Search Daybook" box and the
+   transactions search, so they read as one behaviour, not two. */
+.search:focus-within {
+  border-color: rgb(var(--accent) / .6); box-shadow: 0 0 0 3px rgb(var(--accent) / .12);
+  transform: scale(1.01);
+}
 
 .composer {
   /* Same base look as .card (layout.css) — a multi-row bar (input row,

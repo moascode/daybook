@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm , openBlankTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm , openBlankTransactionForm, selectFilterOption, clearFilterOption } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -20,14 +20,17 @@ async function ensureFiltersOpen() {
 }
 
 /**
- * Export lives inside select mode now (moved off the toolbar so the
- * page-head stays as clean as the mockup's — docs/v2 wallet-transactions
- * rebuild). Entering select mode is a client-side state, so it's lost on
- * every navigation and must be re-entered after each `page.goto('/wallet')`.
+ * Every row's checkbox is always visible — checking one is what surfaces the
+ * floating bulk-action bar, which is where Export lives now (moved off the
+ * toolbar so the page-head stays as clean as the mockup's). Selection is
+ * client-side state, so it's lost on every navigation and must be re-entered
+ * after each `page.goto('/wallet')`. (The Export dialog's own "N of M
+ * selected" checklist is separate, independent state — it defaults to every
+ * visible transaction regardless of which row triggered the bar.)
  */
 async function ensureSelectMode() {
-  if (!(await page.getByTestId('select-mode-bar').isVisible())) {
-    await page.getByRole('button', { name: 'Select transactions' }).click()
+  if (!(await page.getByTestId('bulk-action-bar').isVisible())) {
+    await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
   }
 }
 
@@ -198,21 +201,25 @@ test('exporting with only one transaction selected produces a file with that tra
 test('export modal only shows transactions matching the active type filter', async () => {
   // Apply "Expense" type filter
   await ensureFiltersOpen()
-  await page.getByTestId('filter-type').selectOption('expense')
+  await selectFilterOption(page, 'filter-type', 'expense')
+  // Changing filters clears any selection made under the old filter (rows may
+  // have moved out of view) — the bulk-action bar (and Export within it)
+  // needs a fresh selection under the new filter before it reappears.
+  await ensureSelectMode()
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   const list = page.getByTestId('export-transaction-list')
   // Only the expense should appear
   await expect(list.getByText('Test Merchant')).toBeVisible()
   await expect(list.getByText('Income Source')).not.toBeVisible()
-  // Close and reset filter — scoped to the dialog: select mode's own bar also
-  // has a "Cancel" button, and this must not exit select mode.
+  // Close and reset filter — scoped to the dialog: the bulk-action bar has
+  // its own "Clear selection" control, and this must not clear it too.
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
   // The Filters popup closes on any outside click (including the Export
   // button/dialog interactions just above) — reopen it before touching its
   // fields again.
   await ensureFiltersOpen()
-  await page.getByTestId('filter-type').selectOption('all')
+  await clearFilterOption(page, 'filter-type')
 })
 
 // ── Server-side export honours active filters (Phase 5c C4) ───────────
@@ -230,14 +237,15 @@ async function downloadContent(testid: string): Promise<string> {
 
 test('exported file with an active type filter contains only matching rows', async () => {
   await ensureFiltersOpen()
-  await page.getByTestId('filter-type').selectOption('expense')
+  await selectFilterOption(page, 'filter-type', 'expense')
+  await ensureSelectMode()
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   const content = await downloadContent('export-csv-btn')
   expect(content).toMatch(/Test Merchant/)
   expect(content).not.toMatch(/Income Source/)
   await ensureFiltersOpen()
-  await page.getByTestId('filter-type').selectOption('all')
+  await clearFilterOption(page, 'filter-type')
 })
 
 test('exported file with an active search filter contains only matching rows', async () => {
@@ -247,6 +255,7 @@ test('exported file with an active search filter contains only matching rows', a
   )
   await page.getByTestId('transaction-search').fill('Income')
   await response
+  await ensureSelectMode()
   await page.getByRole('button', { name: /Export/i }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   const content = await downloadContent('export-json-btn')

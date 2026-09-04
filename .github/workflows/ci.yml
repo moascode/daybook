@@ -92,10 +92,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 6 shards, not 3: wrangler dev died part-way through the longest shard on
-        # 7 GB runners, and workerd peaks around 1.1 GB during a long run. Halving
-        # each shard's length halves what accumulates in it — and CI gets faster.
-        shard: [1, 2, 3, 4, 5, 6]
+        # 8 shards, not 6: the suite grew past ~740 tests, which put 6 shards
+        # over 100 tests apiece — the same "wrangler dev dies partway through
+        # a long shard" risk that took shards from 3 to 6 in the first place
+        # (workerd peaks around 1.1 GB on a 7 GB runner; more, shorter shards
+        # cap what accumulates in any one of them). Bump this again if the
+        # suite grows past ~800 tests and shards start creeping past 100.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v4
 
@@ -107,8 +110,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Playwright tests (shard ${{ matrix.shard }}/6)
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/8)
+        run: npx playwright test --shard=${{ matrix.shard }}/8
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

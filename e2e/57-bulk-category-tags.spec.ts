@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, businessToday } from './helpers'
+import { newAppPage, businessToday, selectAllVisibleTransactions } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -43,12 +43,10 @@ test.describe('bulk edit dialog', () => {
 
   test('the Categorise action appears only with a selection', async () => {
     await expect(page.getByText('Coffee')).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
-    await expect(page.getByTestId('select-mode-bar')).toBeVisible()
-
+    await expect(page.getByTestId('bulk-action-bar')).not.toBeVisible()
     await expect(page.getByTestId('bulk-edit-btn')).not.toBeVisible()
 
-    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(page)
     await expect(page.getByTestId('bulk-edit-btn')).toBeVisible()
     await expect(page.getByTestId('bulk-edit-btn')).toContainText('Categorise 3')
   })
@@ -225,7 +223,7 @@ test.describe('suggestions in the bulk edit dialog', () => {
   }
 
   async function selectRow(page: Page, merchant: string) {
-    await page.getByRole('button', { name: `Select transaction ${merchant}` }).click()
+    await page.getByRole('checkbox', { name: `Select ${merchant}` }).click()
   }
 
   test('suggestions appear for a mixed selection and Apply suggestions applies only the matched rows', async ({ browser }) => {
@@ -251,7 +249,6 @@ test.describe('suggestions in the bulk edit dialog', () => {
 
     await page.reload()
     await expect(page.getByText('MCDONALDS-FOUR')).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
     await selectRow(page, 'MCDONALDS-FOUR')
     await selectRow(page, 'FRESH MERCHANT NOPE')
     await page.getByTestId('bulk-edit-btn').click()
@@ -297,8 +294,7 @@ test.describe('suggestions in the bulk edit dialog', () => {
 
     await page.reload()
     await expect(page.getByText('SHELL STATION').first()).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
-    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click() // select all
+    await selectAllVisibleTransactions(page)
     await page.getByTestId('bulk-edit-btn').click()
 
     await expect(page.getByTestId('bulk-edit-transfer-note')).toContainText('1 transfer')
@@ -330,8 +326,7 @@ test.describe('suggestions in the bulk edit dialog', () => {
 
     await page.reload()
     await expect(page.getByText('KFC REFUND CASE').first()).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
-    await page.getByTestId('select-mode-bar').locator('input[type="checkbox"]').click() // select all
+    await selectAllVisibleTransactions(page)
     await page.getByTestId('bulk-edit-btn').click()
 
     const suggestions = page.getByTestId('bulk-edit-suggestions')
@@ -357,7 +352,6 @@ test.describe('suggestions in the bulk edit dialog', () => {
 
     await page.reload()
     await expect(page.getByText('KFC')).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
     await selectRow(page, 'KFC')
     await page.getByTestId('bulk-edit-btn').click()
 

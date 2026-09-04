@@ -251,8 +251,7 @@ test.describe('bulk edit dialog: Ask AI', () => {
 
   async function openBulkEditOnRow(page: Page, merchant: string) {
     await expect(page.getByText(merchant)).toBeVisible({ timeout: 15_000 })
-    await page.getByRole('button', { name: 'Select transactions' }).click()
-    await page.getByRole('button', { name: `Select transaction ${merchant}` }).click()
+    await page.getByRole('checkbox', { name: `Select ${merchant}` }).click()
     await page.getByTestId('bulk-edit-btn').click()
   }
 

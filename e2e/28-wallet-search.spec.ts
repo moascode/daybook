@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, clearFilterOption } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -102,12 +102,12 @@ test('search combines with the type filter', async () => {
 
   // The Type filter lives in the collapsible Filters section
   await page.getByTestId('filter-toggle').click()
-  await page.getByTestId('filter-type').selectOption('income')
+  await selectFilterOption(page, 'filter-type', 'income')
   await expect(transactionRowFor(page, 'Starlight Studio')).toBeVisible()
   await expect(transactionRowFor(page, 'Starbucks Coffee')).not.toBeVisible()
 
   // Reset for later tests
-  await page.getByTestId('filter-type').selectOption('all')
+  await clearFilterOption(page, 'filter-type')
   await page.getByTestId('transaction-search').fill('')
 })
 

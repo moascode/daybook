@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { newAppPage, businessToday } from './helpers'
+import { newAppPage, businessToday, selectAllVisibleTransactions } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -24,17 +24,16 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await expect(page.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 5_000 })
 
-    // Enter select mode
-    await page.getByRole('button', { name: /Select/ }).click()
-    await expect(page.getByTestId('select-mode-bar')).toBeVisible()
-
-    // Share button must NOT be visible with 0 selected
-    await expect(page.getByTestId('bulk-split-btn')).not.toBeVisible()
+    // The bulk-action bar (and its Share/Delete buttons) doesn't exist at
+    // all until something is selected — every row's checkbox is always
+    // visible, so there's no separate "select mode" state with 0 selected.
+    await expect(page.getByTestId('bulk-action-bar')).not.toBeVisible()
 
     // Select one transaction
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
 
-    // Now Share button must appear
+    // Now the bar and Share button appear
+    await expect(page.getByTestId('bulk-action-bar')).toBeVisible()
     await expect(page.getByTestId('bulk-split-btn')).toBeVisible()
     // Delete button also visible
     await expect(page.getByTestId('bulk-delete-btn')).toBeVisible()
@@ -46,7 +45,6 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await page.reload()
 
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
 
     const shareBtn = page.getByTestId('bulk-split-btn')
@@ -68,7 +66,6 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await page.reload()
 
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
     await page.getByTestId('bulk-split-btn').click()
 
@@ -95,10 +92,9 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await page.reload()
 
     await expect(page.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('button', { name: /Select/ }).click()
 
-    // Select all via the header checkbox
-    await page.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    // Select both transactions via the bar's own "Select all" shortcut
+    await selectAllVisibleTransactions(page)
     await page.getByTestId('bulk-split-btn').click()
 
     const dialog = page.getByRole('dialog')
@@ -113,7 +109,6 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await page.reload()
 
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 10_000 })
-    await page.getByRole('button', { name: /Select/ }).click()
     await page.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
     await page.getByTestId('bulk-split-btn').click()
 
@@ -125,7 +120,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await expect(dialog).not.toBeVisible({ timeout: 3_000 })
 
     // Select mode bar is still visible (onSave was NOT triggered — no selectedIds reset)
-    await expect(page.getByTestId('select-mode-bar')).toBeVisible()
+    await expect(page.getByTestId('bulk-action-bar')).toBeVisible()
     // The "1 selected" text remains
     await expect(page.getByText('1 selected')).toBeVisible()
   })
@@ -170,8 +165,7 @@ test.describe('27 — Bulk share with group members', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
-    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(alicePage)
     await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
@@ -212,7 +206,6 @@ test.describe('27 — Bulk share with group members', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Percent Bill')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
     await alicePage.getByTestId('bulk-split-btn').click()
 
@@ -260,7 +253,6 @@ test.describe('27 — Bulk share with group members', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Badge Refresh')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
     await alicePage.getByTestId('bulk-split-btn').click()
 
@@ -277,7 +269,7 @@ test.describe('27 — Bulk share with group members', () => {
     await expect(dialog).not.toBeVisible({ timeout: 5_000 })
 
     // §2.1: save exits select mode and refetches so the Shared badge appears
-    await expect(alicePage.getByTestId('select-mode-bar')).not.toBeVisible()
+    await expect(alicePage.getByTestId('bulk-action-bar')).not.toBeVisible()
     await expect(alicePage.getByText('Shared', { exact: true })).toBeVisible({ timeout: 5_000 })
 
     // Keep as-is wrote a single recipient-owes-100% row
@@ -357,7 +349,6 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Trio Bill')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="transaction-row"]').first().locator('input[type="checkbox"]').click()
     await alicePage.getByTestId('bulk-split-btn').click()
 
@@ -406,8 +397,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Uniform B')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
-    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(alicePage)
     await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
@@ -442,8 +432,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Pct Uniform B')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
-    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(alicePage)
     await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
@@ -484,8 +473,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Zero Pct B')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
-    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(alicePage)
     await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')
@@ -518,8 +506,7 @@ test.describe('27 — Percent auto-adjust and uniform bulk split', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Fixed Small')).toBeVisible({ timeout: 10_000 })
-    await alicePage.getByRole('button', { name: /Select/ }).click()
-    await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
+    await selectAllVisibleTransactions(alicePage)
     await alicePage.getByTestId('bulk-split-btn').click()
 
     const dialog = alicePage.getByRole('dialog')

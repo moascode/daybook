@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm, selectFilterOptionByLabel } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -33,7 +33,7 @@ test.afterAll(async () => {
 test('applying an account filter shows a removable chip', async () => {
   await page.getByTestId('filter-toggle').click()
   await expect(page.getByTestId('filter-panel')).toBeVisible()
-  await page.getByTestId('filter-panel').getByTestId('filter-account').selectOption('Chip Account')
+  await selectFilterOptionByLabel(page, 'filter-account', 'Chip Account')
 
   const chips = page.getByTestId('active-filter-chips')
   await expect(chips).toBeVisible()
@@ -50,14 +50,14 @@ test('clicking the chip × clears just that filter', async () => {
     .getByRole('button', { name: 'Remove filter' })
     .click()
 
-  // Chip row gone (no other filters active) and the Account select back to "all".
+  // Chip row gone (no other filters active) and the Account filter back to "all".
   await expect(page.getByTestId('active-filter-chips')).toHaveCount(0)
   // The chip's × is outside the Filters popup, so that click closed it
-  // (standard click-outside-to-dismiss) — reopen it to check the select's
-  // value reflects the cleared filter.
+  // (standard click-outside-to-dismiss) — reopen it to check the filter's
+  // displayed state reflects the cleared filter.
   await page.getByTestId('filter-toggle').click()
   await expect(page.getByTestId('filter-panel')).toBeVisible()
-  await expect(page.getByTestId('filter-panel').getByTestId('filter-account')).toHaveValue('')
+  await expect(page.getByTestId('filter-account')).toHaveText('All Accounts')
 })
 
 test('a ?account= deep-link auto-opens Filters and shows the chip', async () => {

@@ -14,9 +14,12 @@ interface TransactionListProps {
   onEdit?: (transaction: Transaction) => void
   onDelete?: (transaction: Transaction) => void
   onSplit?: (transaction: Transaction) => void
-  selectMode?: boolean
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
+  /** Selects/clears every selectable transaction in one day at once — the
+   *  day-header checkbox. Receives the day's own selectable id list so the
+   *  caller doesn't need to recompute per-row write permissions itself. */
+  onToggleDay?: (ids: string[]) => void
   /** Row to ring and scroll to — set by /wallet?txn=<id> deep links. */
   highlightId?: string
   /** Forces every row read-only regardless of account permissions — for a
@@ -33,6 +36,14 @@ interface TransactionListProps {
    *  want oldest-first must pass an already-reversed `transactions` array;
    *  this only controls which end of the date range groups sort to. */
   sortDir?: 'newest' | 'oldest'
+}
+
+// Mirrors TransactionRow's own readOnly check — a read-only shared-in row
+// (viewer lacks canWrite) is never selectable, whole-list forcedReadOnly or not.
+function isSelectableRow(transaction: Transaction, accounts: Account[], forcedReadOnly?: boolean): boolean {
+  if (forcedReadOnly) return false
+  const account = accounts.find((a) => a.id === transaction.accountId)
+  return !(account?.isShared && account.canWrite !== 1)
 }
 
 function groupByDay(transactions: Transaction[], sortDir: 'newest' | 'oldest' = 'newest'): DailyGroup[] {
@@ -73,7 +84,6 @@ function TransactionRow({
   onEdit,
   onSplit,
   onDelete,
-  selectMode,
   isSelected,
   onToggleSelect,
   highlighted,
@@ -85,7 +95,6 @@ function TransactionRow({
   onEdit?: (t: Transaction) => void
   onSplit?: (t: Transaction) => void
   onDelete?: (t: Transaction) => void
-  selectMode?: boolean
   isSelected?: boolean
   onToggleSelect?: (id: string) => void
   highlighted?: boolean
@@ -110,7 +119,6 @@ function TransactionRow({
   // Read-only shared-in account: edit/delete/split would always 403, so the row
   // exposes no mutating affordances and isn't clickable-to-edit.
   const readOnly = forcedReadOnly || !!(account?.isShared && account.canWrite !== 1)
-  const interactive = selectMode || !readOnly
 
   // Only when the two genuinely differ, and never on transfers (excluded from
   // income/expense totals anyway, so "your share" would be meaningless). A
@@ -129,12 +137,12 @@ function TransactionRow({
   const amountPrefix =
     transaction.type === 'income' ? '+' : transaction.type === 'expense' ? '-' : ''
 
+  // The checkbox is always there and handles its own click (stopPropagation
+  // below) — the row body's click is always "open Edit", never "toggle
+  // select". Same split Gmail/Drive use: the row is the primary action, the
+  // checkbox is a separate, deliberate target.
   function handleRowClick() {
-    if (selectMode) {
-      onToggleSelect?.(transaction.id)
-    } else if (!readOnly) {
-      onEdit?.(transaction)
-    }
+    if (!readOnly) onEdit?.(transaction)
   }
 
   function handleRowKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -151,50 +159,52 @@ function TransactionRow({
       ref={rowRef}
       data-testid="transaction-row"
       data-highlighted={highlighted ? 'true' : undefined}
-      role={interactive ? 'button' : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      aria-label={interactive ? `${selectMode ? 'Select' : 'Edit'} transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
+      role={!readOnly ? 'button' : undefined}
+      tabIndex={!readOnly ? 0 : undefined}
+      aria-label={!readOnly ? `Edit transaction ${transaction.merchant || transaction.description || 'Untitled'}` : undefined}
       className={cn(
         'group trow',
-        interactive && 'cursor-pointer',
+        !readOnly && 'cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500',
-        selectMode && isSelected ? 'bg-brand-50' : 'hover:bg-surface-sunken',
+        isSelected ? 'bg-brand-50' : 'hover:bg-surface-sunken',
         highlighted && 'ring-2 ring-inset ring-brand-400 bg-brand-50/40',
       )}
-      onClick={interactive ? handleRowClick : undefined}
-      onKeyDown={interactive ? handleRowKeyDown : undefined}
+      onClick={!readOnly ? handleRowClick : undefined}
+      onKeyDown={!readOnly ? handleRowKeyDown : undefined}
     >
       <div className="tlead">
-        {/* Checkbox (select mode) or type indicator */}
-        {selectMode ? (
+        {/* Checkbox always present (not read-only) — clicking it selects,
+            independent of the row's own click-to-edit. Sits beside the type
+            avatar, not replacing it: income/expense/transfer stays glanceable
+            regardless of selection state. */}
+        {!readOnly && onToggleSelect && (
           <input
             type="checkbox"
             checked={isSelected ?? false}
-            onChange={() => onToggleSelect?.(transaction.id)}
+            onChange={() => onToggleSelect(transaction.id)}
             onClick={(e) => e.stopPropagation()}
             className="h-4 w-4 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
-            aria-label="Select transaction"
+            aria-label={`Select ${transaction.merchant || transaction.description || 'transaction'}`}
           />
-        ) : (
-          <div
-            className={cn(
-              'tavatar flex-shrink-0',
-              transaction.type === 'income'
-                ? 'bg-positive-50 text-positive-600'
-                : transaction.type === 'expense'
-                  ? 'bg-red-50 text-red-600'
-                  : 'bg-blue-50 text-blue-600'
-            )}
-          >
-            {transaction.type === 'transfer' ? (
-              <ArrowRightLeft className="h-3.5 w-3.5" />
-            ) : transaction.type === 'income' ? (
-              '+'
-            ) : (
-              '-'
-            )}
-          </div>
         )}
+        <div
+          className={cn(
+            'tavatar flex-shrink-0',
+            transaction.type === 'income'
+              ? 'bg-positive-50 text-positive-600'
+              : transaction.type === 'expense'
+                ? 'bg-red-50 text-red-600'
+                : 'bg-blue-50 text-blue-600'
+          )}
+        >
+          {transaction.type === 'transfer' ? (
+            <ArrowRightLeft className="h-3.5 w-3.5" />
+          ) : transaction.type === 'income' ? (
+            '+'
+          ) : (
+            '-'
+          )}
+        </div>
 
         {/* Name + secondary details */}
         <div className="min-w-0 flex-1">
@@ -265,7 +275,7 @@ function TransactionRow({
           uses one ⋯ icon-btn per row, not a row of separate icons) opening a
           dropdown with Split/Edit/Delete — same actions as before, one entry
           point instead of three always-visible buttons. */}
-      {!selectMode && !readOnly && (
+      {!readOnly && (
         <div
           className="trow-actions flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
           onClick={(e) => e.stopPropagation()}
@@ -330,9 +340,9 @@ export function TransactionList({
   onEdit,
   onDelete,
   onSplit,
-  selectMode,
   selectedIds,
   onToggleSelect,
+  onToggleDay,
   highlightId,
   readOnly,
   showDayTotals = true,
@@ -357,12 +367,34 @@ export function TransactionList({
         // on a live money page.
         const dayNet = Math.round((group.totalIncome - group.totalExpense) * 100) / 100
         const d = parseISO(group.date)
+        // Only rows the viewer can actually act on count toward "select all
+        // for this day" — a read-only shared row (below) is never included.
+        const daySelectableIds =
+          onToggleSelect && onToggleDay
+            ? group.transactions.filter((t) => isSelectableRow(t, accounts, readOnly)).map((t) => t.id)
+            : []
+        const daySelectedCount = selectedIds ? daySelectableIds.filter((id) => selectedIds.has(id)).length : 0
+        const allDaySelected = daySelectableIds.length > 0 && daySelectedCount === daySelectableIds.length
+        const someDaySelected = daySelectedCount > 0 && !allDaySelected
         return (
           <Fragment key={group.date}>
             {/* Day header */}
             <div className="tgroup-head" data-testid="day-header">
-              <span className="tg-date">
-                <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
+              <span className="tg-date flex items-center gap-2">
+                {daySelectableIds.length > 0 && (
+                  <input
+                    type="checkbox"
+                    checked={allDaySelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someDaySelected
+                    }}
+                    onChange={() => onToggleDay!(daySelectableIds)}
+                    className="h-3.5 w-3.5 flex-shrink-0 rounded border-line-strong text-brand-600 cursor-pointer"
+                    aria-label={`Select all transactions on ${format(d, 'dd MMM yyyy')}`}
+                    data-testid="day-select-all"
+                  />
+                )}
+                <span><b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}</span>
               </span>
               {showDayTotals && (
                 <span
@@ -384,7 +416,6 @@ export function TransactionList({
                 onEdit={onEdit}
                 onSplit={onSplit}
                 onDelete={onDelete}
-                selectMode={selectMode}
                 isSelected={selectedIds?.has(t.id)}
                 onToggleSelect={onToggleSelect}
                 highlighted={highlightId === t.id}

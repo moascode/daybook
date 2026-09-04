@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm, businessToday, openBlankTransactionForm, openTransactionRowMenu } from './helpers'
+import { fillAccountForm, fillTransactionForm, businessToday, openBlankTransactionForm, openTransactionRowMenu, selectFilterOption } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -71,11 +71,11 @@ test.describe('35 — Transaction splits', () => {
     // two-way, and a bare text match resolves to all of them.
     await expect(alicePage.getByTestId('section-balance')).toContainText('owes you', { timeout: 5000 })
 
-    // Bob's view: Shared with me filter (a Sharing pill inside the Filters section)
+    // Bob's view: Shared with me filter (a Sharing MultiSelect inside the Filters section)
     await bobPage.goto('/wallet')
     await expect(bobPage.locator('main')).toBeVisible({ timeout: 15_000 })
     await bobPage.getByTestId('filter-toggle').click()
-    await bobPage.getByRole('button', { name: 'Shared with me' }).click()
+    await selectFilterOption(bobPage, 'filter-view', 'shared-with-me')
     // Bob should see the Groceries transaction in his shared view
     await expect(bobPage.getByText('Groceries')).toBeVisible({ timeout: 5000 })
 

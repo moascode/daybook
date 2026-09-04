@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo, selectFilterOption, selectFilterOptionByLabel, clearFilterOption } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -220,13 +220,14 @@ test('deleted transaction stays gone when the undo toast is not used', async () 
 
 test('filter by type: Income shows only income transactions', async () => {
   await ensureFiltersOpen()
-  await page.getByTestId('filter-type').selectOption('income')
+  await selectFilterOption(page, 'filter-type', 'income')
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
 })
 
 test('filter by type: Expense shows only expense transactions', async () => {
-  await page.getByTestId('filter-type').selectOption('expense')
+  await clearFilterOption(page, 'filter-type')
+  await selectFilterOption(page, 'filter-type', 'expense')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
   // No expense transactions remain (we deleted Costa Coffee)
@@ -234,13 +235,14 @@ test('filter by type: Expense shows only expense transactions', async () => {
 })
 
 test('filter by type: Transfer shows only transfers', async () => {
-  await page.getByTestId('filter-type').selectOption('transfer')
+  await clearFilterOption(page, 'filter-type')
+  await selectFilterOption(page, 'filter-type', 'transfer')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
 })
 
 test('reset type filter to All Types', async () => {
-  await page.getByTestId('filter-type').selectOption('all')
+  await clearFilterOption(page, 'filter-type')
   // Both Acme Corp (income) and ATM Withdrawal (transfer) visible
   await expect(transactionRowFor(page, 'Acme Corp')).toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
@@ -267,10 +269,10 @@ test('filter by account: Test Cash shows only cash account transactions', async 
   // silently stay up across unrelated actions) — reopen it here rather than
   // assuming it survived from an earlier test.
   await ensureFiltersOpen()
-  await page.getByTestId('filter-account').selectOption('Test Cash')
+  await selectFilterOptionByLabel(page, 'filter-account', 'Test Cash')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
-  await page.getByTestId('filter-account').selectOption('')
+  await clearFilterOption(page, 'filter-account')
 })
 
 test('filter by tag: "coffee" shows tagged transaction', async () => {
@@ -305,8 +307,8 @@ test('clear tag filter restores all transactions', async () => {
 test('tag filter works standalone without other filters (no category/account required)', async () => {
   // Ensure no category or account filter is active
   await ensureFiltersOpen()
-  await page.getByTestId('filter-account').selectOption('')
-  await page.getByTestId('filter-category').selectOption('')
+  await clearFilterOption(page, 'filter-account')
+  await clearFilterOption(page, 'filter-category')
   // Filter by coffee tag alone — should return only Kopitiam
   const filterTagInput = page.getByTestId('filter-tags')
   await filterTagInput.click()
@@ -418,27 +420,23 @@ test('date range "All time" clears the date range', async () => {
 })
 
 // ── Multi-select delete ──────────────────────────────────────────────────
+// Every row's checkbox is always visible (no separate "select mode" to
+// enter) — checking one is what surfaces the floating bulk-action-bar.
 
-test('Select button enters select mode and shows action bar', async () => {
-  await page.getByRole('button', { name: 'Select' }).click()
-  await expect(page.getByTestId('select-mode-bar')).toBeVisible()
-  await expect(page.getByText('Select transactions')).toBeVisible()
-})
-
-test('clicking a transaction row in select mode checks the checkbox', async () => {
-  // Click a transaction row — should select it, not open edit form
-  await transactionRowFor(page, 'Acme Corp').click()
+test('checking a transaction row selects it and shows the action bar', async () => {
+  await page.getByRole('checkbox', { name: 'Select Acme Corp' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
+  await expect(page.getByTestId('bulk-action-bar')).toBeVisible()
   await expect(page.getByText('1 selected')).toBeVisible()
 })
 
 test('selecting another row updates the count', async () => {
-  await transactionRowFor(page, 'ATM Withdrawal').click()
+  await page.getByRole('checkbox', { name: 'Select ATM Withdrawal' }).click()
   await expect(page.getByText('2 selected')).toBeVisible()
 })
 
 test('Delete button in action bar opens confirmation modal', async () => {
-  await page.getByTestId('bulk-delete-btn').click()
+  await page.getByTestId('bulk-action-bar').getByRole('button', { name: 'Delete' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Delete 2 transactions?' })).toBeVisible()
 })
@@ -446,20 +444,19 @@ test('Delete button in action bar opens confirmation modal', async () => {
 test('confirming bulk delete removes the selected transactions', async () => {
   await page.getByTestId('confirm-bulk-delete').click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
-  await expect(page.getByTestId('select-mode-bar')).not.toBeVisible()
+  await expect(page.getByTestId('bulk-action-bar')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
   await expect(transactionRowFor(page, 'ATM Withdrawal')).not.toBeVisible()
   // Kopitiam expense added in the tag filter tests should still be here
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 
-test('Cancel exits select mode without deleting', async () => {
-  await page.getByRole('button', { name: 'Select' }).click()
-  await expect(page.getByTestId('select-mode-bar')).toBeVisible()
-  await transactionRowFor(page, 'Kopitiam').click()
+test('Clear selection deselects without deleting', async () => {
+  await page.getByRole('checkbox', { name: 'Select Kopitiam' }).click()
+  await expect(page.getByTestId('bulk-action-bar')).toBeVisible()
   await expect(page.getByText('1 selected')).toBeVisible()
-  await page.getByRole('button', { name: 'Cancel' }).click()
-  await expect(page.getByTestId('select-mode-bar')).not.toBeVisible()
+  await page.getByRole('button', { name: 'Clear selection' }).click()
+  await expect(page.getByTestId('bulk-action-bar')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Kopitiam')).toBeVisible()
 })
 

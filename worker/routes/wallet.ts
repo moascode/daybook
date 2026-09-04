@@ -581,7 +581,7 @@ function transactionInputError(
  * wrong value rather than erroring, which is why the filter builders below
  * always push the two together.
  */
-async function viewCondition(
+async function viewConditionSingle(
   db: D1Database,
   userId: string,
   view: string,
@@ -628,9 +628,44 @@ async function viewCondition(
   return `(${alias}.user_id = ? OR ${alias}.account_id IN (${placeholders}) OR ${alias}.destination_account_id IN (${placeholders}) OR ${splitClause})`
 }
 
+/**
+ * Multi-select wrapper over {@link viewConditionSingle}. Every non-'all' view
+ * OR-composes cleanly (each is its own membership test), so multiple selected
+ * views become "matches any of these" — e.g. ['mine','shared-with-me'] shows
+ * both without double-counting a row that happens to satisfy both. No
+ * selection, or 'all' among the selection, falls back to the single 'all'
+ * condition rather than OR-ing 'all' in literally (which would be correct but
+ * wasteful — 'all' already subsumes every other branch).
+ */
+async function viewCondition(
+  db: D1Database,
+  userId: string,
+  views: string[],
+  alias: string,
+  binds: unknown[],
+): Promise<string> {
+  const selected = [...new Set(views.filter((v) => v && v !== 'all'))]
+  if (selected.length === 0) {
+    return viewConditionSingle(db, userId, 'all', alias, binds)
+  }
+  if (selected.length === 1) {
+    return viewConditionSingle(db, userId, selected[0], alias, binds)
+  }
+  const parts: string[] = []
+  for (const v of selected) {
+    parts.push(await viewConditionSingle(db, userId, v, alias, binds))
+  }
+  return `(${parts.join(' OR ')})`
+}
+
 /** Tag values from a repeatable `tags` query param. */
 function tagsFrom(c: { req: { queries: (k: string) => string[] | undefined } }): string[] {
   return (c.req.queries('tags') ?? []).filter((t) => typeof t === 'string' && t.length > 0)
+}
+
+/** Values from any repeatable query param (type/categoryId/accountId/view). */
+function multiFrom(c: { req: { queries: (k: string) => string[] | undefined } }, key: string): string[] {
+  return (c.req.queries(key) ?? []).filter((t) => typeof t === 'string' && t.length > 0)
 }
 
 /**
@@ -651,27 +686,47 @@ function applyFilters(
   const dateTo = str(c.req.query('dateTo'))
   if (dateTo) { conditions.push(`${col('date')} <= ?`); binds.push(dateTo) }
 
-  const type = str(c.req.query('type'))
-  if (type && type !== 'all') { conditions.push(`${col('type')} = ?`); binds.push(type) }
-
-  const categoryId = str(c.req.query('categoryId'))
-  // Sentinel for "no category set" — must match UNCATEGORISED in
-  // src/modules/wallet/dashboard/insights.ts. category_id has no real row with
-  // this value, so `= ?` can't express it; needs its own clause.
-  if (categoryId === '__uncategorised__') { conditions.push(`${col('category_id')} IS NULL`) }
-  else if (categoryId) { conditions.push(`${col('category_id')} = ?`); binds.push(categoryId) }
-
-  const accountId = str(c.req.query('accountId'))
-  if (accountId) {
-    conditions.push(`(${col('account_id')} = ? OR ${col('destination_account_id')} = ?)`)
-    binds.push(accountId, accountId)
+  // Multi-select: a transaction matching ANY selected type is returned.
+  const types = multiFrom(c, 'type').filter((t) => t !== 'all')
+  if (types.length > 0) {
+    conditions.push(`${col('type')} IN (${types.map(() => '?').join(', ')})`)
+    binds.push(...types)
   }
 
-  // B1: free-text search on merchant/description.
+  // Multi-select. Sentinel '__uncategorised__' for "no category set" — must
+  // match UNCATEGORISED in src/modules/wallet/dashboard/insights.ts.
+  // category_id has no real row with this value, so `IN (...)` can't express
+  // it; it gets its own OR'd clause alongside the real ids.
+  const categoryIds = multiFrom(c, 'categoryId')
+  if (categoryIds.length > 0) {
+    const realIds = categoryIds.filter((id) => id !== '__uncategorised__')
+    const clauses: string[] = []
+    if (realIds.length > 0) {
+      clauses.push(`${col('category_id')} IN (${realIds.map(() => '?').join(', ')})`)
+      binds.push(...realIds)
+    }
+    if (categoryIds.includes('__uncategorised__')) clauses.push(`${col('category_id')} IS NULL`)
+    conditions.push(`(${clauses.join(' OR ')})`)
+  }
+
+  // Multi-select: matches if the transaction touches ANY selected account,
+  // as either leg (mirrors the single-account OR-on-both-legs clause below).
+  const accountIds = multiFrom(c, 'accountId')
+  if (accountIds.length > 0) {
+    const placeholders = accountIds.map(() => '?').join(', ')
+    conditions.push(`(${col('account_id')} IN (${placeholders}) OR ${col('destination_account_id')} IN (${placeholders}))`)
+    binds.push(...accountIds, ...accountIds)
+  }
+
+  // B1: free-text search on merchant/description/tags.
   const q = str(c.req.query('q'))
   if (q) {
-    conditions.push(`(${col('merchant')} LIKE ? OR ${col('description')} LIKE ?)`)
-    binds.push(`%${q}%`, `%${q}%`)
+    const tagCol = col('tag')
+    const safeTag = `CASE WHEN json_valid(${tagCol}) AND json_type(${tagCol})='array' THEN ${tagCol} ELSE '[]' END`
+    conditions.push(
+      `(${col('merchant')} LIKE ? OR ${col('description')} LIKE ? OR EXISTS (SELECT 1 FROM json_each(${safeTag}) WHERE value LIKE ?))`,
+    )
+    binds.push(`%${q}%`, `%${q}%`, `%${q}%`)
   }
 
   // Multiple tags use OR logic: a transaction matching ANY selected tag is
@@ -690,7 +745,7 @@ function applyFilters(
 
 wallet.get('/transactions', async (c) => {
   const userId = c.get('userId')
-  const view = str(c.req.query('view')) ?? 'all'
+  const view = multiFrom(c, 'view')
 
   const binds: unknown[] = []
   const conditions: string[] = [
@@ -726,7 +781,7 @@ wallet.get('/transactions/export', async (c) => {
   // §1.2: same view scoping as GET /transactions — the list view ("all") also
   // shows other members' transactions on shared-in accounts, so a hard
   // user_id-only scope silently dropped selected rows from the export.
-  const view = str(c.req.query('view')) ?? 'all'
+  const view = multiFrom(c, 'view')
 
   const binds: unknown[] = []
   const conditions: string[] = [await viewCondition(c.env.DB, userId, view, 't', binds)]

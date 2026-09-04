@@ -10,7 +10,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, selectFilterOptionByLabel, clearFilterOption } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -75,9 +75,9 @@ test('the Filters section is collapsed by default and opens on toggle', async ()
 
 test('active filters are counted on the Filters badge', async () => {
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
-  await page.getByTestId('filter-type').selectOption('expense')
+  await selectFilterOption(page, 'filter-type', 'expense')
   await expect(page.getByTestId('filter-count')).toHaveText('1')
-  await page.getByTestId('filter-account').selectOption('Bar Account')
+  await selectFilterOptionByLabel(page, 'filter-account', 'Bar Account')
   await expect(page.getByTestId('filter-count')).toHaveText('2')
 })
 
@@ -128,14 +128,16 @@ test('group members get the Sharing view filter and ?view= deep links still land
   await expect(page.getByRole('heading', { name: 'Bar Group' })).toBeVisible()
 
   // Deep link from the Shared page keeps working even though the pills moved
+  // to a multi-select dropdown
   await page.goto('/wallet?view=shared-with-me')
   await page.getByTestId('filter-toggle').click()
   await expect(page.getByText('Sharing', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Shared with me' })).toHaveClass(/border-brand/)
+  await page.getByTestId('filter-view').click()
+  await expect(page.getByTestId('filter-view-option-shared-with-me')).toHaveAttribute('aria-pressed', 'true')
   // The deep-linked view counts as an active filter on the badge
   await expect(page.getByTestId('filter-count')).toHaveText('1')
 
   // Back to All clears it
-  await page.getByRole('button', { name: 'All', exact: true }).click()
+  await clearFilterOption(page, 'filter-view')
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
 })
