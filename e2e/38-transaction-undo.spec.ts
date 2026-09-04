@@ -5,7 +5,7 @@
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, transactionRowFor, fillAccountForm, fillTransactionForm , openBlankTransactionForm } from './helpers'
+import { newAppPage, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -28,9 +28,8 @@ test.afterAll(async () => {
 })
 
 test('deleting a transaction removes it immediately with no confirm dialog', async () => {
-  const row = transactionRowFor(page, 'Kopitiam')
-  await row.hover()
-  await row.getByRole('button', { name: 'Delete transaction' }).click()
+  await openTransactionRowMenu(page, 'Kopitiam')
+  await page.getByRole('menuitem', { name: 'Delete transaction' }).click()
   // No confirm dialog appears.
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(transactionRowFor(page, 'Kopitiam')).not.toBeVisible()

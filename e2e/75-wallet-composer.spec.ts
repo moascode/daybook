@@ -162,8 +162,12 @@ test.describe('N hotkey', () => {
     await expect(composerInput(page)).toBeFocused()
 
     await composerInput(page).fill('')
-    await page.getByRole('button', { name: 'Categories' }).click()
-    const searchLike = page.getByRole('dialog').locator('input').first()
+    // Any dialog with a plain text input will do here — this test is only
+    // about the hotkey guard, not category management (which moved to
+    // Settings). Target Merchant specifically: the dialog's first input is
+    // the Date field, which rejects a plain "n" fill (type="date").
+    await page.getByRole('button', { name: 'Expense' }).click()
+    const searchLike = page.getByRole('dialog').getByLabel('Merchant')
     if (await searchLike.count()) {
       await searchLike.fill('n')
       await expect(searchLike).toHaveValue('n')

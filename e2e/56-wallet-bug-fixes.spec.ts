@@ -5,7 +5,10 @@
  *    reported as the viewer's own money.
  * 2. Day headers in the transaction list showed no weekday.
  * 3. Category management was only reachable from an option inside the Category
- *    filter dropdown, inside the collapsed filter panel.
+ *    filter dropdown, inside the collapsed filter panel. (It has since moved
+ *    again, to Settings → Wallet — see the mockup-parity rebuild of the
+ *    Transactions page — but the discoverability regression this guards
+ *    against is unchanged: reachable without opening any filter.)
  */
 
 import { test, expect } from '@playwright/test'
@@ -77,20 +80,12 @@ test('net worth excludes shared-in accounts on the Accounts page', async ({ brow
   await viewerCtx.close()
 })
 
-test('net worth excludes shared-in accounts on the Transactions page', async ({ browser }) => {
-  const { viewerPage, ownerCtx, viewerCtx } = await setupSharedHousehold(browser)
-
-  await viewerPage.goto('/wallet')
-  await expect(viewerPage.locator('main')).toBeVisible({ timeout: 20_000 })
-
-  const banner = viewerPage.getByTestId('net-worth-banner')
-  await expect(banner).toContainText('100.00', { timeout: 10_000 })
-  await expect(banner).not.toContainText('10,099')
-  await expect(banner).toContainText('1 account')
-
-  await ownerCtx.close()
-  await viewerCtx.close()
-})
+// The Transactions page no longer shows a whole-account-book net worth total
+// at all (docs/v2 wallet-transactions rebuild, a literal mockup port) — it
+// only reports the filtered range's Money in / Money out / Net, so the
+// shared-in-account-leaking-into-a-total regression this test guarded against
+// can no longer occur there. Coverage stays on the Accounts page above, which
+// still owns that figure.
 
 // ── Bugs 2 and 3: single-user, one page ────────────────────────────────
 
@@ -126,10 +121,14 @@ test.describe('day headers and category management', () => {
     await expect(header).toContainText(new RegExp(`^${expected},`, 'i'))
   })
 
-  test('categories are reachable from the toolbar, not only the filter dropdown', async () => {
-    // The bug was discoverability: the manager existed but sat three levels
-    // down inside a collapsed filter panel. It must be reachable without
-    // opening any filter.
+  test('categories are reachable from Settings, not only the filter dropdown', async () => {
+    // The original bug was discoverability: the manager existed but sat three
+    // levels down inside a collapsed filter panel. It was later surfaced on
+    // the Transactions toolbar (PR #56), then moved again — to Settings →
+    // Wallet, its single canonical location — as part of the mockup-parity
+    // rebuild of the Transactions page. Either way, it must be reachable
+    // without opening any filter.
+    await page.goto('/settings')
     const button = page.getByTestId('manage-categories')
     await expect(button).toBeVisible()
     await button.click()
@@ -137,7 +136,7 @@ test.describe('day headers and category management', () => {
     await expect(page.getByRole('dialog').getByText('Manage Categories')).toBeVisible()
   })
 
-  test('a category added from the toolbar manager persists', async () => {
+  test('a category added from the Settings manager persists', async () => {
     const dialog = page.getByRole('dialog')
     const name = `Subscriptions ${Date.now()}`
 

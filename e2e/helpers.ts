@@ -110,6 +110,17 @@ export function transactionRowFor(page: Page, merchant: string) {
   return page.locator('[data-testid="transaction-row"]').filter({ hasText: merchant })
 }
 
+/**
+ * Open a transaction row's ⋯ actions dropdown (mockup parity — a single
+ * "More" trigger per row, not always-visible Edit/Delete/Split buttons).
+ * Call this before clicking 'Edit transaction' / 'Delete transaction' /
+ * the split-transaction-btn menu item.
+ */
+export async function openTransactionRowMenu(page: Page, merchant: string) {
+  const row = transactionRowFor(page, merchant)
+  await row.getByRole('button', { name: 'Transaction options' }).click()
+}
+
 /** Fill the AccountForm modal and submit it */
 export async function fillAccountForm(
   page: Page,

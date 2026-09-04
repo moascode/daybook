@@ -224,6 +224,23 @@ td:last-child, th:last-child { padding-right: 0; }
 .filter-field:focus-within { background: rgb(var(--surface)); border-color: rgb(var(--accent) / .6); box-shadow: 0 0 0 3px rgb(var(--accent) / .12); }
 .filter-field input { border: none; background: transparent; outline: none; flex: 1; font-size: var(--t-sm); color: rgb(var(--fg)); min-width: 0; }
 
+/* Wallet Transactions: the single-row search/date/filters/sort bar stays
+   pinned under the app bar (same top:56px convention .tgroup-head already
+   uses below), with an opaque canvas background so list rows don't show
+   through while scrolled under it. Chips and the advanced filter panel are
+   NOT part of this wrapper, so they scroll away normally. */
+.tx-filterbar-sticky {
+  position: sticky; top: 56px; z-index: 5;
+  background: rgb(var(--canvas));
+  padding: var(--s3) 0; margin-bottom: var(--s3);
+}
+/* .tgroup-head (below) also sticks at top:56px by default — right under the
+   sticky filter bar's own top edge, so without this override the two would
+   overlap as the list scrolls. --tx-filterbar-h is the filter bar's real
+   measured height (WalletPage.tsx, ResizeObserver) — not a hardcoded guess,
+   since the row wraps to two lines on narrow viewports. */
+.wallet-transactions .tlist .tgroup-head { top: calc(56px + var(--tx-filterbar-h, 58px)); }
+
 /* ---- stat card (In / Out / Net as separate cards) ---- */
 .stat-card { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s4) var(--s5); }
 .stat-card .stat-icon {

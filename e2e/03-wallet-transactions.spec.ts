@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, openBlankTransactionForm, navTo } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -204,10 +204,9 @@ test('updated amount is reflected in the summary', async () => {
 
 // ── Delete transaction ──────────────────────────────────────────────────
 
-test('delete transaction — hover reveals delete button, removes immediately with undo toast', async () => {
-  const row = transactionRowFor(page, 'Costa Coffee')
-  await row.hover()
-  await row.getByRole('button', { name: 'Delete transaction' }).click()
+test('delete transaction — via the row\'s ⋯ menu, removes immediately with undo toast', async () => {
+  await openTransactionRowMenu(page, 'Costa Coffee')
+  await page.getByRole('menuitem', { name: 'Delete transaction' }).click()
   // No confirm dialog — the row disappears at once and an undo toast appears.
   await expect(transactionRowFor(page, 'Costa Coffee')).not.toBeVisible()
   await expect(page.getByText('Transaction deleted')).toBeVisible()
@@ -263,6 +262,11 @@ test('clear date filter restores transactions', async () => {
 })
 
 test('filter by account: Test Cash shows only cash account transactions', async () => {
+  // The Filters popup closes on any outside click (search, chips, the
+  // date-range control above all reopen the panel-free, so it doesn't
+  // silently stay up across unrelated actions) — reopen it here rather than
+  // assuming it survived from an earlier test.
+  await ensureFiltersOpen()
   await page.getByTestId('filter-account').selectOption('Test Cash')
   await expect(transactionRowFor(page, 'ATM Withdrawal')).toBeVisible()
   await expect(transactionRowFor(page, 'Acme Corp')).not.toBeVisible()
@@ -282,6 +286,7 @@ test('filter by tag: "coffee" shows tagged transaction', async () => {
   // Wait for dialog to fully close before touching the filter bar
   await expect(page.getByRole('dialog')).not.toBeVisible()
   // TagInput filter bar: type to filter suggestions, arrow-down to highlight, Enter to select
+  await ensureFiltersOpen()
   const tagFilterInput = page.getByPlaceholder('Filter by tags...')
   await tagFilterInput.click()
   await tagFilterInput.fill('coffee')
@@ -299,6 +304,7 @@ test('clear tag filter restores all transactions', async () => {
 
 test('tag filter works standalone without other filters (no category/account required)', async () => {
   // Ensure no category or account filter is active
+  await ensureFiltersOpen()
   await page.getByTestId('filter-account').selectOption('')
   await page.getByTestId('filter-category').selectOption('')
   // Filter by coffee tag alone — should return only Kopitiam
@@ -325,6 +331,7 @@ test('tag filter uses OR logic: selecting multiple tags shows transactions match
   await expect(page.getByRole('dialog')).not.toBeVisible()
 
   // The placeholder disappears after the first tag is selected, so anchor on testid.
+  await ensureFiltersOpen()
   const filterTagInput = page.getByTestId('filter-tags')
 
   // Select 'coffee' tag
@@ -553,8 +560,9 @@ test('tag filter works when a legacy tag="" row exists in the same date range', 
 // (scissors) affordance is hidden rather than leading to a dead-end dialog. The
 // full split flow (with a group) is covered in 35-splits.spec.ts.
 test('the Split button is hidden for a user with no household group (U-07)', async () => {
-  await transactionRowFor(page, 'Kopitiam').hover()
-  await expect(transactionRowFor(page, 'Kopitiam').getByTestId('split-transaction-btn')).toHaveCount(0)
+  await openTransactionRowMenu(page, 'Kopitiam')
+  await expect(page.getByTestId('split-transaction-btn')).toHaveCount(0)
+  await page.keyboard.press('Escape')
 })
 
 // ── §1.1 regression: default date filters are TZ-safe ────────────────────

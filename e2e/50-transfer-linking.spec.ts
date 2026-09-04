@@ -6,7 +6,7 @@
  */
 
 import { test, expect, type Browser, type Page } from '@playwright/test'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, fillTransactionForm, navTo , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -45,9 +45,8 @@ test('create the two legs: expense in Bank A, income in Bank B', async () => {
 })
 
 test('edit form offers "Link as transfer" and the picker lists the twin', async () => {
-  const row = transactionRowFor(page, 'CC Payment')
-  await row.hover()
-  await row.getByRole('button', { name: 'Edit transaction' }).click()
+  await openTransactionRowMenu(page, 'CC Payment')
+  await page.getByRole('menuitem', { name: 'Edit transaction' }).click()
   await page.getByTestId('link-transfer-open').click()
 
   // The edit form closes; the picker opens with the matching income leg.

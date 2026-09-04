@@ -21,7 +21,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     await setupAccountAndTransaction(page)
     await page.reload()
 
-    await expect(page.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('Bulk Share Test')).toBeVisible({ timeout: 5_000 })
 
     // Enter select mode
@@ -94,7 +94,7 @@ test.describe('27 — Wallet bulk share dialog', () => {
     })
     await page.reload()
 
-    await expect(page.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
     await page.getByRole('button', { name: /Select/ }).click()
 
     // Select all via the header checkbox
@@ -169,7 +169,7 @@ test.describe('27 — Bulk share with group members', () => {
     })
 
     await alicePage.goto('/wallet')
-    await expect(alicePage.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
+    await expect(alicePage.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
     await alicePage.getByRole('button', { name: /Select/ }).click()
     await alicePage.locator('[data-testid="select-mode-bar"] input[type="checkbox"]').click()
     await alicePage.getByTestId('bulk-split-btn').click()

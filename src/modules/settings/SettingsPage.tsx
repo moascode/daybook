@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
-import { Palette, Globe, LogOut, User, KeyRound, Sparkles } from 'lucide-react'
+import { Palette, Globe, LogOut, User, KeyRound, Sparkles, Wallet, Tag } from 'lucide-react'
 import { api } from '@/lib/api'
 import { errorMessage } from '@/lib/utils'
 import { useAppStore } from '@/stores/app.store'
 import { useThemePreference } from '@/hooks/useThemePreference'
 import { isThemePreference } from '@/lib/theme'
 import { useToastStore } from '@/stores/toast.store'
+import { useWallet } from '@/hooks/useWallet'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
+import { CategoryManager } from '@/modules/wallet/CategoryManager'
 
 export function SettingsPage() {
   const { theme, changeTheme } = useThemePreference()
@@ -25,6 +27,16 @@ export function SettingsPage() {
   }
 
   const [loading, setLoading] = useState(true)
+
+  // Wallet → Categories (moved here from the Transactions toolbar and its
+  // filter-dropdown footer entry, so there's a single canonical place to
+  // manage categories rather than three).
+  const { categories, loadCategories, addCategory, deleteCategory, getCategoryUsage } = useWallet()
+  const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
+
+  useEffect(() => {
+    loadCategories()
+  }, [loadCategories])
 
   // Change password
   const [currentPassword, setCurrentPassword] = useState('')
@@ -259,6 +271,28 @@ export function SettingsPage() {
           </form>
         </section>
 
+        {/* Wallet module settings */}
+        <section className="rounded-xl border border-line bg-surface p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Wallet</h3>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-fg-muted">
+              Categories used across transactions, budgets, and imports.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCategoryManagerOpen(true)}
+              data-testid="manage-categories"
+            >
+              <Tag className="h-3.5 w-3.5" />
+              Manage categories
+            </Button>
+          </div>
+        </section>
+
         {/* Preferences section */}
         <section className="rounded-xl border border-line bg-surface p-5">
           <div className="mb-4 flex items-center gap-2">
@@ -296,6 +330,15 @@ export function SettingsPage() {
           <p className="mt-1 text-xs text-fg-faint">Daybook is single-currency for now.</p>
         </section>
       </div>
+
+      <CategoryManager
+        open={categoryManagerOpen}
+        onOpenChange={setCategoryManagerOpen}
+        categories={categories}
+        onAdd={async (data) => { await addCategory(data) }}
+        onDelete={async (id) => { await deleteCategory(id) }}
+        onGetUsage={getCategoryUsage}
+      />
     </div>
   )
 }

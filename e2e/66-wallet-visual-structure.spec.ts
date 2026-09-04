@@ -16,6 +16,7 @@ import {
   newAppPage,
   accountCardFor,
   transactionRowFor,
+  openTransactionRowMenu,
   fillAccountForm,
   fillTransactionForm,
   businessToday,
@@ -89,7 +90,13 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
   })
 
   test('import-csv-btn is visible on /wallet and navigates to /wallet/import', async ({ browser }) => {
-    const page = await newAppPage(browser, '/wallet')
+    // The entry point now lives in the Composer's own shortcut row (mockup
+    // parity — the header no longer duplicates it), which only renders once
+    // there's an account to add a transaction against.
+    const page = await newAppPage(browser, '/wallet/accounts')
+    await page.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(page, { name: 'Structure Import Bank', type: 'bank' })
+    await page.goto('/wallet')
 
     const importBtn = page.getByTestId('import-csv-btn')
     await expect(importBtn).toBeVisible()
@@ -161,9 +168,15 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await expect(row).toBeVisible()
     const actions = row.locator('.trow-actions')
     await expect(actions).toBeVisible()
-    await expect(row.getByRole('button', { name: 'Split transaction' })).toBeVisible()
-    await expect(row.getByRole('button', { name: 'Edit transaction' })).toBeVisible()
-    await expect(row.getByRole('button', { name: 'Delete transaction' })).toBeVisible()
+    // Mockup parity (docs/v2 wallet-transactions rebuild): one always-visible
+    // ⋯ trigger per row, not three separate touch-sized buttons — opening it
+    // must still reach all three actions.
+    await expect(row.getByRole('button', { name: 'Transaction options' })).toBeVisible()
+    await openTransactionRowMenu(page, 'Neighborhood Supermarket')
+    await expect(page.getByRole('menuitem', { name: 'Split transaction' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Edit transaction' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Delete transaction' })).toBeVisible()
+    await page.keyboard.press('Escape')
 
     // Readable floor: enough for a real merchant name, not a few characters
     // truncated to nothing. 100px comfortably fits "Neighborhood Su…" at
@@ -195,8 +208,8 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await page.goto('/wallet')
     await waitForApp(page)
 
-    const row = transactionRowFor(page, 'Mobile Snack')
-    await row.getByRole('button', { name: 'Delete transaction' }).click()
+    await openTransactionRowMenu(page, 'Mobile Snack')
+    await page.getByRole('menuitem', { name: 'Delete transaction' }).click()
     await expect(transactionRowFor(page, 'Mobile Snack')).toHaveCount(0)
     await expect(page.getByText(/undo/i)).toBeVisible()
     await ctx.close()
