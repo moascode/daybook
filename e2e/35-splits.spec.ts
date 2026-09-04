@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm, businessToday, openBlankTransactionForm } from './helpers'
+import { fillAccountForm, fillTransactionForm, businessToday, openBlankTransactionForm, openTransactionRowMenu } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -47,8 +47,8 @@ test.describe('35 — Transaction splits', () => {
 
     // Alice clicks the split button on the Groceries transaction
     await expect(alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Groceries' })).toBeVisible()
-    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Groceries' }).hover()
-    await alicePage.getByRole('button', { name: 'Split transaction' }).click()
+    await openTransactionRowMenu(alicePage, 'Groceries')
+    await alicePage.getByRole('menuitem', { name: 'Split transaction' }).click()
 
     // ShareDialog opens
     const shareDialog = alicePage.getByRole('dialog')
@@ -114,12 +114,14 @@ test.describe('35 — Transaction splits', () => {
 
     // Alice opens wallet and opens split dialog
     await alicePage.goto('/wallet')
-    // Wait for accounts to load (filter bar appears)
-    await expect(alicePage.getByText('Total Net Worth')).toBeVisible({ timeout: 10_000 })
+    // Wait for accounts to load (filter bar appears) — the page no longer
+    // shows a net-worth banner; summary-income is the equivalent "loaded" signal.
+    await expect(alicePage.getByTestId('summary-income')).toBeVisible({ timeout: 10_000 })
     // Wait for the transaction to appear in the list
     await expect(alicePage.getByText('Lunch')).toBeVisible({ timeout: 10_000 })
-    // Click the split button on the Lunch transaction row using the test ID
-    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Lunch' }).getByRole('button', { name: 'Split transaction' }).click()
+    // Click the split button on the Lunch transaction row's ⋯ menu
+    await openTransactionRowMenu(alicePage, 'Lunch')
+    await alicePage.getByRole('menuitem', { name: 'Split transaction' }).click()
 
     // Wait for dialog
     await expect(alicePage.getByRole('dialog')).toBeVisible({ timeout: 5000 })
@@ -162,7 +164,8 @@ test.describe('35 — Transaction splits', () => {
 
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Utilities')).toBeVisible({ timeout: 10_000 })
-    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Utilities' }).getByRole('button', { name: 'Split transaction' }).click()
+    await openTransactionRowMenu(alicePage, 'Utilities')
+    await alicePage.getByRole('menuitem', { name: 'Split transaction' }).click()
 
     const dialog = alicePage.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })
@@ -227,7 +230,8 @@ test.describe('35 — Transaction splits', () => {
     // Re-open the share dialog on the same transaction
     await alicePage.goto('/wallet')
     await expect(alicePage.getByText('Dinner')).toBeVisible({ timeout: 10_000 })
-    await alicePage.locator('[data-testid="transaction-row"]').filter({ hasText: 'Dinner' }).getByRole('button', { name: 'Split transaction' }).click()
+    await openTransactionRowMenu(alicePage, 'Dinner')
+    await alicePage.getByRole('menuitem', { name: 'Split transaction' }).click()
 
     const dialog = alicePage.getByRole('dialog')
     await expect(dialog).toBeVisible({ timeout: 5000 })

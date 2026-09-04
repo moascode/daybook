@@ -208,6 +208,10 @@ test('export modal only shows transactions matching the active type filter', asy
   // Close and reset filter — scoped to the dialog: select mode's own bar also
   // has a "Cancel" button, and this must not exit select mode.
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+  // The Filters popup closes on any outside click (including the Export
+  // button/dialog interactions just above) — reopen it before touching its
+  // fields again.
+  await ensureFiltersOpen()
   await page.getByTestId('filter-type').selectOption('all')
 })
 
@@ -232,6 +236,7 @@ test('exported file with an active type filter contains only matching rows', asy
   const content = await downloadContent('export-csv-btn')
   expect(content).toMatch(/Test Merchant/)
   expect(content).not.toMatch(/Income Source/)
+  await ensureFiltersOpen()
   await page.getByTestId('filter-type').selectOption('all')
 })
 

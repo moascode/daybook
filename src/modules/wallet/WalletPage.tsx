@@ -88,10 +88,32 @@ export function WalletPage() {
   const composerInputRef = useRef<HTMLInputElement>(null)
   const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
 
-  // §6.4 filter bar: the occasional filters live in a collapsible section; the
+  // §6.4 filter bar: the occasional filters live in a popup; the
   // sharing view only renders for users who are actually in a group (it stays
   // deep-linkable via ?view= either way).
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const filterPanelRef = useRef<HTMLDivElement>(null)
+
+  // Click-outside-to-close, the standard popup convention this page's own
+  // row "⋯" menus already follow. `mousedown`, not `click`: closing on
+  // mousedown means the panel has already unmounted by the time the
+  // subsequent `click` event fires at that same screen position, so a click
+  // meant for something the panel happened to be covering (e.g. Export in
+  // the select-mode bar, which sits right below this popup and was getting
+  // physically obscured by it) lands on THAT element instead of being eaten
+  // by the panel. Closing on `click` instead would still intercept the
+  // click meant for whatever was underneath.
+  useEffect(() => {
+    if (!filtersOpen) return
+    function handleOutsideMouseDown(e: MouseEvent) {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target as Node)) {
+        setFiltersOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideMouseDown)
+    return () => document.removeEventListener('mousedown', handleOutsideMouseDown)
+  }, [filtersOpen])
+
   const [hasGroups, setHasGroups] = useState(false)
 
   useEffect(() => {
@@ -112,6 +134,7 @@ export function WalletPage() {
 
   // Link-as-transfer picker state
   const [linkTarget, setLinkTarget] = useState<Transaction | null>(null)
+
 
   // Keep the latest filters in a ref so the load-on-mutation handlers below can
   // read them without depending on `filters` (which would recreate them).
@@ -701,170 +724,13 @@ export function WalletPage() {
           (or a group: members can view shared transactions with no accounts). */}
       {(accounts.length > 0 || hasGroups) && (
       <>
-      {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
-          convention below — .wallet-transactions bumps that offset in
-          data.css so the two don't overlap while scrolling). Only the
-          single-row search/date/filters/sort stays pinned; chips and the
-          collapsible advanced panel scroll away normally. */}
-      <div className="tx-filterbar-sticky" ref={filterBarRef}>
-        <div className="filters">
-          <div className="filter-field">
-            <Filter className="h-3.5 w-3.5" />
-            <input
-              id="transaction-search"
-              type="search"
-              aria-label="Search transactions"
-              data-testid="transaction-search"
-              placeholder={`Filter these ${transactions.length} transactions…`}
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-            />
-          </div>
-          <DateRangeControl
-            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
-            onChange={(range) => setFilters(range)}
-          />
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((o) => !o)}
-            data-testid="filter-toggle"
-            aria-expanded={filtersOpen}
-            className={cn(
-              'filter-btn',
-              filtersOpen || activeFilterCount > 0
-                ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-                : 'hover:bg-surface-hover hover:text-fg',
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Filters
-            {activeFilterCount > 0 && (
-              <span className="count" data-testid="filter-count">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          {/* Real toggle (not a decorative mockup button — CLAUDE.md rule 13:
-              a click that changes nothing is the worst outcome a handler can
-              produce). Flips both the day-group order and each day's row
-              order. */}
-          <button
-            type="button"
-            onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
-            data-testid="sort-direction-toggle"
-            className="filter-btn hide-mobile"
-          >
-            <ArrowUpDown className="h-3.5 w-3.5" />
-            {sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
-          </button>
-          {anyFilterActive && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              data-testid="filter-clear-all"
-              className="btn btn-quiet"
-            >
-              <X className="h-3.5 w-3.5" />
-              Clear all
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* U-10: removable chips for the active occasional filters */}
-      {filterChips.length > 0 && (
-        <div className="filters mb-4" data-testid="active-filter-chips">
-          {filterChips.map((chip) => (
-            <span
-              key={chip.key}
-              data-testid="filter-chip"
-              className="chip chip-mute"
-            >
-              {chip.label}
-              <button
-                type="button"
-                onClick={chip.onClear}
-                aria-label="Remove filter"
-                title={`Remove ${chip.label}`}
-                className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Collapsible occasional filters — real functionality the mockup
-          doesn't show; kept as its own bordered panel rather than crammed
-          into the mockup's plain filter row. */}
-      {filtersOpen && (
-        <div data-testid="filter-panel" className="mb-4 rounded-lg border border-line-subtle bg-surface p-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Select
-              label="Type"
-              data-testid="filter-type"
-              options={typeOptions}
-              value={filters.type}
-              onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
-            />
-            <Select
-              label="Account"
-              data-testid="filter-account"
-              options={accountOptions}
-              value={filters.accountId ?? ''}
-              onChange={(e) => setFilters({ accountId: e.target.value || null })}
-            />
-            <Select
-              label="Category"
-              data-testid="filter-category"
-              options={categoryOptions}
-              value={filters.categoryId ?? ''}
-              onChange={(e) => setFilters({ categoryId: e.target.value || null })}
-            />
-            <TagInput
-              id="filter-tags"
-              testId="filter-tags"
-              label="Tags"
-              value={filters.tags}
-              onChange={(tags) => setFilters({ tags })}
-              suggestions={tags}
-              allowCreate={false}
-              placeholder="Filter by tags..."
-            />
-          </div>
-          {hasGroups && (
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
-              {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setFilters({ view: v })}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs transition-colors',
-                    filters.view === v
-                      ? 'border-brand-500 bg-brand-50 text-brand-700'
-                      : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
-                  )}
-                >
-                  {v === 'shared-with-me'
-                    ? 'Shared with me'
-                    : v === 'shared-with-others'
-                      ? 'Shared with others'
-                      : v.charAt(0).toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Three stat cards reading off the filtered set — literal port of the
           mockup's Money in / Money out / Net row (replaces the old
           whole-account-book NetWorthBanner, which the mockup doesn't show on
           this page at all). Footnotes are honestly computed from this page's
           own data only; no period-over-period comparison (see summary
-          useMemo's comment). */}
+          useMemo's comment). Rendered ABOVE the filter bar per owner
+          request — the mockup put stats above the list too. */}
       <div className="grid g3 g-1-on-mobile mb-4">
         <div className="card stat-card">
           <div className="stat-topline">
@@ -911,6 +777,216 @@ export function WalletPage() {
           </div>
         </div>
       </div>
+
+      {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
+          convention below — .wallet-transactions bumps that offset in
+          data.css so the two don't overlap while scrolling). Only the
+          single-row search/date/filters/sort/select stays pinned; chips and
+          the collapsible advanced panel scroll away normally. */}
+      <div className="tx-filterbar-sticky" ref={filterBarRef}>
+        <div className="filters">
+          <div className="filter-field">
+            <Filter className="h-3.5 w-3.5" />
+            <input
+              id="transaction-search"
+              type="search"
+              aria-label="Search transactions"
+              data-testid="transaction-search"
+              placeholder={`Filter these ${transactions.length} transactions…`}
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+            />
+          </div>
+          <DateRangeControl
+            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+            onChange={(range) => setFilters(range)}
+          />
+          {/* Occasional filters (Type/Account/Category/Tags + Sharing) live in
+              a popup — owner request to keep the sticky row itself minimal
+              rather than growing it downward on every Filters click.
+              Deliberately a plain conditionally-rendered <div>, NOT a Radix
+              Dialog/Popover: both were tried and both fight this page's own
+              other dialogs (TransactionForm, Export, bulk actions, Split) in
+              ways that are hard to fully pin down —
+              a Dialog's full-page overlay blocks every other click while
+              open; a Popover's dismissable-layer stack sets pointer-events:
+              none on this panel once a second Radix overlay opens on top,
+              and doesn't reliably restore it once that overlay closes,
+              leaving the panel visible but permanently unclickable. A plain
+              div has none of that machinery: no outside-dismiss, no layer
+              stacking, no focus trapping — it just shows and hides on
+              `filtersOpen`, exactly like the collapsible section it
+              replaces, positioned as a floating panel instead of pushing
+              the row's own height around. Escape or re-clicking "Filters"
+              are the only ways to close it (no click-outside-to-dismiss),
+              matching what most of the existing filter e2e coverage
+              assumes. Filters still apply live as each control changes;
+              there's no separate Apply step. */}
+          <div className="relative" ref={filterPanelRef}>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setFiltersOpen(false) }}
+              data-testid="filter-toggle"
+              aria-expanded={filtersOpen}
+              className={cn(
+                'filter-btn',
+                filtersOpen || activeFilterCount > 0
+                  ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                  : 'hover:bg-surface-hover hover:text-fg',
+              )}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="count" data-testid="filter-count">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filtersOpen && (
+              // z-20 — comfortably below Modal.tsx's overlay (z-40): if a
+              // dialog opens on top, its own overlay fully covers and dims
+              // this panel, same as the old collapsible section being
+              // ordinary page content underneath a centered modal's
+              // backdrop. It's exactly where it was, fully interactive,
+              // once that dialog closes.
+              <div
+                data-testid="filter-panel"
+                className="absolute left-0 top-full z-20 mt-2 w-[min(90vw,420px)] rounded-xl border border-line bg-surface-raised p-4 shadow-xl shadow-line/60"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <Select
+                    label="Type"
+                    data-testid="filter-type"
+                    options={typeOptions}
+                    value={filters.type}
+                    onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
+                  />
+                  <Select
+                    label="Account"
+                    data-testid="filter-account"
+                    options={accountOptions}
+                    value={filters.accountId ?? ''}
+                    onChange={(e) => setFilters({ accountId: e.target.value || null })}
+                  />
+                  <Select
+                    label="Category"
+                    data-testid="filter-category"
+                    options={categoryOptions}
+                    value={filters.categoryId ?? ''}
+                    onChange={(e) => setFilters({ categoryId: e.target.value || null })}
+                  />
+                  <TagInput
+                    id="filter-tags"
+                    testId="filter-tags"
+                    label="Tags"
+                    value={filters.tags}
+                    onChange={(tags) => setFilters({ tags })}
+                    suggestions={tags}
+                    allowCreate={false}
+                    placeholder="Filter by tags..."
+                  />
+                </div>
+                {hasGroups && (
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
+                    {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setFilters({ view: v })}
+                        className={cn(
+                          'rounded-full border px-3 py-1 text-xs transition-colors',
+                          filters.view === v
+                            ? 'border-brand-500 bg-brand-50 text-brand-700'
+                            : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
+                        )}
+                      >
+                        {v === 'shared-with-me'
+                          ? 'Shared with me'
+                          : v === 'shared-with-others'
+                            ? 'Shared with others'
+                            : v.charAt(0).toUpperCase() + v.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Real toggle (not a decorative mockup button — CLAUDE.md rule 13:
+              a click that changes nothing is the worst outcome a handler can
+              produce). Flips both the day-group order and each day's row
+              order. */}
+          <button
+            type="button"
+            onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
+            data-testid="sort-direction-toggle"
+            className="filter-btn hide-mobile"
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            {sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
+          </button>
+          {anyFilterActive && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              data-testid="filter-clear-all"
+              className="btn btn-quiet"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+          {/* Select also lives here (not just the page-head) — owner request:
+              a bulk-action entry point right next to the list it acts on,
+              not just up in the header. Same handler as the page-head one;
+              a DIFFERENT aria-label is deliberate — Playwright's role/name
+              lookup matches by substring, so two buttons both named
+              "Select transactions" would make every existing
+              `getByRole('button', { name: 'Select transactions' })` in e2e/
+              ambiguous the moment both are visible together. Careful: the
+              first attempt at this ("Enable bulk selection") STILL collided
+              — "select" is a case-insensitive substring of "selection". */}
+          {accounts.length > 0 && !selectMode && (
+            <button
+              type="button"
+              onClick={toggleSelectMode}
+              aria-label="Start bulk actions"
+              data-testid="select-mode-toggle-filterbar"
+              className="filter-btn ml-auto"
+            >
+              <CheckSquare className="h-3.5 w-3.5" />
+              Select
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* U-10: removable chips for the active occasional filters */}
+      {filterChips.length > 0 && (
+        <div className="filters mb-4" data-testid="active-filter-chips">
+          {filterChips.map((chip) => (
+            <span
+              key={chip.key}
+              data-testid="filter-chip"
+              className="chip chip-mute"
+            >
+              {chip.label}
+              <button
+                type="button"
+                onClick={chip.onClear}
+                aria-label="Remove filter"
+                title={`Remove ${chip.label}`}
+                className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       </>
       )}
 
@@ -918,7 +994,16 @@ export function WalletPage() {
       {selectMode && (
         <div
           data-testid="select-mode-bar"
-          className="mb-4 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5"
+          // relative + z-30: sits right below the sticky filter bar, which
+          // an OPEN Filters popup (z-20) can spatially extend down over
+          // (position:absolute doesn't push layout, so a tall panel simply
+          // floats on top of whatever's beneath it). z-index only changes
+          // hit-testing between POSITIONED elements, hence `relative` here —
+          // without it this bar stays position:static and the higher
+          // z-index on the popup wins regardless of the number. Still well
+          // below Modal.tsx's overlay (z-40), so a real dialog still covers
+          // this bar correctly.
+          className="relative z-30 mb-4 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5"
         >
           <input
             type="checkbox"

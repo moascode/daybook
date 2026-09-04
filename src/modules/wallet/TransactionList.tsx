@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, ArrowRightLeft, Pencil, Scissors, Users } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Trash2, ArrowRightLeft, Pencil, Scissors, Users, MoreHorizontal } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
 import { countableAmount } from '@/hooks/useWallet'
 import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
 
 interface TransactionListProps {
@@ -260,45 +260,63 @@ function TransactionRow({
         )}
       </span>
 
-      {/* Row actions — hidden in select mode and on read-only shared rows */}
+      {/* Row actions — hidden in select mode and on read-only shared rows.
+          A single "More" trigger (mockup parity: proposal-v2/transactions.html
+          uses one ⋯ icon-btn per row, not a row of separate icons) opening a
+          dropdown with Split/Edit/Delete — same actions as before, one entry
+          point instead of three always-visible buttons. */}
       {!selectMode && !readOnly && (
         <div
           className="trow-actions flex-shrink-0 items-center gap-0.5 text-fg-faint transition-colors group-hover:text-fg-muted"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* U-6: hide split button on transfers. U-07: and hide it entirely when
-              the user has no household group to split with (onSplit is undefined). */}
-          {transaction.type !== 'transfer' && onSplit && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-              onClick={() => onSplit(transaction)}
-              aria-label="Split transaction"
-              title="Split with household members"
-              data-testid="split-transaction-btn"
-            >
-              <Scissors className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onEdit?.(transaction)}
-            aria-label="Edit transaction"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
-            onClick={() => onDelete?.(transaction)}
-            aria-label="Delete transaction"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-          </Button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                className="icon-btn flex min-h-[40px] min-w-[40px] items-center justify-center rounded text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted md:min-h-0 md:min-w-0"
+                aria-label="Transaction options"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenu.Trigger>
+
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95"
+                sideOffset={4}
+                align="end"
+              >
+                {/* U-6: hide split on transfers. U-07: hide it entirely when
+                    the user has no household group to split with (onSplit is
+                    undefined). */}
+                {transaction.type !== 'transfer' && onSplit && (
+                  <DropdownMenu.Item
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                    data-testid="split-transaction-btn"
+                    onSelect={() => onSplit(transaction)}
+                  >
+                    <Scissors className="h-3.5 w-3.5 text-fg-faint" />
+                    Split transaction
+                  </DropdownMenu.Item>
+                )}
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                  onSelect={() => onEdit?.(transaction)}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-fg-faint" />
+                  Edit transaction
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"
+                  onSelect={() => onDelete?.(transaction)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete transaction
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       )}
     </div>

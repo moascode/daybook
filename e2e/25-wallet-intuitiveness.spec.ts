@@ -16,7 +16,7 @@ import {
   newAppPage,
   fillAccountForm,
   fillTransactionForm,
-  transactionRowFor,
+  openTransactionRowMenu,
   openBlankTransactionForm,
 } from './helpers'
 
@@ -68,7 +68,7 @@ test('the transaction form pre-selects the first account', async () => {
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 })
 
-test('a transaction row exposes a visible Edit button that opens the editor', async () => {
+test('a transaction row exposes a visible ⋯ menu whose Edit item opens the editor', async () => {
   await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
     type: 'Expense',
@@ -77,7 +77,7 @@ test('a transaction row exposes a visible Edit button that opens the editor', as
     merchant: 'Cafe',
   })
 
-  const row = transactionRowFor(page, 'Cafe')
-  await row.getByRole('button', { name: 'Edit transaction' }).click()
+  await openTransactionRowMenu(page, 'Cafe')
+  await page.getByRole('menuitem', { name: 'Edit transaction' }).click()
   await expect(page.getByRole('heading', { name: 'Edit Transaction' })).toBeVisible()
 })

@@ -9,7 +9,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navTo, navigateToImportCsv , openBlankTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, navTo, navigateToImportCsv , openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -114,9 +114,8 @@ test('balances move on both accounts', async () => {
 
 test('editing an imported income/expense row shows the transfer hint', async () => {
   await navTo(page, 'transactions')
-  const row = transactionRowFor(page, 'Grab Food')
-  await row.hover()
-  await row.getByRole('button', { name: 'Edit transaction' }).click()
+  await openTransactionRowMenu(page, 'Grab Food')
+  await page.getByRole('menuitem', { name: 'Edit transaction' }).click()
   await expect(page.getByTestId('transfer-hint')).toBeVisible()
   await page.getByRole('button', { name: 'Cancel' }).click()
 })

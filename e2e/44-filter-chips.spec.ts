@@ -52,6 +52,11 @@ test('clicking the chip × clears just that filter', async () => {
 
   // Chip row gone (no other filters active) and the Account select back to "all".
   await expect(page.getByTestId('active-filter-chips')).toHaveCount(0)
+  // The chip's × is outside the Filters popup, so that click closed it
+  // (standard click-outside-to-dismiss) — reopen it to check the select's
+  // value reflects the cleared filter.
+  await page.getByTestId('filter-toggle').click()
+  await expect(page.getByTestId('filter-panel')).toBeVisible()
   await expect(page.getByTestId('filter-panel').getByTestId('filter-account')).toHaveValue('')
 })
 
