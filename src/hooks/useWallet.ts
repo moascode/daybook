@@ -267,11 +267,11 @@ function mapGoal(row: GoalRow): Goal {
 interface TransactionFilters {
   dateFrom?: string
   dateTo?: string
-  type?: 'all' | TransactionType
-  categoryId?: string | null
-  accountId?: string | null
+  type?: TransactionType[]
+  categoryId?: string[]
+  accountId?: string[]
   tags?: string[]
-  view?: 'all' | 'mine' | 'shared-with-me' | 'shared-with-others'
+  view?: Array<'mine' | 'shared-with-me' | 'shared-with-others'>
   q?: string // B1: free-text search on merchant/description
 }
 
@@ -340,13 +340,21 @@ export function useWallet() {
     const qs = new URLSearchParams()
     if (filters?.dateFrom) qs.set('dateFrom', filters.dateFrom)
     if (filters?.dateTo) qs.set('dateTo', filters.dateTo)
-    if (filters?.type && filters.type !== 'all') qs.set('type', filters.type)
-    if (filters?.categoryId) qs.set('categoryId', filters.categoryId)
-    if (filters?.accountId) qs.set('accountId', filters.accountId)
+    if (filters?.type?.length) {
+      for (const t of filters.type) qs.append('type', t)
+    }
+    if (filters?.categoryId?.length) {
+      for (const id of filters.categoryId) qs.append('categoryId', id)
+    }
+    if (filters?.accountId?.length) {
+      for (const id of filters.accountId) qs.append('accountId', id)
+    }
     if (filters?.tags?.length) {
       for (const t of filters.tags) qs.append('tags', t)
     }
-    if (filters?.view && filters.view !== 'all') qs.set('view', filters.view)
+    if (filters?.view?.length) {
+      for (const v of filters.view) qs.append('view', v)
+    }
     // B1: Search query
     if (filters?.q) qs.set('q', filters.q)
 
@@ -608,14 +616,14 @@ export function useWallet() {
     const qs = new URLSearchParams()
     if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom)
     if (filters.dateTo) qs.set('dateTo', filters.dateTo)
-    if (filters.type !== 'all') qs.set('type', filters.type)
-    if (filters.categoryId) qs.set('categoryId', filters.categoryId)
-    if (filters.accountId) qs.set('accountId', filters.accountId)
+    for (const t of filters.type) qs.append('type', t)
+    for (const id of filters.categoryId) qs.append('categoryId', id)
+    for (const id of filters.accountId) qs.append('accountId', id)
     for (const t of filters.tags) qs.append('tags', t)
     if (filters.q) qs.set('q', filters.q)
     // §1.2: pass the active view so shared-in rows visible on screen are not
     // silently dropped from the export by the server's own-rows-only default.
-    if (filters.view !== 'all') qs.set('view', filters.view)
+    for (const v of filters.view) qs.append('view', v)
     // Restrict to the user's selection within the filtered view (stale IDs
     // that no longer match the filters are excluded server-side).
     qs.set('ids', ids.join(','))

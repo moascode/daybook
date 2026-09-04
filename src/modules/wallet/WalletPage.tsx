@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { Wallet, TrendingUp, TrendingDown, Download, CheckSquare, Trash2, SlidersHorizontal, ArrowUpDown, X, Users, Tag, Filter } from 'lucide-react'
+import { Wallet, TrendingUp, TrendingDown, Download, Trash2, SlidersHorizontal, ArrowUpDown, X, Users, Tag, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Select } from '@/components/ui/Select'
+import { MultiSelect } from '@/components/ui/MultiSelect'
 import { DateRangeControl } from '@/components/ui/DateRangeControl'
-import { TagInput } from '@/components/ui/TagInput'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
 import { ExportModal } from '@/modules/wallet/ExportModal'
@@ -122,8 +122,10 @@ export function WalletPage() {
       .catch(() => {})
   }, [])
 
-  // Multi-select state
-  const [selectMode, setSelectMode] = useState(false)
+  // Multi-select state — no explicit "mode" anymore. Every row has an
+  // always-visible checkbox (industry convention: Gmail, Drive, Notion never
+  // gate selection behind a separate mode toggle); the floating bulk-action
+  // bar simply appears whenever selectedIds is non-empty.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkSplitOpen, setBulkSplitOpen] = useState(false)
@@ -143,17 +145,24 @@ export function WalletPage() {
   const prevFiltersRef = useRef(filters)
 
   useEffect(() => {
-    // Detect filter changes and clear selection if in select mode
-    if (selectMode && JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
+    // Re-filtering while rows are selected can move some out of view —
+    // clear the selection rather than leave it pointed at hidden rows.
+    if (selectedIds.size > 0 && JSON.stringify(prevFiltersRef.current) !== JSON.stringify(filters)) {
       setSelectedIds(new Set())
     }
     filtersRef.current = filters
     prevFiltersRef.current = filters
-  }, [filters, selectMode])
+  }, [filters, selectedIds.size])
 
   // B1: free-text search — keep keystrokes local, push to filters.q debounced
   // so each character doesn't fire a server round-trip.
   const [searchDraft, setSearchDraft] = useState(filters.q)
+  // Collapses to an icon by default to keep the row compact; expands (and
+  // auto-focuses) on click, and stays expanded on its own whenever there's
+  // an active query — so an in-progress search is never hidden behind an
+  // icon a user has to remember to click again.
+  const [searchExpanded, setSearchExpanded] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -251,11 +260,13 @@ export function WalletPage() {
     // U-10: arriving via ?account= applies a filter that lives in the collapsed
     // panel — open it so the narrowing is visible (the chip below also shows it).
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (accountParam) { setFilters({ accountId: accountParam }); setFiltersOpen(true) }
+    if (accountParam) { setFilters({ accountId: [accountParam] }); setFiltersOpen(true) }
     // Deep link from the Shared page (and elsewhere): /wallet?view=shared-with-me
     const viewParam = searchParams.get('view')
-    if (viewParam === 'all' || viewParam === 'mine' || viewParam === 'shared-with-me' || viewParam === 'shared-with-others') {
-      setFilters({ view: viewParam })
+    if (viewParam === 'mine' || viewParam === 'shared-with-me' || viewParam === 'shared-with-others') {
+      setFilters({ view: [viewParam] })
+    } else if (viewParam === 'all') {
+      setFilters({ view: [] })
     }
     // ?range=all widens to all time. A caller that links to a specific set of
     // rows cannot know which month they fall in, and the default current-month
@@ -276,7 +287,7 @@ export function WalletPage() {
     // the list is filtered with no visible reason why.
     const categoryParam = searchParams.get('category')
     if (categoryParam) {
-      setFilters({ categoryId: categoryParam })
+      setFilters({ categoryId: [categoryParam] })
       setFiltersOpen(true)
     }
     // ?txn=<id> rings and scrolls to one row (see TransactionList). It is a
@@ -438,7 +449,6 @@ export function WalletPage() {
       addToast({ message: errorMessage(err, 'Could not delete all selected transactions — please try again.'), duration: 4000 })
     }
     setSelectedIds(new Set())
-    setSelectMode(false)
     setBulkDeleteOpen(false)
     await loadTransactions(filtersRef.current)
   }, [selectedIds, deleteTransaction, loadTransactions, addToast])
@@ -454,8 +464,7 @@ export function WalletPage() {
       const { updated, skippedTransfers } = await bulkUpdateTransactions(Array.from(selectedIds), changes)
 
       setSelectedIds(new Set())
-      setSelectMode(false)
-      // A re-category can move rows out of the active filter, so reload rather
+        // A re-category can move rows out of the active filter, so reload rather
       // than patching the store.
       await loadTransactions(filtersRef.current)
       await loadTags()
@@ -494,8 +503,7 @@ export function WalletPage() {
       }
 
       setSelectedIds(new Set())
-      setSelectMode(false)
-      await loadTransactions(filtersRef.current)
+        await loadTransactions(filtersRef.current)
       await loadTags()
 
       addToast({
@@ -517,8 +525,7 @@ export function WalletPage() {
     setSplitTarget(transaction)
   }
 
-  function toggleSelectMode() {
-    setSelectMode((m) => !m)
+  function clearSelection() {
     setSelectedIds(new Set())
   }
 
@@ -531,11 +538,26 @@ export function WalletPage() {
     })
   }
 
+  function handleToggleDay(ids: string[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.length > 0 && ids.every((id) => prev.has(id))
+      const next = new Set(prev)
+      for (const id of ids) {
+        if (allSelected) next.delete(id)
+        else next.add(id)
+      }
+      return next
+    })
+  }
+
+  // Selects/clears only the currently VISIBLE (loaded) rows, not the whole
+  // filtered set behind "Load more" — matching the reference pattern's own
+  // scope (its own selection never reached past what was on screen either).
   function handleSelectAll() {
-    if (selectedIds.size === transactions.length) {
+    if (selectedIds.size === visibleTransactions.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(transactions.map((t) => t.id)))
+      setSelectedIds(new Set(visibleTransactions.map((t) => t.id)))
     }
   }
 
@@ -544,32 +566,33 @@ export function WalletPage() {
   }, [exportTransactions])
 
   const typeOptions = [
-    { value: 'all', label: 'All Types' },
     { value: 'income', label: 'Income' },
     { value: 'expense', label: 'Expense' },
     { value: 'transfer', label: 'Transfer' },
   ]
 
-  const accountOptions = [
-    { value: '', label: 'All Accounts' },
-    ...accounts.map((a) => ({ value: a.id, label: a.name })),
-  ]
+  const accountOptions = accounts.map((a) => ({ value: a.id, label: a.name }))
 
   // Category management lives at Settings → Wallet now, not here.
   const categoryOptions = [
-    { value: '', label: 'All Categories' },
     { value: UNCATEGORISED, label: 'Uncategorised' },
     ...categories.map((c) => ({ value: c.id, label: c.name })),
+  ]
+
+  const viewOptions = [
+    { value: 'mine', label: 'Mine' },
+    { value: 'shared-with-me', label: 'Shared with me' },
+    { value: 'shared-with-others', label: 'Shared with others' },
   ]
 
   // Count of active occasional filters — shown on the Filters toggle so
   // URL-driven narrowing (?account=, ?view=) stays visible even collapsed.
   const activeFilterCount = [
-    filters.type !== 'all',
-    !!filters.accountId,
-    !!filters.categoryId,
+    filters.type.length > 0,
+    filters.accountId.length > 0,
+    filters.categoryId.length > 0,
     filters.tags.length > 0,
-    filters.view !== 'all',
+    filters.view.length > 0,
   ].filter(Boolean).length
 
   const anyFilterActive =
@@ -579,48 +602,61 @@ export function WalletPage() {
     setSearchDraft('')
     setFilters({
       ...monthRange(0),
-      type: 'all',
-      categoryId: null,
-      accountId: null,
+      type: [],
+      categoryId: [],
+      accountId: [],
       tags: [],
-      view: 'all',
+      view: [],
       q: '',
     })
   }, [setFilters])
 
+  function viewOptionLabel(v: string) {
+    if (v === 'shared-with-me') return 'Shared with me'
+    if (v === 'shared-with-others') return 'Shared with others'
+    return 'Mine'
+  }
+
   // U-10: surface the occasional (collapsed) filters as removable chips so a
   // deep-link like ?account= doesn't silently narrow the list with no visible,
   // clearable indicator. Date range and search have their own always-visible
-  // controls, so they're intentionally not chipped here.
+  // controls, so they're intentionally not chipped here. Each selected value
+  // gets its own chip (not one combined "Type: Income, Expense" chip) so a
+  // single value can be cleared without reopening the multi-select panel.
   const filterChips = useMemo(() => {
     const chips: { key: string; label: string; onClear: () => void }[] = []
-    if (filters.type !== 'all') {
+    for (const t of filters.type) {
       chips.push({
-        key: 'type',
-        label: `Type: ${filters.type.charAt(0).toUpperCase() + filters.type.slice(1)}`,
-        onClear: () => setFilters({ type: 'all' }),
+        key: `type:${t}`,
+        label: `Type: ${t.charAt(0).toUpperCase() + t.slice(1)}`,
+        onClear: () => setFilters({ type: filters.type.filter((v) => v !== t) }),
       })
     }
-    if (filters.accountId) {
-      const name = accounts.find((a) => a.id === filters.accountId)?.name ?? 'Account'
-      chips.push({ key: 'account', label: `Account: ${name}`, onClear: () => setFilters({ accountId: null }) })
+    for (const id of filters.accountId) {
+      const name = accounts.find((a) => a.id === id)?.name ?? 'Account'
+      chips.push({
+        key: `account:${id}`,
+        label: `Account: ${name}`,
+        onClear: () => setFilters({ accountId: filters.accountId.filter((v) => v !== id) }),
+      })
     }
-    if (filters.categoryId) {
-      const name =
-        filters.categoryId === UNCATEGORISED
-          ? 'Uncategorised'
-          : (categories.find((c) => c.id === filters.categoryId)?.name ?? 'Category')
-      chips.push({ key: 'category', label: `Category: ${name}`, onClear: () => setFilters({ categoryId: null }) })
+    for (const id of filters.categoryId) {
+      const name = id === UNCATEGORISED ? 'Uncategorised' : (categories.find((c) => c.id === id)?.name ?? 'Category')
+      chips.push({
+        key: `category:${id}`,
+        label: `Category: ${name}`,
+        onClear: () => setFilters({ categoryId: filters.categoryId.filter((v) => v !== id) }),
+      })
     }
     for (const tag of filters.tags) {
       chips.push({ key: `tag:${tag}`, label: `Tag: ${tag}`, onClear: () => setFilters({ tags: filters.tags.filter((t) => t !== tag) }) })
     }
-    if (filters.view !== 'all') {
-      const vlabel =
-        filters.view === 'shared-with-me' ? 'Shared with me'
-          : filters.view === 'shared-with-others' ? 'Shared with others'
-            : filters.view.charAt(0).toUpperCase() + filters.view.slice(1)
-      chips.push({ key: 'view', label: `View: ${vlabel}`, onClear: () => setFilters({ view: 'all' }) })
+    for (const v of filters.view) {
+      chips.push({
+        key: `view:${v}`,
+        label: `View: ${viewOptionLabel(v)}`,
+        onClear: () => setFilters({ view: filters.view.filter((x) => x !== v) }),
+      })
     }
     return chips
   }, [filters, accounts, categories, setFilters])
@@ -639,13 +675,12 @@ export function WalletPage() {
   }, [filters.dateFrom, filters.dateTo])
 
   const viewLabel = useMemo(() => {
-    if (filters.view === 'all') return null
-    if (filters.view === 'shared-with-me') return 'Shared with me'
-    if (filters.view === 'shared-with-others') return 'Shared with others'
-    return 'Mine'
+    if (filters.view.length === 0) return null
+    if (filters.view.length === 1) return viewOptionLabel(filters.view[0])
+    return filters.view.map(viewOptionLabel).join(', ')
   }, [filters.view])
 
-  const allSelected = transactions.length > 0 && selectedIds.size === transactions.length
+  const allSelected = visibleTransactions.length > 0 && selectedIds.size === visibleTransactions.length
 
   return (
     <div
@@ -653,29 +688,18 @@ export function WalletPage() {
       style={{ '--tx-filterbar-h': `${filterBarHeight}px` } as React.CSSProperties}
     >
       {/* Literal port of proposal-v2/transactions.html's page-head: a plain
-          title/subtitle, with only "Select" (real bulk-action functionality
-          the mockup has no equivalent for) as a page-head action. Categories
-          moved to Settings → Wallet; Export moved into the select-mode bar
-          below; Import CSV was already reachable via the composer's own
-          shortcut row (removed here as a redundant second entry point). */}
+          title/subtitle, no page-level actions. "Select" lives in the filter
+          row instead — it acts on the list, not the page, so it belongs in
+          the list's own toolbar (Gmail/Drive convention), not up here.
+          Categories moved to Settings → Wallet; Export moved into the
+          select-mode bar below; Import CSV was already reachable via the
+          composer's own shortcut row (removed here as a redundant second
+          entry point). */}
       <div className="page-head">
         <h1 className="page-title">Transactions</h1>
         <span className="page-sub hide-mobile">
           {transactions.length} in range · {dateRangeSubtitle}
         </span>
-        <div className="page-actions">
-          {accounts.length > 0 && !selectMode && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={toggleSelectMode}
-              aria-label="Select transactions"
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-              Select
-            </Button>
-          )}
-        </div>
       </div>
 
       {/* R7: the composer replaces the old "Add Transaction" button as the
@@ -692,13 +716,13 @@ export function WalletPage() {
           accounts only, so with zero own accounts every submission falls
           through to the blank TransactionForm — which lists shared accounts
           in its own dropdown regardless. */}
-      {!selectMode && accounts.length > 0 && (
+      {accounts.length > 0 && (
         <div className="mb-4">
           <Composer
             ref={composerInputRef}
             accounts={ownAccounts}
             categories={categories}
-            activeAccountId={filters.accountId ?? null}
+            activeAccountId={filters.accountId.length === 1 ? filters.accountId[0] : null}
             hasAnthropicKey={hasAnthropicKey}
             onConfirm={handleComposerConfirm}
             onOpenBlankForm={openComposerForm}
@@ -730,7 +754,10 @@ export function WalletPage() {
           this page at all). Footnotes are honestly computed from this page's
           own data only; no period-over-period comparison (see summary
           useMemo's comment). Rendered ABOVE the filter bar per owner
-          request — the mockup put stats above the list too. */}
+          request — the mockup put stats above the list too. Selection no
+          longer has a "mode" to hide these for — it's just a set of checked
+          row ids, communicated separately by the floating bulk-action bar
+          below, so there's nothing to make room for up here. */}
       <div className="grid g3 g-1-on-mobile mb-4">
         <div className="card stat-card">
           <div className="stat-topline">
@@ -765,7 +792,6 @@ export function WalletPage() {
             </span>
             <span className="stat-label">Net</span>
           </div>
-          {/* Explicit sign so positive/negative isn't conveyed by colour alone */}
           <p className={cn('stat-value', summary.net >= 0 ? 'pos' : 'neg')} data-testid="summary-net">
             {summary.net >= 0 ? '+' : ''}
             {formatMYR(summary.net)}
@@ -781,26 +807,64 @@ export function WalletPage() {
       {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
           convention below — .wallet-transactions bumps that offset in
           data.css so the two don't overlap while scrolling). Only the
-          single-row search/date/filters/sort/select stays pinned; chips and
+          single-row search/date/filters/sort stays pinned; chips and
           the collapsible advanced panel scroll away normally. */}
       <div className="tx-filterbar-sticky" ref={filterBarRef}>
         <div className="filters">
-          <div className="filter-field">
-            <Filter className="h-3.5 w-3.5" />
-            <input
-              id="transaction-search"
-              type="search"
-              aria-label="Search transactions"
-              data-testid="transaction-search"
-              placeholder={`Filter these ${transactions.length} transactions…`}
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-            />
+          <div className="segment" role="tablist">
+            <button type="button" role="tab" aria-selected={dateRangePreset(filters) === 'this-month'} onClick={() => setFilters(monthRange(0))}>This month</button>
+            <button type="button" role="tab" aria-selected={dateRangePreset(filters) === 'last-month'} onClick={() => setFilters(monthRange(-1))}>Last month</button>
           </div>
-          <DateRangeControl
-            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
-            onChange={(range) => setFilters(range)}
-          />
+          <div className="ml-auto flex items-center gap-2">
+          {anyFilterActive && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              data-testid="filter-clear-all"
+              className="btn btn-quiet"
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all
+            </button>
+          )}
+          {/* Icon-only by default; expands into the SAME `.search` class the
+              app-bar's own "Search Daybook…" box uses (border, focus ring,
+              hover) rather than a bespoke look — one element throughout, not
+              a conditional icon↔input swap, so the width genuinely animates
+              instead of instantly snapping. Stays expanded whenever there's
+              an active query, same reasoning as before. */}
+          <Tooltip label="Search transactions">
+            <div
+              className={cn(
+                'search flex-none overflow-hidden',
+                searchExpanded || searchDraft ? 'max-w-[240px] cursor-text' : 'max-w-[34px] cursor-pointer',
+              )}
+              style={{
+                transition:
+                  'max-width 200ms var(--ease, ease-out), border-color 120ms var(--ease, ease-out), transform 120ms var(--ease, ease-out)',
+              }}
+              onClick={() => {
+                if (!searchExpanded) {
+                  setSearchExpanded(true)
+                  requestAnimationFrame(() => searchInputRef.current?.focus())
+                }
+              }}
+            >
+              <Search className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              <input
+                ref={searchInputRef}
+                id="transaction-search"
+                type="search"
+                aria-label="Search transactions"
+                data-testid="transaction-search"
+                placeholder="Search by merchant, description, tags…"
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+                onBlur={() => { if (!searchDraft) setSearchExpanded(false) }}
+                tabIndex={searchExpanded || searchDraft ? 0 : -1}
+              />
+            </div>
+          </Tooltip>
           {/* Occasional filters (Type/Account/Category/Tags + Sharing) live in
               a popup — owner request to keep the sticky row itself minimal
               rather than growing it downward on every Filters click.
@@ -823,27 +887,32 @@ export function WalletPage() {
               assumes. Filters still apply live as each control changes;
               there's no separate Apply step. */}
           <div className="relative" ref={filterPanelRef}>
-            <button
-              type="button"
-              onClick={() => setFiltersOpen((o) => !o)}
-              onKeyDown={(e) => { if (e.key === 'Escape') setFiltersOpen(false) }}
-              data-testid="filter-toggle"
-              aria-expanded={filtersOpen}
-              className={cn(
-                'filter-btn',
-                filtersOpen || activeFilterCount > 0
-                  ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-                  : 'hover:bg-surface-hover hover:text-fg',
-              )}
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="count" data-testid="filter-count">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+            <Tooltip label="Filters">
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((o) => !o)}
+                onKeyDown={(e) => { if (e.key === 'Escape') setFiltersOpen(false) }}
+                data-testid="filter-toggle"
+                aria-expanded={filtersOpen}
+                aria-label="Filters"
+                className={cn(
+                  'relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors',
+                  filtersOpen || activeFilterCount > 0
+                    ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
+                    : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted',
+                )}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {activeFilterCount > 0 && (
+                  <span
+                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-bg px-1 text-[10px] font-semibold text-accent-fg"
+                    data-testid="filter-count"
+                  >
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </Tooltip>
             {filtersOpen && (
               // z-20 — comfortably below Modal.tsx's overlay (z-40): if a
               // dialog opens on top, its own overlay fully covers and dims
@@ -853,113 +922,69 @@ export function WalletPage() {
               // once that dialog closes.
               <div
                 data-testid="filter-panel"
-                className="absolute left-0 top-full z-20 mt-2 w-[min(90vw,420px)] rounded-xl border border-line bg-surface-raised p-4 shadow-xl shadow-line/60"
+                className="absolute right-0 top-full z-20 mt-2 w-[min(90vw,420px)] rounded-xl border border-line bg-surface-raised p-4 shadow-xl shadow-line/60"
               >
-                <div className="grid grid-cols-2 gap-3">
-                  <Select
-                    label="Type"
-                    data-testid="filter-type"
-                    options={typeOptions}
-                    value={filters.type}
-                    onChange={(e) => setFilters({ type: e.target.value as typeof filters.type })}
-                  />
-                  <Select
-                    label="Account"
-                    data-testid="filter-account"
-                    options={accountOptions}
-                    value={filters.accountId ?? ''}
-                    onChange={(e) => setFilters({ accountId: e.target.value || null })}
-                  />
-                  <Select
-                    label="Category"
-                    data-testid="filter-category"
-                    options={categoryOptions}
-                    value={filters.categoryId ?? ''}
-                    onChange={(e) => setFilters({ categoryId: e.target.value || null })}
-                  />
-                  <TagInput
-                    id="filter-tags"
-                    testId="filter-tags"
-                    label="Tags"
-                    value={filters.tags}
-                    onChange={(tags) => setFilters({ tags })}
-                    suggestions={tags}
-                    allowCreate={false}
-                    placeholder="Filter by tags..."
+                <div className="mb-3">
+                  <DateRangeControl
+                    value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+                    onChange={(range) => setFilters(range)}
                   />
                 </div>
-                {hasGroups && (
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
-                    <span className="mr-1 text-xs font-medium text-fg-subtle">Sharing</span>
-                    {(['all', 'mine', 'shared-with-me', 'shared-with-others'] as const).map((v) => (
-                      <button
-                        key={v}
-                        onClick={() => setFilters({ view: v })}
-                        className={cn(
-                          'rounded-full border px-3 py-1 text-xs transition-colors',
-                          filters.view === v
-                            ? 'border-brand-500 bg-brand-50 text-brand-700'
-                            : 'border-line text-fg-muted hover:bg-surface-sunken hover:border-line-strong',
-                        )}
-                      >
-                        {v === 'shared-with-me'
-                          ? 'Shared with me'
-                          : v === 'shared-with-others'
-                            ? 'Shared with others'
-                            : v.charAt(0).toUpperCase() + v.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <MultiSelect
+                    label="Type"
+                    allLabel="All Types"
+                    options={typeOptions}
+                    selected={filters.type}
+                    onChange={(values) => setFilters({ type: values as typeof filters.type })}
+                  />
+                  <MultiSelect
+                    label="Account"
+                    allLabel="All Accounts"
+                    searchPlaceholder="Search accounts…"
+                    options={accountOptions}
+                    selected={filters.accountId}
+                    onChange={(values) => setFilters({ accountId: values })}
+                  />
+                  <MultiSelect
+                    label="Category"
+                    allLabel="All Categories"
+                    searchPlaceholder="Search categories…"
+                    options={categoryOptions}
+                    selected={filters.categoryId}
+                    onChange={(values) => setFilters({ categoryId: values })}
+                  />
+                  {hasGroups && (
+                    <MultiSelect
+                      label="Sharing"
+                      allLabel="All"
+                      options={viewOptions}
+                      selected={filters.view}
+                      onChange={(values) => setFilters({ view: values as typeof filters.view })}
+                    />
+                  )}
+                </div>
               </div>
             )}
           </div>
           {/* Real toggle (not a decorative mockup button — CLAUDE.md rule 13:
               a click that changes nothing is the worst outcome a handler can
               produce). Flips both the day-group order and each day's row
-              order. */}
-          <button
-            type="button"
-            onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
-            data-testid="sort-direction-toggle"
-            className="filter-btn hide-mobile"
-          >
-            <ArrowUpDown className="h-3.5 w-3.5" />
-            {sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
-          </button>
-          {anyFilterActive && (
+              order. Icon rotates 180° for oldest-first as the only visual
+              cue — title covers the rest, matching the other icon-only
+              controls in this row. */}
+          <Tooltip label={`Sort by date: ${sortDir === 'newest' ? 'Newest first' : 'Oldest first'}`}>
             <button
               type="button"
-              onClick={clearAllFilters}
-              data-testid="filter-clear-all"
-              className="btn btn-quiet"
+              onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
+              data-testid="sort-direction-toggle"
+              aria-label={sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
+              className="hide-mobile flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
             >
-              <X className="h-3.5 w-3.5" />
-              Clear all
+              <ArrowUpDown className={cn('h-3.5 w-3.5 transition-transform', sortDir === 'oldest' && 'rotate-180')} />
             </button>
-          )}
-          {/* Select also lives here (not just the page-head) — owner request:
-              a bulk-action entry point right next to the list it acts on,
-              not just up in the header. Same handler as the page-head one;
-              a DIFFERENT aria-label is deliberate — Playwright's role/name
-              lookup matches by substring, so two buttons both named
-              "Select transactions" would make every existing
-              `getByRole('button', { name: 'Select transactions' })` in e2e/
-              ambiguous the moment both are visible together. Careful: the
-              first attempt at this ("Enable bulk selection") STILL collided
-              — "select" is a case-insensitive substring of "selection". */}
-          {accounts.length > 0 && !selectMode && (
-            <button
-              type="button"
-              onClick={toggleSelectMode}
-              aria-label="Start bulk actions"
-              data-testid="select-mode-toggle-filterbar"
-              className="filter-btn ml-auto"
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-              Select
-            </button>
-          )}
+          </Tooltip>
+          </div>
         </div>
       </div>
 
@@ -990,83 +1015,10 @@ export function WalletPage() {
       </>
       )}
 
-      {/* Multi-select action bar */}
-      {selectMode && (
-        <div
-          data-testid="select-mode-bar"
-          // relative + z-30: sits right below the sticky filter bar, which
-          // an OPEN Filters popup (z-20) can spatially extend down over
-          // (position:absolute doesn't push layout, so a tall panel simply
-          // floats on top of whatever's beneath it). z-index only changes
-          // hit-testing between POSITIONED elements, hence `relative` here —
-          // without it this bar stays position:static and the higher
-          // z-index on the popup wins regardless of the number. Still well
-          // below Modal.tsx's overlay (z-40), so a real dialog still covers
-          // this bar correctly.
-          className="relative z-30 mb-4 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5"
-        >
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={handleSelectAll}
-            className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
-            aria-label="Select all transactions"
-          />
-          <span className="text-sm text-fg-muted">
-            {selectedIds.size > 0
-              ? `${selectedIds.size} selected`
-              : 'Select transactions'}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            {selectedIds.size > 0 && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setBulkEditOpen(true)}
-                  data-testid="bulk-edit-btn"
-                >
-                  <Tag className="h-3.5 w-3.5" />
-                  Categorise {selectedIds.size}
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setBulkSplitOpen(true)}
-                  data-testid="bulk-split-btn"
-                >
-                  <Users className="h-3.5 w-3.5" />
-                  Split {selectedIds.size}
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setBulkDeleteOpen(true)}
-                  data-testid="bulk-delete-btn"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Delete {selectedIds.size}
-                </Button>
-              </>
-            )}
-            {/* Export moved here from the header toolbar — reachable via
-                Select, scoped to the same active-filters set as before
-                (ExportModal gets the full `transactions`, not just the
-                checked rows; its own internal multiselect still lets you
-                narrow further). Not gated on selectedIds.size — exporting
-                the whole filtered range doesn't require checking every row. */}
-            <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </Button>
-            <Button variant="secondary" size="sm" onClick={toggleSelectMode}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Transaction list */}
+      {/* Transaction list — selection has no separate "mode" anymore: every
+          row carries its own always-visible checkbox (see TransactionList),
+          and the bulk-action bar floats fixed to the bottom of the viewport
+          once anything is checked, rather than living in a header here. */}
       <div className="card overflow-hidden px-4 py-2 sm:px-5">
         {/* "Create an account first" is onboarding advice, and it is only true
             for a user who has nothing at all. A group member with no account of
@@ -1111,7 +1063,7 @@ export function WalletPage() {
                   {viewLabel && (
                     <button
                       type="button"
-                      onClick={() => setFilters({ view: 'all' })}
+                      onClick={() => setFilters({ view: [] })}
                       data-testid="empty-show-all-views"
                       className="rounded-lg px-3 py-1.5 text-sm font-medium text-brand-600 hover:bg-brand-50 hover:underline"
                     >
@@ -1126,48 +1078,90 @@ export function WalletPage() {
           </div>
         ) : (
           <>
-            {/* Select mode shows the whole filtered set — a bulk action
-                (select all, Categorise N) operating on fewer rows than are
-                actually in range would be a surprising, silent narrowing. The
-                "Showing X of Y" reveal is a read-only browsing aid, so it only
-                applies outside select mode. */}
+            {/* Select-all (in the floating bulk bar) only ever covers what's
+                actually rendered — the currently-loaded page, same as the
+                reference pattern this was modeled on. */}
             <TransactionList
-              transactions={selectMode ? orderedTransactions : visibleTransactions}
+              transactions={visibleTransactions}
               accounts={accounts}
               categories={categories}
               onEdit={crud.openEdit}
               onDelete={handleDeleteTransaction}
               onSplit={hasGroups ? openSplitDialog : undefined}
-              selectMode={selectMode}
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
+              onToggleDay={handleToggleDay}
               highlightId={searchParams.get('txn') ?? undefined}
               sortDir={sortDir}
             />
-            {!selectMode && (
-              <>
-                <div className="divider" />
-                <div className="flex items-center gap-3 pb-3">
-                  <span className="text-sm text-fg-subtle">
-                    Showing {visibleTransactions.length} of {transactions.length}
-                  </span>
-                  {visibleCount < transactions.length && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="ml-auto"
-                      onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                      data-testid="load-more-transactions"
-                    >
-                      Load more
-                    </Button>
-                  )}
-                </div>
-              </>
-            )}
+            <div className="divider" />
+            <div className="flex items-center gap-3 pb-3">
+              <span className="text-sm text-fg-subtle">
+                Showing {visibleTransactions.length} of {transactions.length}
+              </span>
+              {visibleCount < transactions.length && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  data-testid="load-more-transactions"
+                >
+                  Load more
+                </Button>
+              )}
+            </div>
           </>
         )}
       </div>
+
+      {/* Floating bulk-action bar — fixed to the bottom of the viewport
+          (not the list), so it stays reachable regardless of scroll
+          position, the same way the reference design's own selection bar
+          sits near the pagination controls rather than up in a header that
+          scrolls out of view. Appears purely because selectedIds is
+          non-empty; no separate "mode" gates it. */}
+      {selectedIds.size > 0 && (
+        <div
+          data-testid="bulk-action-bar"
+          className="fixed inset-x-0 bottom-4 z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-line bg-surface-raised px-3 py-2 shadow-xl shadow-line/60"
+        >
+          <span className="whitespace-nowrap px-2 text-sm font-medium text-fg">
+            {selectedIds.size} selected
+          </span>
+          {!allSelected && (
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="whitespace-nowrap text-sm font-medium text-brand-600 hover:underline"
+            >
+              Select all {visibleTransactions.length}
+            </button>
+          )}
+          <div className="mx-1 h-5 w-px bg-line" />
+          <Button variant="secondary" size="sm" onClick={() => setBulkEditOpen(true)}>
+            <Tag className="h-3.5 w-3.5" /> Categorise
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setBulkSplitOpen(true)}>
+            <Users className="h-3.5 w-3.5" /> Split
+          </Button>
+          <Button variant="danger" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 className="h-3.5 w-3.5" /> Delete
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
+            <Download className="h-3.5 w-3.5" /> Export
+          </Button>
+          <button
+            type="button"
+            onClick={clearSelection}
+            aria-label="Clear selection"
+            title="Clear selection"
+            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <TransactionForm
         open={crud.formOpen}
@@ -1175,7 +1169,7 @@ export function WalletPage() {
         transaction={crud.editingItem}
         accounts={accounts}
         categories={categories}
-        defaultAccountId={filters.accountId}
+        defaultAccountId={filters.accountId.length === 1 ? filters.accountId[0] : null}
         availableTags={tags}
         initialDraft={composerDraft ?? undefined}
         onSubmit={crud.editingItem ? handleUpdateTransaction : handleAddTransaction}
@@ -1247,8 +1241,7 @@ export function WalletPage() {
         onSave={() => {
           setBulkSplitOpen(false)
           setSelectedIds(new Set())
-          setSelectMode(false)
-          loadTransactions(filtersRef.current)
+                loadTransactions(filtersRef.current)
         }}
       />
     </div>

@@ -5,11 +5,13 @@ import type { Account, Transaction, Category, Budget, RecurringTransaction, Goal
 interface WalletFilters {
   dateFrom: string
   dateTo: string
-  type: 'all' | 'income' | 'expense' | 'transfer'
-  categoryId: string | null
-  accountId: string | null
+  // Multi-select: empty array = no restriction ("All"). Each may also carry
+  // the '__uncategorised__' sentinel (categoryId only) alongside real ids.
+  type: Array<'income' | 'expense' | 'transfer'>
+  categoryId: string[]
+  accountId: string[]
   tags: string[]
-  view: 'all' | 'mine' | 'shared-with-me' | 'shared-with-others'
+  view: Array<'mine' | 'shared-with-me' | 'shared-with-others'>
   q: string // B1: free-text search on merchant/description
 }
 
@@ -55,11 +57,11 @@ interface WalletState {
 function getDefaultFilters(): WalletFilters {
   return {
     ...monthRange(0),
-    type: 'all',
-    categoryId: null,
-    accountId: null,
+    type: [],
+    categoryId: [],
+    accountId: [],
     tags: [],
-    view: 'all',
+    view: [],
     q: '', // B1: search query
   }
 }
