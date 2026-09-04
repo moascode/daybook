@@ -381,11 +381,13 @@ test('account balance updates to reflect transactions', async () => {
 
 test('date range "This month" is applied and shown as active', async () => {
   await navTo(page, 'transactions')
-  await ensureFiltersOpen(page)
+  // This month/Last month are always-visible in the sticky row — no panel needed.
   await page.getByTestId('filter-this-month').click()
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
 
-  // Custom… reveals From/To without changing the range — values are the month bounds
+  // Custom… (All time/Custom live in the Filters popup) reveals From/To
+  // without changing the range — values are the month bounds.
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-custom-range').click()
   const now = new Date()
   const firstDay = localISO(new Date(now.getFullYear(), now.getMonth(), 1))
@@ -395,9 +397,12 @@ test('date range "This month" is applied and shown as active', async () => {
 })
 
 test('date range "Last month" sets the previous month bounds', async () => {
+  // Clicking the always-visible "Last month" button counts as an outside
+  // click on the popup opened above — it closes, so reopen before Custom….
   await page.getByTestId('filter-last-month').click()
   await expect(page.getByTestId('filter-last-month')).toHaveClass(/bg-brand/)
 
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-custom-range').click()
   const now = new Date()
   const firstDay = localISO(new Date(now.getFullYear(), now.getMonth() - 1, 1))
@@ -407,7 +412,9 @@ test('date range "Last month" sets the previous month bounds', async () => {
 })
 
 test('date range "All time" clears the date range', async () => {
-  // Date filters are currently set from last test; clear them
+  // Date filters are currently set from last test; clear them. All time
+  // lives in the Filters popup.
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByTestId('filter-clear-dates')).toHaveClass(/bg-brand/)
   await page.getByTestId('filter-custom-range').click()

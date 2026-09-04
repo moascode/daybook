@@ -640,8 +640,12 @@ export function WalletPage() {
 
   // Count of active occasional filters — shown on the Filters toggle so
   // URL-driven narrowing (?account=, ?view=) stays visible even collapsed.
+  // Date range only counts here when it's in its "hidden inside the popup"
+  // state (All time/Custom) — This month/Last month stay visible in the
+  // sticky row itself, so badging them would be redundant.
+  const hiddenDateRangeActive = ['all-time', 'custom'].includes(dateRangePreset(filters))
   const activeFilterCount = [
-    dateRangePreset(filters) !== 'this-month',
+    hiddenDateRangeActive,
     filters.type.length > 0,
     filters.accountId.length > 0,
     filters.categoryId.length > 0,
@@ -861,14 +865,20 @@ export function WalletPage() {
       {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
           convention below — .wallet-transactions bumps that offset in
           data.css so the two don't overlap while scrolling). Only the
-          single-row search/filters/sort stays pinned; chips and
-          the collapsible advanced panel scroll away normally. Date range
-          moved into the Filters popup below (owner call) — but this group
-          keeps ml-auto: it's the sole child of `.filters` now, and without
-          it the Filters button (and the popup anchored to it) collapses to
-          the row's left edge, landing the popup under the sidebar. */}
+          single-row search/date/filters/sort stays pinned; chips and
+          the collapsible advanced panel scroll away normally.
+          Date range is split (owner call): This month/Last month — the two
+          everyday presets — stay always-visible here; All time/Custom… move
+          into the Filters popup below alongside Type/Account/Category/Tags.
+          Both DateRangeControl instances share the same filters.dateFrom/To,
+          so picking either half updates the same state. */}
       <div className="tx-filterbar-sticky" ref={filterBarRef}>
         <div className="filters">
+          <DateRangeControl
+            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+            onChange={(range) => setFilters(range)}
+            presets={['this-month', 'last-month']}
+          />
           <div className="ml-auto flex items-center gap-2">
           {anyFilterActive && (
             <button
@@ -982,6 +992,7 @@ export function WalletPage() {
                   <DateRangeControl
                     value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
                     onChange={(range) => setFilters(range)}
+                    presets={['all-time', 'custom']}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
