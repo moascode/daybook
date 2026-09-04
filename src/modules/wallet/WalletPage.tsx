@@ -641,6 +641,7 @@ export function WalletPage() {
   // Count of active occasional filters — shown on the Filters toggle so
   // URL-driven narrowing (?account=, ?view=) stays visible even collapsed.
   const activeFilterCount = [
+    dateRangePreset(filters) !== 'this-month',
     filters.type.length > 0,
     filters.accountId.length > 0,
     filters.categoryId.length > 0,
@@ -860,14 +861,14 @@ export function WalletPage() {
       {/* Sticky under the app bar (mirrors .tgroup-head's own top:56px
           convention below — .wallet-transactions bumps that offset in
           data.css so the two don't overlap while scrolling). Only the
-          single-row search/date/filters/sort stays pinned; chips and
-          the collapsible advanced panel scroll away normally. */}
+          single-row search/filters/sort stays pinned; chips and
+          the collapsible advanced panel scroll away normally. Date range
+          moved into the Filters popup below (owner call) — but this group
+          keeps ml-auto: it's the sole child of `.filters` now, and without
+          it the Filters button (and the popup anchored to it) collapses to
+          the row's left edge, landing the popup under the sidebar. */}
       <div className="tx-filterbar-sticky" ref={filterBarRef}>
         <div className="filters">
-          <DateRangeControl
-            value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
-            onChange={(range) => setFilters(range)}
-          />
           <div className="ml-auto flex items-center gap-2">
           {anyFilterActive && (
             <button
@@ -977,6 +978,12 @@ export function WalletPage() {
                 data-testid="filter-panel"
                 className="absolute right-0 top-full z-20 mt-2 w-[min(90vw,420px)] rounded-xl border border-line bg-surface-raised p-4 shadow-xl shadow-line/60"
               >
+                <div className="mb-3">
+                  <DateRangeControl
+                    value={{ dateFrom: filters.dateFrom, dateTo: filters.dateTo }}
+                    onChange={(range) => setFilters(range)}
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <MultiSelect
                     label="Type"

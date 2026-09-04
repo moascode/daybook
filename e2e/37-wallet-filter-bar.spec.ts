@@ -1,16 +1,18 @@
 /**
  * Wallet: §6.4 filter-bar reorganisation.
- * The Transactions bar is a single search-first row: search input, a segmented
- * date-range control that always shows its active value, a Filters toggle with
- * an active-count badge, and a Clear button that only appears when something
- * is active. The occasional filters (Type/Account/Category/Tags + the Sharing
- * view for group members) live in a collapsible section; category management
- * is reachable from the Category dropdown's footer option.
+ * The Transactions bar is a single search-first row: search input, a Filters
+ * toggle with an active-count badge, and a Clear button that only appears when
+ * something is active. The occasional filters — the segmented date-range
+ * control, Type/Account/Category/Tags, and the Sharing view for group members
+ * — live in a collapsible popup opened by the Filters toggle (owner call:
+ * date range moved in alongside the others rather than staying always-visible
+ * in the row); category management is reachable from the Category dropdown's
+ * footer option.
  */
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, selectFilterOptionByLabel, clearFilterOption } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, transactionRowFor , openBlankTransactionForm, selectFilterOption, selectFilterOptionByLabel, clearFilterOption, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -35,8 +37,12 @@ test.afterAll(async () => {
 })
 
 // ── Date-range control active state ─────────────────────────────────────
+// Now inside the Filters popup — open it once here; it stays open through
+// the rest of this block (nothing here closes it) and is explicitly closed
+// again at the end so the "collapsed by default" tests below still hold.
 
 test('the default "This month" range is shown as active', async () => {
+  await ensureFiltersOpen(page)
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
   await expect(page.getByTestId('filter-last-month')).not.toHaveClass(/bg-brand/)
 })
@@ -62,6 +68,11 @@ test('"Custom…" reveals From/To pre-filled with the current range', async () =
   // Picking a preset closes the editors again
   await page.getByTestId('filter-this-month').click()
   await expect(page.getByTestId('filter-from')).toHaveCount(0)
+
+  // Close the Filters popup again — the tests below assert it's collapsed
+  // by default, and nothing above this point closed it.
+  await page.getByTestId('filter-toggle').click()
+  await expect(page.getByTestId('filter-panel')).toHaveCount(0)
 })
 
 // ── Filters toggle + active-count badge ────────────────────────────────
@@ -97,6 +108,7 @@ test('Clear resets every filter and disappears when nothing is active', async ()
   // Defaults restored: no badge, search empty, This month active again
   await expect(page.getByTestId('filter-count')).toHaveCount(0)
   await expect(page.getByTestId('transaction-search')).toHaveValue('')
+  await ensureFiltersOpen(page)
   await expect(page.getByTestId('filter-this-month')).toHaveClass(/bg-brand/)
   await expect(page.getByTestId('filter-clear-all')).toHaveCount(0)
   await expect(transactionRowFor(page, 'Bar Cafe')).toBeVisible()

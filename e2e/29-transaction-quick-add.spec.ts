@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, transactionRowFor , openBlankTransactionForm } from './helpers'
+import { newAppPage, fillAccountForm, transactionRowFor , openBlankTransactionForm, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -20,6 +20,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Side Account', type: 'bank' })
   await page.goto('/wallet')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
 })
 

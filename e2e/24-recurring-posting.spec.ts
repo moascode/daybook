@@ -10,7 +10,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, transactionRowFor, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -99,6 +99,7 @@ test('processing catches up every occurrence due on/before today', async () => {
 
   // The back-dated occurrences now exist as real transactions.
   await page.goto('/wallet')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await expect(transactionRowFor(page, 'OldBill').first()).toBeVisible()
 })

@@ -6,18 +6,11 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm , openBlankTransactionForm, selectFilterOption, clearFilterOption } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm , openBlankTransactionForm, selectFilterOption, clearFilterOption, ensureFiltersOpen } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
-
-/** Open the collapsible Filters section of the §6.4 bar if it isn't already. */
-async function ensureFiltersOpen() {
-  if (!(await page.getByTestId('filter-panel').isVisible())) {
-    await page.getByTestId('filter-toggle').click()
-  }
-}
 
 /**
  * Every row's checkbox is always visible — checking one is what surfaces the
@@ -40,6 +33,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   await fillAccountForm(page, { name: 'Export Account', type: 'cash' })
   await page.goto('/wallet')
   // Clear date filters so our dated transactions are always visible
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await openBlankTransactionForm(page)
   await fillTransactionForm(page, {
@@ -66,6 +60,7 @@ test.afterAll(async () => {
 
 test('Export button is visible on the wallet transactions page', async () => {
   await page.goto('/wallet')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await ensureSelectMode()
   await expect(page.getByRole('button', { name: /Export/i })).toBeVisible()
@@ -200,8 +195,13 @@ test('exporting with only one transaction selected produces a file with that tra
 
 test('export modal only shows transactions matching the active type filter', async () => {
   // Apply "Expense" type filter
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await selectFilterOption(page, 'filter-type', 'expense')
+  // selectFilterOption leaves the Type multi-select's own dropdown open (it
+  // supports picking several before closing) — with the date range now also
+  // in the popup, that leaves it tall enough to cover the first transaction
+  // row underneath. Close the whole popup before clicking into the list.
+  await page.getByTestId('filter-toggle').click()
   // Changing filters clears any selection made under the old filter (rows may
   // have moved out of view) — the bulk-action bar (and Export within it)
   // needs a fresh selection under the new filter before it reappears.
@@ -218,7 +218,7 @@ test('export modal only shows transactions matching the active type filter', asy
   // The Filters popup closes on any outside click (including the Export
   // button/dialog interactions just above) — reopen it before touching its
   // fields again.
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await clearFilterOption(page, 'filter-type')
 })
 
@@ -236,7 +236,7 @@ async function downloadContent(testid: string): Promise<string> {
 }
 
 test('exported file with an active type filter contains only matching rows', async () => {
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await selectFilterOption(page, 'filter-type', 'expense')
   await ensureSelectMode()
   await page.getByRole('button', { name: /Export/i }).click()
@@ -244,7 +244,7 @@ test('exported file with an active type filter contains only matching rows', asy
   const content = await downloadContent('export-csv-btn')
   expect(content).toMatch(/Test Merchant/)
   expect(content).not.toMatch(/Income Source/)
-  await ensureFiltersOpen()
+  await ensureFiltersOpen(page)
   await clearFilterOption(page, 'filter-type')
 })
 
@@ -299,6 +299,7 @@ test('exported rows match the on-screen selection when shared-in rows are select
 
   // Main user: all three rows visible (2 own + 1 shared-in), all pre-selected.
   await page.goto('/wallet')
+  await ensureFiltersOpen(page)
   await page.getByTestId('filter-clear-dates').click()
   await expect(page.getByText('Shared Spend')).toBeVisible()
   await ensureSelectMode()

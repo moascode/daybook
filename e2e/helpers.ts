@@ -100,6 +100,18 @@ export function bulletNodeFor(page: Page, taskContent: string) {
   })
 }
 
+/**
+ * The Transactions page's occasional filters (Date range, Type, Account,
+ * Category, Tags, Sharing) live in the collapsible Filters popup — open it
+ * if it isn't already. Idempotent: safe to call before every interaction
+ * with a control inside the popup, even if a prior step already opened it.
+ */
+export async function ensureFiltersOpen(page: Page) {
+  if (!(await page.getByTestId('filter-panel').isVisible())) {
+    await page.getByTestId('filter-toggle').click()
+  }
+}
+
 /** Return a locator scoped to the account card with the given account name */
 export function accountCardFor(page: Page, accountName: string) {
   return page.locator('[data-testid="account-card"]').filter({ hasText: accountName })
