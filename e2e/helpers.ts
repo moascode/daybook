@@ -206,6 +206,8 @@ export async function fillTransactionForm(
     category?: string
     /** Tags to add — each is typed into the TagInput and confirmed with Enter */
     tags?: string[]
+    /** Set false to fill the form and leave it open, without clicking submit. */
+    submit?: boolean
   },
 ) {
   const dialog = page.getByRole('dialog')
@@ -246,6 +248,7 @@ export async function fillTransactionForm(
       await tagInput.press('Enter')
     }
   }
+  if (fields.submit === false) return
   await dialog.getByRole('button', { name: /Add Transaction|Save Changes/ }).click()
   await expect(dialog).toBeHidden()
 }

@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { TagInput } from '@/components/ui/TagInput'
 import { cn, todayISO } from '@/lib/utils'
+import { TransferMatchHint, type TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
+import { TransferLinkHint } from '@/modules/wallet/TransferLinkHint'
 import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
 
 interface TransactionFormProps {
@@ -19,6 +21,18 @@ interface TransactionFormProps {
   onSubmit: (data: TransactionFormData) => void | Promise<void>
   /** Edit mode only: opens the link-as-transfer picker for this transaction. */
   onLinkTransfer?: () => void
+  /**
+   * Edit mode only: links this transaction directly to `candidateId` — the
+   * one-click path when TransferLinkHint's proactive search already found the
+   * twin, skipping the manual picker onLinkTransfer opens.
+   */
+  onQuickLinkTransfer?: (candidateId: string) => Promise<void>
+  /**
+   * Create mode only, type=transfer: creates the missing leg from the form's
+   * current fields and links it to `candidate` instead of inserting a new
+   * transfer row. Closes the form on success, same as a normal submit.
+   */
+  onLinkExistingTransfer?: (candidate: TransferMatchCandidate, data: TransactionFormData) => Promise<void>
   /**
    * Create mode only: partial field values to pre-fill on top of the normal
    * create-mode defaults (e.g. from a composer draft). Ignored entirely when
@@ -82,6 +96,8 @@ export function TransactionForm({
   availableTags,
   onSubmit,
   onLinkTransfer,
+  onQuickLinkTransfer,
+  onLinkExistingTransfer,
   initialDraft,
 }: TransactionFormProps) {
   const [form, setForm] = useState<TransactionFormData>(
@@ -89,6 +105,7 @@ export function TransactionForm({
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [linkingExisting, setLinkingExisting] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevTransaction, setPrevTransaction] = useState(transaction)
   const [prevDefaultAccountId, setPrevDefaultAccountId] = useState(defaultAccountId)
@@ -193,6 +210,17 @@ export function TransactionForm({
     }
   }
 
+  async function handlePickExistingMatch(candidate: TransferMatchCandidate) {
+    if (!onLinkExistingTransfer || linkingExisting) return
+    setLinkingExisting(true)
+    try {
+      await onLinkExistingTransfer(candidate, buildSubmitData())
+      onOpenChange(false)
+    } finally {
+      setLinkingExisting(false)
+    }
+  }
+
   const isEdit = !!transaction
 
   return (
@@ -227,21 +255,21 @@ export function TransactionForm({
               point at the fix without changing any behaviour. */}
           {isEdit && !!transaction?.importHash && form.type !== 'transfer' && (
             <p className="text-xs text-fg-faint" data-testid="transfer-hint">
-              Moved money between your own accounts? Switch Type to Transfer
-              {onLinkTransfer
-                ? ', or use "Link as transfer" to pair it with the other side.'
-                : ' to keep it out of income and expense totals.'}
+              Moved money between your own accounts? Switch Type to Transfer, or
+              link it to the other side below.
             </p>
           )}
           {isEdit && form.type !== 'transfer' && onLinkTransfer && (
-            <button
-              type="button"
-              onClick={onLinkTransfer}
-              data-testid="link-transfer-open"
-              className="self-start text-xs font-medium text-brand-600 hover:underline"
-            >
-              Link as transfer…
-            </button>
+            <TransferLinkHint
+              transactionId={transaction!.id}
+              accountId={form.accountId}
+              type={form.type as 'expense' | 'income'}
+              amount={form.amount}
+              date={form.date}
+              accounts={accounts}
+              onLink={onQuickLinkTransfer ?? (async () => onLinkTransfer())}
+              onOpenPicker={onLinkTransfer}
+            />
           )}
         </div>
 
@@ -294,6 +322,21 @@ export function TransactionForm({
             error={errors.destinationAccountId}
           />
         )}
+
+        {/* Proactive merge suggestion — create mode only. See TransferMatchHint. */}
+        {!isEdit &&
+          form.type === 'transfer' &&
+          form.destinationAccountId &&
+          onLinkExistingTransfer && (
+            <TransferMatchHint
+              sourceAccountId={form.accountId}
+              destinationAccountId={form.destinationAccountId}
+              amount={form.amount}
+              date={form.date}
+              accounts={accounts}
+              onLink={handlePickExistingMatch}
+            />
+          )}
 
         {/* Merchant */}
         <Input
@@ -355,13 +398,13 @@ export function TransactionForm({
               type="button"
               variant="secondary"
               onClick={handleSaveAndAddAnother}
-              disabled={saving}
+              disabled={saving || linkingExisting}
               data-testid="save-add-another"
             >
               Save &amp; Add Another
             </Button>
           )}
-          <Button type="submit" loading={saving}>
+          <Button type="submit" loading={saving} disabled={linkingExisting}>
             {isEdit ? 'Save Changes' : 'Add Transaction'}
           </Button>
         </div>

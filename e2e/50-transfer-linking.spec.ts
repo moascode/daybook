@@ -44,20 +44,23 @@ test('create the two legs: expense in Bank A, income in Bank B', async () => {
   await expect(transactionRowFor(page, 'Payment Received')).toBeVisible()
 })
 
-test('edit form offers "Link as transfer" and the picker lists the twin', async () => {
+test('edit form proactively surfaces the matching twin, no click needed to search', async () => {
   await openTransactionRowMenu(page, 'CC Payment')
   await page.getByRole('menuitem', { name: 'Edit transaction' }).click()
-  await page.getByTestId('link-transfer-open').click()
 
-  // The edit form closes; the picker opens with the matching income leg.
-  await expect(page.getByRole('dialog').getByText('Link as transfer')).toBeVisible()
-  const candidates = page.getByTestId('link-transfer-candidates')
+  // TransferLinkHint runs the search as soon as the form opens — the matching
+  // income leg is offered directly, with no "Link as transfer…" button click
+  // required first (that button only shows once no match is auto-found).
+  const hint = page.getByTestId('transfer-link-hint')
+  await expect(hint).toBeVisible()
+  await expect(page.getByTestId('link-transfer-open')).toHaveCount(0)
+  const candidates = page.getByTestId('transfer-link-hint-candidates')
   await expect(candidates.getByRole('button', { name: /Payment Received/ })).toBeVisible()
 })
 
 test('picking the twin merges the two rows into one transfer', async () => {
   await page
-    .getByTestId('link-transfer-candidates')
+    .getByTestId('transfer-link-hint-candidates')
     .getByRole('button', { name: /Payment Received/ })
     .click()
   await expect(page.getByText('Linked as one transfer')).toBeVisible()
@@ -77,6 +80,56 @@ test('balances reflect the transfer on both accounts', async () => {
   await navTo(page, 'accounts')
   await expect(accountCardFor(page, 'Bank A').getByTestId('account-card-balance')).toHaveText(/-\s?RM\s?350\.00/)
   await expect(accountCardFor(page, 'Bank B').getByTestId('account-card-balance')).toHaveText(/RM\s?350\.00/)
+})
+
+test('no match found falls back to the manual "Link as transfer" button', async () => {
+  await navTo(page, 'transactions')
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, {
+    type: 'Expense', amount: '77', account: 'Bank A', merchant: 'Solo Charge',
+  })
+  await openTransactionRowMenu(page, 'Solo Charge')
+  await page.getByRole('menuitem', { name: 'Edit transaction' }).click()
+
+  await expect(page.getByTestId('transfer-link-hint')).toHaveCount(0)
+  const openPicker = page.getByTestId('link-transfer-open')
+  await expect(openPicker).toBeVisible()
+  await openPicker.click()
+
+  await expect(page.getByRole('dialog').getByText('Link as transfer')).toBeVisible()
+  await expect(page.getByTestId('link-transfer-empty')).toBeVisible()
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+// ── Proactive suggestion from the create form ────────────────────────────
+
+test('creating a transfer suggests linking an existing unlinked leg instead', async () => {
+  await navTo(page, 'transactions')
+  // An unlinked income sitting in Bank B, not yet paired with anything.
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, {
+    type: 'Income', amount: '120', account: 'Bank B', merchant: 'Refund In',
+  })
+  await expect(transactionRowFor(page, 'Refund In')).toBeVisible()
+
+  // Now start a transfer from Bank A to Bank B for the same amount — the hint
+  // should surface the existing income as a candidate to link instead.
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, {
+    type: 'Transfer', amount: '120', account: 'Bank A', toAccount: 'Bank B', submit: false,
+  })
+  const hint = page.getByTestId('transfer-match-hint')
+  await expect(hint).toBeVisible()
+  await hint.getByRole('button', { name: /Refund In/ }).click()
+
+  await expect(page.getByText('Linked as one transfer')).toBeVisible()
+  // The pre-existing income leg is gone, replaced by one surviving transfer —
+  // no third, redundant row was created.
+  await expect(transactionRowFor(page, 'Refund In')).toHaveCount(0)
+  // CC Payment (merged earlier) + Solo Charge (no-match test) + the new merged transfer.
+  await expect(page.locator('[data-testid="transaction-row"]')).toHaveCount(3)
 })
 
 // ── Guard cases via the API (same session user) ──────────────────────────

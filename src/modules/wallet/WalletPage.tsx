@@ -17,6 +17,7 @@ import { BulkSplitDialog } from '@/modules/wallet/BulkSplitDialog'
 import { BulkEditDialog } from '@/modules/wallet/BulkEditDialog'
 import { SplitDialog } from '@/modules/wallet/SplitDialog'
 import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
+import type { TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
 import { Composer } from '@/modules/wallet/composer/Composer'
 import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
@@ -440,6 +441,57 @@ export function WalletPage() {
     addToast({ message: 'Linked as one transfer', duration: 4000 })
     await loadTransactions(filtersRef.current)
   }, [linkTarget, linkTransfer, loadTransactions, addToast])
+
+  // TransferLinkHint's one-click pick, from the EDIT form: it already found the
+  // twin itself, so this skips the manual LinkTransferDialog picker entirely —
+  // link straight away and close the edit form, same end state as
+  // handleLinkTransfer above.
+  const handleQuickLinkTransfer = useCallback(async (candidateId: string) => {
+    if (!crud.editingItem) return
+    try {
+      await linkTransfer(crud.editingItem.id, candidateId)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not link the transactions — please try again.'), duration: 4000 })
+      throw err // keep the form open so the user can retry
+    }
+    crud.closeForm(false)
+    addToast({ message: 'Linked as one transfer', duration: 4000 })
+    await loadTransactions(filtersRef.current)
+  }, [crud, linkTransfer, loadTransactions, addToast])
+
+  // TransferMatchHint's pick, from the CREATE form: the candidate is already
+  // one real leg (an unlinked expense on the source account, or an unlinked
+  // income on the destination account) — only the other leg is missing. Create
+  // it from the form's own fields, then merge exactly like the edit-form path
+  // above. If the candidate is the moneyOut leg it survives the merge as-is
+  // (its own merchant/description), so what the user typed only ends up on the
+  // surviving row when the candidate was the moneyIn leg.
+  const handleLinkExistingTransfer = useCallback(async (
+    candidate: TransferMatchCandidate,
+    data: TransactionFormData,
+  ) => {
+    try {
+      const legType = candidate.type === 'income' ? 'expense' : 'income'
+      const legAccountId = candidate.type === 'income' ? data.accountId : data.destinationAccountId!
+      const leg = await addTransaction({
+        accountId: legAccountId,
+        date: data.date,
+        merchant: data.merchant,
+        description: data.description,
+        amount: data.amount,
+        type: legType,
+        categoryId: null,
+        tags: [],
+      })
+      await linkTransfer(leg.id, candidate.id)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not link the transactions — please try again.'), duration: 4000 })
+      throw err // keep the form open so the user can retry
+    }
+    addToast({ message: 'Linked as one transfer', duration: 4000 })
+    await loadTransactions(filtersRef.current)
+    await loadTags()
+  }, [addTransaction, linkTransfer, loadTransactions, loadTags, addToast])
 
   const handleBulkDelete = useCallback(async () => {
     try {
@@ -1187,6 +1239,8 @@ export function WalletPage() {
             ? () => { setLinkTarget(crud.editingItem); crud.closeForm(false) }
             : undefined
         }
+        onQuickLinkTransfer={crud.editingItem && !crud.editingItem.hasSplits ? handleQuickLinkTransfer : undefined}
+        onLinkExistingTransfer={crud.editingItem ? undefined : handleLinkExistingTransfer}
       />
 
       <LinkTransferDialog
