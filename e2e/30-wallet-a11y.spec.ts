@@ -3,7 +3,9 @@
  *
  * - Transaction rows and account cards are real keyboard targets:
  *   role="button", tabIndex=0, Enter/Space activate them (B4).
- * - Account card actions are visible without hover (B6).
+ * - Account card actions, once the page's "Manage" toggle is on, are visible
+ *   without needing hover (B6) — mockup parity hid them by default behind
+ *   that toggle rather than a hover-only reveal.
  * - The account edit modal (with the 5b sharing section open) fits within the
  *   default 1280×720 viewport — regression for the spec-24 clipping bug (B3).
  */
@@ -17,6 +19,7 @@ import {
   accountCardFor,
   transactionRowFor,
   openBlankTransactionForm,
+  enableAccountManageMode,
 } from './helpers'
 
 test('transaction row is keyboard-accessible: focus, Enter and Space open the editor', async ({ browser }) => {
@@ -66,10 +69,11 @@ test('account card is keyboard-accessible: Enter navigates to its transactions',
   await expect(page).toHaveURL(/\/wallet\?account=/)
 })
 
-test('account card actions are visible without hover', async ({ browser }) => {
+test('account card actions, once Manage mode is on, are visible without hover', async ({ browser }) => {
   const page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Touch Cash' })
+  await enableAccountManageMode(page)
 
   const editBtn = accountCardFor(page, 'Touch Cash').getByRole('button', { name: 'Edit account' })
   await expect(editBtn).toBeVisible()
@@ -100,6 +104,7 @@ test('account edit modal with sharing section fits within the 1280×720 viewport
   await waitForApp(page)
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Shared Cash' })
+  await enableAccountManageMode(page)
 
   await accountCardFor(page, 'Shared Cash').getByRole('button', { name: 'Edit account' }).click()
   const dialog = page.getByRole('dialog')

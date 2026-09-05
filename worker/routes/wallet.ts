@@ -49,6 +49,8 @@ const ACCOUNT_COLS: Record<string, string> = {
   color: 'color',
   icon: 'icon',
   openingBalance: 'opening_balance',
+  creditLimit: 'credit_limit',
+  statementDay: 'statement_day',
 }
 
 const ACCOUNT_TYPES = new Set(['cash', 'card', 'e-wallet', 'bank', 'investment', 'other'])
@@ -70,6 +72,17 @@ function accountInputError(b: Record<string, unknown>, partial: boolean): string
         ? Number(b.openingBalance)
         : NaN
     if (!Number.isFinite(n)) return 'openingBalance must be a number'
+  }
+  if (has('creditLimit') && b.creditLimit !== null) {
+    const n =
+      typeof b.creditLimit === 'number' || typeof b.creditLimit === 'string'
+        ? Number(b.creditLimit)
+        : NaN
+    if (!Number.isFinite(n) || n <= 0) return 'creditLimit must be a positive number, or null to clear it'
+  }
+  if (has('statementDay') && b.statementDay !== null) {
+    const n = typeof b.statementDay === 'number' || typeof b.statementDay === 'string' ? Number(b.statementDay) : NaN
+    if (!Number.isInteger(n) || n < 1 || n > 31) return 'statementDay must be an integer 1-31, or null to clear it'
   }
   return null
 }
@@ -114,11 +127,11 @@ wallet.post('/accounts', async (c) => {
 
   const row = await c.env.DB.prepare(
     `INSERT INTO accounts
-       (id, user_id, name, description, currency, type, color, icon, opening_balance, created_at)
-     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       (id, user_id, name, description, currency, type, color, icon, opening_balance, credit_limit, statement_day, created_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      RETURNING *`,
   )
-    // userId, name, description, currency, type, color, icon, openingBalance
+    // userId, name, description, currency, type, color, icon, openingBalance, creditLimit, statementDay
     .bind(
       c.get('userId'),
       b.name,
@@ -128,6 +141,8 @@ wallet.post('/accounts', async (c) => {
       b.color ?? '#1D9E75',
       b.icon ?? 'wallet',
       normalizeBind(b.openingBalance ?? 0),
+      normalizeBind(b.creditLimit ?? null),
+      normalizeBind(b.statementDay ?? null),
     )
     .first()
 

@@ -25,6 +25,8 @@ interface AccountRow {
   color: string
   icon: string
   opening_balance: number
+  credit_limit: number | null
+  statement_day: number | null
   created_at: string
   // Sharing fields (only present on shared-in accounts)
   is_shared?: number
@@ -85,6 +87,8 @@ function mapAccount(row: AccountRow): Account {
     color: row.color,
     icon: row.icon,
     openingBalance: row.opening_balance ?? 0,
+    creditLimit: row.credit_limit ?? null,
+    statementDay: row.statement_day ?? null,
     createdAt: row.created_at,
     isShared: !!row.is_shared,
     sharedByUserId: row.shared_by_user_id ?? null,
@@ -201,6 +205,8 @@ interface AccountInput {
   color?: string
   icon?: string
   openingBalance?: number
+  creditLimit?: number | null
+  statementDay?: number | null
 }
 
 interface TransactionInput {

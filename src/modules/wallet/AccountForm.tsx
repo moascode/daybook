@@ -24,6 +24,8 @@ export interface AccountFormData {
   color: string
   icon: string
   openingBalance: number
+  creditLimit: number | null
+  statementDay: number | null
 }
 
 const ACCOUNT_TYPES = [
@@ -62,6 +64,8 @@ function getInitialState(account?: Account | null): AccountFormData {
     color: account?.color ?? '#1D9E75',
     icon: account?.icon ?? 'wallet',
     openingBalance: account?.openingBalance ?? 0,
+    creditLimit: account?.creditLimit ?? null,
+    statementDay: account?.statementDay ?? null,
   }
 }
 
@@ -164,6 +168,51 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             Starting balance — included in the computed balance. Can be negative.
           </p>
         </div>
+
+        {/* Credit limit — card accounts only. Powers the utilization bar on the account card instead of a sparkline. */}
+        {form.type === 'card' && (
+          <div>
+            <Input
+              label="Credit Limit"
+              id="credit-limit"
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g. 3000"
+              value={form.creditLimit ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                setForm((f) => ({ ...f, creditLimit: raw === '' ? null : parseFloat(raw) || 0 }))
+              }}
+            />
+            <p className="mt-1 text-xs text-fg-subtle">
+              Optional — shows how much of the limit is used on the account card.
+            </p>
+          </div>
+        )}
+
+        {/* Statement day — card accounts only. Drives the "Statement <date>" foot-row label. */}
+        {form.type === 'card' && (
+          <div>
+            <Input
+              label="Statement Day"
+              id="statement-day"
+              type="number"
+              step="1"
+              min="1"
+              max="31"
+              placeholder="e.g. 28"
+              value={form.statementDay ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value
+                setForm((f) => ({ ...f, statementDay: raw === '' ? null : parseInt(raw, 10) || null }))
+              }}
+            />
+            <p className="mt-1 text-xs text-fg-subtle">
+              Optional — day of the month (1–31) your statement closes.
+            </p>
+          </div>
+        )}
 
         <Select
           label="Icon"
