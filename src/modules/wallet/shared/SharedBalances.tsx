@@ -107,13 +107,6 @@ export function SharedBalances({
 
   return (
     <section id="shared-balances" className="card card-pad c12" data-testid="shared-balances">
-      <div className="card-head">
-        <div>
-          <div className="card-title">Balances</div>
-          <div className="card-sub">Green means they owe you</div>
-        </div>
-      </div>
-
       <div className="grid g3">
         {pairings.map((p, i) => {
           const balance = p.balance
