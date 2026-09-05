@@ -102,7 +102,7 @@ export function SharedBalances({
   if (pairings.length === 0) return null
 
   return (
-    <section id="shared-balances" className="card card-pad c12" data-testid="shared-balances">
+    <div id="shared-balances" className="c12" data-testid="shared-balances">
       <div className="grid g3">
         {pairings.map((p, i) => {
           const balance = p.balance
@@ -167,6 +167,6 @@ export function SharedBalances({
           Mark all as settled
         </Button>
       )}
-    </section>
+    </div>
   )
 }
