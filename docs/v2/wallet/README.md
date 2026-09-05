@@ -11,6 +11,7 @@ the right place to prove the token layer and the shell against real complexity.
 |---|---|
 | [02-design-adoption.md](02-design-adoption.md) | R3 — the eight pages, page by page |
 | [03-feature-waves.md](03-feature-waves.md) | R7–R9 — what the design shows that we do not compute |
+| [feature-photo-import.md](feature-photo-import.md) | Proposed, not yet slotted into a release — import transactions by photographing a receipt or bank statement; AI call needs a yes (P2 in ai-usage.md) |
 
 There is no `01-data-model.md`: **R3 needs no schema change**, and R7–R9 need
 at most one additive column. That is the whole reason Wallet is first.
