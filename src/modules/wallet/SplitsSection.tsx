@@ -252,9 +252,17 @@ export function SplitsSection({
     >
       <header className="border-b border-line-subtle px-4 py-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-fg">{counterpartyUsername}</h3>
-            {showGroupName && <p className="mt-0.5 text-xs text-fg-faint">{groupName}</p>}
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div
+              className="avatar"
+              style={{ background: 'rgb(var(--accent-bg))', color: 'rgb(var(--accent-fg))' }}
+            >
+              {counterpartyUsername.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <h3 className="pname truncate text-fg">{counterpartyUsername}</h3>
+              {showGroupName && <p className="psub mt-0.5 truncate">{groupName}</p>}
+            </div>
           </div>
           {balance && netAmount > 0.005 && (
             <Button size="sm" variant={iAmNetCreditor ? 'secondary' : 'primary'} onClick={() => onSettle(range)}>
