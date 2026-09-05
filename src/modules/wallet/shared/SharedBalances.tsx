@@ -95,10 +95,6 @@ export function SharedBalances({
   onMarkAll,
 }: SharedBalancesProps) {
   const withBalance = pairings.filter((p) => p.balance && p.balance.amount > 0.005)
-  const net = withBalance.reduce((sum, p) => {
-    const iAmCreditor = p.balance!.toUserId === currentUserId
-    return sum + (iAmCreditor ? p.balance!.amount : -p.balance!.amount)
-  }, 0)
   // Only pairings with nothing already pending can go through "Mark all" — one
   // that already has an unconfirmed settlement needs Review, not a second one.
   const markAllEligible = withBalance.filter((p) => !pendingSettlementByCounterparty[p.counterpartyId])
@@ -106,14 +102,7 @@ export function SharedBalances({
   if (pairings.length === 0) return null
 
   return (
-    <section id="shared-balances" className="card card-pad c12" data-testid="shared-balances">
-      <div className="card-head">
-        <div>
-          <div className="card-title">Balances</div>
-          <div className="card-sub">Green means they owe you</div>
-        </div>
-      </div>
-
+    <div id="shared-balances" className="c12" data-testid="shared-balances">
       <div className="grid g3">
         {pairings.map((p, i) => {
           const balance = p.balance
@@ -173,28 +162,11 @@ export function SharedBalances({
         })}
       </div>
 
-      <div className="divider" style={{ marginTop: 'var(--s4)' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontSize: 'var(--t-sm)', color: 'rgb(var(--fg-subtle))' }}>Net position across your groups</span>
-        <span
-          className="money"
-          style={{
-            fontSize: 'var(--t-lg)',
-            fontWeight: 660,
-            letterSpacing: '-.02em',
-            color: Math.abs(net) < 0.005 ? undefined : net > 0 ? 'rgb(var(--pos-fg))' : 'rgb(var(--neg-fg))',
-          }}
-          data-testid="balances-net"
-        >
-          {Math.abs(net) < 0.005 ? formatMYR(0) : `${net > 0 ? '+' : '−'}${formatMYR(Math.abs(net))}`}
-        </span>
-      </div>
-
       {markAllEligible.length > 1 && (
-        <Button variant="secondary" style={{ width: '100%', marginTop: 'var(--s3)' }} onClick={onMarkAll} data-testid="mark-all-settled">
+        <Button variant="secondary" style={{ width: '100%', marginTop: 'var(--s4)' }} onClick={onMarkAll} data-testid="mark-all-settled">
           Mark all as settled
         </Button>
       )}
-    </section>
+    </div>
   )
 }
