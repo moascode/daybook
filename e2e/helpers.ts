@@ -117,6 +117,19 @@ export function accountCardFor(page: Page, accountName: string) {
   return page.locator('[data-testid="account-card"]').filter({ hasText: accountName })
 }
 
+/**
+ * Turn on the Accounts page's "Manage" toggle. Mockup parity hid every
+ * card's share/edit/delete buttons by default (`AccountsPage.tsx`
+ * `manageMode` state) — they only render once this is clicked. Idempotent
+ * (checks `aria-pressed` first) and page-scoped state, so it resets on
+ * navigation away from /wallet/accounts and must be called again after
+ * returning.
+ */
+export async function enableAccountManageMode(page: Page) {
+  const toggle = page.getByRole('button', { name: 'Manage' })
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+}
+
 /** Return a locator scoped to the transaction row that contains the given merchant text */
 export function transactionRowFor(page: Page, merchant: string) {
   return page.locator('[data-testid="transaction-row"]').filter({ hasText: merchant })

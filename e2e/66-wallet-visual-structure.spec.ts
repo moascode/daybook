@@ -23,6 +23,7 @@ import {
   signUpOnPage,
   waitForApp,
   openBlankTransactionForm,
+  enableAccountManageMode,
 } from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
@@ -244,12 +245,15 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await ctx.close()
   })
 
-  test('at 390px, account-card actions (share, edit, delete) are all visible', async ({ browser }: { browser: Browser }) => {
+  test('at 390px, account-card actions (share, edit, delete) are all visible once Manage mode is on', async ({ browser }: { browser: Browser }) => {
     // Regression for: .acct-top had no flex-wrap, and the account-card root
     // keeps overflow-hidden for its coloured accent bar — so the three
     // always-visible 40px touch targets overflowed past that ancestor and
     // were invisibly clipped instead of wrapping to a second line, taking
     // edit and delete out of reach on mobile (share, being first, survived).
+    // Mockup parity later hid all three behind a page-level "Manage" toggle
+    // (no longer always-visible), so this now checks they're all reachable
+    // once that's on, not that they're on by default.
     const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
     const page = await ctx.newPage()
     await signUpOnPage(page)
@@ -257,6 +261,7 @@ test.describe('wallet visual structure (R3 PR-1)', () => {
     await waitForApp(page)
     await page.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(page, { name: 'Mobile Acct Card', type: 'cash' })
+    await enableAccountManageMode(page)
 
     const card = accountCardFor(page, 'Mobile Acct Card')
     await expect(card).toBeVisible()

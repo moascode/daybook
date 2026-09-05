@@ -1,0 +1,1 @@
+ALTER TABLE accounts ADD COLUMN statement_day INTEGER DEFAULT NULL;

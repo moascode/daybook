@@ -69,12 +69,12 @@ test('net worth excludes shared-in accounts on the Accounts page', async ({ brow
   await expect(viewerPage.getByText('Viewer Cash')).toBeVisible({ timeout: 10_000 })
   await expect(viewerPage.getByText('Owner Savings')).toBeVisible()
 
-  const banner = viewerPage.getByTestId('net-worth-banner')
+  const summary = viewerPage.getByTestId('balance-summary')
   // 100, not 10,099. The regression is the shared 9,999 leaking into the total.
-  await expect(banner).toContainText('100.00')
-  await expect(banner).not.toContainText('10,099')
+  await expect(summary.getByTestId('balance-summary-total')).toContainText('100.00')
+  await expect(summary).not.toContainText('10,099')
   // The caption must count the same set the figure was summed over.
-  await expect(banner).toContainText('1 account')
+  await expect(summary).toContainText('across 1 account')
 
   await ownerCtx.close()
   await viewerCtx.close()

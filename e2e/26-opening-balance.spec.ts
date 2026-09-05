@@ -6,7 +6,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, fillTransactionForm , openBlankTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, fillTransactionForm, openBlankTransactionForm, enableAccountManageMode } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -33,8 +33,8 @@ test('create an account with an opening balance', async () => {
 })
 
 test('net worth includes the opening balance', async () => {
-  await expect(page.getByText('Total Net Worth')).toBeVisible()
-  await expect(page.getByText('RM 1,000.00').first()).toBeVisible()
+  await expect(page.getByTestId('balance-summary')).toBeVisible()
+  await expect(page.getByTestId('balance-summary-total')).toHaveText('RM 1,000.00')
 })
 
 test('opening balance feeds the running balance after a transaction', async () => {
@@ -52,8 +52,10 @@ test('opening balance feeds the running balance after a transaction', async () =
 })
 
 test('editing the opening balance updates the running balance', async () => {
+  // The previous test's page.goto('/wallet/accounts') reset the page-scoped
+  // Manage-mode toggle — re-enable it before Edit account is clickable.
+  await enableAccountManageMode(page)
   const card = accountCardFor(page, 'Savings')
-  await card.hover()
   await card.getByRole('button', { name: 'Edit account' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByLabel('Opening Balance')).toHaveValue('1000')

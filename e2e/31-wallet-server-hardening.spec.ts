@@ -169,14 +169,14 @@ test('batched balances endpoint matches the per-account route', async () => {
   }
 })
 
-test('hero net worth matches the sum of account balances', async () => {
+test('total balance matches the sum of account balances', async () => {
   // Main 150 + Savings 40 = 190. The Accounts page owns this figure — the
   // Transactions page dropped its own net-worth hero (mockup-parity rebuild;
   // it now shows only the filtered range's Money in/out/Net, never a
   // whole-account-book total).
   await page.goto('/wallet/accounts')
-  await expect(page.getByText('Total Net Worth')).toBeVisible()
-  await expect(page.getByTestId('net-worth-value')).toContainText('190.00')
+  await expect(page.getByTestId('balance-summary')).toBeVisible()
+  await expect(page.getByTestId('balance-summary-total')).toContainText('190.00')
 })
 
 // ── §1.3: recurring-rule validation ────────────────────────────────────

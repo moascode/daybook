@@ -5,7 +5,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, accountCardFor, fillAccountForm, navTo, navItem } from './helpers'
+import { newAppPage, accountCardFor, fillAccountForm, navTo, navItem, enableAccountManageMode } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -84,9 +84,16 @@ test('account card shows name, type badge, currency and balance', async () => {
 
 // ── Edit account ──────────────────────────────────────────────────────
 
-test('open Edit Account modal via pencil icon', async () => {
+test('account actions are hidden until "Manage" is toggled on', async () => {
   const card = accountCardFor(page, 'Maybank Savings')
   await card.hover()
+  await expect(card.getByRole('button', { name: 'Edit account' })).not.toBeVisible()
+  await enableAccountManageMode(page)
+  await expect(card.getByRole('button', { name: 'Edit account' })).toBeVisible()
+})
+
+test('open Edit Account modal via pencil icon', async () => {
+  const card = accountCardFor(page, 'Maybank Savings')
   await card.getByRole('button', { name: 'Edit account' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Edit Account' })).toBeVisible()
@@ -126,7 +133,6 @@ test('create third account: Touch n Go eWallet (e-wallet)', async () => {
 
 test('open delete confirmation dialog', async () => {
   const card = accountCardFor(page, 'Touch n Go')
-  await card.hover()
   await card.getByRole('button', { name: 'Delete account' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Delete account?' })).toBeVisible()
@@ -141,7 +147,6 @@ test('cancel delete keeps the account', async () => {
 
 test('confirm delete removes the account', async () => {
   const card = accountCardFor(page, 'Touch n Go')
-  await card.hover()
   await card.getByRole('button', { name: 'Delete account' }).click()
   // Scoped to the dialog: the card's own "Delete account" trigger button stays
   // in the DOM behind the overlay and shares the same accessible name.

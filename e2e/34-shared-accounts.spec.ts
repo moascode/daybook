@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { fillAccountForm, fillTransactionForm, openBlankTransactionForm } from './helpers'
+import { fillAccountForm, fillTransactionForm, openBlankTransactionForm, enableAccountManageMode } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -57,6 +57,7 @@ test.describe('34 — Shared accounts', () => {
 
     // Alice edits the account and shares it with the group
     await alicePage.goto('/wallet/accounts')
+    await enableAccountManageMode(alicePage)
     await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Family Visa' }).hover()
     await alicePage.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
@@ -98,6 +99,7 @@ test.describe('34 — Shared accounts', () => {
     // the moment a second account exists here.
     const sharedCard = alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'Shared Card' })
     await expect(sharedCard).toBeVisible({ timeout: 15_000 })
+    await enableAccountManageMode(alicePage)
     await sharedCard.hover()
     await sharedCard.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
@@ -152,6 +154,7 @@ test.describe('34 — Shared accounts', () => {
     await fillTransactionForm(alicePage, { amount: '80', merchant: 'Bakery' })
 
     await alicePage.goto('/wallet/accounts')
+    await enableAccountManageMode(alicePage)
     await alicePage.locator('[data-testid="account-card"]').filter({ hasText: 'RO Card' }).hover()
     await alicePage.getByRole('button', { name: 'Edit account' }).click()
     const shareSelect = alicePage.getByRole('dialog').locator('select').last()
@@ -172,11 +175,13 @@ test.describe('34 — Shared accounts', () => {
     await expect(row.getByRole('button', { name: 'Delete transaction' })).toHaveCount(0)
     await expect(row.getByRole('button', { name: 'Split transaction' })).toHaveCount(0)
 
-    // Bob's shared-in account card has no delete action either.
+    // Bob's shared-in account card has no delete action either — checked with
+    // Manage mode on, so the absence is really about read-only permission,
+    // not just Manage being off (which would make this pass for the wrong reason).
     await bobPage.goto('/wallet/accounts')
+    await enableAccountManageMode(bobPage)
     const card = bobPage.locator('[data-testid="account-card"]').filter({ hasText: 'RO Card' })
     await expect(card).toBeVisible({ timeout: 5000 })
-    await card.hover()
     await expect(card.getByRole('button', { name: 'Delete account' })).toHaveCount(0)
 
     await aliceCtx.close()

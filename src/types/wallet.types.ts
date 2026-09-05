@@ -7,6 +7,10 @@ export interface Account {
   color: string
   icon: string
   openingBalance: number
+  /** Card accounts only — used for a utilization bar instead of a sparkline. null when not set. */
+  creditLimit: number | null
+  /** Card accounts only — day of month (1-31) the statement closes. Drives the "Statement <date>" foot-row label. null when not set. */
+  statementDay: number | null
   createdAt: string
   // Sharing — populated when the account is shared-in from another user
   isShared?: boolean
