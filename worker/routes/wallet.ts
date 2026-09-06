@@ -3082,6 +3082,13 @@ async function resolveMerchantLadder(
   env: Env,
   userId: string,
   items: Array<{ raw: string; guess: string }>,
+  // `useAI` gates Stage 3 only — Stages 1-2 (corrections cache + own history)
+  // are free/deterministic and always run. Mirrors A4's category-suggestion
+  // split (docs/v2/cross-cutting/ai-usage.md): the rules pass runs
+  // automatically on import, AI is reached only via an explicit "Ask AI"
+  // action. Defaults true so /merchants/canonicalize's direct call (an
+  // already-explicit, user-navigated bulk-cleanup action) is unaffected.
+  { useAI = true }: { useAI?: boolean } = {},
 ): Promise<MerchantLadderResult> {
   // Dedupe by normalised guess before any lookup or AI call — keep one
   // representative raw narrative per key.
@@ -3127,6 +3134,11 @@ async function resolveMerchantLadder(
 
   remaining = remaining.filter((key) => !resolutions.has(key))
   if (remaining.length === 0) return { resolutions, failedKeys: [] }
+
+  // The automatic on-import pass stops here (rules only, zero AI spend) —
+  // not a failure, just "rules didn't resolve it"; no failureReason, so the
+  // caller doesn't render this as an error the way an actual AI failure is.
+  if (!useAI) return { resolutions, failedKeys: remaining }
 
   // Stage 3 — AI on the raw narrative. No key configured -> ladder stops
   // here; every remaining guess is reported as failed with a reason.
@@ -3224,7 +3236,12 @@ wallet.post('/merchants/resolve', async (c) => {
     return c.json({ error: `cannot request more than ${MAX_MERCHANTS} merchants at once` }, 400)
   }
 
-  const ladder = await resolveMerchantLadder(c.env, userId, items)
+  // Opt-in only: the automatic on-import call omits this (rules-only), and
+  // the review page's explicit "Ask AI to resolve merchant names" button
+  // sets it true. Defaulting false here (unlike the ladder function's own
+  // default) means a caller must ask for AI, not merely forget to say no.
+  const useAI = b.useAI === true
+  const ladder = await resolveMerchantLadder(c.env, userId, items, { useAI })
 
   const resolutions: Array<{ guess: string; name: string; source: MerchantResolutionSource }> = []
   for (const item of items) {

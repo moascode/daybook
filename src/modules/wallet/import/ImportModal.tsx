@@ -168,8 +168,14 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
       }
       if (narrativePairs.size > 0) {
         try {
-          const { resolutions, failedGuesses, failureReason } = await resolveMerchants(
+          // Rules only (corrections cache + own history) — free, automatic,
+          // no AI spend. Anything left unresolved is marked and left for the
+          // review page's explicit "Ask AI to resolve merchant names" button
+          // (mirrors A4's category-suggestion split); this is a normal
+          // outcome, not a failure, so it gets no toast here.
+          const { resolutions, failedGuesses } = await resolveMerchants(
             [...narrativePairs.entries()].map(([guess, raw]) => ({ raw, guess })),
+            false,
           )
           const byGuess = new Map(resolutions.map((r) => [r.guess, r.name]))
           const failedSet = new Set(failedGuesses)
@@ -181,12 +187,6 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
             } else if (failedSet.has(row.merchant)) {
               row.merchantUnresolved = true
             }
-          }
-          if (failedGuesses.length > 0) {
-            addToast({
-              message: `Couldn't clean up ${failedGuesses.length} merchant name${failedGuesses.length === 1 ? '' : 's'}${failureReason ? ` — ${failureReason}` : ''}.`,
-              duration: 5000,
-            })
           }
         } catch {
           addToast({ message: 'Could not resolve merchant names — using the automatic guesses instead.', duration: 4000 })
