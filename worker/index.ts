@@ -10,6 +10,7 @@ import { settlements } from './routes/settlements.ts'
 import { wallet } from './routes/wallet.ts'
 import { capture } from './routes/capture.ts'
 import { captureTokens } from './routes/capture-tokens.ts'
+import { captures } from './routes/captures.ts'
 import { test } from './routes/test.ts'
 
 // ─────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ protectedApi.route('/', wallet)
 // cookie-authenticated like everything else here. A capture token can never
 // mint or revoke another (spec §4.2).
 protectedApi.route('/', captureTokens)
+protectedApi.route('/', captures)
 
 app.route('/api', protectedApi)
 
