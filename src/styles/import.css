@@ -1,0 +1,101 @@
+/* Ported from proposal-v2/transactions-import.html + transactions-import-review.html.
+   Concern: the import modal's dropzone/file-list/column-mapping views, and the
+   review page's editable row list. Reuses .segment/.chip/.notice/.tag from
+   primitives.css and .card/.card-pad from layout.css as-is — only markup with
+   no existing counterpart is defined here. */
+@layer components {
+
+.dropzone {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; text-align: center; border: 1.5px dashed rgb(var(--line-strong));
+  border-radius: var(--r-md); background: rgb(var(--canvas));
+  padding: var(--s6) var(--s4); cursor: pointer;
+  transition: border-color .15s var(--ease), background-color .15s var(--ease);
+}
+.dropzone:hover, .dropzone.drop-active {
+  border-color: rgb(var(--accent)); background: rgb(var(--accent-bg) / .4);
+}
+.dropzone svg { width: 26px; height: 26px; color: rgb(var(--fg-faint)); margin-bottom: 2px; }
+.dropzone-text { font-size: var(--t-sm); color: rgb(var(--fg-muted)); }
+.dropzone-text b { color: rgb(var(--fg)); font-weight: 650; }
+.dropzone-text .link { color: rgb(var(--accent-fg)); font-weight: 650; }
+.dropzone-hint { font-size: var(--t-micro); color: rgb(var(--fg-faint)); }
+
+/* file list — shared row shape for the picked-files list and (later) photo review thumbnails */
+.flist { display: flex; flex-direction: column; }
+.frow { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid rgb(var(--line-subtle)); }
+.flist .frow:first-of-type { border-top: none; }
+.frow-thumb {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--surface-sunk)); color: rgb(var(--fg-faint));
+}
+.frow-thumb svg { width: 14px; height: 14px; }
+.frow-name { font-size: var(--t-sm); font-weight: 500; color: rgb(var(--fg)); }
+.frow-size { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); }
+.frow-trail { margin-left: auto; flex-shrink: 0; }
+
+/* column-mapping view */
+.map-file-chip {
+  display: flex; align-items: center; gap: var(--s3);
+  padding-bottom: var(--s3); margin-bottom: var(--s3);
+  border-bottom: 1px solid rgb(var(--line-subtle));
+}
+.map-file-chip-name { font-size: var(--t-sm); font-weight: 600; color: rgb(var(--fg)); }
+.map-file-chip-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
+.header-toggle { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-bottom: var(--s3); }
+.maprow {
+  display: grid; grid-template-columns: 96px 1fr; align-items: center;
+  gap: var(--s3); padding: var(--s2) 0; border-top: 1px solid rgb(var(--line-subtle));
+}
+.flist .maprow:first-of-type { border-top: none; }
+.maprow-field { font-size: var(--t-sm); font-weight: 650; color: rgb(var(--fg)); }
+.maprow-field .req { color: rgb(var(--neg-fg)); margin-left: 2px; }
+
+/* in-modal processing */
+.modal-proc { text-align: center; padding: var(--s3) 0; }
+.modal-proc .spin { width: 28px; height: 28px; margin: 0 auto var(--s3); animation: import-mrot 1.1s linear infinite; }
+@keyframes import-mrot { to { transform: rotate(360deg); } }
+.modal-proc .proc-title { font-size: var(--t-base); font-weight: 650; margin: 0 0 var(--s4); }
+.progress-track { height: 6px; border-radius: 999px; background: rgb(var(--track)); overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; border-radius: 999px; background: rgb(var(--accent)); transition: width .5s var(--ease); }
+
+/* review page — editable row list, an alternate .trow for a not-yet-committed row */
+.step-tag { font-size: var(--t-xs); font-weight: 650; color: rgb(var(--accent-fg)); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 var(--s3); }
+.rrow {
+  display: grid; align-items: center; gap: var(--s3);
+  grid-template-columns: 20px 1fr 160px 112px 76px 92px 100px;
+  padding: var(--s3) var(--s2); margin: 0 -8px; border-radius: var(--r-md);
+  border-top: 1px solid rgb(var(--line-subtle));
+}
+.rrow:hover { background: rgb(var(--surface-hover)); }
+.tlist .rrow:first-of-type { border-top: none; }
+.rrow.muted { opacity: .55; }
+.rrow input[type=checkbox] { width: 16px; height: 16px; }
+.rrow .amt { text-align: right; }
+.rrow .tdesc {
+  font-size: var(--t-sm); color: rgb(var(--fg-muted)); display: block;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.warn-icon { color: rgb(var(--warn)); flex-shrink: 0; display: inline-flex; margin-left: 4px; vertical-align: -3px; }
+.warn-icon svg { width: 14px; height: 14px; }
+.rthumb {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgb(var(--surface-sunk)); color: rgb(var(--fg-faint));
+}
+.rthumb.bad svg { width: 16px; height: 16px; }
+.rtfoot {
+  display: flex; align-items: center; gap: var(--s5); padding-top: var(--s4);
+  margin-top: var(--s2); border-top: 1px solid rgb(var(--line-subtle));
+  font-size: var(--t-xs); color: rgb(var(--fg-subtle));
+}
+.rtfoot .spacer { flex: 1; }
+.rtfoot .total { font-weight: 650; color: rgb(var(--fg-muted)); }
+
+@media (max-width: 680px) {
+  .rrow { grid-template-columns: 20px 1fr auto; }
+  .rrow .tdesc, .rrow .tmeta { display: none; }
+}
+
+}

@@ -41,9 +41,6 @@ test.afterAll(async () => {
 
 test('navigate to Import CSV via the account menu', async () => {
   await navigateToImportCsv(page)
-  await expect(page).toHaveURL(/\/wallet\/import$/)
-  await page.waitForLoadState('networkidle')
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
 })
 
 // ── Upload the CSV ──────────────────────────────────────────────────────
@@ -54,42 +51,42 @@ test('upload CSV file with both Payee and Description columns', async () => {
     const file = new File([content], 'payee-and-narrative.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
   }, csvContent)
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('payee-and-narrative.csv')).toBeVisible({ timeout: 10_000 })
 })
 
-test('mapping step shows the file name and row count', async () => {
+test('map view shows the file name and row count', async () => {
   await expect(page.getByText('payee-and-narrative.csv')).toBeVisible()
   // 3 data rows in the fixture
-  await expect(page.getByText('3 rows')).toBeVisible()
+  await expect(page.getByText('3 rows detected')).toBeVisible()
 })
 
 // ── Column mapping — the core assertion ─────────────────────────────────
 
 test('merchant column is auto-detected as "Payee", not "Description"', async () => {
-  const merchantSelect = page.getByLabel('Merchant / Description column')
+  const merchantSelect = page.getByLabel('Merchant column')
   await expect(merchantSelect).toHaveValue('Payee')
 })
 
 test('description column is separately auto-detected as "Description"', async () => {
-  const descriptionSelect = page.getByLabel('Additional description column (optional)')
+  const descriptionSelect = page.getByLabel('Description column')
   await expect(descriptionSelect).toHaveValue('Description')
 })
 
 test('account selector shows Narrative Account', async () => {
-  const accountSelect = page.getByLabel('Import into account *')
+  const accountSelect = page.getByLabel('Import into account')
   await accountSelect.selectOption('Narrative Account')
 })
 
-test('proceed to Review Rows step', async () => {
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+test('proceed to review', async () => {
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 })
 
 // ── Review step — the split survived ────────────────────────────────────
 
 test('review table shows all 3 rows, none duplicate', async () => {
-  await expect(page.getByText('3 to import')).toBeVisible()
-  await expect(page.getByText('0 duplicate')).toBeVisible()
+  await expect(page.getByText('To import: 3')).toBeVisible()
+  await expect(page.getByText('Duplicates: 0')).toBeVisible()
 })
 
 test('review table merchant inputs hold the clean Payee text, not the raw narrative', async () => {
@@ -107,7 +104,7 @@ test('review table merchant inputs hold the clean Payee text, not the raw narrat
 // ── Import ──────────────────────────────────────────────────────────────
 
 test('click Import button triggers import and shows success screen', async () => {
-  await page.getByRole('button', { name: /Import 3 Transactions/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 })
 

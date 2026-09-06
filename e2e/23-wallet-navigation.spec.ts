@@ -73,9 +73,13 @@ test.describe('wallet module sidebar navigation', () => {
     // D-14 / design spec §4: Import CSV leaves the sidebar; it must still be
     // reachable from somewhere or the feature has no UI entry point at all.
     // It lives in the account menu's settings pane, alongside merchant names.
+    // It now opens the unified import modal in place (ImportModal.tsx) rather
+    // than navigating to a standalone page — the URL stays on /wallet until
+    // the review step.
     await page.getByTestId('account-menu-button').click()
     await page.getByTestId('account-menu-settings').click()
     await page.getByTestId('account-menu-import-csv').click()
-    await expect(page).toHaveURL(/\/wallet\/import$/)
+    await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
+    await expect(page).toHaveURL(/\/wallet$/)
   })
 })

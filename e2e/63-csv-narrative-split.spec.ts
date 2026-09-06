@@ -45,9 +45,6 @@ test.afterAll(async () => {
 
 test('navigate to Import CSV via the account menu', async () => {
   await navigateToImportCsv(page)
-  await expect(page).toHaveURL(/\/wallet\/import$/)
-  await page.waitForLoadState('networkidle')
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
 })
 
 // ── Upload the CSV ──────────────────────────────────────────────────────
@@ -58,13 +55,13 @@ test('upload CSV file with only a Description column', async () => {
     const file = new File([content], 'narrative-only.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
   }, csvContent)
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('narrative-only.csv')).toBeVisible({ timeout: 10_000 })
 })
 
-test('mapping step shows the file name and row count', async () => {
+test('map view shows the file name and row count', async () => {
   await expect(page.getByText('narrative-only.csv')).toBeVisible()
   // 3 data rows in the fixture
-  await expect(page.getByText('3 rows')).toBeVisible()
+  await expect(page.getByText('3 rows detected')).toBeVisible()
 })
 
 // ── Column mapping — the core auto-detection assertion ──────────────────
@@ -72,35 +69,35 @@ test('mapping step shows the file name and row count', async () => {
 test('merchant column is auto-detected as the only candidate, "Description"', async () => {
   // No Payee/Merchant/Vendor column exists, so detectColumns()'s fallback
   // assigns the sole description-keyword column straight to mapping.merchant.
-  const merchantSelect = page.getByLabel('Merchant / Description column')
+  const merchantSelect = page.getByLabel('Merchant column')
   await expect(merchantSelect).toHaveValue('Description')
 })
 
 test('the separate description selector is left unmapped', async () => {
-  // The "Additional description column" <select> always renders — it isn't
-  // conditionally hidden — but with only one usable column in this CSV there
-  // is nothing left to map it to. It stays on its blank "None" option, so
-  // mapping.description is null and buildImportRows() takes the narrative-
-  // split path instead of copying the column verbatim.
-  const descriptionSelect = page.getByLabel('Additional description column (optional)')
+  // The description <select> always renders — it isn't conditionally hidden
+  // — but with only one usable column in this CSV there is nothing left to
+  // map it to. It stays on its blank "None" option, so mapping.description is
+  // null and buildImportRows() takes the narrative-split path instead of
+  // copying the column verbatim.
+  const descriptionSelect = page.getByLabel('Description column')
   await expect(descriptionSelect).toHaveValue('')
 })
 
 test('account selector shows Narrative Only Account', async () => {
-  const accountSelect = page.getByLabel('Import into account *')
+  const accountSelect = page.getByLabel('Import into account')
   await accountSelect.selectOption('Narrative Only Account')
 })
 
-test('proceed to Review Rows step', async () => {
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+test('proceed to review', async () => {
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 })
 
 // ── Review step — canonicalization is the core assertion ────────────────
 
 test('review table shows all 3 rows, none duplicate', async () => {
-  await expect(page.getByText('3 to import')).toBeVisible()
-  await expect(page.getByText('0 duplicate')).toBeVisible()
+  await expect(page.getByText('To import: 3')).toBeVisible()
+  await expect(page.getByText('Duplicates: 0')).toBeVisible()
 })
 
 test('review table merchant inputs hold the canonicalized name, not the raw narrative or its all-caps token', async () => {
@@ -121,7 +118,7 @@ test('review table merchant inputs hold the canonicalized name, not the raw narr
 // ── Import ──────────────────────────────────────────────────────────────
 
 test('click Import button triggers import and shows success screen', async () => {
-  await page.getByRole('button', { name: /Import 3 Transactions/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 })
 

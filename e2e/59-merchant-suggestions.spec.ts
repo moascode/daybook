@@ -263,7 +263,7 @@ async function uploadCsv(page: Page, csv: string, filename: string) {
     },
     { content: csv, name: filename },
   )
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
 }
 
 test('review step pre-fills a category from history with a match-count caption', async ({ browser }) => {
@@ -278,11 +278,11 @@ test('review step pre-fills a category from history with a match-count caption',
   }
 
   const page = await ctx.newPage()
-  await page.goto('/wallet/import')
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
+  await page.goto('/wallet')
+  await navigateToImportCsv(page)
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-9.50,MCDONALDS/KLCC\n', 'mcd.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   await expect(page.getByTestId('csv-suggestions-banner')).toContainText('Suggested a category for 1 of 1 row')
   await expect(page.getByText('MCDONALDS · you categorised this 3×')).toBeVisible()
@@ -301,8 +301,8 @@ test('review step pre-fills from the builtin map with a "common merchant" captio
 
   await navigateToImportCsv(page)
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-12.00,KFC 4471102\n', 'kfc.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   await expect(page.getByText('KFC · common merchant')).toBeVisible()
 
@@ -322,15 +322,15 @@ test('Clear suggestions nulls only the pre-filled rows, hand-picked categories u
   }
 
   const page = await ctx.newPage()
-  await page.goto('/wallet/import')
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
+  await page.goto('/wallet')
+  await navigateToImportCsv(page)
   await uploadCsv(
     page,
     'Date,Amount,Merchant\n2026-07-20,-9.50,MCDONALDS/KLCC\n2026-07-21,-40.00,BRAND NEW SHOP\n',
     'mixed.csv',
   )
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   // Row order mirrors CSV row order (the suggestion pass mutates rows in
   // place, it does not reorder them) — an input's value isn't part of its
@@ -362,9 +362,9 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
 
   await navigateToImportCsv(page)
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-5.00,SomeShop\n', 'fail.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
-  await expect(page.getByText('1 to import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('To import: 1')).toBeVisible()
   await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
 
   // …and says why every row came back uncategorised. Proceeding is right;
@@ -372,7 +372,7 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
   // suggestions were broken or simply had nothing to offer.
   await expect(page.getByText('Could not load category suggestions')).toBeVisible()
 
-  await page.getByRole('button', { name: /Import 1 Transaction/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 
   await page.context().close()
@@ -390,8 +390,8 @@ test('a money-in row is not pre-filled with an expense suggestion', async ({ bro
   // own Category select does not offer — the select renders blank while the
   // value is still set, so it would import invisibly.
   await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,12.00,KFC 4471102\n', 'refund.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   await expect(page.getByTestId('csv-review-row').first().getByTestId('csv-row-type')).toHaveValue('income')
   await expect(page.getByText('KFC · common merchant')).not.toBeVisible()
@@ -411,18 +411,18 @@ test('re-importing the same file after suggestions still detects duplicates (G11
 
   await navigateToImportCsv(page)
   await uploadCsv(page, csv, 'kfc.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('KFC · common merchant')).toBeVisible() // suggestion did apply
-  await page.getByRole('button', { name: /Import 1 Transaction/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 
   await navigateToImportCsv(page)
   await uploadCsv(page, csv, 'kfc.csv')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
-  await expect(page.getByText('0 to import')).toBeVisible()
-  await expect(page.getByText('1 duplicate')).toBeVisible()
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('To import: 0')).toBeVisible()
+  await expect(page.getByText('Duplicates: 1')).toBeVisible()
 
   await page.context().close()
 })

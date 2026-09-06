@@ -138,14 +138,14 @@ test.describe('shortcut row', () => {
     await page.context().close()
   })
 
-  test('Import CSV navigates to /wallet/import, same as the old header button', async ({ browser }: { browser: Browser }) => {
+  test('Import opens the unified import modal', async ({ browser }: { browser: Browser }) => {
     const page = await newAppPage(browser, '/wallet/accounts')
     await page.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(page, { name: 'Bank' })
     await page.goto('/wallet')
 
-    await page.getByRole('link', { name: 'Import CSV' }).first().click()
-    await expect(page).toHaveURL(/\/wallet\/import/)
+    await page.getByTestId('import-csv-btn').click()
+    await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
     await page.context().close()
   })
 })

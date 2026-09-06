@@ -22,7 +22,7 @@ async function uploadFixtureCsv(p: Page) {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
   }, csvContent)
-  await expect(p.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await expect(p.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
 }
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
@@ -43,12 +43,11 @@ test.afterAll(async () => {
 
 test('upload CSV and reach the review step', async () => {
   await navigateToImportCsv(page)
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
   await uploadFixtureCsv(page)
-  await page.getByLabel('Import into account *').selectOption('Main Bank')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
-  await expect(page.getByText('4 to import')).toBeVisible()
+  await page.getByLabel('Import into account').selectOption('Main Bank')
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByTestId('import-confirm-btn')).toHaveText(/Import 4 transactions/)
 })
 
 test('type select offers Transfer and swaps category for a destination dropdown', async () => {
@@ -69,18 +68,18 @@ test('type select offers Transfer and swaps category for a destination dropdown'
 })
 
 test('importing a transfer row without a destination is blocked with a toast', async () => {
-  await page.getByRole('button', { name: /Import 4 Transactions/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(
     page.getByText(/a transfer needs a destination account different from the import account/),
   ).toBeVisible()
   // Still on the review step — nothing was imported.
-  await expect(page.getByText('Review Import')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible()
 })
 
 test('selecting a destination and importing succeeds', async () => {
   const destSelect = page.getByRole('combobox', { name: /^Destination account for row/ })
   await destSelect.selectOption('Credit Card')
-  await page.getByRole('button', { name: /Import 4 Transactions/ }).click()
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('4 transactions imported')).toBeVisible()
 })

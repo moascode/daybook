@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { newAppPage, fillAccountForm } from './helpers'
+import { newAppPage, fillAccountForm, navigateToImportCsv } from './helpers'
 
 const CSV_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'european-format.csv')
 
@@ -25,8 +25,7 @@ test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
   await fillAccountForm(page, { name: 'Import Account', type: 'bank' })
-  await page.goto('/wallet/import')
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
+  await navigateToImportCsv(page)
 })
 
 test.afterAll(async () => {
@@ -40,11 +39,11 @@ test('imports a US-format date and a European-decimal amount correctly', async (
     await window.__testCsvFileSelect(file)
   }, csvContent)
 
-  // Mapping step: headers auto-detect; pick the import account, then review.
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
-  await page.getByLabel('Import into account *').selectOption('Import Account')
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+  // Map view: headers auto-detect; pick the import account, then review.
+  await expect(page.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
+  await page.getByLabel('Import into account').selectOption('Import Account')
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   // B-13: 12/31/2025 (day 31 > 12 ⇒ MM/DD) → 2025-12-31, not the invalid 2025-31-12.
   await expect(page.getByTestId('csv-row-date')).toHaveValue('2025-12-31')
