@@ -58,19 +58,44 @@ test.describe('POST /transactions/import-photo', () => {
     const body = await res.json()
     expect(body.failureReason).toBeUndefined()
     expect(body.rows).toEqual([
-      { date: '2026-09-05', merchant: 'Village Grocer', amount: 42.6, type: 'expense', categoryGuess: 'Food & Drink' },
+      {
+        date: '2026-09-05',
+        merchant: 'Village Grocer',
+        // A receipt has no raw line separate from the merchant name — the
+        // AI is never asked for one, so this defaults to ''.
+        description: '',
+        amount: 42.6,
+        type: 'expense',
+        categoryGuess: 'Food & Drink',
+      },
     ])
   })
 
-  test('statement kind returns multiple mixed-direction rows', async ({ browser }) => {
+  test('statement kind returns multiple mixed-direction rows, each with its raw statement line as description', async ({
+    browser,
+  }) => {
     const page = await newAppPage(browser, '/wallet/accounts')
     await setApiKey(page, 'sk-ant-test-dummy')
     await mockPhotoAiResponse(
       page,
       JSON.stringify({
         rows: [
-          { date: '2026-09-01', merchant: 'Netflix', amount: 54.9, type: 'expense', categoryGuess: 'Entertainment' },
-          { date: '2026-09-03', merchant: 'Salary', amount: 4200, type: 'income', categoryGuess: null },
+          {
+            date: '2026-09-01',
+            merchant: 'Netflix',
+            description: 'NETFLIX.COM 8887 8887 CA',
+            amount: 54.9,
+            type: 'expense',
+            categoryGuess: 'Entertainment',
+          },
+          {
+            date: '2026-09-03',
+            merchant: 'Salary',
+            description: 'SALARY SEPT2026 ACME SDN BHD',
+            amount: 4200,
+            type: 'income',
+            categoryGuess: null,
+          },
         ],
       }),
     )
@@ -80,8 +105,36 @@ test.describe('POST /transactions/import-photo', () => {
     const body = await res.json()
     expect(body.rows).toHaveLength(2)
     expect(body.rows[0].type).toBe('expense')
+    expect(body.rows[0].description).toBe('NETFLIX.COM 8887 8887 CA')
     expect(body.rows[1].type).toBe('income')
+    expect(body.rows[1].description).toBe('SALARY SEPT2026 ACME SDN BHD')
     expect(body.rows[1].categoryGuess).toBeNull()
+    expect(body.truncated).toBeUndefined()
+  })
+
+  test('a statement reply cut off mid-array still recovers the rows that completed, with truncated: true', async ({
+    browser,
+  }) => {
+    const page = await newAppPage(browser, '/wallet/accounts')
+    await setApiKey(page, 'sk-ant-test-dummy')
+    // Simulates hitting max_tokens partway through the second row — the
+    // first row's object is complete, the second is cut off before its
+    // closing brace, and the array/object are never closed at all. Mirrors
+    // the real Maybank-statement bug: JSON.parse on the whole reply fails,
+    // so parsePhotoImportWithAI falls back to salvageTruncatedPhotoRows.
+    await mockPhotoAiResponse(
+      page,
+      '{"rows":[{"date":"2026-08-01","merchant":"Grab","amount":20,"type":"expense","categoryGuess":"Transport"},{"date":"2026-08-02","merchant":"Star',
+    )
+
+    const res = await importPhoto(page, 'statement')
+    expect(res.status()).toBe(200) // partial success, never an HTTP error — rule 13
+    const body = await res.json()
+    expect(body.rows).toEqual([
+      { date: '2026-08-01', merchant: 'Grab', description: '', amount: 20, type: 'expense', categoryGuess: 'Transport' },
+    ])
+    expect(body.truncated).toBe(true)
+    expect(body.failureReason).toBeUndefined()
   })
 
   test('a malformed AI response still returns 200 with an empty rows array and a failureReason', async ({ browser }) => {
@@ -232,7 +285,73 @@ test('a batch of 2 photos with one unreadable shows the partial-failure notice a
   await expect(page.getByTestId('csv-review-row')).toHaveCount(1)
   await expect(page.getByRole('textbox', { name: /^Merchant for row/ })).toHaveValue('Village Grocer')
 
-  // Photo column (not Description) is showing for this photo-mode review.
-  await expect(page.locator('th', { hasText: 'Photo' })).toBeVisible()
-  await expect(page.locator('th', { hasText: 'Description' })).toHaveCount(0)
+  // Source photo column (filename, not a thumbnail) is showing for this
+  // photo-mode review, alongside Description (always shown; empty here since
+  // this batch used the receipt kind, which never populates it). Both photos
+  // upload concurrently, so whichever one's request reaches the mocked route
+  // first is the one that "succeeds" — match either name, not a fixed one.
+  await expect(page.locator('th', { hasText: 'Source photo' })).toBeVisible()
+  await expect(page.locator('th', { hasText: 'Description' })).toBeVisible()
+  await expect(page.getByRole('link', { name: /photo[12]\.png/ })).toBeVisible()
+})
+
+test('a truncated statement photo shows the cut-off notice and still imports the rows it recovered', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await setApiKey(page, 'sk-ant-test-dummy')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Truncated Statement Bank', type: 'bank' })
+  await page.goto('/wallet')
+
+  await page.route('**/api/transactions/import-photo', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        rows: [
+          {
+            date: '2026-08-01',
+            merchant: 'Grab',
+            description: 'GRABPAY-EC *PETALING JAYA',
+            amount: 20,
+            type: 'expense',
+            categoryGuess: null,
+          },
+          {
+            date: '2026-08-02',
+            merchant: 'Netflix',
+            description: 'NETFLIX.COM 8887 8887 CA',
+            amount: 54.9,
+            type: 'expense',
+            categoryGuess: null,
+          },
+        ],
+        truncated: true,
+      }),
+    })
+  })
+
+  await page.getByTestId('import-csv-btn').click()
+  await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Photo' }).click()
+  await page.getByRole('tab', { name: 'Bank statement' }).click()
+
+  const fileInput = page.locator('input[type=file][accept="image/*"]')
+  await fileInput.setInputFiles([PHOTO1])
+  await expect(page.getByText('photo1.png')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Extract transactions' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 15_000 })
+
+  // Cut-off notice names the file and the recovered row count, but both rows
+  // stay in the table — a truncated photo is a partial success, not a failure.
+  await expect(page.getByText('1 photo was cut off partway through')).toBeVisible()
+  await expect(page.getByText(/had more transactions than fit in one reply/)).toBeVisible()
+  await expect(page.getByText(/2 rows were extracted below/)).toBeVisible()
+  await expect(page.getByTestId('csv-review-row')).toHaveCount(2)
+
+  // The raw statement line survived into the editable Description field, not
+  // just the AI-cleaned merchant name.
+  await expect(page.getByRole('textbox', { name: /^Description for row/ }).first()).toHaveValue(
+    'GRABPAY-EC *PETALING JAYA',
+  )
 })

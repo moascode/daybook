@@ -49,6 +49,9 @@ export interface ImportRow {
    * mapping. CSV rows never set this.
    */
   photoUrl?: string
+  /** The source photo's filename, alongside photoUrl — shown in the review
+   *  table's Source photo column so a multi-photo batch can be told apart. */
+  photoFileName?: string
   /**
    * Soft cross-source duplicate candidates (layer 3 of check-duplicates):
    * same date + exact amount as an existing transaction, but a merchant that
