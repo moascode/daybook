@@ -25,6 +25,11 @@ export interface PhotoExtractionResult {
   photoUrl: string
   rows: PhotoImportRow[]
   failureReason?: string
+  /** true when the reply was cut off before Claude finished reading the
+   *  photo (worker/lib/anthropic.ts's parsePhotoImportWithAI) — the rows
+   *  present are real and safe to import, but the statement may continue
+   *  past where the reply stopped. */
+  truncated?: boolean
 }
 
 // Cap the longest edge at 1568px — the size beyond which Claude's vision
@@ -70,6 +75,7 @@ async function resizeImageForUpload(file: File): Promise<{ base64: string; media
 interface ImportPhotoResponse {
   rows: PhotoImportRow[]
   failureReason?: string
+  truncated?: boolean
 }
 
 async function extractOnePhoto(file: File, kind: PhotoImportKind): Promise<PhotoExtractionResult> {
@@ -80,7 +86,7 @@ async function extractOnePhoto(file: File, kind: PhotoImportKind): Promise<Photo
     imageType: mediaType,
     kind,
   })
-  return { fileName: file.name, photoUrl, rows: res.rows, failureReason: res.failureReason }
+  return { fileName: file.name, photoUrl, rows: res.rows, failureReason: res.failureReason, truncated: res.truncated }
 }
 
 /**
@@ -115,12 +121,24 @@ export async function extractPhotoBatch(
  * §7 of the spec: PhotoImportRow -> ImportRow, one row per successful
  * extraction result, in one pass after every photo's call has settled.
  */
+export interface TruncatedPhoto {
+  fileName: string
+  rowCount: number
+}
+
 export async function photoResultsToImportRows(
   results: PhotoExtractionResult[],
   categories: Category[],
-): Promise<{ rows: ImportRow[]; failed: PhotoExtractionResult[] }> {
+): Promise<{ rows: ImportRow[]; failed: PhotoExtractionResult[]; truncated: TruncatedPhoto[] }> {
   const failed = results.filter((r) => r.rows.length === 0)
   const succeeded = results.filter((r) => r.rows.length > 0)
+  // A photo can be both truncated AND have rows — that's the whole point of
+  // the salvage path (worker/lib/anthropic.ts): the rows before the cutoff
+  // are real and land here, not in `failed`. Only a photo that was cut off
+  // before even its first row completed shows up in `failed` instead.
+  const truncated = succeeded
+    .filter((r) => r.truncated)
+    .map((r) => ({ fileName: r.fileName, rowCount: r.rows.length }))
 
   const rows: ImportRow[] = []
   for (const result of succeeded) {
@@ -159,5 +177,5 @@ export async function photoResultsToImportRows(
     if (candidates && candidates.length > 0) row.possibleDuplicateOf = candidates
   })
 
-  return { rows, failed }
+  return { rows, failed, truncated }
 }

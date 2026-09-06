@@ -49,11 +49,17 @@ const MAX_TOKENS = 2000
 // call. 150 comfortably covers {merchant, amount, type, account, category,
 // date} with no risk of the truncation trap MAX_TOKENS's comment describes.
 const COMPOSER_MAX_TOKENS = 150
-// A receipt is one row (~20 tokens); a statement screenshot can show 15-20
-// line items, so this is sized like the batch categorisation limit above,
-// not the small composer limit — see spec §5 for why "more photos" (not a
-// bigger budget here) is the chunking lever for a long statement.
-const PHOTO_MAX_TOKENS = 2000
+// A receipt is one row (~20 tokens) so this small budget is generous.
+const PHOTO_RECEIPT_MAX_TOKENS = 300
+// A real statement screenshot can show 20-30+ line items (bank narratives
+// like "2608280057180715 T170704333326 *HOTLINK TOP UP" run ~20-30 tokens
+// each once the surrounding JSON is counted), so 2000 tokens truncated the
+// response mid-array on any statement past ~15 rows — Claude's JSON got cut
+// off before its closing bracket and JSON.parse rejected the whole reply,
+// discarding every row instead of just the ones past the limit. Sized well
+// above what a single statement screenshot needs; "more photos" (spec §5) is
+// still the chunking lever if a single photo somehow exceeds this.
+const PHOTO_STATEMENT_MAX_TOKENS = 8192
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
 For each merchant string, choose exactly one category from the list provided.
@@ -239,13 +245,21 @@ async function fetchClaudeComposerText(
   return resultText
 }
 
+interface ClaudePhotoResponse {
+  text: string
+  /** true when Anthropic's own `stop_reason` says the reply was cut off by
+   *  max_tokens — the authoritative truncation signal, independent of
+   *  whether the JSON still happens to parse (see parsePhotoImportWithAI). */
+  truncatedByModel: boolean
+}
+
 async function fetchClaudePhotoText(
   apiKey: string,
   base64Image: string,
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<string> {
+): Promise<ClaudePhotoResponse> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -255,7 +269,7 @@ async function fetchClaudePhotoText(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: PHOTO_MAX_TOKENS,
+      max_tokens: kind === 'receipt' ? PHOTO_RECEIPT_MAX_TOKENS : PHOTO_STATEMENT_MAX_TOKENS,
       temperature: 0,
       system: kind === 'receipt' ? PHOTO_RECEIPT_SYSTEM_PROMPT : PHOTO_STATEMENT_SYSTEM_PROMPT,
       messages: [
@@ -286,10 +300,10 @@ async function fetchClaudePhotoText(
       .catch(() => '')
     throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
   }
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
-  return resultText
+  return { text: resultText, truncatedByModel: data.stop_reason === 'max_tokens' }
 }
 
 // Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
@@ -524,29 +538,7 @@ export async function parseComposerWithAI(
   return parseComposerResult(resultText)
 }
 
-/**
- * Salvage a PhotoImportRow[] from Claude's reply text.
- *
- * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
- * candidate. A malformed individual row is dropped rather than treated as a
- * whole-call error — same "omission is correct" posture the other parsers use.
- */
-function parsePhotoImportRows(text: string): PhotoImportRow[] {
-  let parsed: unknown
-  let lastError: unknown
-  for (const candidate of jsonCandidates(text)) {
-    try {
-      parsed = JSON.parse(candidate)
-      lastError = undefined
-      break
-    } catch (err) {
-      lastError = err
-    }
-  }
-  if (lastError !== undefined) throw lastError
-  const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
-  if (!Array.isArray(rows)) throw new Error('malformed rows shape')
-
+function toPhotoImportRows(rows: unknown[]): PhotoImportRow[] {
   const result: PhotoImportRow[] = []
   for (const item of rows) {
     if (typeof item !== 'object' || item === null) continue
@@ -562,6 +554,106 @@ function parsePhotoImportRows(text: string): PhotoImportRow[] {
     })
   }
   return result
+}
+
+/**
+ * Recover whatever rows are already complete when the reply's JSON array was
+ * cut off mid-object — the shape a hard `max_tokens` truncation takes. Scans
+ * for the `"rows":[` array and brace-balances forward (tracking string
+ * literals so a brace inside a merchant name can't miscount) to find the last
+ * `}` that closes a complete top-level element, then re-parses just that
+ * prefix with the array and object closed off. Returns [] if nothing in the
+ * reply was ever a rows array, or if not even the first row completed.
+ */
+function salvageTruncatedPhotoRows(text: string): PhotoImportRow[] {
+  const trimmed = text.trim()
+  const rowsKeyIdx = trimmed.indexOf('"rows"')
+  if (rowsKeyIdx === -1) return []
+  const arrStart = trimmed.indexOf('[', rowsKeyIdx)
+  if (arrStart === -1) return []
+
+  let depth = 0
+  let lastCompleteEnd = -1
+  let inString = false
+  let escape = false
+  for (let i = arrStart + 1; i < trimmed.length; i++) {
+    const ch = trimmed[i]
+    if (inString) {
+      if (escape) escape = false
+      else if (ch === '\\') escape = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+    } else if (ch === '{') {
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0) lastCompleteEnd = i
+    }
+  }
+  if (lastCompleteEnd === -1) return []
+
+  try {
+    const repaired = JSON.parse(`{"rows":${trimmed.slice(arrStart, lastCompleteEnd + 1)}]}`) as { rows?: unknown }
+    return Array.isArray(repaired.rows) ? toPhotoImportRows(repaired.rows) : []
+  } catch {
+    return []
+  }
+}
+
+interface PhotoImportParseResult {
+  rows: PhotoImportRow[]
+  /** true when the whole-response JSON.parse failed and salvageTruncatedPhotoRows
+   *  had to recover a prefix of rows — a strong sign of truncation on its own,
+   *  used alongside stop_reason in parsePhotoImportWithAI (see its comment). */
+  salvaged: boolean
+}
+
+/**
+ * Salvage a PhotoImportRow[] from Claude's reply text.
+ *
+ * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
+ * candidate NOR by salvageTruncatedPhotoRows. A malformed individual row is
+ * dropped rather than treated as a whole-call error — same "omission is
+ * correct" posture the other parsers use. A `max_tokens`-truncated statement
+ * (the reply's JSON array cut off mid-object, valid rows and all) hits this
+ * same path: whole-response JSON.parse fails on every jsonCandidates()
+ * attempt, so the rows Claude did finish are recovered instead of the whole
+ * photo being discarded (rule 13 — a partial statement import is a real
+ * result, not the silent-empty failure a bare throw would produce here).
+ */
+function parsePhotoImportRows(text: string): PhotoImportParseResult {
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) {
+    const salvaged = salvageTruncatedPhotoRows(text)
+    if (salvaged.length > 0) return { rows: salvaged, salvaged: true }
+    throw lastError
+  }
+  const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
+  if (!Array.isArray(rows)) throw new Error('malformed rows shape')
+  return { rows: toPhotoImportRows(rows), salvaged: false }
+}
+
+export interface PhotoImportResult {
+  rows: PhotoImportRow[]
+  /** true when the reply was cut off before it finished reading the photo —
+   *  either Anthropic's own stop_reason said so, or the parser had to
+   *  salvage a prefix of rows out of JSON that never closed. The rows
+   *  present are still real and safe to import; there may just be more of
+   *  them past whatever the cutoff point was. */
+  truncated: boolean
 }
 
 /**
@@ -581,10 +673,14 @@ export async function parsePhotoImportWithAI(
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<PhotoImportRow[]> {
-  const text =
+): Promise<PhotoImportResult> {
+  // Test mode has no Anthropic response envelope to read a stop_reason from —
+  // truncation there is only ever observed via the salvage path below, which
+  // a spec can trigger by stashing a deliberately cut-off mock reply.
+  const { text, truncatedByModel } =
     env.DAYBOOK_TEST === '1'
-      ? await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT)
+      ? { text: await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT), truncatedByModel: false }
       : await fetchClaudePhotoText(apiKey, base64Image, imageType, kind, categoryNames)
-  return parsePhotoImportRows(text)
+  const { rows, salvaged } = parsePhotoImportRows(text)
+  return { rows, truncated: truncatedByModel || salvaged }
 }
