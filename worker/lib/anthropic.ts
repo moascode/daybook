@@ -49,11 +49,17 @@ const MAX_TOKENS = 2000
 // call. 150 comfortably covers {merchant, amount, type, account, category,
 // date} with no risk of the truncation trap MAX_TOKENS's comment describes.
 const COMPOSER_MAX_TOKENS = 150
-// A receipt is one row (~20 tokens); a statement screenshot can show 15-20
-// line items, so this is sized like the batch categorisation limit above,
-// not the small composer limit — see spec §5 for why "more photos" (not a
-// bigger budget here) is the chunking lever for a long statement.
-const PHOTO_MAX_TOKENS = 2000
+// A receipt is one row (~20 tokens) so this small budget is generous.
+const PHOTO_RECEIPT_MAX_TOKENS = 300
+// A real statement screenshot can show 20-30+ line items (bank narratives
+// like "2608280057180715 T170704333326 *HOTLINK TOP UP" run ~20-30 tokens
+// each once the surrounding JSON is counted), so 2000 tokens truncated the
+// response mid-array on any statement past ~15 rows — Claude's JSON got cut
+// off before its closing bracket and JSON.parse rejected the whole reply,
+// discarding every row instead of just the ones past the limit. Sized well
+// above what a single statement screenshot needs; "more photos" (spec §5) is
+// still the chunking lever if a single photo somehow exceeds this.
+const PHOTO_STATEMENT_MAX_TOKENS = 8192
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
 For each merchant string, choose exactly one category from the list provided.
@@ -255,7 +261,7 @@ async function fetchClaudePhotoText(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: PHOTO_MAX_TOKENS,
+      max_tokens: kind === 'receipt' ? PHOTO_RECEIPT_MAX_TOKENS : PHOTO_STATEMENT_MAX_TOKENS,
       temperature: 0,
       system: kind === 'receipt' ? PHOTO_RECEIPT_SYSTEM_PROMPT : PHOTO_STATEMENT_SYSTEM_PROMPT,
       messages: [
@@ -524,29 +530,7 @@ export async function parseComposerWithAI(
   return parseComposerResult(resultText)
 }
 
-/**
- * Salvage a PhotoImportRow[] from Claude's reply text.
- *
- * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
- * candidate. A malformed individual row is dropped rather than treated as a
- * whole-call error — same "omission is correct" posture the other parsers use.
- */
-function parsePhotoImportRows(text: string): PhotoImportRow[] {
-  let parsed: unknown
-  let lastError: unknown
-  for (const candidate of jsonCandidates(text)) {
-    try {
-      parsed = JSON.parse(candidate)
-      lastError = undefined
-      break
-    } catch (err) {
-      lastError = err
-    }
-  }
-  if (lastError !== undefined) throw lastError
-  const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
-  if (!Array.isArray(rows)) throw new Error('malformed rows shape')
-
+function toPhotoImportRows(rows: unknown[]): PhotoImportRow[] {
   const result: PhotoImportRow[] = []
   for (const item of rows) {
     if (typeof item !== 'object' || item === null) continue
@@ -562,6 +546,88 @@ function parsePhotoImportRows(text: string): PhotoImportRow[] {
     })
   }
   return result
+}
+
+/**
+ * Recover whatever rows are already complete when the reply's JSON array was
+ * cut off mid-object — the shape a hard `max_tokens` truncation takes. Scans
+ * for the `"rows":[` array and brace-balances forward (tracking string
+ * literals so a brace inside a merchant name can't miscount) to find the last
+ * `}` that closes a complete top-level element, then re-parses just that
+ * prefix with the array and object closed off. Returns [] if nothing in the
+ * reply was ever a rows array, or if not even the first row completed.
+ */
+function salvageTruncatedPhotoRows(text: string): PhotoImportRow[] {
+  const trimmed = text.trim()
+  const rowsKeyIdx = trimmed.indexOf('"rows"')
+  if (rowsKeyIdx === -1) return []
+  const arrStart = trimmed.indexOf('[', rowsKeyIdx)
+  if (arrStart === -1) return []
+
+  let depth = 0
+  let lastCompleteEnd = -1
+  let inString = false
+  let escape = false
+  for (let i = arrStart + 1; i < trimmed.length; i++) {
+    const ch = trimmed[i]
+    if (inString) {
+      if (escape) escape = false
+      else if (ch === '\\') escape = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+    } else if (ch === '{') {
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0) lastCompleteEnd = i
+    }
+  }
+  if (lastCompleteEnd === -1) return []
+
+  try {
+    const repaired = JSON.parse(`{"rows":${trimmed.slice(arrStart, lastCompleteEnd + 1)}]}`) as { rows?: unknown }
+    return Array.isArray(repaired.rows) ? toPhotoImportRows(repaired.rows) : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Salvage a PhotoImportRow[] from Claude's reply text.
+ *
+ * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
+ * candidate NOR by salvageTruncatedPhotoRows. A malformed individual row is
+ * dropped rather than treated as a whole-call error — same "omission is
+ * correct" posture the other parsers use. A `max_tokens`-truncated statement
+ * (the reply's JSON array cut off mid-object, valid rows and all) hits this
+ * same path: whole-response JSON.parse fails on every jsonCandidates()
+ * attempt, so the rows Claude did finish are recovered instead of the whole
+ * photo being discarded (rule 13 — a partial statement import is a real
+ * result, not the silent-empty failure a bare throw would produce here).
+ */
+function parsePhotoImportRows(text: string): PhotoImportRow[] {
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) {
+    const salvaged = salvageTruncatedPhotoRows(text)
+    if (salvaged.length > 0) return salvaged
+    throw lastError
+  }
+  const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
+  if (!Array.isArray(rows)) throw new Error('malformed rows shape')
+  return toPhotoImportRows(rows)
 }
 
 /**
