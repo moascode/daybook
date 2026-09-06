@@ -1690,6 +1690,27 @@ Seed whatever accounts/transactions/categories the feature under test needs
 directly via the API (`page`-style `fetch` calls or `curl`), then hand the
 owner the URL plus these credentials.
 
+**Never run `npx playwright test` against a manual preview session without
+`E2E_PERSIST_TO`.** `wrangler dev --local` persists D1 to
+`.wrangler/state/v3/d1/...sqlite` by default, and both the manual
+`dev:worker` preview (:8788) and Playwright's own `webServer` (:5173,
+`playwright.config.ts`) use that same default path unless told otherwise —
+they are two different processes sharing one file. `e2e/global-setup.ts`
+calls `POST /api/test/reset` (a full-table wipe, by design, to bound DB
+growth across runs) before every `npx playwright test` invocation, so running
+a targeted e2e spec while a manual preview session is up silently deletes the
+`demo` account and everything seeded on it. Set an isolated persist directory
+for the e2e run instead:
+
+```bash
+E2E_PERSIST_TO=/tmp/daybook-e2e-state npx playwright test e2e/some.spec.ts
+```
+
+This was misdiagnosed as a flaky D1 several times before being traced to this
+file-sharing default — the fix is confirmed by a live run: seed `demo`, run a
+spec with `E2E_PERSIST_TO` set, then reload the :8788 preview and confirm
+`demo`'s data is still there.
+
 ### Development workflow
 
 **Default:** Branch → Plan (for non-trivial changes) → Implement → Test → PR →
