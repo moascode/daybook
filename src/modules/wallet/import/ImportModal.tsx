@@ -64,7 +64,10 @@ interface ImportModalProps {
 export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthropicKey, onReady }: ImportModalProps) {
   const { addToast } = useToastStore()
   const [view, setView] = useState<ModalView>('pick')
-  const [importType, setImportType] = useState<ImportType>('csv')
+  // Photo is the default once a key is set — it's the richer, less-typing
+  // path. Falls back to CSV-only when there's no key to spend, same as the
+  // segment itself being hidden entirely in that case (no key, no tab).
+  const [importType, setImportType] = useState<ImportType>(() => (hasAnthropicKey ? 'photo' : 'csv'))
   const [photoKind, setPhotoKind] = useState<PhotoKind>('receipt')
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
@@ -81,7 +84,7 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
 
   const resetAll = useCallback(() => {
     setView('pick')
-    setImportType('csv')
+    setImportType(hasAnthropicKey ? 'photo' : 'csv')
     setPhotoKind('receipt')
     setPhotoFiles([])
     setFile(null)
@@ -91,7 +94,7 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
     setParseErrors([])
     setProcLabel('')
     setProcPct(0)
-  }, [])
+  }, [hasAnthropicKey])
 
   const handleClose = useCallback(
     (next: boolean) => {

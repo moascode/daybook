@@ -72,15 +72,11 @@ checklist (§8) are all still accurate.
    "segment collapses to CSV-only, no toggle shown" behavior is right before
    it ships. (Made autonomously and documented here rather than blocked on,
    since this call is fully reversible and stated plainly for review.)
-6. **The mockup's default active tab is "Photo," not "CSV."** Given photo
-   import is gated behind P2 and CSV import is the only one that actually
-   works today, the shipped CSV-reskin defaults the segment to **CSV** when
-   photo is unavailable (no key) and — pending the owner's product-taste
-   call, not asked here since it's cosmetic and reversible — defaults to
-   **CSV** even when a key is present, until photo import itself ships,
-   since an active tab whose action always errors would violate rule 13.
-   Once photo import is approved and wired, whichever tab was last used
-   would be a reasonable default to revisit.
+6. **Default tab matches the mockup's own default: Photo when a key is set,
+   CSV otherwise.** Confirmed by the owner 2026-09-06, once P2 shipped —
+   Photo is the richer, less-typing path and wins by default whenever it's
+   actually usable; the segment defaults to CSV only when there's no key to
+   spend (the same condition that hides the segment entirely).
 
 ---
 
