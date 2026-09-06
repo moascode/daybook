@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
+import { CaptureTokens } from './CaptureTokens'
 
 export function SettingsPage() {
   const { theme, changeTheme } = useThemePreference()
@@ -270,6 +271,8 @@ export function SettingsPage() {
             </div>
           </form>
         </section>
+
+        <CaptureTokens />
 
         {/* Wallet module settings */}
         <section className="rounded-xl border border-line bg-surface p-5">

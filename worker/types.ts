@@ -49,5 +49,16 @@ export interface Env {
  */
 export type AppEnv = {
   Bindings: Env
-  Variables: { userId: string }
+  Variables: {
+    userId: string
+    /**
+     * Set ONLY by the capture sub-app's bearer guard (worker/routes/capture.ts),
+     * never by requireAuth. Its presence is what distinguishes a machine caller
+     * from a browser session; cookie-authenticated routes must never read it,
+     * and token-authenticated routes must never assume a session exists.
+     */
+    captureTokenId?: string
+    captureTokenLabel?: string
+    captureScopes?: string[]
+  }
 }
