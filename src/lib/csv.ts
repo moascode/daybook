@@ -413,7 +413,7 @@ export async function checkDuplicates(
 export interface MerchantResolution {
   guess: string
   name: string
-  source: 'correction' | 'history' | 'ai'
+  source: 'correction' | 'history' | 'builtin' | 'ai'
 }
 
 export interface MerchantResolveResult {

@@ -10,13 +10,14 @@ interface MerchantCanonical {
   canonical: string
   transactionCount: number
   /** Which ladder step resolved the canonical name (docs/v1/flow-plan.md). */
-  source: 'regex' | 'correction' | 'history' | 'ai'
+  source: 'regex' | 'correction' | 'history' | 'builtin' | 'ai'
 }
 
 const SOURCE_LABEL: Record<MerchantCanonical['source'], string> = {
   regex: 'Pattern match',
   correction: 'Previously corrected',
   history: 'From history',
+  builtin: 'Recognised merchant',
   ai: 'AI-suggested',
 }
 

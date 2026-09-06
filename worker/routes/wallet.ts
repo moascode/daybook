@@ -3177,7 +3177,7 @@ wallet.delete('/goals/:id', async (c) => {
 // the raw narrative -> memoize the AI answer so every future occurrence of
 // the same regex guess resolves for free.
 
-type MerchantResolutionSource = 'correction' | 'history' | 'ai'
+type MerchantResolutionSource = 'correction' | 'history' | 'builtin' | 'ai'
 
 interface MerchantLadderResult {
   // Keyed by correctionKey(guess) — one entry per distinct guess resolved.
@@ -3239,6 +3239,25 @@ async function resolveMerchantLadder(
   for (const key of remaining) {
     if (historyKeys.has(key)) {
       resolutions.set(key, { name: repByKey.get(key)!.guess, source: 'history' })
+    }
+  }
+
+  remaining = remaining.filter((key) => !resolutions.has(key))
+  if (remaining.length === 0) return { resolutions, failedKeys: [] }
+
+  // Stage 2.5 — the builtin category map (worker/lib/merchant-map.ts). If the
+  // regex guess is recognised there, category suggestion will confidently tag
+  // it "common merchant" regardless of what this ladder decides — which used
+  // to leave the exact same guess simultaneously marked "couldn't be cleaned
+  // up automatically" in the review table. A map hit is independent
+  // confirmation the guess already IS a real name (the map is curated by
+  // developers, not guessed at runtime), so no AI call is needed just to
+  // agree with what the app already recognises.
+  for (const key of remaining) {
+    const guess = repByKey.get(key)!.guess
+    const canonical = canonicalMerchant(guess)
+    if (canonical && builtinCategory(canonical)) {
+      resolutions.set(key, { name: guess, source: 'builtin' })
     }
   }
 

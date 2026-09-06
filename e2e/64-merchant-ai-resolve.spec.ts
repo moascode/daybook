@@ -164,6 +164,30 @@ test.describe('POST /merchants/resolve', () => {
     await page.context().close()
   })
 
+  test('(f) a guess the builtin category map recognises resolves for free — no key, no AI call, not reported as failed', async ({
+    browser,
+  }) => {
+    // Regression: category suggestion (a separate system, worker/lib/merchant-map.ts)
+    // confidently tags GUARDIAN "Personal Care · common merchant" regardless of
+    // whether this ladder has ever confirmed the name — before this stage
+    // existed, the exact same guess was simultaneously marked "couldn't be
+    // cleaned up automatically" in the review table, which read as a
+    // contradiction to the user. A builtin-map hit is independent confirmation
+    // the guess already IS a real name, so it must resolve here too, with zero
+    // AI spend (no key set at all in this test).
+    const page = await newAppPage(browser, '/wallet')
+    const res = await resolveMerchants(page, [
+      { raw: 'IBG FROM GUARDIAN HEALTH AND BEAUTY SDN BHD REF 552013', guess: 'Guardian Health And Beauty' },
+    ])
+    expect(res.status()).toBe(200)
+    const body = (await res.json()) as { resolutions: { guess: string; name: string; source: string }[]; failedGuesses: string[] }
+    expect(body.resolutions).toEqual([
+      { guess: 'Guardian Health And Beauty', name: 'Guardian Health And Beauty', source: 'builtin' },
+    ])
+    expect(body.failedGuesses).toEqual([])
+    await page.context().close()
+  })
+
   test('duplicate guesses within one request are deduplicated before any AI call', async ({ browser }) => {
     const page = await newAppPage(browser, '/wallet')
     await setApiKey(page, 'sk-ant-test-dummy')
@@ -245,7 +269,7 @@ test.describe('CSV import: merchant AI resolution', () => {
     // rules pass resolves nothing, so all 3 rows are marked unresolved and
     // the banner offers the explicit button — no toast, this is a normal
     // outcome, not a failure.
-    await expect(page.getByTestId('csv-merchant-banner')).toContainText("3 merchant names couldn't be cleaned up automatically")
+    await expect(page.getByTestId('csv-merchant-banner')).toContainText('3 rows still need merchant cleanup')
     const merchantInputsBefore = page.getByRole('textbox', { name: /^Merchant for row/ })
     await expect(merchantInputsBefore).toHaveCount(3)
     await expect(page.getByText('Merchant name not resolved automatically').first()).toBeVisible()
