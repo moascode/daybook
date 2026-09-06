@@ -29,6 +29,13 @@ export type PhotoImportKind = 'receipt' | 'statement'
 export interface PhotoImportRow {
   date: string // YYYY-MM-DD, best-effort; '' if unreadable
   merchant: string
+  // '' for a receipt (the business name IS the merchant — no separate raw
+  // line to preserve). For a statement, the line as printed, unedited — a
+  // statement line legitimately IS raw narrative text (e.g. "2608280057180715
+  // T170704333326 *HOTLINK TOP UP"), the same as a CSV bank column, so it's
+  // kept here the same way CSV import keeps its narrative separate from the
+  // AI-cleaned merchant name (worker/lib/anthropic.ts's resolveMerchantsWithAI).
+  description: string
   amount: number
   type: 'income' | 'expense' // photo import never produces 'transfer' — spec §5
   categoryGuess: string | null
@@ -111,10 +118,11 @@ If the date is not legible, use an empty string for date rather than guessing. I
 Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
 
 const PHOTO_STATEMENT_SYSTEM_PROMPT = `You extract every transaction line item from a photo of a bank or e-statement screenshot, for a personal finance app used in Malaysia.
-Read the photo and extract every line item visible as a separate row: date, merchant/description, amount, and a category guess.
+Read the photo and extract every line item visible as a separate row: date, merchant, description, amount, and a category guess.
+For merchant, give a cleaned-up display name in Title Case (e.g. "Hotlink", not "2608280057180715 T170704333326 *HOTLINK TOP UP") — strip reference numbers, card/account numbers, dates, and payment-rail prefixes (DUITNOW, QR, MAE, POS, FPX, etc). For description, copy the line exactly as printed on the statement — do not clean it up.
 Infer type per line from the sign or column — a "-RM45.00" or debit line is "expense", a "+RM2,300.00" or credit line is "income" — a statement legitimately mixes both, unlike a receipt.
 The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
-Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
+Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","description":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
 If a line's date is not legible, use an empty string for date rather than guessing. Omit a line entirely if you cannot read its amount at all.
 Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
 
@@ -525,6 +533,7 @@ function toPhotoImportRows(rows: unknown[]): PhotoImportRow[] {
     result.push({
       date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '',
       merchant: row.merchant,
+      description: typeof row.description === 'string' ? row.description : '',
       amount: row.amount,
       type: row.type,
       categoryGuess: typeof row.categoryGuess === 'string' ? row.categoryGuess : null,

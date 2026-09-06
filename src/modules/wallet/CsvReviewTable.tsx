@@ -17,10 +17,11 @@ interface CsvReviewTableProps {
   /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
   onClearSuggestions: () => void
   /**
-   * Photo import (P2, approved 2026-09-06): swaps the Description column for
-   * a Photo thumbnail column, per docs/v2/wallet/feature-photo-import.md §7.
-   * CSV rows never set this — a review session is always all-CSV or
-   * all-photo, never mixed.
+   * Photo import (P2, approved 2026-09-06): adds a Source photo column
+   * (filename, not a thumbnail — see the cell's own comment) ahead of
+   * Description, which now carries the raw statement line for a statement
+   * row (docs/v2/wallet/feature-photo-import.md §7, amended). CSV rows never
+   * set this — a review session is always all-CSV or all-photo, never mixed.
    */
   photoMode?: boolean
   /** A4 (approved 2026-09-06) — gates the "Ask AI to suggest" action. No key, no button. */
@@ -229,7 +230,8 @@ export function CsvReviewTable({
             </th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
-            <th className="px-3 py-2 font-medium text-fg-subtle">{photoMode ? 'Photo' : 'Description'}</th>
+            {photoMode && <th className="px-3 py-2 font-medium text-fg-subtle w-32">Source photo</th>}
+            <th className="px-3 py-2 font-medium text-fg-subtle">Description</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-24">Type</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-36">Category</th>
@@ -308,30 +310,50 @@ export function CsvReviewTable({
                 </div>
               </td>
 
-              {/* Description (CSV) or a Photo thumbnail (photo-import prototype) */}
-              <td className="px-3 py-2">
-                {photoMode ? (
-                  row.photoUrl ? (
-                    <img
-                      src={row.photoUrl}
-                      alt={`Source photo for row ${index + 1}`}
-                      className="h-9 w-9 rounded-lg object-cover"
-                    />
+              {/* Source photo — the filename, not a thumbnail: at table row
+                  height a thumbnail is too small to tell photos apart in a
+                  multi-photo batch, while the filename (already meaningful —
+                  it's the name the user's phone or bank app gave the photo)
+                  reliably answers "which photo produced this row". */}
+              {photoMode && (
+                <td className="px-3 py-2">
+                  {row.photoFileName ? (
+                    row.photoUrl ? (
+                      <a
+                        href={row.photoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block max-w-[8rem] truncate text-xs text-accent-fg underline decoration-dotted"
+                        title={`Open ${row.photoFileName} at full size`}
+                      >
+                        {row.photoFileName}
+                      </a>
+                    ) : (
+                      <span className="block max-w-[8rem] truncate text-xs text-fg-subtle" title={row.photoFileName}>
+                        {row.photoFileName}
+                      </span>
+                    )
                   ) : (
                     <span className="text-fg-faint">—</span>
-                  )
-                ) : (
-                  <Input
-                    value={row.description}
-                    onChange={(e) =>
-                      onRowChange(index, { description: e.target.value })
-                    }
-                    className="w-48 text-xs"
-                    placeholder="—"
-                    disabled={!row.included}
-                    aria-label={`Description for row ${index + 1}`}
-                  />
-                )}
+                  )}
+                </td>
+              )}
+
+              {/* Description — always shown; for a photo-imported statement
+                  row this is the raw line as printed (worker/lib/anthropic.ts's
+                  PhotoImportRow), empty for a receipt row (there is no raw
+                  line separate from the merchant name to preserve). */}
+              <td className="px-3 py-2">
+                <Input
+                  value={row.description}
+                  onChange={(e) =>
+                    onRowChange(index, { description: e.target.value })
+                  }
+                  className="w-48 text-xs"
+                  placeholder="—"
+                  disabled={!row.included}
+                  aria-label={`Description for row ${index + 1}`}
+                />
               </td>
 
               {/* Amount */}
