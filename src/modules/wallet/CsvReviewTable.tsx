@@ -16,6 +16,13 @@ interface CsvReviewTableProps {
   onToggleInclude: (index: number) => void
   /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
   onClearSuggestions: () => void
+  /**
+   * PROTOTYPE (photo import, gated behind P2 — not wired to a real AI call):
+   * swaps the Description column for a Photo thumbnail column, per
+   * docs/v2/wallet/feature-photo-import.md §7. CSV rows never set this — a
+   * review session is always all-CSV or all-photo, never mixed.
+   */
+  photoMode?: boolean
 }
 
 export function CsvReviewTable({
@@ -25,6 +32,7 @@ export function CsvReviewTable({
   onRowChange,
   onToggleInclude,
   onClearSuggestions,
+  photoMode,
 }: CsvReviewTableProps) {
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
@@ -85,7 +93,7 @@ export function CsvReviewTable({
             </th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
-            <th className="px-3 py-2 font-medium text-fg-subtle">Description</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle">{photoMode ? 'Photo' : 'Description'}</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-24">Type</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-36">Category</th>
@@ -164,18 +172,30 @@ export function CsvReviewTable({
                 </div>
               </td>
 
-              {/* Description — raw bank narrative, editable for clarity */}
+              {/* Description (CSV) or a Photo thumbnail (photo-import prototype) */}
               <td className="px-3 py-2">
-                <Input
-                  value={row.description}
-                  onChange={(e) =>
-                    onRowChange(index, { description: e.target.value })
-                  }
-                  className="w-48 text-xs"
-                  placeholder="—"
-                  disabled={!row.included}
-                  aria-label={`Description for row ${index + 1}`}
-                />
+                {photoMode ? (
+                  row.photoUrl ? (
+                    <img
+                      src={row.photoUrl}
+                      alt={`Source photo for row ${index + 1}`}
+                      className="h-9 w-9 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <span className="text-fg-faint">—</span>
+                  )
+                ) : (
+                  <Input
+                    value={row.description}
+                    onChange={(e) =>
+                      onRowChange(index, { description: e.target.value })
+                    }
+                    className="w-48 text-xs"
+                    placeholder="—"
+                    disabled={!row.included}
+                    aria-label={`Description for row ${index + 1}`}
+                  />
+                )}
               </td>
 
               {/* Amount */}

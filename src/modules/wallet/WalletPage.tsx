@@ -20,7 +20,7 @@ import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
 import type { TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
 import { Composer } from '@/modules/wallet/composer/Composer'
 import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
-import { ImportModal } from '@/modules/wallet/import/ImportModal'
+import { ImportModal, type ImportReadyMeta } from '@/modules/wallet/import/ImportModal'
 import type { ImportRow } from '@/lib/csv'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
@@ -118,8 +118,8 @@ export function WalletPage() {
     }
   }, [location, navigate])
   const handleImportReady = useCallback(
-    (rows: ImportRow[], selectedAccountId: string) => {
-      navigate('/wallet/import', { state: { rows, selectedAccountId } })
+    (rows: ImportRow[], selectedAccountId: string, meta?: ImportReadyMeta) => {
+      navigate('/wallet/import', { state: { rows, selectedAccountId, ...meta } })
     },
     [navigate],
   )
@@ -827,6 +827,8 @@ export function WalletPage() {
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         accounts={accounts.filter((a) => !a.isShared || a.canWrite === 1)}
+        categories={categories}
+        hasAnthropicKey={hasAnthropicKey}
         onReady={handleImportReady}
       />
 

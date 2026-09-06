@@ -12,6 +12,9 @@ import type { TransactionInput } from '@/hooks/useWallet'
 interface ImportLocationState {
   rows: ImportRow[]
   selectedAccountId: string
+  /** PROTOTYPE (photo import, gated behind P2 — see ImportModal.tsx). */
+  photoMode?: boolean
+  failedPhotos?: { fileName: string; failureReason?: string }[]
 }
 
 /**
@@ -31,6 +34,8 @@ export function CsvImport() {
   const state = location.state as ImportLocationState | null
   const [importRows, setImportRows] = useState<ImportRow[]>(state?.rows ?? [])
   const [selectedAccountId] = useState(state?.selectedAccountId ?? '')
+  const [failedPhotos, setFailedPhotos] = useState(state?.failedPhotos ?? [])
+  const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
 
@@ -134,6 +139,32 @@ export function CsvImport() {
         <h1 className="page-title">Review transactions</h1>
       </div>
 
+      {/* PROTOTYPE (photo import, gated behind P2): partial-failure notice,
+          per transactions-import-error.html. Never appears for a CSV import. */}
+      {failedPhotos.length > 0 && (
+        <div className="notice notice-fail mb-4">
+          <div>
+            <div className="notice-title">
+              Couldn't read {failedPhotos.length} of {importRows.length + failedPhotos.length} photos
+            </div>
+            <div className="notice-sub">
+              <b>{failedPhotos[0].fileName}</b>
+              {failedPhotos.length === 1 ? ' was' : ` and ${failedPhotos.length - 1} other photo${failedPhotos.length > 2 ? 's were' : ' was'}`}{' '}
+              {failedPhotos[0].failureReason ?? 'unreadable'} — no transaction was extracted from it. The rows below were
+              read normally and are safe to import.
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto flex-shrink-0"
+            onClick={() => setFailedPhotos([])}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+
       {/* CsvReviewTable renders its own "Suggested a category…" banner
           (csv-suggestions-banner) — do not duplicate it here. */}
       <CsvReviewTable
@@ -143,6 +174,7 @@ export function CsvImport() {
         onRowChange={updateRow}
         onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
         onClearSuggestions={clearSuggestions}
+        photoMode={photoMode}
       />
 
       {selectedCount > 0 && (

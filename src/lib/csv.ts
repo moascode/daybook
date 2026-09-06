@@ -43,6 +43,12 @@ export interface ImportRow {
   narrativeRaw?: string
   /** True when /merchants/resolve could not improve on the regex guess for this row (no key, rate limit, or AI failure) — the guess is kept as-is. */
   merchantUnresolved?: boolean
+  /**
+   * PROTOTYPE (photo import, gated behind P2 in ai-usage.md — not wired):
+   * a local object URL for the source photo, set only by
+   * `src/lib/photo-import.ts`'s mock mapping. CSV rows never set this.
+   */
+  photoUrl?: string
 }
 
 // ── Date patterns for auto-detection ────────────────
