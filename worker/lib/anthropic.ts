@@ -29,6 +29,13 @@ export type PhotoImportKind = 'receipt' | 'statement'
 export interface PhotoImportRow {
   date: string // YYYY-MM-DD, best-effort; '' if unreadable
   merchant: string
+  // '' for a receipt (the business name IS the merchant — no separate raw
+  // line to preserve). For a statement, the line as printed, unedited — a
+  // statement line legitimately IS raw narrative text (e.g. "2608280057180715
+  // T170704333326 *HOTLINK TOP UP"), the same as a CSV bank column, so it's
+  // kept here the same way CSV import keeps its narrative separate from the
+  // AI-cleaned merchant name (worker/lib/anthropic.ts's resolveMerchantsWithAI).
+  description: string
   amount: number
   type: 'income' | 'expense' // photo import never produces 'transfer' — spec §5
   categoryGuess: string | null
@@ -49,11 +56,17 @@ const MAX_TOKENS = 2000
 // call. 150 comfortably covers {merchant, amount, type, account, category,
 // date} with no risk of the truncation trap MAX_TOKENS's comment describes.
 const COMPOSER_MAX_TOKENS = 150
-// A receipt is one row (~20 tokens); a statement screenshot can show 15-20
-// line items, so this is sized like the batch categorisation limit above,
-// not the small composer limit — see spec §5 for why "more photos" (not a
-// bigger budget here) is the chunking lever for a long statement.
-const PHOTO_MAX_TOKENS = 2000
+// A receipt is one row (~20 tokens) so this small budget is generous.
+const PHOTO_RECEIPT_MAX_TOKENS = 300
+// A real statement screenshot can show 20-30+ line items (bank narratives
+// like "2608280057180715 T170704333326 *HOTLINK TOP UP" run ~20-30 tokens
+// each once the surrounding JSON is counted), so 2000 tokens truncated the
+// response mid-array on any statement past ~15 rows — Claude's JSON got cut
+// off before its closing bracket and JSON.parse rejected the whole reply,
+// discarding every row instead of just the ones past the limit. Sized well
+// above what a single statement screenshot needs; "more photos" (spec §5) is
+// still the chunking lever if a single photo somehow exceeds this.
+const PHOTO_STATEMENT_MAX_TOKENS = 8192
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
 For each merchant string, choose exactly one category from the list provided.
@@ -105,15 +118,58 @@ If the date is not legible, use an empty string for date rather than guessing. I
 Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
 
 const PHOTO_STATEMENT_SYSTEM_PROMPT = `You extract every transaction line item from a photo of a bank or e-statement screenshot, for a personal finance app used in Malaysia.
-Read the photo and extract every line item visible as a separate row: date, merchant/description, amount, and a category guess.
+Read the photo and extract every line item visible as a separate row: date, merchant, description, amount, and a category guess.
+For merchant, give a cleaned-up display name in Title Case (e.g. "Hotlink", not "2608280057180715 T170704333326 *HOTLINK TOP UP") — strip reference numbers, card/account numbers, dates, and payment-rail prefixes (DUITNOW, QR, MAE, POS, FPX, etc). For description, copy the line exactly as printed on the statement — do not clean it up.
 Infer type per line from the sign or column — a "-RM45.00" or debit line is "expense", a "+RM2,300.00" or credit line is "income" — a statement legitimately mixes both, unlike a receipt.
 The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
-Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
+Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","description":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
 If a line's date is not legible, use an empty string for date rather than guessing. Omit a line entirely if you cannot read its amount at all.
 Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
 
 function buildPhotoImportUserMessage(kind: PhotoImportKind, categoryNames: string[]): string {
   return `Categories: ${categoryNames.join(', ')}\nThis photo is a ${kind === 'receipt' ? 'retail receipt' : 'bank/e-statement screenshot'}.`
+}
+
+/**
+ * Build the Error thrown for a non-2xx Anthropic response, shared by every
+ * fetchClaude*Text function below (previously four copies of the same
+ * body-parsing logic, each missing the same diagnostic fields).
+ *
+ * Captures three things, all of which the caller can't guess and Anthropic's
+ * bare status code doesn't distinguish: the error `type` (e.g.
+ * `permission_error` vs `invalid_request_error` vs `rate_limit_error` — the
+ * difference between a blocked key/connection, a malformed request, and
+ * spend/rate exhaustion), the `message`, and Anthropic's own `request-id`
+ * response header. The request-id's presence is itself diagnostic: if it's
+ * there, Anthropic's application layer issued the rejection and that id can
+ * be handed to Anthropic support to get a real answer; if it's absent, the
+ * rejection likely never reached Anthropic at all (a network-level block on
+ * the connection itself — e.g. an IP-range block — happening before their
+ * server had a chance to stamp a request-id). `cf-ray` is included too,
+ * since this Worker's own edge hop is the other half of that same question.
+ */
+async function anthropicErrorFromResponse(res: Response): Promise<Error> {
+  const requestId = res.headers.get('request-id') ?? res.headers.get('anthropic-request-id')
+  const cfRay = res.headers.get('cf-ray')
+  const body = await res.text().catch(() => '')
+  let type: string | undefined
+  let message: string | undefined
+  try {
+    const parsed: unknown = JSON.parse(body)
+    const err = typeof parsed === 'object' && parsed !== null ? (parsed as { error?: unknown }).error : undefined
+    if (typeof err === 'object' && err !== null) {
+      const e = err as { type?: unknown; message?: unknown }
+      if (typeof e.type === 'string') type = e.type
+      if (typeof e.message === 'string') message = e.message
+    }
+  } catch {
+    // body wasn't JSON at all — fall through to the raw text slice below
+  }
+  const detail = message ?? (body ? body.slice(0, 200) : '')
+  let text = `Anthropic API responded ${res.status}${type ? ` (${type})` : ''}${detail ? `: ${detail}` : ''}`
+  if (requestId) text += ` [request-id ${requestId}]`
+  if (cfRay) text += ` [cf-ray ${cfRay}]`
+  return new Error(text)
 }
 
 async function fetchClaudeText(apiKey: string, categoryNames: string[], merchants: string[]): Promise<string> {
@@ -132,24 +188,7 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
       messages: [{ role: 'user', content: buildUserMessage(categoryNames, merchants) }],
     }),
   })
-  if (!res.ok) {
-    // Anthropic's own message is the only thing that distinguishes an invalid
-    // key from an exhausted credit balance from a bad model id — all of which
-    // are the user's to fix and none of which the caller can guess. The body
-    // is `{error: {type, message}}`; it never echoes the API key back.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const text = data.content?.find((block) => block.type === 'text')?.text
   if (!text) throw new Error('no text content in Anthropic response')
@@ -172,23 +211,7 @@ async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: strin
       messages: [{ role: 'user', content: buildMerchantUserMessage(items) }],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const text = data.content?.find((block) => block.type === 'text')?.text
   if (!text) throw new Error('no text content in Anthropic response')
@@ -216,27 +239,19 @@ async function fetchClaudeComposerText(
       messages: [{ role: 'user', content: buildComposerUserMessage(text, accountNames, categoryNames) }],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
   return resultText
+}
+
+interface ClaudePhotoResponse {
+  text: string
+  /** true when Anthropic's own `stop_reason` says the reply was cut off by
+   *  max_tokens — the authoritative truncation signal, independent of
+   *  whether the JSON still happens to parse (see parsePhotoImportWithAI). */
+  truncatedByModel: boolean
 }
 
 async function fetchClaudePhotoText(
@@ -245,7 +260,7 @@ async function fetchClaudePhotoText(
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<string> {
+): Promise<ClaudePhotoResponse> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -255,7 +270,7 @@ async function fetchClaudePhotoText(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: PHOTO_MAX_TOKENS,
+      max_tokens: kind === 'receipt' ? PHOTO_RECEIPT_MAX_TOKENS : PHOTO_STATEMENT_MAX_TOKENS,
       temperature: 0,
       system: kind === 'receipt' ? PHOTO_RECEIPT_SYSTEM_PROMPT : PHOTO_STATEMENT_SYSTEM_PROMPT,
       messages: [
@@ -269,27 +284,11 @@ async function fetchClaudePhotoText(
       ],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
+  const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
-  return resultText
+  return { text: resultText, truncatedByModel: data.stop_reason === 'max_tokens' }
 }
 
 // Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
@@ -524,14 +523,94 @@ export async function parseComposerWithAI(
   return parseComposerResult(resultText)
 }
 
+function toPhotoImportRows(rows: unknown[]): PhotoImportRow[] {
+  const result: PhotoImportRow[] = []
+  for (const item of rows) {
+    if (typeof item !== 'object' || item === null) continue
+    const row = item as Record<string, unknown>
+    if (typeof row.merchant !== 'string' || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue
+    if (row.type !== 'income' && row.type !== 'expense') continue
+    result.push({
+      date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '',
+      merchant: row.merchant,
+      description: typeof row.description === 'string' ? row.description : '',
+      amount: row.amount,
+      type: row.type,
+      categoryGuess: typeof row.categoryGuess === 'string' ? row.categoryGuess : null,
+    })
+  }
+  return result
+}
+
+/**
+ * Recover whatever rows are already complete when the reply's JSON array was
+ * cut off mid-object — the shape a hard `max_tokens` truncation takes. Scans
+ * for the `"rows":[` array and brace-balances forward (tracking string
+ * literals so a brace inside a merchant name can't miscount) to find the last
+ * `}` that closes a complete top-level element, then re-parses just that
+ * prefix with the array and object closed off. Returns [] if nothing in the
+ * reply was ever a rows array, or if not even the first row completed.
+ */
+function salvageTruncatedPhotoRows(text: string): PhotoImportRow[] {
+  const trimmed = text.trim()
+  const rowsKeyIdx = trimmed.indexOf('"rows"')
+  if (rowsKeyIdx === -1) return []
+  const arrStart = trimmed.indexOf('[', rowsKeyIdx)
+  if (arrStart === -1) return []
+
+  let depth = 0
+  let lastCompleteEnd = -1
+  let inString = false
+  let escape = false
+  for (let i = arrStart + 1; i < trimmed.length; i++) {
+    const ch = trimmed[i]
+    if (inString) {
+      if (escape) escape = false
+      else if (ch === '\\') escape = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') {
+      inString = true
+    } else if (ch === '{') {
+      depth++
+    } else if (ch === '}') {
+      depth--
+      if (depth === 0) lastCompleteEnd = i
+    }
+  }
+  if (lastCompleteEnd === -1) return []
+
+  try {
+    const repaired = JSON.parse(`{"rows":${trimmed.slice(arrStart, lastCompleteEnd + 1)}]}`) as { rows?: unknown }
+    return Array.isArray(repaired.rows) ? toPhotoImportRows(repaired.rows) : []
+  } catch {
+    return []
+  }
+}
+
+interface PhotoImportParseResult {
+  rows: PhotoImportRow[]
+  /** true when the whole-response JSON.parse failed and salvageTruncatedPhotoRows
+   *  had to recover a prefix of rows — a strong sign of truncation on its own,
+   *  used alongside stop_reason in parsePhotoImportWithAI (see its comment). */
+  salvaged: boolean
+}
+
 /**
  * Salvage a PhotoImportRow[] from Claude's reply text.
  *
  * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
- * candidate. A malformed individual row is dropped rather than treated as a
- * whole-call error — same "omission is correct" posture the other parsers use.
+ * candidate NOR by salvageTruncatedPhotoRows. A malformed individual row is
+ * dropped rather than treated as a whole-call error — same "omission is
+ * correct" posture the other parsers use. A `max_tokens`-truncated statement
+ * (the reply's JSON array cut off mid-object, valid rows and all) hits this
+ * same path: whole-response JSON.parse fails on every jsonCandidates()
+ * attempt, so the rows Claude did finish are recovered instead of the whole
+ * photo being discarded (rule 13 — a partial statement import is a real
+ * result, not the silent-empty failure a bare throw would produce here).
  */
-function parsePhotoImportRows(text: string): PhotoImportRow[] {
+function parsePhotoImportRows(text: string): PhotoImportParseResult {
   let parsed: unknown
   let lastError: unknown
   for (const candidate of jsonCandidates(text)) {
@@ -543,25 +622,24 @@ function parsePhotoImportRows(text: string): PhotoImportRow[] {
       lastError = err
     }
   }
-  if (lastError !== undefined) throw lastError
+  if (lastError !== undefined) {
+    const salvaged = salvageTruncatedPhotoRows(text)
+    if (salvaged.length > 0) return { rows: salvaged, salvaged: true }
+    throw lastError
+  }
   const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
   if (!Array.isArray(rows)) throw new Error('malformed rows shape')
+  return { rows: toPhotoImportRows(rows), salvaged: false }
+}
 
-  const result: PhotoImportRow[] = []
-  for (const item of rows) {
-    if (typeof item !== 'object' || item === null) continue
-    const row = item as Record<string, unknown>
-    if (typeof row.merchant !== 'string' || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue
-    if (row.type !== 'income' && row.type !== 'expense') continue
-    result.push({
-      date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '',
-      merchant: row.merchant,
-      amount: row.amount,
-      type: row.type,
-      categoryGuess: typeof row.categoryGuess === 'string' ? row.categoryGuess : null,
-    })
-  }
-  return result
+export interface PhotoImportResult {
+  rows: PhotoImportRow[]
+  /** true when the reply was cut off before it finished reading the photo —
+   *  either Anthropic's own stop_reason said so, or the parser had to
+   *  salvage a prefix of rows out of JSON that never closed. The rows
+   *  present are still real and safe to import; there may just be more of
+   *  them past whatever the cutoff point was. */
+  truncated: boolean
 }
 
 /**
@@ -581,10 +659,14 @@ export async function parsePhotoImportWithAI(
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<PhotoImportRow[]> {
-  const text =
+): Promise<PhotoImportResult> {
+  // Test mode has no Anthropic response envelope to read a stop_reason from —
+  // truncation there is only ever observed via the salvage path below, which
+  // a spec can trigger by stashing a deliberately cut-off mock reply.
+  const { text, truncatedByModel } =
     env.DAYBOOK_TEST === '1'
-      ? await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT)
+      ? { text: await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT), truncatedByModel: false }
       : await fetchClaudePhotoText(apiKey, base64Image, imageType, kind, categoryNames)
-  return parsePhotoImportRows(text)
+  const { rows, salvaged } = parsePhotoImportRows(text)
+  return { rows, truncated: truncatedByModel || salvaged }
 }
