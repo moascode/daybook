@@ -68,6 +68,7 @@ yet even though the code is merged to `main`; see the warning below.
 | R5 | v2.14.0 | Tasks — design adoption (4 pages) | ✅ merged [PR 142](https://github.com/moascode/daybook/pull/142)–[145](https://github.com/moascode/daybook/pull/145) (4 PRs) — **not tagged** |
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — tagging now |
 | R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151), plus design-parity follow-ups [152](https://github.com/moascode/daybook/pull/152), [154](https://github.com/moascode/daybook/pull/154) (4 PRs) — **not tagged** |
+| R18 | **v3.6.0** | Machine capture — token auth, capture endpoint, pending inbox | ⭐ **next** — planned, [spec](wallet/feature-capture-inbox.md) |
 | R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — |
 | R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — |
 | R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — |
@@ -79,6 +80,12 @@ yet even though the code is merged to `main`; see the warning below.
 | R16 | v3.10.0 | Day D2 — Close the day, usual, on-this-day, month grid | — |
 | R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states | — |
 
+> ⚠️ **The Tag column below R7 is stale.** `v3.2.0`–`v3.5.0` are already real
+> tags cut against other work (latest: `v3.5.0`, 2026-09-07), so R8's "v3.2.0"
+> and everything under it are fiction. R18's `v3.6.0` is the only forward row
+> that matches `git tag`. Derive tags from
+> `git for-each-ref --sort=-creatordate refs/tags`, never from this table.
+>
 > ⚠️ **"R4" name collision, unrelated to this roadmap.** A same-named but
 > unrelated session shipped PR #136 ("AI-assisted merchant name resolution")
 > labeled "R4" — that work is on the older `docs/v1/flow-plan.md` track (PR
