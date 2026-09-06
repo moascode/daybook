@@ -68,6 +68,7 @@ yet even though the code is merged to `main`; see the warning below.
 | R5 | v2.14.0 | Tasks — design adoption (4 pages) | ✅ merged [PR 142](https://github.com/moascode/daybook/pull/142)–[145](https://github.com/moascode/daybook/pull/145) (4 PRs) — **not tagged** |
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — tagging now |
 | R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151), plus design-parity follow-ups [152](https://github.com/moascode/daybook/pull/152), [154](https://github.com/moascode/daybook/pull/154) (4 PRs) — **not tagged** |
+| R18 | **v3.1.1** | Machine capture — token auth, capture endpoint, pending inbox | ⭐ **next** — planned, [spec](wallet/feature-capture-inbox.md) |
 | R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — |
 | R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — |
 | R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — |

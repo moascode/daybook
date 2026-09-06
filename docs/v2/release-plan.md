@@ -23,6 +23,8 @@ R1 foundation: tokens ──┬─► R2 shell ──┬─► R3 Wallet adopt �
                         └─► (R0 e2e seams, folded into R1)                    all ─► R17 cross-cutting
 ```
 
+R18 is independent of all of them and runs next (owner, 2026-09-06).
+
 R7–R16 are strictly module-local and can be reordered or run in parallel with
 each other. R1→R2→R3/R4 is the only hard chain.
 
@@ -225,6 +227,26 @@ Spec: [trips/03-feature-waves.md](trips/03-feature-waves.md).
 
 Spec: [day/03-feature-waves.md](day/03-feature-waves.md).
 
+## R18 · **`v3.1.1`** · Machine capture: token auth + pending inbox
+
+Spec: [wallet/feature-capture-inbox.md](wallet/feature-capture-inbox.md).
+
+**Runs next, before R8** (owner, 2026-09-06). Out-of-band insertion after R7, so
+it takes a patch-level tag rather than renumbering R8–R16 across six docs.
+
+A scoped bearer token (`capture:write` only) plus `POST /api/capture/transaction`,
+landing every machine-written transaction in a **pending inbox** the owner accepts
+through the generalised import review surface. Serves an iOS Shortcuts Apple Pay
+automation, a manual quick-add shortcut, and Claude identically. Rules-only
+enrichment — no new Claude call. Six PRs; PR-6 alone is gated on an on-device
+probe, the rest ship regardless.
+
+Also closes the two cross-source duplicate gaps capture exposes: pending rows are
+invisible to `check-duplicates`, and bank posting-date drift defeats date-exact
+matching.
+
+---
+
 ## R17 · **`v4.0.0`** · Cross-cutting
 
 Spec: [cross-cutting/README.md](cross-cutting/README.md).
@@ -256,6 +278,7 @@ Deliberately in relative terms — the owner sets the calendar.
 | R12–R14 | XL total | a whole new module + a currency decision |
 | R15–R16 | L each | schema (time), then the ritual |
 | R17 | M | mostly wiring things already drawn |
+| R18 | M | the review-surface generalisation and the duplicate gaps, not the endpoint |
 
 **The two that will overrun** are R3 (volume) and R14 (multi-currency touches
 every money surface in the app). Both are worth splitting further at the point
