@@ -23,7 +23,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv, selectReviewAccount } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -89,8 +89,7 @@ test('proceed to review', async () => {
 })
 
 test('account selector (shared by both import types) shows Narrative Only Account, on the review page', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await accountSelect.selectOption('Narrative Only Account')
+  await selectReviewAccount(page, 'Narrative Only Account')
 })
 
 // ── Review step — canonicalization is the core assertion ────────────────

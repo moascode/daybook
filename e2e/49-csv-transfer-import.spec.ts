@@ -9,7 +9,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, navTo, navigateToImportCsv , openBlankTransactionForm } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, openTransactionRowMenu, fillAccountForm, navTo, navigateToImportCsv, selectReviewAccount, openBlankTransactionForm } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -47,7 +47,7 @@ test('upload CSV and reach the review step', async () => {
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   // Account is picked on the review page (shared by both import types).
-  await page.getByLabel('Import into account').selectOption('Main Bank')
+  await selectReviewAccount(page, 'Main Bank')
   await expect(page.getByTestId('import-confirm-btn')).toHaveText(/Import 4 transactions/)
 })
 

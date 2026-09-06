@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { newAppPage, fillAccountForm, navigateToImportCsv } from './helpers'
+import { newAppPage, fillAccountForm, navigateToImportCsv, selectReviewAccount } from './helpers'
 
 const CSV_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'european-format.csv')
 
@@ -45,7 +45,7 @@ test('imports a US-format date and a European-decimal amount correctly', async (
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   // Account is picked on the review page now (shared by both import types).
-  await page.getByLabel('Import into account').selectOption('Import Account')
+  await selectReviewAccount(page, 'Import Account')
 
   // B-13: 12/31/2025 (day 31 > 12 ⇒ MM/DD) → 2025-12-31, not the invalid 2025-31-12.
   await expect(page.getByTestId('csv-row-date')).toHaveValue('2025-12-31')

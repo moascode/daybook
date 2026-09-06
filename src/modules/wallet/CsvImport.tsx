@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { CheckCircle2, ChevronDown, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
@@ -213,24 +213,55 @@ export function CsvImport() {
     )
   }
 
+  const selectedAccount = importableAccounts.find((a) => a.id === selectedAccountId)
+
   return (
     <div className="mx-auto max-w-5xl pb-24">
-      <div className="page-head">
+      <div className="page-head justify-between">
         <h1 className="page-title">Review transactions</h1>
-      </div>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              data-testid="review-account-trigger"
+              aria-label="Import into account"
+              className="flex flex-shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover"
+            >
+              <span
+                className="h-2 w-2 flex-shrink-0 rounded-full"
+                style={{ background: selectedAccount?.color }}
+                aria-hidden="true"
+              />
+              {selectedAccount?.name}
+              <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
 
-      <div className="mb-4 flex items-center gap-2">
-        <label htmlFor="review-account-select" className="text-xs font-medium text-fg-subtle">
-          Import into
-        </label>
-        <Select
-          id="review-account-select"
-          aria-label="Import into account"
-          options={importableAccounts.map((a) => ({ value: a.id, label: a.name }))}
-          value={selectedAccountId}
-          onChange={(e) => setSelectedAccountId(e.target.value)}
-          className="w-56"
-        />
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className="z-50 min-w-[200px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95"
+              sideOffset={4}
+              align="end"
+            >
+              {importableAccounts.map((a) => (
+                <DropdownMenu.Item
+                  key={a.id}
+                  data-testid="review-account-option"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                  onSelect={() => setSelectedAccountId(a.id)}
+                >
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ background: a.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1">{a.name}</span>
+                  {a.id === selectedAccountId && <Check className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
 
       {/* Photo import's partial-failure notice, per transactions-import-error.html.

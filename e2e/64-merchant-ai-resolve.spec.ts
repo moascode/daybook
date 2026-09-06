@@ -20,7 +20,7 @@ import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, businessToday, accountCardFor, fillAccountForm, navigateToImportCsv } from './helpers'
+import { newAppPage, businessToday, accountCardFor, fillAccountForm, navigateToImportCsv, selectReviewAccount } from './helpers'
 
 const API = '/api'
 const CSV_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'narrative-unknown-merchants.csv')
@@ -229,8 +229,7 @@ test.describe('CSV import: merchant AI resolution', () => {
     await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
     // Account is picked on the review page (shared by both import types).
-    const accountSelect = page.getByLabel('Import into account')
-    await accountSelect.selectOption('Merchant AI Import Acct')
+    await selectReviewAccount(page, 'Merchant AI Import Acct')
 
     // Toast names the one unresolved row.
     await expect(page.getByText(/Couldn.t clean up 1 merchant name/)).toBeVisible({ timeout: 10_000 })
