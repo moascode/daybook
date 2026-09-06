@@ -91,25 +91,44 @@ export function CsvReviewTable({
     (r) => r.included && r.type !== 'transfer' && !r.categoryId,
   ).length
   const merchantUnresolvedCount = rows.filter((r) => r.included && r.merchantUnresolved).length
+  // Narrative-split rows the rules pass (or a prior "Ask AI" click) already
+  // resolved — same "affected" shape as suggestedCount above, so the banner
+  // reads identically: "N still need X · M filled in automatically".
+  const merchantResolvedCount = rows.filter(
+    (r) => r.included && r.narrativeRaw && !r.merchantUnresolved,
+  ).length
 
   return (
     <div>
-      {merchantUnresolvedCount > 0 && (
+      {(merchantResolvedCount > 0 || merchantUnresolvedCount > 0) && (
         <div
           data-testid="csv-merchant-banner"
           className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
         >
-          <span className="text-fg-muted">
-            {merchantUnresolvedCount} merchant name{merchantUnresolvedCount !== 1 ? 's' : ''} couldn't be cleaned up automatically
-            {!hasAnthropicKey && (
+          <span>
+            {merchantUnresolvedCount > 0 ? (
               <>
-                {' — set an '}
-                <a href="/settings" className="underline">Anthropic API key in Settings</a>
-                {' to ask AI'}
+                <span className="text-fg-muted">
+                  {merchantUnresolvedCount} merchant name{merchantUnresolvedCount !== 1 ? 's' : ''} couldn't be cleaned up automatically
+                  {!hasAnthropicKey && (
+                    <>
+                      {' — set an '}
+                      <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                      {' to ask AI'}
+                    </>
+                  )}
+                </span>
+                {merchantResolvedCount > 0 && (
+                  <span className="text-fg-faint"> · {merchantResolvedCount} filled in automatically</span>
+                )}
               </>
+            ) : (
+              <span className="text-fg-muted">
+                {merchantResolvedCount} merchant name{merchantResolvedCount !== 1 ? 's' : ''} filled in automatically
+              </span>
             )}
           </span>
-          {hasAnthropicKey && (
+          {merchantUnresolvedCount > 0 && hasAnthropicKey && (
             <button
               type="button"
               onClick={onResolveMerchantsAI}
