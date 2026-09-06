@@ -49,6 +49,16 @@ export interface ImportRow {
    * mapping. CSV rows never set this.
    */
   photoUrl?: string
+  /**
+   * Soft cross-source duplicate candidates (layer 3 of check-duplicates):
+   * same date + exact amount as an existing transaction, but a merchant that
+   * canonicalizes differently, so it was NOT auto-excluded the way an exact
+   * or canonical-key match (`isDuplicate`) is — two genuine same-day,
+   * same-amount transactions must never be silently merged. Purely a
+   * dismissible hint for the review table; the row stays `included` by
+   * default.
+   */
+  possibleDuplicateOf?: { id: string; merchant: string; date: string; amount: number }[]
 }
 
 // ── Date patterns for auto-detection ────────────────
@@ -359,11 +369,40 @@ function sha256(ascii: string): string {
 
 // ── Check duplicates against DB ─────────────────────
 
-export async function checkDuplicates(hashes: string[]): Promise<Set<string>> {
-  if (hashes.length === 0) return new Set()
+export interface PossibleDuplicateCandidate {
+  id: string
+  merchant: string
+  date: string
+  amount: number
+}
 
-  const existing = await api.post<string[]>('/transactions/check-duplicates', { hashes })
-  return new Set(existing)
+export interface DuplicateCheckResult {
+  duplicateHashes: Set<string>
+  possibleDuplicates: Map<string, PossibleDuplicateCandidate[]>
+}
+
+/**
+ * Three-layer duplicate check (docs/v2/wallet/duplicate-detection.md):
+ * exact import_hash, exact canonical duplicate_key (closes the CSV-vs-photo
+ * merchant-text gap), and — for anything neither catches — a dismissible
+ * "possible duplicate" hint for same-date/same-amount rows with a different
+ * merchant. Only the first two auto-exclude a row; the third never does.
+ */
+export async function checkDuplicates(
+  items: { importHash: string; date: string; amount: number; merchant: string; type: string }[],
+): Promise<DuplicateCheckResult> {
+  if (items.length === 0) return { duplicateHashes: new Set(), possibleDuplicates: new Map() }
+
+  const res = await api.post<{
+    duplicateHashes: string[]
+    possibleDuplicates: Record<string, PossibleDuplicateCandidate[]>
+  }>('/transactions/check-duplicates', {
+    items: items.map((r) => ({ hash: r.importHash, date: r.date, amount: r.amount, merchant: r.merchant, type: r.type })),
+  })
+  return {
+    duplicateHashes: new Set(res.duplicateHashes),
+    possibleDuplicates: new Map(Object.entries(res.possibleDuplicates ?? {})),
+  }
 }
 
 // ── AI-assisted merchant name resolution ────────────
@@ -483,7 +522,6 @@ export async function buildImportRows(
   }
 
   const importRows: ImportRow[] = []
-  const hashes: string[] = []
 
   // Check if merchant column is a narrative-only column (e.g. "Description", "Narrative").
   // If description is null and merchant came from a narrative keyword, we'll split it:
@@ -527,7 +565,6 @@ export async function buildImportRows(
         merchant = canonical   // canonical → merchant
       }
     }
-    hashes.push(hash)
 
     importRows.push({
       date,
@@ -546,12 +583,15 @@ export async function buildImportRows(
   }
 
   // Second pass: check duplicates
-  const duplicateSet = await checkDuplicates(hashes)
+  const { duplicateHashes, possibleDuplicates } = await checkDuplicates(importRows)
   for (const importRow of importRows) {
-    if (duplicateSet.has(importRow.importHash)) {
+    if (duplicateHashes.has(importRow.importHash)) {
       importRow.isDuplicate = true
       importRow.included = false
+      continue
     }
+    const candidates = possibleDuplicates.get(importRow.importHash)
+    if (candidates && candidates.length > 0) importRow.possibleDuplicateOf = candidates
   }
 
   return importRows
