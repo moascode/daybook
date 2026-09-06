@@ -24,7 +24,7 @@ import {
   CalendarDays,
   StickyNote,
   ClipboardCheck,
-  History,
+  History, Inbox,
 } from 'lucide-react'
 
 /**
@@ -211,6 +211,7 @@ export const modules: ModuleDescriptor[] = [
           { to: '/wallet', label: 'Transactions', icon: List, end: true, testid: 'nav-transactions' },
           { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false, testid: 'nav-accounts' },
           { to: '/wallet/shared', label: 'Shared', icon: Users, end: false, testid: 'nav-shared' },
+          { to: '/wallet/inbox', label: 'Inbox', icon: Inbox, end: false, testid: 'nav-capture-inbox' },
         ],
       },
       {
