@@ -363,13 +363,27 @@ export function CsvReviewTable({
 
               {/* Status */}
               <td className="px-3 py-2">
-                {row.isDuplicate ? (
-                  <Badge variant="warning">Duplicate</Badge>
-                ) : row.included ? (
-                  <Badge variant="success">New</Badge>
-                ) : (
-                  <Badge variant="default">Excluded</Badge>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {row.isDuplicate ? (
+                    <Badge variant="warning">Duplicate</Badge>
+                  ) : row.included ? (
+                    <Badge variant="success">New</Badge>
+                  ) : (
+                    <Badge variant="default">Excluded</Badge>
+                  )}
+                  {!row.isDuplicate && row.possibleDuplicateOf && row.possibleDuplicateOf.length > 0 && (
+                    <span
+                      className="flex shrink-0 items-center text-amber-600"
+                      data-testid="csv-possible-duplicate"
+                      title={`Might match ${row.possibleDuplicateOf[0].merchant} on ${row.possibleDuplicateOf[0].date}${
+                        row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1} more)` : ''
+                      } — check before importing`}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="sr-only">Possible duplicate — not auto-excluded</span>
+                    </span>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

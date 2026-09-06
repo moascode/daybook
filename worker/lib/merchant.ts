@@ -86,3 +86,19 @@ export function canonicalizeMerchantForDisplay(raw: string): string | null {
 export function correctionKey(guess: string): string {
   return guess.trim().replace(/\s+/g, ' ').toLowerCase()
 }
+
+/**
+ * Cross-source duplicate identity key: the same real transaction should
+ * collapse to the same key whether its merchant text arrived as a raw bank
+ * narrative (CSV import) or an AI-clean name (photo import) — canonicalMerchant()
+ * already folds both shapes to the same bucket in the common case ("GRABFOOD MY
+ * SDN BHD 041225" and "Grab Food" both reduce to "GRABFOOD"). Falls back to the
+ * normalized raw merchant text when canonicalMerchant can't extract a usable
+ * name (empty/all-digit merchant), rather than dropping merchant identity from
+ * the key. Amount is compared in integer cents to avoid float-precision drift.
+ */
+export function buildDuplicateKey(date: string, amount: number, type: string, merchant: string): string {
+  const cents = Math.round(amount * 100)
+  const key = correctionKey(canonicalMerchant(merchant) ?? merchant)
+  return `${date}|${cents}|${type}|${key}`
+}

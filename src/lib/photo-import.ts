@@ -123,14 +123,12 @@ export async function photoResultsToImportRows(
   const succeeded = results.filter((r) => r.rows.length > 0)
 
   const rows: ImportRow[] = []
-  const hashes: string[] = []
   for (const result of succeeded) {
     for (const photoRow of result.rows) {
       const hash = await computeImportHash(photoRow.date, photoRow.amount, photoRow.merchant)
       const category = photoRow.categoryGuess
         ? categories.find((c) => c.name === photoRow.categoryGuess && (c.type === photoRow.type || c.type === 'both'))
         : undefined
-      hashes.push(hash)
       rows.push({
         date: photoRow.date,
         amount: photoRow.amount,
@@ -150,12 +148,15 @@ export async function photoResultsToImportRows(
     }
   }
 
-  const duplicateSet = await checkDuplicates(hashes)
+  const { duplicateHashes, possibleDuplicates } = await checkDuplicates(rows)
   rows.forEach((row) => {
-    if (duplicateSet.has(row.importHash)) {
+    if (duplicateHashes.has(row.importHash)) {
       row.isDuplicate = true
       row.included = false
+      return
     }
+    const candidates = possibleDuplicates.get(row.importHash)
+    if (candidates && candidates.length > 0) row.possibleDuplicateOf = candidates
   })
 
   return { rows, failed }

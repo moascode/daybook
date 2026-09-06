@@ -18,7 +18,7 @@ import {
   visibleAccountIds,
   writableAccountIds,
 } from '../lib/sharing.ts'
-import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey } from '../lib/merchant.ts'
+import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey, buildDuplicateKey } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
 import {
   suggestCategoriesWithAI,
@@ -488,17 +488,19 @@ function insertTransactionStmt(
   b: Record<string, unknown>,
   userId: string,
 ) {
+  const amount = Number(b.amount)
+  const duplicateKey = buildDuplicateKey(String(b.date ?? ''), amount, String(b.type ?? ''), String(b.merchant ?? ''))
   return db
     .prepare(
       `INSERT INTO transactions
          (id, user_id, account_id, destination_account_id, date, merchant, description,
-          amount, type, category_id, tag, import_hash, created_at, updated_at)
+          amount, type, category_id, tag, import_hash, duplicate_key, created_at, updated_at)
        VALUES
-         (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+         (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
        RETURNING *`,
     )
     // userId, accountId, destinationAccountId, date, merchant, description,
-    // amount, type, categoryId, tag, importHash
+    // amount, type, categoryId, tag, importHash, duplicateKey
     .bind(
       userId,
       b.accountId,
@@ -511,6 +513,7 @@ function insertTransactionStmt(
       b.categoryId ?? null,
       Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
       b.importHash ?? '',
+      duplicateKey,
     )
 }
 
@@ -831,48 +834,155 @@ wallet.get('/transactions/export', async (c) => {
   return c.json(results)
 })
 
-// Returns the subset of the given hashes that already exist for this user.
-// Batched to stay under D1's 100-bound-parameter-per-query cap (this is a
-// Cloudflare D1 platform limit, not SQLite's own — see
-// https://developers.cloudflare.com/d1/platform/limits/). Each chunk is
-// issued as two single-table statements (userId + chunk = chunk+1 params
-// apiece) rather than one UNION query binding userId and the chunk twice —
-// that older shape hit the cap on any import over ~49 rows and D1 rejected
-// the query outright, surfacing as a 500 with no indication of the cause.
-// A hash counts as a duplicate if it is on a live transaction OR was absorbed
-// into a merged transfer (absorbed_import_hashes) — otherwise re-importing a
-// statement would re-create the leg that link-as-transfer deleted.
+interface CheckDuplicatesItem {
+  hash: string
+  date: string
+  amount: number
+  merchant: string
+  type: string
+}
+
+interface PossibleDuplicateCandidate {
+  id: string
+  merchant: string
+  date: string
+  amount: number
+}
+
+// Three layers, cheapest-and-safest first (docs/v2/wallet/duplicate-detection.md):
+//
+// 1. Exact import_hash match — catches re-importing the identical source
+//    (same CSV row, same photo) again. Unchanged from the original design.
+// 2. Exact duplicate_key match — a normalized (date, amount cents, type,
+//    canonicalized merchant) fingerprint computed identically at write time
+//    for every source (worker/lib/merchant.ts buildDuplicateKey). This is
+//    what actually closes the CSV-vs-photo gap: "GRABFOOD MY SDN BHD 041225"
+//    (raw bank narrative) and "Grab Food" (AI-extracted from a receipt photo)
+//    canonicalize to the same key, so importing the same real transaction
+//    from both sources is caught even though their raw merchant text never
+//    matched.
+// 3. Soft "possible duplicate" — same date + exact amount but a merchant that
+//    canonicalizes differently (e.g. "Village Grocer" vs "VG RETAIL SDN
+//    BHD" — no automatic transform bridges that). Deliberately NEVER
+//    auto-excludes the row: two genuine same-day, same-amount transactions
+//    (two RM12 Grab rides) must not be silently merged. Only surfaced as a
+//    dismissible candidate for the human to judge.
+//
+// Batched to stay under D1's 100-bound-parameter-per-query cap (a Cloudflare
+// D1 platform limit, not SQLite's own — see
+// https://developers.cloudflare.com/d1/platform/limits/). Each chunk issues
+// single-table statements (userId + chunk = chunk+1 params apiece) rather
+// than one UNION query binding userId twice, matching the layer-1 approach
+// this replaces (that shape hit the cap on any import over ~49 rows).
 wallet.post('/transactions/check-duplicates', async (c) => {
   const b = await body(c)
-  const hashes: string[] = Array.isArray(b.hashes) ? b.hashes : []
-  if (hashes.length === 0) return c.json([])
+  const rawItems = Array.isArray(b.items) ? b.items : []
+  const items: CheckDuplicatesItem[] = rawItems
+    .filter((r: Record<string, unknown>) => r && typeof r.hash === 'string')
+    .map((r: Record<string, unknown>) => ({
+      hash: String(r.hash),
+      date: String(r.date ?? ''),
+      amount: Number(r.amount ?? 0),
+      merchant: String(r.merchant ?? ''),
+      type: String(r.type ?? ''),
+    }))
+  if (items.length === 0) return c.json({ duplicateHashes: [], possibleDuplicates: {} })
 
   const userId = c.get('userId')
-  const found = new Set<string>()
-  const BATCH = 90
+  const BATCH = 45 // two placeholder sets per chunk (hash + duplicateKey) stay under the 100-param cap
 
-  // The chunks are independent, so they go out as one batch() rather than
-  // sequential awaits — N/BATCH round trips become one.
-  const stmts = []
-  for (let i = 0; i < hashes.length; i += BATCH) {
-    const chunk = hashes.slice(i, i + BATCH)
-    const placeholders = chunk.map(() => '?').join(', ')
-    stmts.push(
+  const withKey = items.map((item) => ({
+    ...item,
+    duplicateKey: buildDuplicateKey(item.date, item.amount, item.type, item.merchant),
+  }))
+  const hashes = withKey.map((i) => i.hash)
+  const duplicateKeys = withKey.map((i) => i.duplicateKey)
+
+  // ── Layers 1 + 2: exact hash / exact canonical key ──
+  const foundHashes = new Set<string>()
+  const foundKeys = new Set<string>()
+  const exactStmts = []
+  for (let i = 0; i < items.length; i += BATCH) {
+    const hashChunk = hashes.slice(i, i + BATCH)
+    const keyChunk = duplicateKeys.slice(i, i + BATCH)
+    const hashPlaceholders = hashChunk.map(() => '?').join(', ')
+    const keyPlaceholders = keyChunk.map(() => '?').join(', ')
+    exactStmts.push(
       c.env.DB
-        .prepare(`SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${placeholders})`)
-        .bind(userId, ...chunk),
+        .prepare(`SELECT import_hash AS hash FROM transactions WHERE user_id = ? AND import_hash IN (${hashPlaceholders})`)
+        .bind(userId, ...hashChunk),
     )
-    stmts.push(
+    exactStmts.push(
       c.env.DB
-        .prepare(`SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${placeholders})`)
-        .bind(userId, ...chunk),
+        .prepare(`SELECT hash FROM absorbed_import_hashes WHERE user_id = ? AND hash IN (${hashPlaceholders})`)
+        .bind(userId, ...hashChunk),
+    )
+    exactStmts.push(
+      c.env.DB
+        .prepare(`SELECT DISTINCT duplicate_key AS key FROM transactions WHERE user_id = ? AND duplicate_key IN (${keyPlaceholders})`)
+        .bind(userId, ...keyChunk),
     )
   }
+  const exactResults = await c.env.DB.batch<{ hash?: string; key?: string }>(exactStmts)
+  for (const r of exactResults) {
+    for (const row of r.results) {
+      if (row.hash) foundHashes.add(row.hash)
+      if (row.key) foundKeys.add(row.key)
+    }
+  }
 
-  const results = await c.env.DB.batch<{ hash: string }>(stmts)
-  for (const r of results) for (const row of r.results) found.add(row.hash)
+  const duplicateHashes = withKey
+    .filter((i) => foundHashes.has(i.hash) || foundKeys.has(i.duplicateKey))
+    .map((i) => i.hash)
+  const duplicateHashSet = new Set(duplicateHashes)
 
-  return c.json([...found])
+  // ── Layer 3: soft possible-duplicate candidates ──
+  // Only for items layers 1-2 did not already flag. Grouped by distinct
+  // (date, amount) pairs so a batch of N rows costs one round trip (db.batch),
+  // not N sequential queries — matching the bulk-insert pattern this route's
+  // sibling already uses for imports this size (50-500 rows typical).
+  const candidateItems = withKey.filter((i) => !duplicateHashSet.has(i.hash))
+  const pairKey = (date: string, amount: number) => `${date}|${amount}`
+  const distinctPairs = new Map<string, { date: string; amount: number }>()
+  for (const i of candidateItems) distinctPairs.set(pairKey(i.date, i.amount), { date: i.date, amount: i.amount })
+
+  const possibleDuplicates: Record<string, PossibleDuplicateCandidate[]> = {}
+  if (distinctPairs.size > 0) {
+    const pairs = [...distinctPairs.values()]
+    const pairStmts = pairs.map((p) =>
+      c.env.DB
+        .prepare('SELECT id, merchant, date, amount, duplicate_key FROM transactions WHERE user_id = ? AND date = ? AND amount = ?')
+        .bind(userId, p.date, p.amount),
+    )
+    const pairResults = await c.env.DB.batch<{ id: string; merchant: string; date: string; amount: number; duplicate_key: string }>(pairStmts)
+    const candidatesByPair = new Map<string, (PossibleDuplicateCandidate & { duplicateKey: string })[]>()
+    pairs.forEach((p, idx) => {
+      candidatesByPair.set(
+        pairKey(p.date, p.amount),
+        pairResults[idx].results.map((row) => ({
+          id: row.id,
+          merchant: row.merchant,
+          date: row.date,
+          amount: row.amount,
+          duplicateKey: row.duplicate_key,
+        })),
+      )
+    })
+
+    // Defensive filter, not the primary mechanism: a candidate sharing this
+    // item's exact duplicateKey should already have been caught by layer 2
+    // above, so none are expected to reach here — comparing keys (not raw
+    // merchant text) is what actually determines "is this the same merchant
+    // identity", so this stays correct even if that invariant is ever wrong.
+    for (const item of candidateItems) {
+      const candidates = (candidatesByPair.get(pairKey(item.date, item.amount)) ?? [])
+        .filter((cand) => cand.duplicateKey !== item.duplicateKey)
+        .map(({ id, merchant, date, amount }) => ({ id, merchant, date, amount }))
+      if (candidates.length > 0) possibleDuplicates[item.hash] = candidates
+    }
+  }
+
+  return c.json({ duplicateHashes, possibleDuplicates })
 })
 
 // docs/auto-categorisation-plan.md. Nothing is persisted — the user's own

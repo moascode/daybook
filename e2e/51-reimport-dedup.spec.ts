@@ -43,10 +43,17 @@ test('absorbed import hashes dedup re-imports until the transfer is deleted', as
     accountId: card.id, amount: 120, type: 'income', merchant: 'Payment Received', importHash: IN_HASH,
   })
 
-  const duplicates = async () =>
-    (await (await page.request.post(`${API}/transactions/check-duplicates`, {
-      data: { hashes: [OUT_HASH, IN_HASH] },
-    })).json()) as string[]
+  const duplicates = async () => {
+    const res = (await (await page.request.post(`${API}/transactions/check-duplicates`, {
+      data: {
+        items: [
+          { hash: OUT_HASH, date: '2026-07-15', amount: 120, merchant: 'CC Payment', type: 'expense' },
+          { hash: IN_HASH, date: '2026-07-15', amount: 120, merchant: 'Payment Received', type: 'income' },
+        ],
+      },
+    })).json()) as { duplicateHashes: string[] }
+    return res.duplicateHashes
+  }
 
   // Both legs live → both hashes are duplicates.
   expect((await duplicates()).sort()).toEqual([IN_HASH, OUT_HASH].sort())
