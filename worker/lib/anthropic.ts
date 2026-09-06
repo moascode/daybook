@@ -245,13 +245,21 @@ async function fetchClaudeComposerText(
   return resultText
 }
 
+interface ClaudePhotoResponse {
+  text: string
+  /** true when Anthropic's own `stop_reason` says the reply was cut off by
+   *  max_tokens — the authoritative truncation signal, independent of
+   *  whether the JSON still happens to parse (see parsePhotoImportWithAI). */
+  truncatedByModel: boolean
+}
+
 async function fetchClaudePhotoText(
   apiKey: string,
   base64Image: string,
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<string> {
+): Promise<ClaudePhotoResponse> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -292,10 +300,10 @@ async function fetchClaudePhotoText(
       .catch(() => '')
     throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
   }
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
-  return resultText
+  return { text: resultText, truncatedByModel: data.stop_reason === 'max_tokens' }
 }
 
 // Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
@@ -595,6 +603,14 @@ function salvageTruncatedPhotoRows(text: string): PhotoImportRow[] {
   }
 }
 
+interface PhotoImportParseResult {
+  rows: PhotoImportRow[]
+  /** true when the whole-response JSON.parse failed and salvageTruncatedPhotoRows
+   *  had to recover a prefix of rows — a strong sign of truncation on its own,
+   *  used alongside stop_reason in parsePhotoImportWithAI (see its comment). */
+  salvaged: boolean
+}
+
 /**
  * Salvage a PhotoImportRow[] from Claude's reply text.
  *
@@ -608,7 +624,7 @@ function salvageTruncatedPhotoRows(text: string): PhotoImportRow[] {
  * photo being discarded (rule 13 — a partial statement import is a real
  * result, not the silent-empty failure a bare throw would produce here).
  */
-function parsePhotoImportRows(text: string): PhotoImportRow[] {
+function parsePhotoImportRows(text: string): PhotoImportParseResult {
   let parsed: unknown
   let lastError: unknown
   for (const candidate of jsonCandidates(text)) {
@@ -622,12 +638,22 @@ function parsePhotoImportRows(text: string): PhotoImportRow[] {
   }
   if (lastError !== undefined) {
     const salvaged = salvageTruncatedPhotoRows(text)
-    if (salvaged.length > 0) return salvaged
+    if (salvaged.length > 0) return { rows: salvaged, salvaged: true }
     throw lastError
   }
   const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
   if (!Array.isArray(rows)) throw new Error('malformed rows shape')
-  return toPhotoImportRows(rows)
+  return { rows: toPhotoImportRows(rows), salvaged: false }
+}
+
+export interface PhotoImportResult {
+  rows: PhotoImportRow[]
+  /** true when the reply was cut off before it finished reading the photo —
+   *  either Anthropic's own stop_reason said so, or the parser had to
+   *  salvage a prefix of rows out of JSON that never closed. The rows
+   *  present are still real and safe to import; there may just be more of
+   *  them past whatever the cutoff point was. */
+  truncated: boolean
 }
 
 /**
@@ -647,10 +673,14 @@ export async function parsePhotoImportWithAI(
   imageType: string,
   kind: PhotoImportKind,
   categoryNames: string[],
-): Promise<PhotoImportRow[]> {
-  const text =
+): Promise<PhotoImportResult> {
+  // Test mode has no Anthropic response envelope to read a stop_reason from —
+  // truncation there is only ever observed via the salvage path below, which
+  // a spec can trigger by stashing a deliberately cut-off mock reply.
+  const { text, truncatedByModel } =
     env.DAYBOOK_TEST === '1'
-      ? await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT)
+      ? { text: await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT), truncatedByModel: false }
       : await fetchClaudePhotoText(apiKey, base64Image, imageType, kind, categoryNames)
-  return parsePhotoImportRows(text)
+  const { rows, salvaged } = parsePhotoImportRows(text)
+  return { rows, truncated: truncatedByModel || salvaged }
 }

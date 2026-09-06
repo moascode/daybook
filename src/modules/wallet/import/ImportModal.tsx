@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { parseCSV, detectColumns, buildImportRows, resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestionFitsType } from '@/lib/merchantSuggestions'
-import { extractPhotoBatch, photoResultsToImportRows, type PhotoExtractionResult } from '@/lib/photo-import'
+import {
+  extractPhotoBatch,
+  photoResultsToImportRows,
+  type PhotoExtractionResult,
+  type TruncatedPhoto,
+} from '@/lib/photo-import'
 import { useToastStore } from '@/stores/toast.store'
 import { TEST_HOOKS_ENABLED } from '@/lib/utils'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
@@ -26,6 +31,7 @@ type PhotoKind = 'receipt' | 'statement'
 export interface ImportReadyMeta {
   photoMode?: boolean
   failedPhotos?: { fileName: string; failureReason?: string }[]
+  truncatedPhotos?: TruncatedPhoto[]
 }
 
 interface ImportModalProps {
@@ -236,12 +242,13 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
         setProcLabel(`${done} of ${total} photos processed`)
         setProcPct(Math.round((done / total) * 100))
       })
-      const { rows, failed } = await photoResultsToImportRows(results, categories)
+      const { rows, failed, truncated } = await photoResultsToImportRows(results, categories)
       resetAll()
       onOpenChange(false)
       onReady(rows, {
         photoMode: true,
         failedPhotos: failed.map((f) => ({ fileName: f.fileName, failureReason: f.failureReason })),
+        truncatedPhotos: truncated,
       })
     } catch {
       addToast({ message: 'Could not process the photos — please try again.', duration: 4000 })

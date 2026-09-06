@@ -1483,8 +1483,8 @@ wallet.post('/transactions/import-photo', async (c) => {
   }
 
   try {
-    const rows = await parsePhotoImportWithAI(c.env, userId, apiKey, image, imageType, kind, categoryNames)
-    return c.json({ rows })
+    const { rows, truncated } = await parsePhotoImportWithAI(c.env, userId, apiKey, image, imageType, kind, categoryNames)
+    return c.json(truncated ? { rows, truncated } : { rows })
   } catch (err) {
     console.error('AI photo import failed', err)
     return c.json({ rows: [], failureReason: err instanceof Error ? err.message : 'AI photo extraction failed' })

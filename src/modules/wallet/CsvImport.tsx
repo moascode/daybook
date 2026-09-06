@@ -13,12 +13,18 @@ import { errorMessage } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
+import type { TruncatedPhoto } from '@/lib/photo-import'
 
 interface ImportLocationState {
   rows: ImportRow[]
   /** Photo import (P2, approved 2026-09-06) — see ImportModal.tsx. */
   photoMode?: boolean
   failedPhotos?: { fileName: string; failureReason?: string }[]
+  /** A photo whose reply was cut off before the model finished the statement
+   *  (worker/lib/anthropic.ts's parsePhotoImportWithAI) — its rows are
+   *  already included in `rows` above and are safe to import; this is only
+   *  the "there may be more, crop and re-upload" notice. */
+  truncatedPhotos?: TruncatedPhoto[]
 }
 
 /**
@@ -44,6 +50,7 @@ export function CsvImport() {
   // and changeable (per the owner's ask, 2026-09-06).
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [failedPhotos, setFailedPhotos] = useState(state?.failedPhotos ?? [])
+  const [truncatedPhotos, setTruncatedPhotos] = useState(state?.truncatedPhotos ?? [])
   const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
@@ -347,6 +354,45 @@ export function CsvImport() {
             size="sm"
             className="ml-auto flex-shrink-0"
             onClick={() => setFailedPhotos([])}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+
+      {/* Photo import's partial-success notice — the reply was cut off before
+          the model finished reading a statement. Its rows are already in
+          importRows and are safe to import; this only flags that more may
+          exist past the cutoff. Distinct from failedPhotos above (0 rows
+          extracted) — this always has at least 1. */}
+      {truncatedPhotos.length > 0 && (
+        <div className="notice mb-4">
+          <div>
+            <div className="notice-title">
+              {truncatedPhotos.length === 1 ? '1 photo was' : `${truncatedPhotos.length} photos were`} cut off partway
+              through
+            </div>
+            <div className="notice-sub">
+              {truncatedPhotos.length === 1 ? (
+                <>
+                  <b>{truncatedPhotos[0].fileName}</b> had more transactions than fit in one reply.{' '}
+                  {truncatedPhotos[0].rowCount} rows were extracted below. Crop the photo to the remaining rows and
+                  upload it again to add the rest.
+                </>
+              ) : (
+                <>
+                  <b>{truncatedPhotos[0].fileName}</b> and {truncatedPhotos.length - 1} other photo
+                  {truncatedPhotos.length > 2 ? 's' : ''} were cut off partway through. Rows extracted below are safe
+                  to import. Crop each photo to its remaining rows and upload again to add the rest.
+                </>
+              )}
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto flex-shrink-0"
+            onClick={() => setTruncatedPhotos([])}
           >
             Dismiss
           </Button>
