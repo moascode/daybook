@@ -23,7 +23,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv, selectReviewAccount } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -83,14 +83,13 @@ test('the separate description selector is left unmapped', async () => {
   await expect(descriptionSelect).toHaveValue('')
 })
 
-test('account selector shows Narrative Only Account', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await accountSelect.selectOption('Narrative Only Account')
-})
-
 test('proceed to review', async () => {
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+})
+
+test('account selector (shared by both import types) shows Narrative Only Account, on the review page', async () => {
+  await selectReviewAccount(page, 'Narrative Only Account')
 })
 
 // ── Review step — canonicalization is the core assertion ────────────────

@@ -1,13 +1,14 @@
 # Wallet — feature: import transactions from a photo
 
-**Status: proposed, not slotted into a release.** Not yet in
-[release-plan.md](../release-plan.md)'s R1–R17. Owner picks the release when
-ready to build (candidate slot: alongside R8/R9, since it depends on nothing
-R7–R9 don't already touch). AI call is registered as **P2** in
-[../cross-cutting/ai-usage.md](../cross-cutting/ai-usage.md) — that file is
-the single source of truth for the register entry and the approval log; this
-doc does not duplicate it. Needs a yes there before any code is wired, per
-CLAUDE.md rule 10 and §9.3.
+**Status: implemented (2026-09-06), not yet in a numbered release.** Not in
+[release-plan.md](../release-plan.md)'s R1–R17 — this shipped as a standalone
+`feat/wallet-photo-import` PR alongside the R3 wallet-import-modal work,
+following the same fix/feat-PR pattern as the Accounts/Transactions/Shared
+literal ports rather than waiting for a release slot. AI call is registered
+as **P2** in [../cross-cutting/ai-usage.md](../cross-cutting/ai-usage.md) —
+approved 2026-09-06 in chat, per CLAUDE.md rule 10 and §9.3. That file
+remains the single source of truth for the register entry and approval log;
+this doc does not duplicate it.
 
 **One-line pitch:** photograph one or more receipts, or a bank/e-statement
 screenshot, Claude Haiku extracts the transaction(s) from each photo, the
@@ -71,15 +72,11 @@ checklist (§8) are all still accurate.
    "segment collapses to CSV-only, no toggle shown" behavior is right before
    it ships. (Made autonomously and documented here rather than blocked on,
    since this call is fully reversible and stated plainly for review.)
-6. **The mockup's default active tab is "Photo," not "CSV."** Given photo
-   import is gated behind P2 and CSV import is the only one that actually
-   works today, the shipped CSV-reskin defaults the segment to **CSV** when
-   photo is unavailable (no key) and — pending the owner's product-taste
-   call, not asked here since it's cosmetic and reversible — defaults to
-   **CSV** even when a key is present, until photo import itself ships,
-   since an active tab whose action always errors would violate rule 13.
-   Once photo import is approved and wired, whichever tab was last used
-   would be a reasonable default to revisit.
+6. **Default tab matches the mockup's own default: Photo when a key is set,
+   CSV otherwise.** Confirmed by the owner 2026-09-06, once P2 shipped —
+   Photo is the richer, less-typing path and wins by default whenever it's
+   actually usable; the segment defaults to CSV only when there's no key to
+   spend (the same condition that hides the segment entirely).
 
 ---
 
@@ -354,33 +351,44 @@ byte-for-byte unchanged. A single review session is always all-CSV or
 all-photo — the two sources are never mixed in one table — so this is a
 table-level prop, not a per-row field.
 
-## 8. New pieces checklist
+## 8. New pieces checklist — as actually built (2026-09-06)
 
 - `worker/lib/anthropic.ts`: `parsePhotoImportWithAI()` following the exact
   shape of `suggestCategoriesWithAI`/`resolveMerchantsWithAI` — same
   `jsonCandidates` salvage parsing, same THROWS-on-failure contract, same
-  `DAYBOOK_TEST` mock-response branch (new `TEST_MOCK_KEY_PHOTO` constant) so
-  e2e can cover it without a real network call (CLAUDE.md §16 trap 6).
+  `DAYBOOK_TEST` mock-response branch (`TEST_MOCK_KEY_PHOTO_IMPORT`) so e2e
+  can cover it without a real network call (CLAUDE.md §16 trap 6). Two
+  system prompts (`PHOTO_RECEIPT_SYSTEM_PROMPT` / `PHOTO_STATEMENT_SYSTEM_PROMPT`),
+  `PHOTO_MAX_TOKENS = 2000`, image content block ahead of the text block.
 - `worker/routes/wallet.ts`: `POST /transactions/import-photo` — new rate
-  limit bucket `ai_rate_limit_photo_import`, same 20/hour shape and
-  `overAiRateLimit()` helper as the other three buckets, one unit per call
-  (§3.1) so a burst of photo imports can't exhaust the CSV categorisation or
-  composer budgets.
-- `src/components/ui/Modal.tsx`-based **Import chooser**: replaces the
-  Transactions composer's "Import CSV" shortcut with "Import", opening a
-  two-option modal (Import CSV / Import from photo, the latter hidden with no
-  API key per §6).
-- `src/modules/wallet/PhotoImport.tsx`: photo picker (multi-select) +
-  Receipt/Statement toggle, fires the `Promise.allSettled` batch (§3.1),
-  shows per-photo progress, maps every succeeded `PhotoImportRow[]` →
-  `ImportRow[]` (§7), surfaces a failure notice for any photo that didn't
-  succeed, then renders `<CsvReviewTable photoMode />`.
-- `src/lib/csv.ts` or a new `src/lib/photo-import.ts`: the `PhotoImportRow`
-  → `ImportRow` mapping function from §7, including the `import_hash`
-  computation and the category-name-to-id lookup.
-- `src/modules/wallet/CsvReviewTable.tsx`: add the `photoMode` prop and its
-  Photo-column rendering (§7) — the only change to an existing file.
-- e2e: `NN-wallet-photo-import.spec.ts`, covering both `kind` values, a
-  multi-photo batch with one photo failing (the partial-failure notice), a
-  garbled/unreadable-row response, a rate-limit-exceeded response, and the
-  no-API-key hidden-entry-point case.
+  limit bucket `ai_rate_limit_photo_import` (`PHOTO_AI_RATE_LIMIT_KEY`), same
+  20/hour shape and `overAiRateLimit()` helper as the other three buckets,
+  one unit per call (§3.1). Always returns 200 — even no-key, rate-limited,
+  and a malformed AI reply come back as `{ rows: [], failureReason }`, never
+  an HTTP error status, so the client's `Promise.allSettled` fan-out treats
+  every outcome uniformly.
+  `worker/routes/test.ts`'s `mock-ai-response` route gained
+  `feature: 'photo_import'`.
+- `src/modules/wallet/import/ImportModal.tsx` (not a separate chooser or a
+  separate `PhotoImport.tsx` — see §0's reconciliation): the modal's
+  **Photo** tab (type segment, only rendered when `hasAnthropicKey`), the
+  Receipt/Bank-statement kind picker, a multi-file dropzone, and the
+  processing view that calls `extractPhotoBatch`.
+- `src/lib/photo-import.ts`: `extractPhotoBatch()` — client-side resize (cap
+  the longest edge at 1568px, re-encode as JPEG via canvas) then
+  `Promise.allSettled` across `POST /transactions/import-photo`, one call
+  per photo — and `photoResultsToImportRows()`, the `PhotoImportRow` →
+  `ImportRow` mapping from §7 (`import_hash` computation, category-name-to-id
+  lookup via the caller's own category list, `photoUrl` for the review
+  table's thumbnail).
+- `src/modules/wallet/CsvReviewTable.tsx`: the `photoMode` prop and its
+  Photo-column rendering (§7) — the only change to this existing file.
+- `src/modules/wallet/CsvImport.tsx`: the partial-failure notice
+  (transactions-import-error.html), rendered above the review table whenever
+  any photo in the batch failed.
+- e2e: `76-wallet-photo-import.spec.ts` — both `kind` values, a malformed AI
+  response, no-API-key, an invalid `kind`/`imageType`, the rate-limit bucket's
+  independence from the other three, the Photo tab's key-gating, and (via
+  intercepting the browser's own call to the route, since the real
+  Worker→Anthropic call is invisible to Playwright per trap 6) a 2-photo
+  batch with one failing — the partial-failure notice and the surviving row.

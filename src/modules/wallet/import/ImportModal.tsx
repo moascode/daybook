@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Upload, FileSpreadsheet, X } from 'lucide-react'
+import { Upload, FileSpreadsheet, Image as ImageIcon, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { parseCSV, detectColumns, buildImportRows, resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestionFitsType } from '@/lib/merchantSuggestions'
+import { extractPhotoBatch, photoResultsToImportRows, type PhotoExtractionResult } from '@/lib/photo-import'
 import { useToastStore } from '@/stores/toast.store'
 import { TEST_HOOKS_ENABLED } from '@/lib/utils'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
-import type { Account } from '@/types/wallet.types'
+import type { Account, Category } from '@/types/wallet.types'
 
 declare global {
   interface Window {
@@ -19,55 +20,73 @@ declare global {
 }
 
 type ModalView = 'pick' | 'map' | 'processing'
+type ImportType = 'csv' | 'photo'
+type PhotoKind = 'receipt' | 'statement'
+
+export interface ImportReadyMeta {
+  photoMode?: boolean
+  failedPhotos?: { fileName: string; failureReason?: string }[]
+}
 
 interface ImportModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Own accounts plus writable shared-in accounts — the same set CsvImport.tsx offers today. */
   accounts: Account[]
+  categories: Category[]
+  /** Mirrors Composer's prop — gates the Photo tab. No key, no tab, CSV-only. */
+  hasAnthropicKey: boolean
   /**
    * Fires once rows are built and AI-assisted resolution/suggestion have run —
    * the parent (WalletPage) navigates to the review page with these in hand.
-   * The modal itself closes right before this fires.
+   * The modal itself closes right before this fires. The destination account
+   * is chosen on the review page, not here — extraction/mapping never needed
+   * it, so asking for it up front only locked in a choice before the user
+   * had seen anything to check it against.
    */
-  onReady: (rows: ImportRow[], selectedAccountId: string) => void
+  onReady: (rows: ImportRow[], meta?: ImportReadyMeta) => void
 }
 
 /**
- * Unified import entry point — currently CSV only. Photo import (P2 in
- * docs/v2/cross-cutting/ai-usage.md) is not wired: no type segment is shown
- * because there is only one working import kind today, matching the "an
- * entry point for a feature that doesn't exist yet must not appear" posture
- * CLAUDE.md §9.3 already uses elsewhere.
+ * Unified import entry point — CSV and photo (P2 in
+ * docs/v2/cross-cutting/ai-usage.md, approved 2026-09-06). Photo extraction
+ * (`extractPhotoBatch` in `src/lib/photo-import.ts`) calls
+ * `POST /transactions/import-photo`, one photo per call — see that route
+ * and `worker/lib/anthropic.ts`'s `parsePhotoImportWithAI` for the real
+ * Claude call. `hasAnthropicKey` gates the Photo tab: no key, no tab,
+ * CSV-only — same posture CLAUDE.md §9.3 uses everywhere else an AI entry
+ * point exists.
  *
  * Three in-place views (pick → map → processing) replace CsvImport.tsx's
  * former standalone upload/mapping steps — only the final review stays a
  * separate page, per the mockup (transactions-import.html).
  */
-export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportModalProps) {
+export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthropicKey, onReady }: ImportModalProps) {
   const { addToast } = useToastStore()
   const [view, setView] = useState<ModalView>('pick')
+  // Photo is the default once a key is set — it's the richer, less-typing
+  // path. Falls back to CSV-only when there's no key to spend, same as the
+  // segment itself being hidden entirely in that case (no key, no tab).
+  const [importType, setImportType] = useState<ImportType>(() => (hasAnthropicKey ? 'photo' : 'csv'))
+  const [photoKind, setPhotoKind] = useState<PhotoKind>('receipt')
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [dragActive, setDragActive] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<ColumnMapping>({ date: null, amount: null, merchant: null, description: null })
   const [firstRowIsHeader, setFirstRowIsHeader] = useState(true)
-  const [selectedAccountId, setSelectedAccountId] = useState('')
   const [parseErrors, setParseErrors] = useState<string[]>([])
   const [procLabel, setProcLabel] = useState('')
   const [procPct, setProcPct] = useState(0)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Converging conditional adjusted during render (no effect needed) — same
-  // pattern CsvImport.tsx used for this before the modal rework.
-  if (open && accounts.length > 0 && !selectedAccountId) {
-    setSelectedAccountId(accounts[0].id)
-  }
-
   const resetAll = useCallback(() => {
     setView('pick')
+    setImportType(hasAnthropicKey ? 'photo' : 'csv')
+    setPhotoKind('receipt')
+    setPhotoFiles([])
     setFile(null)
     setHeaders([])
     setRawRows([])
@@ -75,7 +94,7 @@ export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportMod
     setParseErrors([])
     setProcLabel('')
     setProcPct(0)
-  }, [])
+  }, [hasAnthropicKey])
 
   const handleClose = useCallback(
     (next: boolean) => {
@@ -198,15 +217,41 @@ export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportMod
 
       resetAll()
       onOpenChange(false)
-      onReady(rows, selectedAccountId)
+      onReady(rows)
     } catch {
       addToast({ message: 'Could not prepare the import — please try again.', duration: 4000 })
       setView('map')
     }
-  }, [rawRows, mapping, selectedAccountId, addToast, onReady, onOpenChange, resetAll])
+  }, [rawRows, mapping, addToast, onReady, onOpenChange, resetAll])
+
+  // Client-side fan-out (spec §3.1): N photos is N independent calls to
+  // POST /transactions/import-photo via Promise.allSettled inside
+  // extractPhotoBatch, not one request carrying N images.
+  const runPhotoProcessing = useCallback(async () => {
+    setView('processing')
+    setProcLabel(`0 of ${photoFiles.length} photos processed`)
+    setProcPct(0)
+    try {
+      const results: PhotoExtractionResult[] = await extractPhotoBatch(photoFiles, photoKind, (done, total) => {
+        setProcLabel(`${done} of ${total} photos processed`)
+        setProcPct(Math.round((done / total) * 100))
+      })
+      const { rows, failed } = await photoResultsToImportRows(results, categories)
+      resetAll()
+      onOpenChange(false)
+      onReady(rows, {
+        photoMode: true,
+        failedPhotos: failed.map((f) => ({ fileName: f.fileName, failureReason: f.failureReason })),
+      })
+    } catch {
+      addToast({ message: 'Could not process the photos — please try again.', duration: 4000 })
+      setView('pick')
+    }
+  }, [photoFiles, photoKind, categories, addToast, onReady, onOpenChange, resetAll])
 
   const headerOptions = [{ value: '', label: '— None —' }, ...headers.map((h) => ({ value: h, label: h }))]
-  const canReview = !!mapping.date && !!mapping.amount && !!selectedAccountId
+  const canReview = !!mapping.date && !!mapping.amount
+  const canExtractPhotos = photoFiles.length > 0
 
   return (
     <Modal open={open} onOpenChange={handleClose} title="Import transactions" className="max-w-lg">
@@ -224,40 +269,143 @@ export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportMod
             </div>
           ) : (
             <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(e) => {
-                  const selected = e.target.files?.[0]
-                  if (selected) void handleFileSelect(selected)
-                }}
-              />
-              <label
-                htmlFor="import-modal-file-input"
-                className={`dropzone w-full ${dragActive ? 'drop-active' : ''}`}
-                onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={handleDrop}
-                onClick={(e) => { e.preventDefault(); fileInputRef.current?.click() }}
-              >
-                <Upload aria-hidden="true" />
-                <div className="dropzone-text">
-                  <b>Drag a file here</b>, or <span className="link">browse</span>
+              {hasAnthropicKey && (
+                <div className="segment type-segment mb-4" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={importType === 'photo'}
+                    onClick={() => setImportType('photo')}
+                  >
+                    Photo
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={importType === 'csv'}
+                    onClick={() => setImportType('csv')}
+                  >
+                    CSV
+                  </button>
                 </div>
-                <div className="dropzone-hint">CSV files exported from your bank</div>
-              </label>
-              <input id="import-modal-file-input" type="hidden" />
+              )}
 
-              {parseErrors.length > 0 && (
-                <p className="mt-2 text-xs text-amber-700">{parseErrors.length} parsing warning(s)</p>
+              {importType === 'photo' && (
+                <div className="mb-4">
+                  <p className="field-label">What are these photos?</p>
+                  <div className="segment" role="tablist">
+                    <button type="button" role="tab" aria-selected={photoKind === 'receipt'} onClick={() => setPhotoKind('receipt')}>
+                      Receipt
+                    </button>
+                    <button type="button" role="tab" aria-selected={photoKind === 'statement'} onClick={() => setPhotoKind('statement')}>
+                      Bank statement
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importType === 'csv' ? (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = e.target.files?.[0]
+                      if (selected) void handleFileSelect(selected)
+                    }}
+                  />
+                  <label
+                    htmlFor="import-modal-file-input"
+                    className={`dropzone w-full ${dragActive ? 'drop-active' : ''}`}
+                    onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={handleDrop}
+                    onClick={(e) => { e.preventDefault(); fileInputRef.current?.click() }}
+                  >
+                    <Upload aria-hidden="true" />
+                    <div className="dropzone-text">
+                      <b>Drag a file here</b>, or <span className="link">browse</span>
+                    </div>
+                    <div className="dropzone-hint">CSV files exported from your bank</div>
+                  </label>
+                  <input id="import-modal-file-input" type="hidden" />
+
+                  {parseErrors.length > 0 && (
+                    <p className="mt-2 text-xs text-amber-700">{parseErrors.length} parsing warning(s)</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.files ?? [])
+                      if (selected.length > 0) setPhotoFiles(selected)
+                    }}
+                  />
+                  <label
+                    htmlFor="import-modal-photo-input"
+                    className={`dropzone w-full ${dragActive ? 'drop-active' : ''}`}
+                    onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDragLeave={() => setDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      setDragActive(false)
+                      const dropped = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'))
+                      if (dropped.length > 0) setPhotoFiles(dropped)
+                    }}
+                    onClick={(e) => { e.preventDefault(); fileInputRef.current?.click() }}
+                  >
+                    <ImageIcon aria-hidden="true" />
+                    <div className="dropzone-text">
+                      <b>Drag files here</b>, or <span className="link">browse</span>
+                    </div>
+                    <div className="dropzone-hint">JPG, PNG or WEBP · up to 10 photos</div>
+                  </label>
+                  <input id="import-modal-photo-input" type="hidden" />
+
+                  {photoFiles.length > 0 && (
+                    <div className="flist modal-flist mt-3">
+                      {photoFiles.map((f, i) => (
+                        <div className="frow" key={`${f.name}-${i}`}>
+                          <div className="frow-thumb"><ImageIcon className="h-3.5 w-3.5" aria-hidden="true" /></div>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div className="frow-name">{f.name}</div>
+                            <div className="frow-size">{(f.size / 1024 / 1024).toFixed(1)} MB</div>
+                          </div>
+                          <div className="frow-trail">
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              aria-label="Remove"
+                              onClick={() => setPhotoFiles((prev) => prev.filter((_, j) => j !== i))}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" size="sm" onClick={() => handleClose(false)}>Cancel</Button>
+            {importType === 'photo' && accounts.length > 0 && (
+              <Button size="sm" onClick={() => void runPhotoProcessing()} disabled={!canExtractPhotos}>
+                Extract transactions
+              </Button>
+            )}
           </div>
         </>
       )}
@@ -319,15 +467,6 @@ export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportMod
                 onChange={(e) => setMapping((m) => ({ ...m, description: e.target.value || null }))}
               />
             </div>
-            <div className="maprow">
-              <span className="maprow-field">Account<span className="req">*</span></span>
-              <Select
-                aria-label="Import into account"
-                options={accounts.map((a) => ({ value: a.id, label: a.name }))}
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
-              />
-            </div>
           </div>
 
           <div className="mt-4 flex items-center justify-between">
@@ -349,7 +488,7 @@ export function ImportModal({ open, onOpenChange, accounts, onReady }: ImportMod
 
       {view === 'processing' && (
         <div className="modal-proc">
-          <p className="proc-title">Preparing your import…</p>
+          <p className="proc-title">{importType === 'photo' ? 'Reading your photos…' : 'Preparing your import…'}</p>
           <div className="progress-track"><div className="progress-fill" style={{ width: `${procPct}%` }} /></div>
           <p className="mt-2 text-left text-xs font-semibold text-fg-subtle">{procLabel}</p>
         </div>

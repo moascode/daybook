@@ -108,15 +108,18 @@ test.post('/test/mock-ai-response', async (c) => {
   const b: { text?: unknown; feature?: unknown } = await c.req.json().catch(() => ({}))
   if (typeof b.text !== 'string') return c.json({ error: 'text is required' }, 400)
   // 'merchants' targets resolveMerchantsWithAI's own mock slot (worker/lib/anthropic.ts
-  // TEST_MOCK_KEY_MERCHANTS) and 'composer' targets parseComposerWithAI's
-  // (TEST_MOCK_KEY_COMPOSER), so a spec exercising multiple AI features in one
-  // run doesn't have one mock clobber another. Anything else keeps the original key.
+  // TEST_MOCK_KEY_MERCHANTS), 'composer' targets parseComposerWithAI's
+  // (TEST_MOCK_KEY_COMPOSER), and 'photo_import' targets parsePhotoImportWithAI's
+  // (TEST_MOCK_KEY_PHOTO_IMPORT), so a spec exercising multiple AI features in
+  // one run doesn't have one mock clobber another. Anything else keeps the original key.
   const settingsKey =
     b.feature === 'merchants'
       ? '_test_ai_mock_response_merchants'
       : b.feature === 'composer'
         ? '_test_ai_mock_response_composer'
-        : '_test_ai_mock_response'
+        : b.feature === 'photo_import'
+          ? '_test_ai_mock_response_photo_import'
+          : '_test_ai_mock_response'
 
   await c.env.DB.prepare(
     `INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?)

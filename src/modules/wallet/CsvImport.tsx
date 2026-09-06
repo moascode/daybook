@@ -1,17 +1,23 @@
 import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { CheckCircle2, ChevronDown, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
+import { useAppStore } from '@/stores/app.store'
+import { suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
+import { errorMessage } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
 
 interface ImportLocationState {
   rows: ImportRow[]
-  selectedAccountId: string
+  /** Photo import (P2, approved 2026-09-06) — see ImportModal.tsx. */
+  photoMode?: boolean
+  failedPhotos?: { fileName: string; failureReason?: string }[]
 }
 
 /**
@@ -27,15 +33,30 @@ export function CsvImport() {
   const location = useLocation()
   const { accounts, categories, importTransactions, setFilters } = useWallet()
   const { addToast } = useToastStore()
+  const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
 
   const state = location.state as ImportLocationState | null
   const [importRows, setImportRows] = useState<ImportRow[]>(state?.rows ?? [])
-  const [selectedAccountId] = useState(state?.selectedAccountId ?? '')
+  // Chosen here, not in the modal — extraction/mapping never needed it, and
+  // review is where the user is already checking everything else before
+  // committing, so this is the one place the account should be both visible
+  // and changeable (per the owner's ask, 2026-09-06).
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [failedPhotos, setFailedPhotos] = useState(state?.failedPhotos ?? [])
+  const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
+  const [askingAI, setAskingAI] = useState(false)
+  const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
+
+  // Converging conditional adjusted during render (no effect needed) — same
+  // pattern ImportModal.tsx used for this before the account field moved here.
+  if (importableAccounts.length > 0 && !selectedAccountId) {
+    setSelectedAccountId(importableAccounts[0].id)
+  }
 
   const includedCount = importRows.filter((r) => r.included).length
   const selectedCount = importRows.filter((r) => r.included).length
@@ -53,6 +74,70 @@ export function CsvImport() {
       ),
     )
   }, [])
+
+  // A4 (docs/v2/cross-cutting/ai-usage.md, approved 2026-09-06) — same call,
+  // same chunking/rate-limit bucket, same messaging as BulkEditDialog's own
+  // "Ask AI" button. Only asks about rows the rules pass left uncategorised.
+  const handleAskAI = useCallback(async () => {
+    const merchants = [
+      ...new Set(
+        importRows
+          .filter((r) => r.included && r.type !== 'transfer' && !r.categoryId && r.merchant)
+          .map((r) => r.merchant),
+      ),
+    ]
+    if (merchants.length === 0) return
+    setAskingAI(true)
+    setAiMessage(null)
+    try {
+      const { suggestions, askedMerchants, failedMerchants, failureReason } = await suggestCategoriesAI(merchants)
+      if (suggestions.length > 0) {
+        const byMerchant = new Map(suggestions.map((s) => [s.raw, s]))
+        setImportRows((prev) =>
+          prev.map((row) => {
+            if (row.categoryId || row.type === 'transfer' || !row.included) return row
+            const hit = byMerchant.get(row.merchant)
+            if (!hit || !suggestionFitsType(hit, row.type)) return row
+            return {
+              ...row,
+              categoryId: hit.categoryId,
+              suggestedFrom: { canonical: hit.canonical, matchCount: hit.matchCount },
+              suggestionApplied: true,
+            }
+          }),
+        )
+      }
+
+      // Every outcome says something — a click on a paid button that changes
+      // nothing on screen and explains nothing is the one result this must
+      // never produce (rule 13).
+      if (failedMerchants > 0 && suggestions.length === 0) {
+        setAiMessage({
+          tone: 'error',
+          text: failureReason
+            ? `AI categorisation failed: ${failureReason}`
+            : 'AI categorisation failed — nothing came back. Please try again.',
+        })
+      } else if (failedMerchants > 0) {
+        setAiMessage({
+          tone: 'error',
+          text: `${failedMerchants} of ${askedMerchants} merchants could not be categorised${failureReason ? ` (${failureReason})` : ''} — ask AI again to retry those.`,
+        })
+      } else if (suggestions.length === 0) {
+        setAiMessage({
+          tone: 'info',
+          text:
+            askedMerchants === 1
+              ? 'Claude had no confident suggestion for this merchant.'
+              : `Claude had no confident suggestion for any of these ${askedMerchants} merchants.`,
+        })
+      }
+    } catch (err) {
+      setAiMessage({ tone: 'error', text: errorMessage(err, 'Could not ask AI — please try again.') })
+    } finally {
+      setAskingAI(false)
+    }
+  }, [importRows])
 
   const handleImport = useCallback(async () => {
     if (!selectedAccountId) return
@@ -128,11 +213,82 @@ export function CsvImport() {
     )
   }
 
+  const selectedAccount = importableAccounts.find((a) => a.id === selectedAccountId)
+
   return (
     <div className="mx-auto max-w-5xl pb-24">
-      <div className="page-head">
+      <div className="page-head justify-between">
         <h1 className="page-title">Review transactions</h1>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              data-testid="review-account-trigger"
+              aria-label="Import into account"
+              className="flex flex-shrink-0 items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-fg transition-colors hover:bg-surface-hover"
+            >
+              <span
+                className="h-2 w-2 flex-shrink-0 rounded-full"
+                style={{ background: selectedAccount?.color }}
+                aria-hidden="true"
+              />
+              {selectedAccount?.name}
+              <ChevronDown className="h-3.5 w-3.5 text-fg-subtle" aria-hidden="true" />
+            </button>
+          </DropdownMenu.Trigger>
+
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className="z-50 min-w-[200px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95"
+              sideOffset={4}
+              align="end"
+            >
+              {importableAccounts.map((a) => (
+                <DropdownMenu.Item
+                  key={a.id}
+                  data-testid="review-account-option"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                  onSelect={() => setSelectedAccountId(a.id)}
+                >
+                  <span
+                    className="h-2 w-2 flex-shrink-0 rounded-full"
+                    style={{ background: a.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1">{a.name}</span>
+                  {a.id === selectedAccountId && <Check className="h-3.5 w-3.5 text-fg-faint" aria-hidden="true" />}
+                </DropdownMenu.Item>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
+
+      {/* Photo import's partial-failure notice, per transactions-import-error.html.
+          Never appears for a CSV import. */}
+      {failedPhotos.length > 0 && (
+        <div className="notice notice-fail mb-4">
+          <div>
+            <div className="notice-title">
+              Couldn't read {failedPhotos.length} of {importRows.length + failedPhotos.length} photos
+            </div>
+            <div className="notice-sub">
+              <b>{failedPhotos[0].fileName}</b>
+              {failedPhotos.length === 1 ? ' was' : ` and ${failedPhotos.length - 1} other photo${failedPhotos.length > 2 ? 's were' : ' was'}`}{' '}
+              {failedPhotos[0].failureReason ?? 'unreadable'} — no transaction was extracted from it. The rows below were
+              read normally and are safe to import.
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="ml-auto flex-shrink-0"
+            onClick={() => setFailedPhotos([])}
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {/* CsvReviewTable renders its own "Suggested a category…" banner
           (csv-suggestions-banner) — do not duplicate it here. */}
@@ -143,6 +299,11 @@ export function CsvImport() {
         onRowChange={updateRow}
         onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
         onClearSuggestions={clearSuggestions}
+        photoMode={photoMode}
+        hasAnthropicKey={hasAnthropicKey}
+        askingAI={askingAI}
+        aiMessage={aiMessage}
+        onAskAI={() => void handleAskAI()}
       />
 
       {selectedCount > 0 && (

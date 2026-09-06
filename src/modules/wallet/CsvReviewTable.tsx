@@ -16,6 +16,19 @@ interface CsvReviewTableProps {
   onToggleInclude: (index: number) => void
   /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
   onClearSuggestions: () => void
+  /**
+   * Photo import (P2, approved 2026-09-06): swaps the Description column for
+   * a Photo thumbnail column, per docs/v2/wallet/feature-photo-import.md §7.
+   * CSV rows never set this — a review session is always all-CSV or
+   * all-photo, never mixed.
+   */
+  photoMode?: boolean
+  /** A4 (approved 2026-09-06) — gates the "Ask AI to suggest" action. No key, no button. */
+  hasAnthropicKey: boolean
+  askingAI: boolean
+  aiMessage: { tone: 'error' | 'info'; text: string } | null
+  /** Asks Claude for the rows still uncategorised after the rules pass. */
+  onAskAI: () => void
 }
 
 export function CsvReviewTable({
@@ -25,6 +38,11 @@ export function CsvReviewTable({
   onRowChange,
   onToggleInclude,
   onClearSuggestions,
+  photoMode,
+  hasAnthropicKey,
+  askingAI,
+  aiMessage,
+  onAskAI,
 }: CsvReviewTableProps) {
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
@@ -55,26 +73,79 @@ export function CsvReviewTable({
   }
 
   const suggestedCount = rows.filter((r) => r.suggestionApplied).length
+  // Same "affected" shape BulkEditDialog's noSuggestionCount uses: transfers
+  // are never categorised, and an excluded row isn't going anywhere either.
+  const uncategorizedCount = rows.filter(
+    (r) => r.included && r.type !== 'transfer' && !r.categoryId,
+  ).length
 
   return (
     <div>
-      {suggestedCount > 0 && (
+      {(suggestedCount > 0 || uncategorizedCount > 0) && (
         <div
           data-testid="csv-suggestions-banner"
           className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
         >
           <span>
-            Suggested a category for {suggestedCount} of {rows.length} row{rows.length !== 1 ? 's' : ''} — check the
-            Category column before importing.
+            {uncategorizedCount > 0 ? (
+              <>
+                <span className="text-fg-muted">
+                  {uncategorizedCount} row{uncategorizedCount !== 1 ? 's' : ''} still {uncategorizedCount !== 1 ? 'need' : 'needs'} a category
+                  {!hasAnthropicKey && (
+                    <>
+                      {' — set an '}
+                      <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                      {' to ask AI'}
+                    </>
+                  )}
+                </span>
+                {suggestedCount > 0 && (
+                  <span className="text-fg-faint"> · {suggestedCount} filled in automatically</span>
+                )}
+              </>
+            ) : (
+              <span className="text-fg-muted">
+                {suggestedCount} row{suggestedCount !== 1 ? 's' : ''} filled in automatically
+              </span>
+            )}
           </span>
-          <button
-            type="button"
-            onClick={onClearSuggestions}
-            className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700"
-          >
-            Clear suggestions
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {uncategorizedCount > 0 && hasAnthropicKey && (
+              <button
+                type="button"
+                onClick={onAskAI}
+                disabled={askingAI}
+                data-testid="csv-ask-ai"
+                className="font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+              >
+                {askingAI ? 'Asking AI…' : 'Ask AI to suggest'}
+              </button>
+            )}
+            {uncategorizedCount > 0 && hasAnthropicKey && suggestedCount > 0 && (
+              <div className="h-4 w-px bg-line" />
+            )}
+            {suggestedCount > 0 && (
+              <button
+                type="button"
+                onClick={onClearSuggestions}
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                Clear suggestions
+              </button>
+            )}
+          </div>
         </div>
+      )}
+      {aiMessage && (
+        <p
+          data-testid="csv-ai-message"
+          className={cn(
+            'mb-3 rounded-lg px-3 py-2 text-xs',
+            aiMessage.tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-surface-sunken text-fg-subtle',
+          )}
+        >
+          {aiMessage.text}
+        </p>
       )}
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -85,7 +156,7 @@ export function CsvReviewTable({
             </th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
-            <th className="px-3 py-2 font-medium text-fg-subtle">Description</th>
+            <th className="px-3 py-2 font-medium text-fg-subtle">{photoMode ? 'Photo' : 'Description'}</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-24">Type</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-36">Category</th>
@@ -164,18 +235,30 @@ export function CsvReviewTable({
                 </div>
               </td>
 
-              {/* Description — raw bank narrative, editable for clarity */}
+              {/* Description (CSV) or a Photo thumbnail (photo-import prototype) */}
               <td className="px-3 py-2">
-                <Input
-                  value={row.description}
-                  onChange={(e) =>
-                    onRowChange(index, { description: e.target.value })
-                  }
-                  className="w-48 text-xs"
-                  placeholder="—"
-                  disabled={!row.included}
-                  aria-label={`Description for row ${index + 1}`}
-                />
+                {photoMode ? (
+                  row.photoUrl ? (
+                    <img
+                      src={row.photoUrl}
+                      alt={`Source photo for row ${index + 1}`}
+                      className="h-9 w-9 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <span className="text-fg-faint">—</span>
+                  )
+                ) : (
+                  <Input
+                    value={row.description}
+                    onChange={(e) =>
+                      onRowChange(index, { description: e.target.value })
+                    }
+                    className="w-48 text-xs"
+                    placeholder="—"
+                    disabled={!row.included}
+                    aria-label={`Description for row ${index + 1}`}
+                  />
+                )}
               </td>
 
               {/* Amount */}

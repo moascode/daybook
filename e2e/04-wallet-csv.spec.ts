@@ -7,7 +7,7 @@
 import { test, expect, type Browser, type Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv } from './helpers'
+import { newAppPage, accountCardFor, transactionRowFor, fillAccountForm, navigateToImportCsv, selectReviewAccount } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -79,19 +79,18 @@ test('merchant column is auto-detected from "Merchant" header', async () => {
   await expect(merchantSelect).toHaveValue('Merchant')
 })
 
-test('account selector shows Import Account', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await expect(accountSelect).toHaveValue(/.+/) // has a value
-  // Select "Import Account" explicitly
-  await accountSelect.selectOption('Import Account')
-})
-
 test('proceed to review', async () => {
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 })
 
 // ── Review step ─────────────────────────────────────────────────────────
+
+test('account selector (shared by both import types) shows Import Account, on the review page', async () => {
+  await expect(page.getByLabel('Import into account')).toContainText('Import Account')
+  // Re-select it explicitly via the dropdown menu.
+  await selectReviewAccount(page, 'Import Account')
+})
 
 test('review page shows all 4 rows from the CSV', async () => {
   const rows = page.getByTestId('csv-review-row')

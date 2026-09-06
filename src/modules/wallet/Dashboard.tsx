@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { Composer } from '@/modules/wallet/composer/Composer'
 import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
-import { ImportModal } from '@/modules/wallet/import/ImportModal'
+import { ImportModal, type ImportReadyMeta } from '@/modules/wallet/import/ImportModal'
 import { TransactionForm, type TransactionFormData } from '@/modules/wallet/TransactionForm'
 import type { Transaction } from '@/types/wallet.types'
 import type { ImportRow } from '@/lib/csv'
@@ -122,8 +122,8 @@ export function Dashboard() {
     }
   }, [location, navigate])
   const handleImportReady = useCallback(
-    (rows: ImportRow[], selectedAccountId: string) => {
-      navigate('/wallet/import', { state: { rows, selectedAccountId } })
+    (rows: ImportRow[], meta?: ImportReadyMeta) => {
+      navigate('/wallet/import', { state: { rows, ...meta } })
     },
     [navigate],
   )
@@ -467,6 +467,8 @@ export function Dashboard() {
         open={importModalOpen}
         onOpenChange={setImportModalOpen}
         accounts={accounts.filter((a) => !a.isShared || a.canWrite === 1)}
+        categories={categories}
+        hasAnthropicKey={hasAnthropicKey}
         onReady={handleImportReady}
       />
 

@@ -24,7 +24,9 @@ import {
   suggestCategoriesWithAI,
   resolveMerchantsWithAI,
   parseComposerWithAI,
+  parsePhotoImportWithAI,
   type CategorySuggestion,
+  type PhotoImportKind,
 } from '../lib/anthropic.ts'
 
 // Port of server/routes/wallet.ts. Being the largest route module by far
@@ -1069,6 +1071,17 @@ const MERCHANT_AI_RATE_LIMIT_KEY = 'ai_rate_limit_merchant'
 // categorisation or merchant-cleanup budgets, and vice versa.
 const COMPOSER_AI_RATE_LIMIT_KEY = 'ai_rate_limit_composer'
 
+// Own bucket again for photo import — one unit per PHOTO (§3.1 of the spec:
+// a batch of N photos is N independent calls and N rate-limit units, an
+// accepted tradeoff rather than something engineered around), independent
+// of the other three buckets so a large photo batch can't exhaust the CSV
+// categorisation or composer budgets and vice versa.
+const PHOTO_AI_RATE_LIMIT_KEY = 'ai_rate_limit_photo_import'
+// image/jpeg, image/png, image/webp — the three formats a phone camera or a
+// screenshot realistically produces and that the Anthropic API accepts
+// directly (spec §3.2).
+const ALLOWED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+
 // Per-user hourly cap, stored as a JSON blob in the settings key/value table —
 // the app owns no queue, KV namespace, or Durable Object today.
 //
@@ -1311,6 +1324,61 @@ wallet.post('/transactions/parse-composer-ai', async (c) => {
   if (parsed.date) draft.date = parsed.date
 
   return c.json({ draft })
+})
+
+// docs/v2/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
+// photo per call, deliberately — the client fans a multi-select batch out
+// into N independent calls to this same endpoint (Promise.allSettled),
+// never one request carrying N images (spec §3.1: per-photo attribution and
+// truncation blast radius).
+//
+// Always 200 on a reachable model response — even a hard failure (no key,
+// rate limit, network, malformed reply) returns `{ rows: [], failureReason }`
+// rather than an HTTP error status, because the client treats every call in
+// the batch uniformly via Promise.allSettled and one bad photo must never
+// look different from "this photo had nothing readable on it" (rule 13: a
+// failure is reported, never silently dropped, but it also never blocks the
+// rest of the batch).
+wallet.post('/transactions/import-photo', async (c) => {
+  const userId = c.get('userId')
+  const b = await body(c)
+
+  const image = typeof b.image === 'string' ? b.image : ''
+  const imageType = typeof b.imageType === 'string' ? b.imageType : ''
+  const kind = b.kind === 'receipt' || b.kind === 'statement' ? (b.kind as PhotoImportKind) : null
+
+  if (!image) return c.json({ error: 'image is required' }, 400)
+  if (!ALLOWED_PHOTO_TYPES.has(imageType)) {
+    return c.json({ error: 'imageType must be image/jpeg, image/png, or image/webp' }, 400)
+  }
+  if (!kind) return c.json({ error: 'kind must be "receipt" or "statement"' }, 400)
+
+  const keyRow = await c.env.DB.prepare(
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'anthropic_api_key'`,
+  )
+    .bind(userId)
+    .first<{ value: string }>()
+  const apiKey = keyRow?.value?.trim()
+  if (!apiKey) return c.json({ rows: [], failureReason: 'no API key configured' })
+
+  const catsResult = await c.env.DB.prepare('SELECT name FROM categories WHERE user_id = ?')
+    .bind(userId)
+    .all<{ name: string }>()
+  const categoryNames = catsResult.results.map((cat) => cat.name)
+
+  // Last, so a request rejected above for a reason that spends nothing does
+  // not cost the caller a slot in their hourly budget.
+  if (await overAiRateLimit(c.env.DB, userId, PHOTO_AI_RATE_LIMIT_KEY)) {
+    return c.json({ rows: [], failureReason: `photo import limit reached (${AI_RATE_LIMIT_MAX} per hour) — try again later` })
+  }
+
+  try {
+    const rows = await parsePhotoImportWithAI(c.env, userId, apiKey, image, imageType, kind, categoryNames)
+    return c.json({ rows })
+  } catch (err) {
+    console.error('AI photo import failed', err)
+    return c.json({ rows: [], failureReason: err instanceof Error ? err.message : 'AI photo extraction failed' })
+  }
 })
 
 // Bulk insert (CSV import). Returns the created rows.

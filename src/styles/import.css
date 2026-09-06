@@ -20,6 +20,11 @@
 .dropzone-text b { color: rgb(var(--fg)); font-weight: 650; }
 .dropzone-text .link { color: rgb(var(--accent-fg)); font-weight: 650; }
 .dropzone-hint { font-size: var(--t-micro); color: rgb(var(--fg-faint)); }
+.field-label { font-size: var(--t-sm); font-weight: 650; margin: 0 0 var(--s2); }
+
+/* photo-import prototype (gated behind P2) — partial-failure notice */
+.notice-fail { border-left-color: rgb(var(--warn)); }
+.notice-fail .icon-wrap { color: rgb(var(--warn)); }
 
 /* file list — shared row shape for the picked-files list and (later) photo review thumbnails */
 .flist { display: flex; flex-direction: column; }

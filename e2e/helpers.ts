@@ -324,3 +324,13 @@ export async function navigateToImportCsv(page: Page) {
   await page.getByTestId('account-menu-import-csv').click()
   await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
 }
+
+/**
+ * The review page's "Import into" control (CsvImport.tsx) is a Radix
+ * DropdownMenu trigger, not a native <select> — opens on click, then picks
+ * the account by its visible name from the menu that drops down.
+ */
+export async function selectReviewAccount(page: Page, accountName: string) {
+  await page.getByLabel('Import into account').click()
+  await page.getByRole('menuitem', { name: accountName }).click()
+}
