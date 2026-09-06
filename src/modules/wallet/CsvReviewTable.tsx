@@ -109,7 +109,7 @@ export function CsvReviewTable({
             {merchantUnresolvedCount > 0 ? (
               <>
                 <span className="text-fg-muted">
-                  {merchantUnresolvedCount} merchant name{merchantUnresolvedCount !== 1 ? 's' : ''} couldn't be cleaned up automatically
+                  {merchantUnresolvedCount} row{merchantUnresolvedCount !== 1 ? 's' : ''} still {merchantUnresolvedCount !== 1 ? 'need' : 'needs'} merchant cleanup
                   {!hasAnthropicKey && (
                     <>
                       {' — set an '}
@@ -119,12 +119,12 @@ export function CsvReviewTable({
                   )}
                 </span>
                 {merchantResolvedCount > 0 && (
-                  <span className="text-fg-faint"> · {merchantResolvedCount} filled in automatically</span>
+                  <span className="text-fg-faint"> · {merchantResolvedCount} cleaned up automatically</span>
                 )}
               </>
             ) : (
               <span className="text-fg-muted">
-                {merchantResolvedCount} merchant name{merchantResolvedCount !== 1 ? 's' : ''} filled in automatically
+                {merchantResolvedCount} row{merchantResolvedCount !== 1 ? 's' : ''} cleaned up automatically
               </span>
             )}
           </span>
@@ -136,7 +136,7 @@ export function CsvReviewTable({
               data-testid="csv-ask-ai-merchants"
               className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
             >
-              {resolvingMerchants ? 'Asking AI…' : 'Ask AI to suggest'}
+              {resolvingMerchants ? 'Asking AI…' : 'Ask AI to clean up'}
             </button>
           )}
         </div>

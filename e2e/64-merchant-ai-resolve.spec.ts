@@ -269,7 +269,7 @@ test.describe('CSV import: merchant AI resolution', () => {
     // rules pass resolves nothing, so all 3 rows are marked unresolved and
     // the banner offers the explicit button — no toast, this is a normal
     // outcome, not a failure.
-    await expect(page.getByTestId('csv-merchant-banner')).toContainText("3 merchant names couldn't be cleaned up automatically")
+    await expect(page.getByTestId('csv-merchant-banner')).toContainText('3 rows still need merchant cleanup')
     const merchantInputsBefore = page.getByRole('textbox', { name: /^Merchant for row/ })
     await expect(merchantInputsBefore).toHaveCount(3)
     await expect(page.getByText('Merchant name not resolved automatically').first()).toBeVisible()
