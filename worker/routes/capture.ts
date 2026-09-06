@@ -9,6 +9,8 @@ import {
   SCOPE_CAPTURE_WRITE,
 } from '../lib/capture-token.ts'
 import { overRateLimit } from '../lib/rate-limit.ts'
+import { todayStr } from '../lib.ts'
+import { buildDuplicateKey } from '../lib/merchant.ts'
 
 // ─────────────────────────────────────────────────────────────
 // The machine surface. Everything here authenticates with a bearer capture
@@ -124,3 +126,141 @@ capture.use('*', requireCaptureToken)
 capture.get('/health', requireScope(SCOPE_CAPTURE_WRITE), (c) =>
   c.json({ ok: true, device: c.get('captureTokenLabel') ?? '' }),
 )
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/capture/transaction — the one write a machine can make.
+//
+// It does NOT write to `transactions`. It writes a pending row a human accepts
+// later (spec §4.1/D-A), which is what makes an unreliable signal safe: Apple's
+// trigger fires on DECLINED payments and is documented to deliver an empty
+// merchant or a 0.0 amount, and an agent client acts on text other people
+// wrote. A ledger row moves balances, budgets, safe-to-spend and reports, and
+// on a shared account can be split and settled against before anyone notices.
+//
+// Enrichment (merchant cleanup, category, account mapping) deliberately does
+// NOT happen here — it runs when the review surface loads the row (§5.2). The
+// shortcut is waiting on this response, so this stays one INSERT; enrichment
+// needs several reads and would buy nothing on that hot path.
+//
+// No AI runs here, ever. ai-usage.md guardrail 2 forbids a Claude call on
+// anything but an explicit human action, and an unattended POST is the
+// definition of a non-human trigger.
+// ─────────────────────────────────────────────────────────────
+
+const CAPTURE_TYPES = new Set(['expense', 'income', 'transfer'])
+const MAX_TEXT = 200
+
+interface CaptureBody {
+  merchant?: unknown
+  amount?: unknown
+  card?: unknown
+  destinationCard?: unknown
+  occurredAt?: unknown
+  type?: unknown
+  source?: unknown
+}
+
+/** Money, formatted the way the shortcut will read it aloud in a notification. */
+function money(amount: number): string {
+  return `RM${amount.toFixed(2)}`
+}
+
+capture.post('/transaction', requireScope(SCOPE_CAPTURE_WRITE), async (c) => {
+  const userId = c.get('userId')
+
+  // The header, not a body field — it is a standard, and this endpoint serves
+  // many clients. Shortcuts has no UUID action, so the setup guide builds one
+  // from actions that do exist (Format Date + amount in cents + Random Number).
+  const idempotencyKey = (c.req.header('Idempotency-Key') ?? '').trim().slice(0, MAX_TEXT)
+  if (!idempotencyKey) return c.json({ error: 'Idempotency-Key header is required' }, 400)
+
+  const b = (await c.req.json().catch(() => ({}))) as CaptureBody
+
+  // Reject at the door rather than at review: a non-positive amount is how a
+  // DECLINED payment and the documented `0.0` bug both arrive, and neither is
+  // a transaction. Everything else is accepted and flagged instead, because
+  // dropping a row would lose a real payment.
+  const amount = Number(b.amount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return c.json({ error: 'amount must be greater than zero' }, 400)
+  }
+
+  const type = b.type == null ? 'expense' : String(b.type)
+  if (!CAPTURE_TYPES.has(type)) {
+    return c.json({ error: 'type must be expense, income or transfer' }, 400)
+  }
+
+  // Empty is allowed and flagged at review — Apple delivers a blank merchant
+  // often enough that refusing it would silently drop real payments.
+  const merchant = String(b.merchant ?? '').trim().slice(0, MAX_TEXT)
+  const card = String(b.card ?? '').trim().slice(0, MAX_TEXT)
+  const destinationCard = String(b.destinationCard ?? '').trim().slice(0, MAX_TEXT)
+  const source = String(b.source ?? 'api').trim().slice(0, 40) || 'api'
+
+  // Absent → stamped in Asia/Kuala_Lumpur, never UTC. CLAUDE.md §16 trap 1: for
+  // the eight hours a day the two disagree, a UTC stamp lands the row outside
+  // the month the client is showing.
+  let occurredAt = todayStr()
+  if (b.occurredAt != null && String(b.occurredAt).trim() !== '') {
+    const raw = String(b.occurredAt).trim()
+    const parsed = new Date(raw)
+    if (Number.isNaN(parsed.getTime())) {
+      return c.json({ error: 'occurredAt is not a valid date' }, 400)
+    }
+    occurredAt = raw.slice(0, 10)
+  }
+
+  // Computed here, not at accept, so a CSV import running before the row is
+  // ever reviewed can still match it (§5.3 gap 1).
+  const duplicateKey = buildDuplicateKey(occurredAt, amount, type, merchant)
+
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO pending_captures
+       (user_id, token_id, source, idempotency_key, raw_merchant, raw_card,
+        raw_destination_card, amount, type, occurred_at, duplicate_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, idempotency_key) DO NOTHING
+     RETURNING id`,
+  )
+    .bind(
+      userId,
+      c.get('captureTokenId') ?? null,
+      source,
+      idempotencyKey,
+      merchant,
+      card,
+      destinationCard,
+      amount,
+      type,
+      occurredAt,
+      duplicateKey,
+    )
+    .first<{ id: string }>()
+
+  // No row back means the UNIQUE constraint absorbed a replay. That is the
+  // idempotency guarantee, enforced by the database rather than by a
+  // check-then-insert race: "Get Contents of URL" timing out after the server
+  // already committed is indistinguishable, on the phone, from never arriving.
+  if (!inserted) {
+    return c.json({ status: 'duplicate', message: 'already captured' }, 200)
+  }
+
+  const pending = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM pending_captures WHERE user_id = ? AND status = 'pending'`,
+  )
+    .bind(userId)
+    .first<{ n: number }>()
+  const waiting = Number(pending?.n ?? 1)
+
+  // Short and human-readable on purpose: the shortcut pipes this straight into
+  // a notification, which is how the user learns the capture worked at all.
+  const name = merchant || 'Unnamed'
+  return c.json(
+    {
+      status: 'pending',
+      id: inserted.id,
+      message: `${name} ${money(amount)} — ${waiting} to review`,
+    },
+    201,
+  )
+})
