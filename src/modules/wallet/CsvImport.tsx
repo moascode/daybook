@@ -128,26 +128,14 @@ export function CsvImport() {
     )
   }
 
-  const suggestedCount = importRows.filter((r) => r.suggestionApplied).length
-
   return (
     <div className="mx-auto max-w-5xl pb-24">
       <div className="page-head">
         <h1 className="page-title">Review transactions</h1>
       </div>
 
-      {suggestedCount > 0 && (
-        <div className="notice mb-4">
-          <div>
-            <div className="notice-title">Suggested a category for {suggestedCount} of {importRows.length} rows</div>
-            <div className="notice-sub">Check the Category column before importing.</div>
-          </div>
-          <Button variant="secondary" size="sm" className="ml-auto flex-shrink-0" onClick={clearSuggestions}>
-            Clear suggestions
-          </Button>
-        </div>
-      )}
-
+      {/* CsvReviewTable renders its own "Suggested a category…" banner
+          (csv-suggestions-banner) — do not duplicate it here. */}
       <CsvReviewTable
         rows={importRows}
         categories={categories}
