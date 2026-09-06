@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -117,7 +117,7 @@ export function CsvReviewTable({
               data-testid="csv-ask-ai-merchants"
               className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
             >
-              {resolvingMerchants ? 'Asking AI…' : 'Ask AI to resolve merchant names'}
+              {resolvingMerchants ? 'Asking AI…' : 'Ask AI to suggest'}
             </button>
           )}
         </div>
@@ -180,9 +180,11 @@ export function CsvReviewTable({
               <button
                 type="button"
                 onClick={onClearSuggestions}
-                className="font-medium text-brand-600 hover:text-brand-700"
+                aria-label="Clear suggestions"
+                title="Clear suggestions"
+                className="flex-shrink-0 rounded-full p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
               >
-                Clear suggestions
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
