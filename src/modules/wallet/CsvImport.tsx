@@ -12,7 +12,7 @@ import type { TransactionInput } from '@/hooks/useWallet'
 interface ImportLocationState {
   rows: ImportRow[]
   selectedAccountId: string
-  /** PROTOTYPE (photo import, gated behind P2 — see ImportModal.tsx). */
+  /** Photo import (P2, approved 2026-09-06) — see ImportModal.tsx. */
   photoMode?: boolean
   failedPhotos?: { fileName: string; failureReason?: string }[]
 }
@@ -139,8 +139,8 @@ export function CsvImport() {
         <h1 className="page-title">Review transactions</h1>
       </div>
 
-      {/* PROTOTYPE (photo import, gated behind P2): partial-failure notice,
-          per transactions-import-error.html. Never appears for a CSV import. */}
+      {/* Photo import's partial-failure notice, per transactions-import-error.html.
+          Never appears for a CSV import. */}
       {failedPhotos.length > 0 && (
         <div className="notice notice-fail mb-4">
           <div>

@@ -17,10 +17,10 @@ interface CsvReviewTableProps {
   /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
   onClearSuggestions: () => void
   /**
-   * PROTOTYPE (photo import, gated behind P2 — not wired to a real AI call):
-   * swaps the Description column for a Photo thumbnail column, per
-   * docs/v2/wallet/feature-photo-import.md §7. CSV rows never set this — a
-   * review session is always all-CSV or all-photo, never mixed.
+   * Photo import (P2, approved 2026-09-06): swaps the Description column for
+   * a Photo thumbnail column, per docs/v2/wallet/feature-photo-import.md §7.
+   * CSV rows never set this — a review session is always all-CSV or
+   * all-photo, never mixed.
    */
   photoMode?: boolean
 }

@@ -23,6 +23,17 @@ export interface ComposerParseResult {
   date?: string // YYYY-MM-DD, only if the text implies a specific date — omit for "today"/unspecified
 }
 
+// docs/v2/wallet/feature-photo-import.md (P2, approved 2026-09-06).
+export type PhotoImportKind = 'receipt' | 'statement'
+
+export interface PhotoImportRow {
+  date: string // YYYY-MM-DD, best-effort; '' if unreadable
+  merchant: string
+  amount: number
+  type: 'income' | 'expense' // photo import never produces 'transfer' — spec §5
+  categoryGuess: string | null
+}
+
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 const ANTHROPIC_VERSION = '2023-06-01'
 // Classification, not reasoning — cheapest current model (§5 of the doc).
@@ -38,6 +49,11 @@ const MAX_TOKENS = 2000
 // call. 150 comfortably covers {merchant, amount, type, account, category,
 // date} with no risk of the truncation trap MAX_TOKENS's comment describes.
 const COMPOSER_MAX_TOKENS = 150
+// A receipt is one row (~20 tokens); a statement screenshot can show 15-20
+// line items, so this is sized like the batch categorisation limit above,
+// not the small composer limit — see spec §5 for why "more photos" (not a
+// bigger budget here) is the chunking lever for a long statement.
+const PHOTO_MAX_TOKENS = 2000
 
 const SYSTEM_PROMPT = `You categorise bank transactions for a personal finance app used in Malaysia.
 For each merchant string, choose exactly one category from the list provided.
@@ -75,6 +91,29 @@ Reply with the raw JSON object and nothing else — no markdown code fence, no c
 
 function buildComposerUserMessage(text: string, accountNames: string[], categoryNames: string[]): string {
   return `Text: "${text}"\nAccounts: ${accountNames.join(', ')}\nCategories: ${categoryNames.join(', ')}`
+}
+
+// Two separate prompts selected by `kind`, not one prompt that branches
+// internally (spec §4) — a receipt and a statement screenshot are different
+// extraction problems, and splitting them keeps each prompt small and testable.
+const PHOTO_RECEIPT_SYSTEM_PROMPT = `You extract a single transaction from a photo of a retail receipt, for a personal finance app used in Malaysia.
+Read the photo and extract exactly one transaction: the date, the merchant name (the business itself, not the payment processor), the total amount paid, and a category guess.
+The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
+Always set type to "expense" — nothing about a receipt implies income.
+Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
+If the date is not legible, use an empty string for date rather than guessing. If the amount or merchant cannot be read at all, return an empty rows array rather than inventing a value.
+Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
+
+const PHOTO_STATEMENT_SYSTEM_PROMPT = `You extract every transaction line item from a photo of a bank or e-statement screenshot, for a personal finance app used in Malaysia.
+Read the photo and extract every line item visible as a separate row: date, merchant/description, amount, and a category guess.
+Infer type per line from the sign or column — a "-RM45.00" or debit line is "expense", a "+RM2,300.00" or credit line is "income" — a statement legitimately mixes both, unlike a receipt.
+The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
+Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
+If a line's date is not legible, use an empty string for date rather than guessing. Omit a line entirely if you cannot read its amount at all.
+Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
+
+function buildPhotoImportUserMessage(kind: PhotoImportKind, categoryNames: string[]): string {
+  return `Categories: ${categoryNames.join(', ')}\nThis photo is a ${kind === 'receipt' ? 'retail receipt' : 'bank/e-statement screenshot'}.`
 }
 
 async function fetchClaudeText(apiKey: string, categoryNames: string[], merchants: string[]): Promise<string> {
@@ -200,6 +239,59 @@ async function fetchClaudeComposerText(
   return resultText
 }
 
+async function fetchClaudePhotoText(
+  apiKey: string,
+  base64Image: string,
+  imageType: string,
+  kind: PhotoImportKind,
+  categoryNames: string[],
+): Promise<string> {
+  const res = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: PHOTO_MAX_TOKENS,
+      temperature: 0,
+      system: kind === 'receipt' ? PHOTO_RECEIPT_SYSTEM_PROMPT : PHOTO_STATEMENT_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imageType, data: base64Image } },
+            { type: 'text', text: buildPhotoImportUserMessage(kind, categoryNames) },
+          ],
+        },
+      ],
+    }),
+  })
+  if (!res.ok) {
+    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
+    // exhausted balance from a bad model id is on Anthropic's error body, and
+    // the caller can't guess which one it is otherwise.
+    const detail = await res
+      .text()
+      .then((body) => {
+        const parsed: unknown = JSON.parse(body)
+        const message =
+          typeof parsed === 'object' && parsed !== null
+            ? (parsed as { error?: { message?: unknown } }).error?.message
+            : undefined
+        return typeof message === 'string' ? message : body.slice(0, 200)
+      })
+      .catch(() => '')
+    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
+  }
+  const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+  const resultText = data.content?.find((block) => block.type === 'text')?.text
+  if (!resultText) throw new Error('no text content in Anthropic response')
+  return resultText
+}
+
 // Default mock-response key, used by suggestCategoriesWithAI. Keep in sync
 // with worker/routes/test.ts's default.
 const TEST_MOCK_KEY = '_test_ai_mock_response'
@@ -211,6 +303,8 @@ const TEST_MOCK_KEY_MERCHANTS = '_test_ai_mock_response_merchants'
 // Separate key again for parseComposerWithAI, same rationale as
 // TEST_MOCK_KEY_MERCHANTS above.
 const TEST_MOCK_KEY_COMPOSER = '_test_ai_mock_response_composer'
+// Own key again for parsePhotoImportWithAI, same rationale.
+const TEST_MOCK_KEY_PHOTO_IMPORT = '_test_ai_mock_response_photo_import'
 
 // e2e cannot intercept a Worker-to-Anthropic fetch the way Playwright
 // intercepts browser requests — `wrangler dev` makes that call from a
@@ -428,4 +522,69 @@ export async function parseComposerWithAI(
       ? await fetchTestText(env, userId, TEST_MOCK_KEY_COMPOSER)
       : await fetchClaudeComposerText(apiKey, text, accountNames, categoryNames)
   return parseComposerResult(resultText)
+}
+
+/**
+ * Salvage a PhotoImportRow[] from Claude's reply text.
+ *
+ * THROWS only when the JSON itself can't be recovered by any jsonCandidates()
+ * candidate. A malformed individual row is dropped rather than treated as a
+ * whole-call error — same "omission is correct" posture the other parsers use.
+ */
+function parsePhotoImportRows(text: string): PhotoImportRow[] {
+  let parsed: unknown
+  let lastError: unknown
+  for (const candidate of jsonCandidates(text)) {
+    try {
+      parsed = JSON.parse(candidate)
+      lastError = undefined
+      break
+    } catch (err) {
+      lastError = err
+    }
+  }
+  if (lastError !== undefined) throw lastError
+  const rows = typeof parsed === 'object' && parsed !== null ? (parsed as { rows?: unknown }).rows : undefined
+  if (!Array.isArray(rows)) throw new Error('malformed rows shape')
+
+  const result: PhotoImportRow[] = []
+  for (const item of rows) {
+    if (typeof item !== 'object' || item === null) continue
+    const row = item as Record<string, unknown>
+    if (typeof row.merchant !== 'string' || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue
+    if (row.type !== 'income' && row.type !== 'expense') continue
+    result.push({
+      date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '',
+      merchant: row.merchant,
+      amount: row.amount,
+      type: row.type,
+      categoryGuess: typeof row.categoryGuess === 'string' ? row.categoryGuess : null,
+    })
+  }
+  return result
+}
+
+/**
+ * Ask Claude to extract transaction(s) from ONE photo (a receipt or a
+ * statement screenshot, per `kind`) against the caller's own category names.
+ *
+ * THROWS on any failure — network, non-2xx, malformed JSON. Same contract as
+ * every other *WithAI function here: the caller (POST /transactions/import-photo)
+ * turns a throw into `{ rows: [], failureReason }`, never a silent empty
+ * response with no explanation (CLAUDE.md rule 13).
+ */
+export async function parsePhotoImportWithAI(
+  env: Env,
+  userId: string,
+  apiKey: string,
+  base64Image: string,
+  imageType: string,
+  kind: PhotoImportKind,
+  categoryNames: string[],
+): Promise<PhotoImportRow[]> {
+  const text =
+    env.DAYBOOK_TEST === '1'
+      ? await fetchTestText(env, userId, TEST_MOCK_KEY_PHOTO_IMPORT)
+      : await fetchClaudePhotoText(apiKey, base64Image, imageType, kind, categoryNames)
+  return parsePhotoImportRows(text)
 }

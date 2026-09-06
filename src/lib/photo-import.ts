@@ -1,19 +1,14 @@
+import { api } from '@/lib/api'
 import { computeImportHash, checkDuplicates } from '@/lib/csv'
 import type { ImportRow } from '@/lib/csv'
 import type { Category } from '@/types/wallet.types'
 
-// ── PROTOTYPE ONLY — no real Anthropic call ─────────────────────────────
-//
-// docs/v2/wallet/feature-photo-import.md describes `POST
-// /transactions/import-photo` (worker/lib/anthropic.ts's
-// parsePhotoImportWithAI, a new ai_rate_limit_photo_import bucket). None of
-// that is wired here — P2 in docs/v2/cross-cutting/ai-usage.md is still
-// "pending owner yes", and CLAUDE.md rule 2 ("warn before wiring") forbids
-// adding an outbound Claude call without that yes in chat first. This module
-// exists only so the review-table/UI wiring downstream of "we have N rows
-// from photos" can be built and looked at now — every extraction here is a
-// canned, client-side mock, never a network call to Anthropic or even to
-// this app's own Worker.
+// docs/v2/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
+// photo per call, deliberately client-side fan-out (§3.1) — a batch of N
+// photos is N independent POSTs to /transactions/import-photo run with
+// Promise.allSettled, never one request carrying N images.
+
+export type PhotoImportKind = 'receipt' | 'statement'
 
 export interface PhotoImportRow {
   date: string
@@ -25,76 +20,85 @@ export interface PhotoImportRow {
 
 export interface PhotoExtractionResult {
   fileName: string
-  /** A local object URL for the picked file — stands in for what a real
-   *  upload would eventually let the review table thumbnail. Never sent
-   *  anywhere; revoked when the review page unmounts. */
+  /** A local object URL for the picked file, for the review table's Photo
+   *  thumbnail column. Never sent anywhere — revoked when no longer needed. */
   photoUrl: string
   rows: PhotoImportRow[]
   failureReason?: string
 }
 
-const MOCK_RECEIPT_MERCHANTS = [
-  { merchant: 'Village Grocer', amount: 42.6, categoryGuess: 'Food & Drink' },
-  { merchant: 'Petronas', amount: 80, categoryGuess: 'Transport' },
-  { merchant: 'Guardian Pharmacy', amount: 23.9, categoryGuess: 'Health' },
-]
+// Cap the longest edge at 1568px — the size beyond which Claude's vision
+// input stops gaining resolution (spec §3.2) — before sending. A phone photo
+// straight off the camera can be 10-20MB; resizing client-side wastes no
+// upload time and buys no extraction quality past this point. Re-encodes as
+// JPEG uniformly (screenshots/receipts have no meaningful alpha channel),
+// which is one of the three types the endpoint accepts.
+const MAX_EDGE_PX = 1568
+const JPEG_QUALITY = 0.85
 
-/**
- * Mocks one photo's extraction. Deliberately deterministic (cycles a small
- * canned list) and deliberately fails the LAST photo in a batch of 2+ — so a
- * batch of one always succeeds (nothing to demo a partial failure against)
- * and a batch of 2+ always shows the partial-failure notice the review page
- * needs to render.
- */
-async function mockExtractOnePhoto(
-  file: File,
-  index: number,
-  totalInBatch: number,
-  kind: 'receipt' | 'statement',
-): Promise<PhotoExtractionResult> {
-  await new Promise((resolve) => setTimeout(resolve, 400 + index * 150))
+async function resizeImageForUpload(file: File): Promise<{ base64: string; mediaType: string }> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
 
-  const photoUrl = URL.createObjectURL(file)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas 2d context unavailable')
+    ctx.drawImage(bitmap, 0, 0, width, height)
 
-  if (totalInBatch > 1 && index === totalInBatch - 1) {
-    return { fileName: file.name, photoUrl, rows: [], failureReason: 'too blurry for Claude to read reliably' }
-  }
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('image encode failed'))), 'image/jpeg', JPEG_QUALITY)
+    })
 
-  if (kind === 'receipt') {
-    const pick = MOCK_RECEIPT_MERCHANTS[index % MOCK_RECEIPT_MERCHANTS.length]
-    return {
-      fileName: file.name,
-      photoUrl,
-      rows: [{ date: new Date().toISOString().slice(0, 10), merchant: pick.merchant, amount: pick.amount, type: 'expense', categoryGuess: pick.categoryGuess }],
-    }
-  }
-
-  // Statement: a short mixed-direction line-item list, same shape §4 of the
-  // spec describes for the statement prompt.
-  return {
-    fileName: file.name,
-    photoUrl,
-    rows: [
-      { date: new Date().toISOString().slice(0, 10), merchant: 'Netflix', amount: 54.9, type: 'expense', categoryGuess: 'Entertainment' },
-      { date: new Date().toISOString().slice(0, 10), merchant: 'Salary', amount: 4200, type: 'income', categoryGuess: null },
-    ],
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.onerror = () => reject(reader.error ?? new Error('file read failed'))
+      reader.readAsDataURL(blob)
+    })
+    const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+    return { base64, mediaType: 'image/jpeg' }
+  } finally {
+    bitmap.close()
   }
 }
 
+interface ImportPhotoResponse {
+  rows: PhotoImportRow[]
+  failureReason?: string
+}
+
+async function extractOnePhoto(file: File, kind: PhotoImportKind): Promise<PhotoExtractionResult> {
+  const photoUrl = URL.createObjectURL(file)
+  const { base64, mediaType } = await resizeImageForUpload(file)
+  const res = await api.post<ImportPhotoResponse>('/transactions/import-photo', {
+    image: base64,
+    imageType: mediaType,
+    kind,
+  })
+  return { fileName: file.name, photoUrl, rows: res.rows, failureReason: res.failureReason }
+}
+
 /**
- * Batch of N photos → N independent mock "calls", exactly the client-side
- * fan-out shape §3.1 of the spec describes for the real endpoint
- * (Promise.allSettled, one photo's failure never blocking the rest).
+ * Batch of N photos → N independent calls to POST /transactions/import-photo,
+ * run with Promise.allSettled so one photo's failure (network error, thrown
+ * exception) never blocks the rest — the server itself never errors the
+ * whole call (always 200 with a per-photo failureReason), but resizing can
+ * still throw client-side (e.g. a corrupt file), which this also catches.
  */
-export async function mockExtractPhotoBatch(
+export async function extractPhotoBatch(
   files: File[],
-  kind: 'receipt' | 'statement',
+  kind: PhotoImportKind,
   onProgress?: (done: number, total: number) => void,
 ): Promise<PhotoExtractionResult[]> {
   let done = 0
   const settled = await Promise.allSettled(
-    files.map(async (file, i) => {
-      const result = await mockExtractOnePhoto(file, i, files.length, kind)
+    files.map(async (file) => {
+      const result = await extractOnePhoto(file, kind)
       done += 1
       onProgress?.(done, files.length)
       return result
@@ -103,13 +107,13 @@ export async function mockExtractPhotoBatch(
   return settled.map((s, i) =>
     s.status === 'fulfilled'
       ? s.value
-      : { fileName: files[i].name, photoUrl: '', rows: [], failureReason: 'network error' },
+      : { fileName: files[i].name, photoUrl: '', rows: [], failureReason: 'could not process this photo' },
   )
 }
 
 /**
  * §7 of the spec: PhotoImportRow -> ImportRow, one row per successful
- * extraction result, in one pass after every photo's mock call has settled.
+ * extraction result, in one pass after every photo's call has settled.
  */
 export async function photoResultsToImportRows(
   results: PhotoExtractionResult[],

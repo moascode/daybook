@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
 import { parseCSV, detectColumns, buildImportRows, resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestionFitsType } from '@/lib/merchantSuggestions'
-import { mockExtractPhotoBatch, photoResultsToImportRows, type PhotoExtractionResult } from '@/lib/photo-import'
+import { extractPhotoBatch, photoResultsToImportRows, type PhotoExtractionResult } from '@/lib/photo-import'
 import { useToastStore } from '@/stores/toast.store'
 import { TEST_HOOKS_ENABLED } from '@/lib/utils'
 import type { ColumnMapping, ImportRow } from '@/lib/csv'
@@ -34,7 +34,7 @@ interface ImportModalProps {
   /** Own accounts plus writable shared-in accounts — the same set CsvImport.tsx offers today. */
   accounts: Account[]
   categories: Category[]
-  /** Mirrors Composer's prop — gates the (mocked) Photo tab. See the PROTOTYPE note below. */
+  /** Mirrors Composer's prop — gates the Photo tab. No key, no tab, CSV-only. */
   hasAnthropicKey: boolean
   /**
    * Fires once rows are built and AI-assisted resolution/suggestion have run —
@@ -45,18 +45,14 @@ interface ImportModalProps {
 }
 
 /**
- * Unified import entry point — CSV, plus a **prototype-only** Photo tab.
- *
- * PROTOTYPE WARNING: the Photo tab's extraction (`mockExtractPhotoBatch` in
- * `src/lib/photo-import.ts`) is a canned client-side mock — it makes no
- * network call to Anthropic or even to this app's own Worker. Photo import
- * is P2 in docs/v2/cross-cutting/ai-usage.md, still "pending owner yes" —
- * CLAUDE.md rule 2 forbids wiring a real call before that yes. This exists
- * only so the review-table wiring downstream of "we have N rows from
- * photos" (photoMode, the partial-failure notice) can be looked at now, on
- * its own branch, never merged as-is. `hasAnthropicKey` still gates the tab
- * exactly as it will once real: no key, no Photo tab, CSV-only — same
- * posture CLAUDE.md §9.3 uses everywhere else an AI entry point exists.
+ * Unified import entry point — CSV and photo (P2 in
+ * docs/v2/cross-cutting/ai-usage.md, approved 2026-09-06). Photo extraction
+ * (`extractPhotoBatch` in `src/lib/photo-import.ts`) calls
+ * `POST /transactions/import-photo`, one photo per call — see that route
+ * and `worker/lib/anthropic.ts`'s `parsePhotoImportWithAI` for the real
+ * Claude call. `hasAnthropicKey` gates the Photo tab: no key, no tab,
+ * CSV-only — same posture CLAUDE.md §9.3 uses everywhere else an AI entry
+ * point exists.
  *
  * Three in-place views (pick → map → processing) replace CsvImport.tsx's
  * former standalone upload/mapping steps — only the final review stays a
@@ -229,16 +225,15 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
     }
   }, [rawRows, mapping, selectedAccountId, addToast, onReady, onOpenChange, resetAll])
 
-  // PROTOTYPE — mockExtractPhotoBatch makes no network call (see the
-  // component-level warning above). Mirrors the real endpoint's client-side
-  // fan-out shape (§3.1 of the spec) so this wiring transfers unchanged once
-  // P2 is approved and a real POST /transactions/import-photo exists.
+  // Client-side fan-out (spec §3.1): N photos is N independent calls to
+  // POST /transactions/import-photo via Promise.allSettled inside
+  // extractPhotoBatch, not one request carrying N images.
   const runPhotoProcessing = useCallback(async () => {
     setView('processing')
     setProcLabel(`0 of ${photoFiles.length} photos processed`)
     setProcPct(0)
     try {
-      const results: PhotoExtractionResult[] = await mockExtractPhotoBatch(photoFiles, photoKind, (done, total) => {
+      const results: PhotoExtractionResult[] = await extractPhotoBatch(photoFiles, photoKind, (done, total) => {
         setProcLabel(`${done} of ${total} photos processed`)
         setProcPct(Math.round((done / total) * 100))
       })

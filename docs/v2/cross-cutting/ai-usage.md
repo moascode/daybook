@@ -46,6 +46,7 @@ wiring), **RULES-ONLY** (deliberately no API — listed so nobody adds one).
 | A1 | **Wallet composer** — `coffee 4.20 cash` → a transaction draft | R7 | Haiku | Rules parser runs first; Claude is the **fallback only when rules don't match**. One call per **submit**, never per keystroke. ~150 output tokens. Result is a **preview the user confirms**, never a silent write. |
 | A2 | **Tasks composer** — `pay rent tomorrow 9am #household !high` → a task draft | R5/R10 | Haiku | Same shape as A1. `#list !priority @assignee` are rule-parsed; only the free-text remainder can reach Claude. |
 | A3 | **Day composer** — dual-target: the input becomes a task *or* a transaction | R15 | Haiku | Same shape. The extra job is classify-which-module, still one call, still preview-confirmed. Hardest prompt; ship after A1/A2 so it reuses their parser. |
+| P2 | **Photo import** — receipt or statement screenshot → transaction draft(s), feeding the CSV review table | TBD | Haiku | One call per uploaded photo (a multi-select batch of N photos is N calls, N rate-limit units — accepted tradeoff, see the spec), explicit user action, never automatic. Rows land in the **same review-and-confirm table** CSV import uses — never a silent write. No key → entry point hidden. Approved 2026-09-06. Full spec: [../wallet/feature-photo-import.md](../wallet/feature-photo-import.md). |
 
 **Why these need the API at all:** the composer's entire value proposition over a
 form is that free text works. Rules cover the common grammar (`4.20 cash`,
@@ -58,7 +59,6 @@ falls back to the structured form, so the feature degrades, never breaks.
 | # | Touchpoint | Release | Model | Note |
 |---|---|---|---|---|
 | P1 | **CSV per-row auto-categorisation on import** (§9.3 step 6) — suggest a category for each non-duplicate imported row | R7/R8 | Haiku | Reuses `suggestCategoriesAI` exactly. Batched: **one call for the whole import**, not one per row. Recommended, because the machinery already exists and import is the highest-volume categorisation moment — but it is a new *automatic* call at import time, so it needs your yes. Alternative: leave it behind the existing manual "Ask AI" button. |
-| P2 | **Photo import** — receipt or statement screenshot → transaction draft(s), feeding the CSV review table | TBD | Haiku | One call per uploaded photo (a multi-select batch of N photos is N calls, N rate-limit units — accepted tradeoff, see the spec), explicit user action, never automatic. Rows land in the **same review-and-confirm table** CSV import uses — never a silent write. No key → entry point hidden. Full spec: [../wallet/feature-photo-import.md](../wallet/feature-photo-import.md). |
 
 ### 2.3 RULES-ONLY — deliberately no API (do not add one)
 
@@ -123,4 +123,4 @@ Every approved call must satisfy all of these, or it is not wired:
 | 2026-08-21 | A1 / A2 / A3 composer calls | approved in principle as part of D-11; each still confirmed here before its release wires it |
 | 2026-09-02 | A1 wired | confirmed in chat at R7-composer kickoff — proceed exactly as scoped above |
 | — | P1 CSV auto-categorise | **pending owner yes** |
-| — | P2 photo import | **pending owner yes** |
+| 2026-09-06 | P2 photo import | **approved** — confirmed in chat, proceed to wire exactly as scoped in [../wallet/feature-photo-import.md](../wallet/feature-photo-import.md) |
