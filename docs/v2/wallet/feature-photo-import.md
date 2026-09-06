@@ -313,8 +313,14 @@ doesn't carry, and one field (`categoryId`) in a different shape
 successful `PhotoImportRow` after every photo's calls have settled:
 
 - `date`, `merchant`, `amount`, `type` — copied straight across.
-- `description` — always `''`. A photo has no raw narrative text the way a
-  CSV bank column does, so there is nothing meaningful to put here.
+- `description` — **amended 2026-09-07.** Originally always `''` on the
+  reasoning that "a photo has no raw narrative text the way a CSV bank column
+  does." True for a receipt (the business name printed on it IS the
+  merchant — nothing else to keep), false for a statement screenshot, which
+  *is* raw narrative text, the same as a CSV bank column. `merchant` is now
+  an AI-cleaned display name and `description` the line as printed,
+  unedited — the same split CSV import already makes between a resolved
+  merchant and its raw narrative. Still `''` for a receipt row.
 - `categoryId` — resolve `categoryGuess` (a name) against the caller's own
   category list (the same list already sent into the prompt, so a non-null
   guess is guaranteed to match by name) to get an id; `null` guess → `null`
@@ -343,13 +349,23 @@ successful `PhotoImportRow` after every photo's calls have settled:
   an unresolved CSV merchant name.
 
 **The one change to `CsvReviewTable.tsx`:** a new optional
-`photoMode?: boolean` prop. When true, the table's **Description** column
-(which has nothing to show for a photo row — see above) is replaced by a
-**Photo** column: a small thumbnail of the source image next to each row, for
-attribution. CSV rows never set `photoMode`, so CSV import's rendering is
-byte-for-byte unchanged. A single review session is always all-CSV or
-all-photo — the two sources are never mixed in one table — so this is a
-table-level prop, not a per-row field.
+`photoMode?: boolean` prop. CSV rows never set `photoMode`, so CSV import's
+rendering is byte-for-byte unchanged. A single review session is always
+all-CSV or all-photo — the two sources are never mixed in one table — so
+this is a table-level prop, not a per-row field.
+
+**Amended 2026-09-07.** Originally, when `photoMode` was true, the
+**Description** column was replaced entirely by a **Photo** column: a
+36×36px thumbnail of the source image next to each row. Two problems
+surfaced with real use: (1) `description` isn't always empty for a photo row
+any more — see the §7 amendment above — so hiding the column lost real,
+editable data; (2) a 36×36px thumbnail turned out to be too small to
+distinguish one photo from another in a multi-photo batch, the opposite of
+its "for attribution" purpose. `photoMode` now *adds* a **Source photo**
+column (the filename, as a link to the full-size `photoUrl` object URL —
+reliably identifies which photo a row came from, and stays clickable if you
+want to actually look at it) ahead of **Description**, which is now always
+rendered, exactly as it is for CSV rows.
 
 ## 8. New pieces checklist — as actually built (2026-09-06)
 

@@ -13,6 +13,9 @@ export type PhotoImportKind = 'receipt' | 'statement'
 export interface PhotoImportRow {
   date: string
   merchant: string
+  // '' for a receipt; for a statement, the line as printed on it — see
+  // worker/lib/anthropic.ts's PhotoImportRow for why the two kinds differ.
+  description: string
   amount: number
   type: 'income' | 'expense'
   categoryGuess: string | null
@@ -151,7 +154,7 @@ export async function photoResultsToImportRows(
         date: photoRow.date,
         amount: photoRow.amount,
         merchant: photoRow.merchant,
-        description: '',
+        description: photoRow.description,
         type: photoRow.type,
         categoryId: category?.id ?? null,
         destinationAccountId: null,
@@ -160,6 +163,7 @@ export async function photoResultsToImportRows(
         included: true,
         originalRow: {},
         photoUrl: result.photoUrl,
+        photoFileName: result.fileName,
         suggestedFrom: category ? { canonical: photoRow.merchant, matchCount: 0 } : undefined,
         suggestionApplied: !!category,
       })
