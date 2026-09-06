@@ -6,6 +6,7 @@ import { modules } from './modules'
 import { ModuleSwitcher } from './ModuleSwitcher'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
+import { CaptureInboxBadge } from '@/modules/wallet/CaptureInboxBadge'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
 import { useDayStore } from '@/stores/day.store'
@@ -118,6 +119,7 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
                     <item.icon className="icon" size={16} />
                     {item.label}
                     {item.to === '/wallet/shared' && <PendingClaimsBadge />}
+                    {item.to === '/wallet/inbox' && <CaptureInboxBadge />}
                   </NavLink>
                 ),
               )}

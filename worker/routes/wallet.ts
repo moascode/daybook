@@ -21,6 +21,7 @@ import {
 import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey, buildDuplicateKey } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
 import { overRateLimit } from '../lib/rate-limit.ts'
+import { insertTransactionStmt } from '../lib/insert-transaction.ts'
 import {
   suggestCategoriesWithAI,
   resolveMerchantsWithAI,
@@ -478,46 +479,6 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 /** Non-empty string from a query param, else undefined. */
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.length > 0 ? v : undefined
-
-/**
- * Build the INSERT for a transaction. Returns a prepared statement rather than
- * executing it, so callers can either run it directly or fold it into a
- * batch() — the recurring processor below needs the latter.
- */
-function insertTransactionStmt(
-  db: D1Database,
-  b: Record<string, unknown>,
-  userId: string,
-) {
-  const amount = Number(b.amount)
-  const duplicateKey = buildDuplicateKey(String(b.date ?? ''), amount, String(b.type ?? ''), String(b.merchant ?? ''))
-  return db
-    .prepare(
-      `INSERT INTO transactions
-         (id, user_id, account_id, destination_account_id, date, merchant, description,
-          amount, type, category_id, tag, import_hash, duplicate_key, created_at, updated_at)
-       VALUES
-         (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-       RETURNING *`,
-    )
-    // userId, accountId, destinationAccountId, date, merchant, description,
-    // amount, type, categoryId, tag, importHash, duplicateKey
-    .bind(
-      userId,
-      b.accountId,
-      b.destinationAccountId ?? null,
-      b.date,
-      b.merchant ?? '',
-      b.description ?? '',
-      normalizeBind(b.amount),
-      b.type,
-      b.categoryId ?? null,
-      Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
-      b.importHash ?? '',
-      duplicateKey,
-    )
-}
-
 
 // ── Transactions ─────────────────────────────────────
 

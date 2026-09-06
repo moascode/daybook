@@ -62,6 +62,20 @@ export interface ImportRow {
    * default.
    */
   possibleDuplicateOf?: { id: string; merchant: string; date: string; amount: number }[]
+  /**
+   * Capture inbox (R18) only. CSV and photo rows all land in ONE account
+   * chosen once in the review header, but a capture carries its own card, so
+   * each row resolves to its own account. Never set by the CSV or photo paths.
+   */
+  accountId?: string
+  /** True when the capture's card matched no entry in the card→account map, so
+   *  `accountId` is a fallback rather than a real answer — flagged in the
+   *  inbox rather than silently filed (rule 13). */
+  accountUnmapped?: boolean
+  /** The pending_captures row this came from. Capture inbox only. */
+  captureId?: string
+  /** The raw issuer card string the capture arrived with, for the flag's copy. */
+  rawCard?: string
 }
 
 // ── Date patterns for auto-detection ────────────────

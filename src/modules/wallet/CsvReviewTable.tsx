@@ -12,6 +12,12 @@ interface CsvReviewTableProps {
   categories: Category[]
   /** Accounts eligible as a transfer destination (writable), excluding the import target. */
   destinationAccounts: Account[]
+  /**
+   * Capture inbox (R18): when supplied, each row gets its own Account cell.
+   * CSV and photo import leave this undefined — those rows all land in the one
+   * account chosen in the review header, so a per-row column would be noise.
+   */
+  accountOptions?: Account[]
   onRowChange: (index: number, updates: Partial<ImportRow>) => void
   onToggleInclude: (index: number) => void
   /** Nulls every pre-filled category — a category the user chose by hand is untouched. */
@@ -45,6 +51,7 @@ export function CsvReviewTable({
   rows,
   categories,
   destinationAccounts,
+  accountOptions,
   onRowChange,
   onToggleInclude,
   onClearSuggestions,
@@ -230,6 +237,7 @@ export function CsvReviewTable({
             </th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Date</th>
             <th className="px-3 py-2 font-medium text-fg-subtle">Merchant</th>
+            {accountOptions && <th className="px-3 py-2 font-medium text-fg-subtle w-40">Account</th>}
             {photoMode && <th className="px-3 py-2 font-medium text-fg-subtle w-32">Source photo</th>}
             <th className="px-3 py-2 font-medium text-fg-subtle">Description</th>
             <th className="px-3 py-2 font-medium text-fg-subtle w-28">Amount</th>
@@ -309,6 +317,36 @@ export function CsvReviewTable({
                   )}
                 </div>
               </td>
+
+              {/* Account — capture inbox only. A capture carries its own card,
+                  so unlike CSV/photo it cannot inherit one account for the
+                  whole batch. An unmapped card is FLAGGED rather than quietly
+                  filed to the default account (rule 13). */}
+              {accountOptions && (
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <Select
+                      value={row.accountId ?? ''}
+                      onChange={(e) => onRowChange(index, { accountId: e.target.value, accountUnmapped: false })}
+                      options={accountOptions.map((a) => ({ value: a.id, label: a.name }))}
+                      className="w-36 text-xs"
+                      disabled={!row.included}
+                      aria-label={`Account for row ${index + 1}`}
+                      data-testid="capture-row-account"
+                    />
+                    {row.accountUnmapped && (
+                      <span
+                        className="flex shrink-0 items-center text-amber-600"
+                        title={`"${row.rawCard || 'Unknown card'}" isn't mapped to an account yet — check this one`}
+                        data-testid="capture-row-unmapped"
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span className="sr-only">Card not mapped to an account</span>
+                      </span>
+                    )}
+                  </div>
+                </td>
+              )}
 
               {/* Source photo — the filename, not a thumbnail: at table row
                   height a thumbnail is too small to tell photos apart in a
