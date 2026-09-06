@@ -292,17 +292,28 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
               )}
 
               {importType === 'photo' && (
-                <div className="mb-4">
-                  <p className="field-label">What are these photos?</p>
-                  <div className="segment" role="tablist">
-                    <button type="button" role="tab" aria-selected={photoKind === 'receipt'} onClick={() => setPhotoKind('receipt')}>
-                      Receipt
-                    </button>
-                    <button type="button" role="tab" aria-selected={photoKind === 'statement'} onClick={() => setPhotoKind('statement')}>
-                      Bank statement
-                    </button>
+                <>
+                  <div className="mb-4">
+                    <p className="field-label">What are these photos?</p>
+                    <div className="segment" role="tablist">
+                      <button type="button" role="tab" aria-selected={photoKind === 'receipt'} onClick={() => setPhotoKind('receipt')}>
+                        Receipt
+                      </button>
+                      <button type="button" role="tab" aria-selected={photoKind === 'statement'} onClick={() => setPhotoKind('statement')}>
+                        Bank statement
+                      </button>
+                    </div>
                   </div>
-                </div>
+                  <div className="mb-4">
+                    <p className="field-label">Import into account</p>
+                    <Select
+                      aria-label="Import into account"
+                      options={accounts.map((acc) => ({ value: acc.id, label: acc.name }))}
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                    />
+                  </div>
+                </>
               )}
 
               {importType === 'csv' ? (
