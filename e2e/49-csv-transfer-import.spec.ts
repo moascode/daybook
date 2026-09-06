@@ -43,11 +43,11 @@ test.afterAll(async () => {
 
 test('upload CSV and reach the review step', async () => {
   await navigateToImportCsv(page)
-  // Account is picked in the pick view (shared by both import types), before upload.
-  await page.getByLabel('Import into account').selectOption('Main Bank')
   await uploadFixtureCsv(page)
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  // Account is picked on the review page (shared by both import types).
+  await page.getByLabel('Import into account').selectOption('Main Bank')
   await expect(page.getByTestId('import-confirm-btn')).toHaveText(/Import 4 transactions/)
 })
 

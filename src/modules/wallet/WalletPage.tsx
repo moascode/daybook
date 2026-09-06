@@ -118,8 +118,8 @@ export function WalletPage() {
     }
   }, [location, navigate])
   const handleImportReady = useCallback(
-    (rows: ImportRow[], selectedAccountId: string, meta?: ImportReadyMeta) => {
-      navigate('/wallet/import', { state: { rows, selectedAccountId, ...meta } })
+    (rows: ImportRow[], meta?: ImportReadyMeta) => {
+      navigate('/wallet/import', { state: { rows, ...meta } })
     },
     [navigate],
   )

@@ -39,9 +39,12 @@ interface ImportModalProps {
   /**
    * Fires once rows are built and AI-assisted resolution/suggestion have run —
    * the parent (WalletPage) navigates to the review page with these in hand.
-   * The modal itself closes right before this fires.
+   * The modal itself closes right before this fires. The destination account
+   * is chosen on the review page, not here — extraction/mapping never needed
+   * it, so asking for it up front only locked in a choice before the user
+   * had seen anything to check it against.
    */
-  onReady: (rows: ImportRow[], selectedAccountId: string, meta?: ImportReadyMeta) => void
+  onReady: (rows: ImportRow[], meta?: ImportReadyMeta) => void
 }
 
 /**
@@ -70,18 +73,11 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([])
   const [mapping, setMapping] = useState<ColumnMapping>({ date: null, amount: null, merchant: null, description: null })
   const [firstRowIsHeader, setFirstRowIsHeader] = useState(true)
-  const [selectedAccountId, setSelectedAccountId] = useState('')
   const [parseErrors, setParseErrors] = useState<string[]>([])
   const [procLabel, setProcLabel] = useState('')
   const [procPct, setProcPct] = useState(0)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Converging conditional adjusted during render (no effect needed) — same
-  // pattern CsvImport.tsx used for this before the modal rework.
-  if (open && accounts.length > 0 && !selectedAccountId) {
-    setSelectedAccountId(accounts[0].id)
-  }
 
   const resetAll = useCallback(() => {
     setView('pick')
@@ -218,12 +214,12 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
 
       resetAll()
       onOpenChange(false)
-      onReady(rows, selectedAccountId)
+      onReady(rows)
     } catch {
       addToast({ message: 'Could not prepare the import — please try again.', duration: 4000 })
       setView('map')
     }
-  }, [rawRows, mapping, selectedAccountId, addToast, onReady, onOpenChange, resetAll])
+  }, [rawRows, mapping, addToast, onReady, onOpenChange, resetAll])
 
   // Client-side fan-out (spec §3.1): N photos is N independent calls to
   // POST /transactions/import-photo via Promise.allSettled inside
@@ -240,7 +236,7 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
       const { rows, failed } = await photoResultsToImportRows(results, categories)
       resetAll()
       onOpenChange(false)
-      onReady(rows, selectedAccountId, {
+      onReady(rows, {
         photoMode: true,
         failedPhotos: failed.map((f) => ({ fileName: f.fileName, failureReason: f.failureReason })),
       })
@@ -248,11 +244,11 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
       addToast({ message: 'Could not process the photos — please try again.', duration: 4000 })
       setView('pick')
     }
-  }, [photoFiles, photoKind, categories, selectedAccountId, addToast, onReady, onOpenChange, resetAll])
+  }, [photoFiles, photoKind, categories, addToast, onReady, onOpenChange, resetAll])
 
   const headerOptions = [{ value: '', label: '— None —' }, ...headers.map((h) => ({ value: h, label: h }))]
-  const canReview = !!mapping.date && !!mapping.amount && !!selectedAccountId
-  const canExtractPhotos = photoFiles.length > 0 && !!selectedAccountId
+  const canReview = !!mapping.date && !!mapping.amount
+  const canExtractPhotos = photoFiles.length > 0
 
   return (
     <Modal open={open} onOpenChange={handleClose} title="Import transactions" className="max-w-lg">
@@ -290,19 +286,6 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
                   </button>
                 </div>
               )}
-
-              {/* Shared by both import types — one account, chosen once, up front,
-                  rather than CSV asking for it later in the map view and photo
-                  asking earlier: the same field in the same place either way. */}
-              <div className="mb-4">
-                <p className="field-label">Import into account</p>
-                <Select
-                  aria-label="Import into account"
-                  options={accounts.map((acc) => ({ value: acc.id, label: acc.name }))}
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
-                />
-              </div>
 
               {importType === 'photo' && (
                 <div className="mb-4">

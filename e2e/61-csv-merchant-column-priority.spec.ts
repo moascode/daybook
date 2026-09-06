@@ -43,11 +43,6 @@ test('navigate to Import CSV via the account menu', async () => {
   await navigateToImportCsv(page)
 })
 
-test('account selector (shared by both import types) shows Narrative Account, in the pick view', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await accountSelect.selectOption('Narrative Account')
-})
-
 // ── Upload the CSV ──────────────────────────────────────────────────────
 
 test('upload CSV file with both Payee and Description columns', async () => {
@@ -80,6 +75,11 @@ test('description column is separately auto-detected as "Description"', async ()
 test('proceed to review', async () => {
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+})
+
+test('account selector (shared by both import types) shows Narrative Account, on the review page', async () => {
+  const accountSelect = page.getByLabel('Import into account')
+  await accountSelect.selectOption('Narrative Account')
 })
 
 // ── Review step — the split survived ────────────────────────────────────

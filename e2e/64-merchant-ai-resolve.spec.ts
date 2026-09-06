@@ -218,10 +218,6 @@ test.describe('CSV import: merchant AI resolution', () => {
 
     await navigateToImportCsv(page)
 
-    // Account is picked in the pick view (shared by both import types), before upload.
-    const accountSelect = page.getByLabel('Import into account')
-    await accountSelect.selectOption('Merchant AI Import Acct')
-
     const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
     await page.evaluate(async (content) => {
       const file = new File([content], 'narrative-unknown-merchants.csv', { type: 'text/csv' })
@@ -231,6 +227,10 @@ test.describe('CSV import: merchant AI resolution', () => {
 
     await page.getByRole('button', { name: 'Review rows' }).click()
     await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+
+    // Account is picked on the review page (shared by both import types).
+    const accountSelect = page.getByLabel('Import into account')
+    await accountSelect.selectOption('Merchant AI Import Acct')
 
     // Toast names the one unresolved row.
     await expect(page.getByText(/Couldn.t clean up 1 merchant name/)).toBeVisible({ timeout: 10_000 })

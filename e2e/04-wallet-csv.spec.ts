@@ -47,13 +47,6 @@ test('pick view shows a drop zone', async () => {
   await expect(page.getByText('CSV files exported from your bank')).toBeVisible()
 })
 
-test('account selector (shared by both import types) shows Import Account, in the pick view', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await expect(accountSelect).toHaveValue(/.+/) // has a value
-  // Select "Import Account" explicitly
-  await accountSelect.selectOption('Import Account')
-})
-
 // ── Upload the CSV ──────────────────────────────────────────────────────
 
 test('upload CSV file via file input', async () => {
@@ -92,6 +85,13 @@ test('proceed to review', async () => {
 })
 
 // ── Review step ─────────────────────────────────────────────────────────
+
+test('account selector (shared by both import types) shows Import Account, on the review page', async () => {
+  const accountSelect = page.getByLabel('Import into account')
+  await expect(accountSelect).toHaveValue(/.+/) // has a value
+  // Select "Import Account" explicitly
+  await accountSelect.selectOption('Import Account')
+})
 
 test('review page shows all 4 rows from the CSV', async () => {
   const rows = page.getByTestId('csv-review-row')

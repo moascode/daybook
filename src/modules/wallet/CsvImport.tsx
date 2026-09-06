@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Select'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
@@ -14,7 +15,6 @@ import type { TransactionInput } from '@/hooks/useWallet'
 
 interface ImportLocationState {
   rows: ImportRow[]
-  selectedAccountId: string
   /** Photo import (P2, approved 2026-09-06) — see ImportModal.tsx. */
   photoMode?: boolean
   failedPhotos?: { fileName: string; failureReason?: string }[]
@@ -37,7 +37,11 @@ export function CsvImport() {
 
   const state = location.state as ImportLocationState | null
   const [importRows, setImportRows] = useState<ImportRow[]>(state?.rows ?? [])
-  const [selectedAccountId] = useState(state?.selectedAccountId ?? '')
+  // Chosen here, not in the modal — extraction/mapping never needed it, and
+  // review is where the user is already checking everything else before
+  // committing, so this is the one place the account should be both visible
+  // and changeable (per the owner's ask, 2026-09-06).
+  const [selectedAccountId, setSelectedAccountId] = useState('')
   const [failedPhotos, setFailedPhotos] = useState(state?.failedPhotos ?? [])
   const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
@@ -47,6 +51,12 @@ export function CsvImport() {
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
+
+  // Converging conditional adjusted during render (no effect needed) — same
+  // pattern ImportModal.tsx used for this before the account field moved here.
+  if (importableAccounts.length > 0 && !selectedAccountId) {
+    setSelectedAccountId(importableAccounts[0].id)
+  }
 
   const includedCount = importRows.filter((r) => r.included).length
   const selectedCount = importRows.filter((r) => r.included).length
@@ -207,6 +217,20 @@ export function CsvImport() {
     <div className="mx-auto max-w-5xl pb-24">
       <div className="page-head">
         <h1 className="page-title">Review transactions</h1>
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <label htmlFor="review-account-select" className="text-xs font-medium text-fg-subtle">
+          Import into
+        </label>
+        <Select
+          id="review-account-select"
+          aria-label="Import into account"
+          options={importableAccounts.map((a) => ({ value: a.id, label: a.name }))}
+          value={selectedAccountId}
+          onChange={(e) => setSelectedAccountId(e.target.value)}
+          className="w-56"
+        />
       </div>
 
       {/* Photo import's partial-failure notice, per transactions-import-error.html.

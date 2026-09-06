@@ -33,9 +33,6 @@ test.afterAll(async () => {
 })
 
 test('imports a US-format date and a European-decimal amount correctly', async () => {
-  // Account is picked in the pick view (shared by both import types), before upload.
-  await page.getByLabel('Import into account').selectOption('Import Account')
-
   const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
   await page.evaluate(async (content) => {
     const file = new File([content], 'european-format.csv', { type: 'text/csv' })
@@ -46,6 +43,9 @@ test('imports a US-format date and a European-decimal amount correctly', async (
   await expect(page.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+
+  // Account is picked on the review page now (shared by both import types).
+  await page.getByLabel('Import into account').selectOption('Import Account')
 
   // B-13: 12/31/2025 (day 31 > 12 ⇒ MM/DD) → 2025-12-31, not the invalid 2025-31-12.
   await expect(page.getByTestId('csv-row-date')).toHaveValue('2025-12-31')
