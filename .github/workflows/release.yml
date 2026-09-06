@@ -103,7 +103,16 @@ jobs:
       # The client bundle still has to exist locally for `wrangler deploy` to
       # upload it — wrangler bundles the Worker from source at deploy time, so
       # there is no prebuilt Worker artifact to promote, only this.
+      #
+      # VITE_APP_VERSION is baked into the bundle here (Vite exposes any
+      # VITE_*-prefixed env var to client code via import.meta.env) so the
+      # sidebar footer's version string is the tag that triggered this exact
+      # release, not a hand-typed literal someone forgets to bump — see
+      # ModuleSidebar.tsx / AccountMenu.tsx. github.ref_name on a tag push is
+      # the tag itself (e.g. "v3.2.0"), no refs/tags/ prefix to strip.
       - name: Build client bundle
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}
         run: npm run build
 
       # ── Everything below touches production ──────────────────────────────
