@@ -1,6 +1,6 @@
 /**
  * Wallet — CSV Import end-to-end tests.
- * Covers the full 4-step flow: upload → column mapping → review → import.
+ * Covers the full flow: modal (pick → map → processing) → review page → import.
  * Also verifies duplicate detection on a second import of the same file.
  */
 
@@ -14,6 +14,14 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 const CSV_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'transactions.csv')
 
+async function uploadFixtureCsv(p: Page) {
+  const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
+  await p.evaluate(async (content) => {
+    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
+    await window.__testCsvFileSelect(file)
+  }, csvContent)
+}
+
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   page = await newAppPage(browser, '/wallet/accounts')
   await page.getByRole('button', { name: 'Add Account' }).first().click()
@@ -25,20 +33,18 @@ test.afterAll(async () => {
   await page.context().close()
 })
 
-// ── Navigate to Import CSV ──────────────────────────────────────────────
+// ── Open the import modal ────────────────────────────────────────────────
 
-test('navigate to Import CSV via the account menu', async () => {
+test('open the import modal via the account menu', async () => {
   // R2: Import CSV left the sidebar — reachable from the account menu now.
+  // navigateToImportCsv waits for the modal (role=dialog) itself since the
+  // URL stays on whatever page the menu was opened from until review.
   await navigateToImportCsv(page)
-  await expect(page).toHaveURL(/\/wallet\/import$/)
-  await page.waitForLoadState('networkidle')
-  // Wait for the heading to render
-  await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
 })
 
-test('upload step shows a drop zone and Choose File button', async () => {
-  await expect(page.getByText('Drop a CSV file here')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Choose File' })).toBeVisible()
+test('pick view shows a drop zone', async () => {
+  await expect(page.getByText('Drag a file here')).toBeVisible()
+  await expect(page.getByText('CSV files exported from your bank')).toBeVisible()
 })
 
 // ── Upload the CSV ──────────────────────────────────────────────────────
@@ -46,55 +52,50 @@ test('upload step shows a drop zone and Choose File button', async () => {
 test('upload CSV file via file input', async () => {
   // Playwright can't reliably trigger React's onChange on hidden file inputs.
   // Use the exposed test helper to pass a File object directly.
-  const csvContent = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
-  await page.evaluate(async (content) => {
-    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
-    await window.__testCsvFileSelect(file)
-  }, csvContent)
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+  await uploadFixtureCsv(page)
+  await expect(page.getByText('transactions.csv')).toBeVisible({ timeout: 10_000 })
 })
 
-test('mapping step shows the file name and row count', async () => {
+test('map view shows the file name and row count', async () => {
   await expect(page.getByText('transactions.csv')).toBeVisible()
   // 4 data rows in the CSV
-  await expect(page.getByText('4 rows')).toBeVisible()
+  await expect(page.getByText('4 rows detected')).toBeVisible()
 })
 
 // ── Column mapping ──────────────────────────────────────────────────────
 
 test('date column is auto-detected from "Date" header', async () => {
-  // The Date select should already have "Date" selected
-  const dateSelect = page.getByLabel('Date column *')
+  const dateSelect = page.getByLabel('Date column')
   await expect(dateSelect).toHaveValue('Date')
 })
 
 test('amount column is auto-detected from "Amount" header', async () => {
-  const amountSelect = page.getByLabel('Amount column *')
+  const amountSelect = page.getByLabel('Amount column')
   await expect(amountSelect).toHaveValue('Amount')
 })
 
 test('merchant column is auto-detected from "Merchant" header', async () => {
-  const merchantSelect = page.getByLabel('Merchant / Description column')
+  const merchantSelect = page.getByLabel('Merchant column')
   await expect(merchantSelect).toHaveValue('Merchant')
 })
 
 test('account selector shows Import Account', async () => {
-  const accountSelect = page.getByLabel('Import into account *')
+  const accountSelect = page.getByLabel('Import into account')
   await expect(accountSelect).toHaveValue(/.+/) // has a value
   // Select "Import Account" explicitly
   await accountSelect.selectOption('Import Account')
 })
 
-test('proceed to Review Rows step', async () => {
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
+test('proceed to review', async () => {
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 })
 
 // ── Review step ─────────────────────────────────────────────────────────
 
-test('review table shows all 4 rows from the CSV', async () => {
-  await expect(page.getByText('4 to import')).toBeVisible()
-  await expect(page.getByText('0 duplicate')).toBeVisible()
+test('review page shows all 4 rows from the CSV', async () => {
+  const rows = page.getByTestId('csv-review-row')
+  await expect(rows).toHaveCount(4)
 })
 
 test('review table shows the CSV rows with correct merchants', async () => {
@@ -114,19 +115,19 @@ test('review table has checkboxes (included column)', async () => {
   expect(count).toBeGreaterThanOrEqual(4)
 })
 
-test('unchecking a row reduces the import count', async () => {
+test('unchecking a row reduces the selected count', async () => {
   // Uncheck the first row
   await page.getByTestId('csv-row-include').first().uncheck()
-  await expect(page.getByText('3 to import')).toBeVisible()
+  await expect(page.getByTestId('import-confirm-btn')).toHaveText(/Import 3 transactions/)
   // Re-check it for the actual import
   await page.getByTestId('csv-row-include').first().check()
-  await expect(page.getByText('4 to import')).toBeVisible()
+  await expect(page.getByTestId('import-confirm-btn')).toHaveText(/Import 4 transactions/)
 })
 
 // ── Import ──────────────────────────────────────────────────────────────
 
-test('click Import button triggers import and shows success screen', async () => {
-  await page.getByRole('button', { name: /Import 4 Transactions/ }).click()
+test('clicking the floating Import button triggers import and shows success screen', async () => {
+  await page.getByTestId('import-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 })
 
@@ -163,49 +164,39 @@ test('imported transactions have correct amounts', async () => {
 
 test('importing the same CSV a second time detects all 4 as duplicates', async () => {
   await navigateToImportCsv(page)
-  const csvContent2 = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
-  await page.evaluate(async (content) => {
-    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
-    await window.__testCsvFileSelect(file)
-  }, csvContent2)
-  await expect(page.getByText('Map Columns')).toBeVisible()
-  await page.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(page.getByText('Review Import')).toBeVisible()
-  // All 4 rows should be marked as duplicates (0 to import)
-  await expect(page.getByText(/0 to import/)).toBeVisible()
-  await expect(page.getByText('4 duplicate')).toBeVisible()
-})
-
-test('Import button is disabled when all rows are duplicates', async () => {
-  await expect(page.getByRole('button', { name: /Import 0 Transactions/ })).toBeDisabled()
+  await uploadFixtureCsv(page)
+  await expect(page.getByText('4 rows detected')).toBeVisible({ timeout: 10_000 })
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  // All 4 rows should be marked as duplicates (0 selected — the bulk bar
+  // only appears once at least one row is checked, so it's absent here).
+  await expect(page.getByTestId('import-bulk-action-bar')).not.toBeVisible()
+  const badges = page.getByText('Duplicate', { exact: true })
+  await expect(badges).toHaveCount(4)
 })
 
 // ── First-row-is-header toggle ───────────────────────────────────────────
 
-test('header toggle is checked by default in the mapping step', async () => {
-  // Re-upload the CSV to get back to mapping step
-  const csvContent = await import('node:fs/promises').then(fs => fs.readFile(CSV_PATH, 'utf-8'))
+test('header toggle is checked by default in the map view', async () => {
+  // Re-upload the CSV to get back to the map view
   await navigateToImportCsv(page)
-  await page.evaluate(async (content) => {
-    const file = new File([content], 'transactions.csv', { type: 'text/csv' })
-    await window.__testCsvFileSelect(file)
-  }, csvContent)
-  await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByLabel('First row is a header (column names)')).toBeChecked()
+  await uploadFixtureCsv(page)
+  await expect(page.getByText('4 rows detected')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByLabel('First row is a header')).toBeChecked()
 })
 
 test('unchecking header toggle increases row count (first row treated as data)', async () => {
   // With header: the CSV has 4 data rows (header row is excluded from count).
   // Without header: first row becomes data too, so count becomes 5.
-  await expect(page.getByText('4 rows')).toBeVisible()
-  await page.getByLabel('First row is a header (column names)').uncheck()
+  await expect(page.getByText('4 rows detected')).toBeVisible()
+  await page.getByLabel('First row is a header').uncheck()
   // Wait for the async re-parse to complete and the count to update
-  await expect(page.getByText('5 rows')).toBeVisible({ timeout: 5000 })
+  await expect(page.getByText('5 rows detected')).toBeVisible({ timeout: 5000 })
 })
 
 test('re-checking header toggle restores original row count', async () => {
-  await page.getByLabel('First row is a header (column names)').check()
-  await expect(page.getByText('4 rows')).toBeVisible()
+  await page.getByLabel('First row is a header').check()
+  await expect(page.getByText('4 rows detected')).toBeVisible()
 })
 
 // ── Type-filtered category options (§2.5) ────────────────────────────────
@@ -218,15 +209,13 @@ test('review category options are filtered by each row type', async ({ browser }
   await fillAccountForm(isoPage, { name: 'Filter Account', type: 'bank' })
 
   await navigateToImportCsv(isoPage)
-  await expect(isoPage.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
-  const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
   await isoPage.evaluate(async (content) => {
     const file = new File([content], 'transactions.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
-  }, csvContent)
-  await expect(isoPage.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
-  await isoPage.getByRole('button', { name: /Review Rows/ }).click()
-  await expect(isoPage.getByText('Review Import')).toBeVisible()
+  }, await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8')))
+  await expect(isoPage.getByText('4 rows detected')).toBeVisible({ timeout: 10_000 })
+  await isoPage.getByRole('button', { name: 'Review rows' }).click()
+  await expect(isoPage.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   // Positive amounts parse as income → the category select offers income
   // categories, never an expense-only one.
@@ -293,16 +282,21 @@ test('CSV import respects shared-account write permission', async ({ browser }) 
 
 // ── No-account guard ────────────────────────────────────────────────────
 
-test('CSV import shows no-account warning when user has no accounts', async ({ browser }) => {
-  // A freshly signed-up user has no accounts — navigate directly to import
-  const noAccountPage = await newAppPage(browser, '/wallet/import')
+test('import modal shows no-account warning when user has no accounts', async ({ browser }) => {
+  // A freshly signed-up user has no accounts. The Composer itself doesn't
+  // render with zero accounts, so the account menu is the only surviving
+  // entry point into the modal in this state.
+  const noAccountPage = await newAppPage(browser, '/wallet')
+  await noAccountPage.getByTestId('account-menu-button').click()
+  await noAccountPage.getByTestId('account-menu-settings').click()
+  await noAccountPage.getByTestId('account-menu-import-csv').click()
 
   await expect(noAccountPage.getByTestId('csv-no-account-warning')).toBeVisible()
-  await expect(noAccountPage.getByText('No accounts yet')).toBeVisible()
+  await expect(noAccountPage.getByText('You need at least one account')).toBeVisible()
   await expect(noAccountPage.getByRole('link', { name: 'Create an Account' })).toBeVisible()
 
   // Drop zone should not be visible when no accounts exist
-  await expect(noAccountPage.getByText('Drop a CSV file here')).not.toBeVisible()
+  await expect(noAccountPage.getByText('Drag a file here')).not.toBeVisible()
 
   await noAccountPage.context().close()
 })

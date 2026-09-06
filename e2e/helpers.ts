@@ -297,9 +297,17 @@ export async function navTo(page: Page, dest: string) {
  * button on the Transactions page and *Import & export data* in the profile
  * menu"), so `navTo(page, 'import')` no longer resolves to anything.
  * Assumes the account menu is currently closed.
+ *
+ * The account-menu item now navigates to `/wallet` with router state
+ * `{ openImport: true }`, which auto-opens the in-page `ImportModal` — it no
+ * longer lands on a standalone `/wallet/import` upload page (that route is
+ * review-only now; see `ImportModal.tsx` / `CsvImport.tsx`). This waits for
+ * the modal itself rather than asserting a URL, since the URL stays on
+ * `/wallet` until the review step.
  */
 export async function navigateToImportCsv(page: Page) {
   await page.getByTestId('account-menu-button').click()
   await page.getByTestId('account-menu-settings').click()
   await page.getByTestId('account-menu-import-csv').click()
+  await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
 }

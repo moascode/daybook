@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { Wallet, TrendingUp, TrendingDown, Download, Trash2, SlidersHorizontal, ArrowUpDown, X, Users, Tag, Search } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +20,8 @@ import { LinkTransferDialog } from '@/modules/wallet/LinkTransferDialog'
 import type { TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
 import { Composer } from '@/modules/wallet/composer/Composer'
 import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
+import { ImportModal } from '@/modules/wallet/import/ImportModal'
+import type { ImportRow } from '@/lib/csv'
 import { useWallet, countableAmount } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useAppStore } from '@/stores/app.store'
@@ -89,6 +91,38 @@ export function WalletPage() {
   // the form closes so a stray draft can't leak into an unrelated open.
   const composerInputRef = useRef<HTMLInputElement>(null)
   const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
+
+  // Unified import modal (CSV only today — see ImportModal.tsx). Opened from
+  // the composer's "Import" shortcut, or by navigating back here with
+  // `{ state: { openImport: true } }` (the review page's "Import Another" /
+  // "Go to Transactions" empty-state actions).
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  // A navigation to this SAME route (e.g. re-opening the menu while already
+  // on /wallet) updates `location` without remounting the component, so a
+  // lazy useState initializer alone would miss it. Tracked by `location.key`
+  // (unique per navigation) rather than an effect + setState, matching the
+  // "converging conditional adjusted during render" pattern already used
+  // elsewhere in this file — avoids react-hooks/set-state-in-effect.
+  const [handledImportKey, setHandledImportKey] = useState<string | null>(null)
+  if ((location.state as { openImport?: boolean } | null)?.openImport && location.key !== handledImportKey) {
+    setImportModalOpen(true)
+    setHandledImportKey(location.key)
+  }
+  // Clears the one-shot nav state (a side effect on the router, not local
+  // state) so navigating back here again doesn't reopen the modal.
+  useEffect(() => {
+    if ((location.state as { openImport?: boolean } | null)?.openImport) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location, navigate])
+  const handleImportReady = useCallback(
+    (rows: ImportRow[], selectedAccountId: string) => {
+      navigate('/wallet/import', { state: { rows, selectedAccountId } })
+    },
+    [navigate],
+  )
 
   // §6.4 filter bar: the occasional filters live in a popup; the
   // sharing view only renders for users who are actually in a group (it stays
@@ -784,9 +818,17 @@ export function WalletPage() {
             hasAnthropicKey={hasAnthropicKey}
             onConfirm={handleComposerConfirm}
             onOpenBlankForm={openComposerForm}
+            onOpenImport={() => setImportModalOpen(true)}
           />
         </div>
       )}
+
+      <ImportModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        accounts={accounts.filter((a) => !a.isShared || a.canWrite === 1)}
+        onReady={handleImportReady}
+      />
 
       {/* U-16: first-run orientation for a wallet with no accounts yet. */}
       {accounts.length === 0 && (

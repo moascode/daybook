@@ -68,8 +68,8 @@ export function AccountMenu() {
   }, [open, close])
 
   const goTo = useCallback(
-    (path: string) => {
-      navigate(path)
+    (path: string, state?: Record<string, unknown>) => {
+      navigate(path, state ? { state } : undefined)
       close()
     },
     [navigate, close],
@@ -228,7 +228,11 @@ export function AccountMenu() {
               /wallet/import and /wallet/canonicalize-merchants would have NO
               UI entry point at all once the sidebar link is gone. */}
           <div className="menu-label">Import &amp; export data</div>
-          <button type="button" className="menu-wide" onClick={() => goTo('/wallet/import')} data-testid="account-menu-import-csv">
+          {/* Opens the unified Import modal from Transactions (R2's own note
+              above: /wallet/import is now review-only, reached from within
+              that modal — see ImportModal.tsx) rather than navigating there
+              directly, which would show "No import in progress" today. */}
+          <button type="button" className="menu-wide" onClick={() => goTo('/wallet', { openImport: true })} data-testid="account-menu-import-csv">
             <span className="bubble">
               <Upload className="icon" />
             </span>

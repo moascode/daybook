@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard } from 'lucide-react'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import { useWallet } from '@/hooks/useWallet'
@@ -13,8 +13,10 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import { Composer } from '@/modules/wallet/composer/Composer'
 import type { ComposerPreviewDraft } from '@/modules/wallet/composer/ComposerPreview'
+import { ImportModal } from '@/modules/wallet/import/ImportModal'
 import { TransactionForm, type TransactionFormData } from '@/modules/wallet/TransactionForm'
 import type { Transaction } from '@/types/wallet.types'
+import type { ImportRow } from '@/lib/csv'
 
 import {
   BASELINE_MONTHS,
@@ -101,6 +103,30 @@ export function Dashboard() {
   const crud = useCrudModal<Transaction>()
   const composerInputRef = useRef<HTMLInputElement>(null)
   const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
+
+  // Unified import modal (CSV only today — see ImportModal.tsx). Mirrors
+  // WalletPage.tsx's wiring; the Overview composer carries the same shortcut.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [importModalOpen, setImportModalOpen] = useState(false)
+  // See WalletPage.tsx's identical comment: tracked by `location.key` rather
+  // than an effect + setState, since a nav to this same route doesn't remount.
+  const [handledImportKey, setHandledImportKey] = useState<string | null>(null)
+  if ((location.state as { openImport?: boolean } | null)?.openImport && location.key !== handledImportKey) {
+    setImportModalOpen(true)
+    setHandledImportKey(location.key)
+  }
+  useEffect(() => {
+    if ((location.state as { openImport?: boolean } | null)?.openImport) {
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location, navigate])
+  const handleImportReady = useCallback(
+    (rows: ImportRow[], selectedAccountId: string) => {
+      navigate('/wallet/import', { state: { rows, selectedAccountId } })
+    },
+    [navigate],
+  )
 
   const { dateFrom, dateTo } = range
   const preset = dateRangePreset(range)
@@ -432,9 +458,17 @@ export function Dashboard() {
             hasAnthropicKey={hasAnthropicKey}
             onConfirm={handleComposerConfirm}
             onOpenBlankForm={openComposerForm}
+            onOpenImport={() => setImportModalOpen(true)}
           />
         </div>
       )}
+
+      <ImportModal
+        open={importModalOpen}
+        onOpenChange={setImportModalOpen}
+        accounts={accounts.filter((a) => !a.isShared || a.canWrite === 1)}
+        onReady={handleImportReady}
+      />
 
       <div className="dash">
         {/* Row A — hero + featured account */}

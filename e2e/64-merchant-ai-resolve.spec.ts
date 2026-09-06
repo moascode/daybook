@@ -217,20 +217,19 @@ test.describe('CSV import: merchant AI resolution', () => {
     )
 
     await navigateToImportCsv(page)
-    await expect(page.locator('main').getByRole('heading', { name: 'Import CSV' })).toBeVisible()
 
     const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
     await page.evaluate(async (content) => {
       const file = new File([content], 'narrative-unknown-merchants.csv', { type: 'text/csv' })
       await window.__testCsvFileSelect(file)
     }, csvContent)
-    await expect(page.getByText('Map Columns')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
 
-    const accountSelect = page.getByLabel('Import into account *')
+    const accountSelect = page.getByLabel('Import into account')
     await accountSelect.selectOption('Merchant AI Import Acct')
 
-    await page.getByRole('button', { name: /Review Rows/ }).click()
-    await expect(page.getByText('Review Import')).toBeVisible()
+    await page.getByRole('button', { name: 'Review rows' }).click()
+    await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
     // Toast names the one unresolved row.
     await expect(page.getByText(/Couldn.t clean up 1 merchant name/)).toBeVisible({ timeout: 10_000 })

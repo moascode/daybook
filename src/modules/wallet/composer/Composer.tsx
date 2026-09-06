@@ -1,5 +1,4 @@
 import { forwardRef, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Send,
   TrendingDown,
@@ -35,6 +34,8 @@ export interface ComposerProps {
    * (→ `{ merchant: <raw text> }`, never a silent failure).
    */
   onOpenBlankForm: (initialDraft?: Partial<TransactionFormData>) => void
+  /** Opens the unified Import modal (currently CSV only — see ImportModal.tsx). */
+  onOpenImport: () => void
 }
 
 interface ComposerAiResponse {
@@ -108,7 +109,7 @@ function draftFromAiResponse(
  * which points directly at the underlying `<input>` DOM node.
  */
 export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Composer(
-  { accounts, categories, activeAccountId, hasAnthropicKey, onConfirm, onOpenBlankForm },
+  { accounts, categories, activeAccountId, hasAnthropicKey, onConfirm, onOpenBlankForm, onOpenImport },
   ref,
 ) {
   const username = useAppStore((s) => s.user?.username ?? '')
@@ -258,12 +259,17 @@ export const Composer = forwardRef<HTMLInputElement, ComposerProps>(function Com
             {label}
           </button>
         ))}
-        <Link to="/wallet/import" className="composer-act" data-testid="import-csv-btn">
+        <button
+          type="button"
+          className="composer-act"
+          data-testid="import-csv-btn"
+          onClick={onOpenImport}
+        >
           <span className="cdot" style={{ background: 'rgb(var(--surface-sunk))', color: 'rgb(var(--fg-muted))' }}>
             <Upload className="icon-sm" aria-hidden="true" />
           </span>
-          Import CSV
-        </Link>
+          Import
+        </button>
       </div>
 
       {previewDraft && (
