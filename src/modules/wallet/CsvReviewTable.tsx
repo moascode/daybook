@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react'
+import { AlertTriangle, Inbox, X } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -482,11 +482,29 @@ export function CsvReviewTable({
                   ) : (
                     <Badge variant="default">Excluded</Badge>
                   )}
+                  {/* R18 gap 1 — a capture is WAITING for this payment. Worded
+                      apart from the possible-duplicate hint below because it
+                      says something different and more actionable: the ledger
+                      does not have this row, your inbox does. */}
+                  {!row.isDuplicate && row.pendingCaptureOf && row.pendingCaptureOf.length > 0 && (
+                    <span
+                      className="flex shrink-0 items-center text-amber-600"
+                      data-testid="csv-pending-capture-match"
+                      title={`A capture for ${row.pendingCaptureOf[0].merchant || 'this payment'} on ${row.pendingCaptureOf[0].date} is already waiting in your inbox — importing this as well would count it twice`}
+                    >
+                      <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="sr-only">A matching capture is waiting in your inbox</span>
+                    </span>
+                  )}
                   {!row.isDuplicate && row.possibleDuplicateOf && row.possibleDuplicateOf.length > 0 && (
                     <span
                       className="flex shrink-0 items-center text-amber-600"
                       data-testid="csv-possible-duplicate"
-                      title={`Might match ${row.possibleDuplicateOf[0].merchant} on ${row.possibleDuplicateOf[0].date}${
+                      title={`${
+                        row.possibleDuplicateOf[0].fromCapture
+                          ? `Might be the same payment as the captured "${row.possibleDuplicateOf[0].merchant}"`
+                          : `Might match ${row.possibleDuplicateOf[0].merchant}`
+                      } on ${row.possibleDuplicateOf[0].date}${
                         row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1} more)` : ''
                       } — check before importing`}
                     >
