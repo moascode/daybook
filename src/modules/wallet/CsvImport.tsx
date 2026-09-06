@@ -8,6 +8,7 @@ import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
 import { useAppStore } from '@/stores/app.store'
 import { suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
+import { resolveMerchants } from '@/lib/csv'
 import { errorMessage } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
@@ -48,6 +49,8 @@ export function CsvImport() {
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
   const [askingAI, setAskingAI] = useState(false)
   const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
+  const [resolvingMerchants, setResolvingMerchants] = useState(false)
+  const [merchantAiMessage, setMerchantAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
@@ -136,6 +139,66 @@ export function CsvImport() {
       setAiMessage({ tone: 'error', text: errorMessage(err, 'Could not ask AI — please try again.') })
     } finally {
       setAskingAI(false)
+    }
+  }, [importRows])
+
+  // Merchant-resolution mirror of A4 above: the automatic on-import pass
+  // (ImportModal.tsx) only runs the free rules ladder (corrections cache +
+  // own history); this button is the sole place AI is reached for merchant
+  // cleanup, for whatever the rules pass left unresolved.
+  const handleResolveMerchantsAI = useCallback(async () => {
+    const pending = new Map<string, string>() // guess (current merchant text) -> raw narrative
+    for (const row of importRows) {
+      if (row.included && row.merchantUnresolved && row.narrativeRaw) {
+        pending.set(row.merchant, row.narrativeRaw)
+      }
+    }
+    if (pending.size === 0) return
+    const totalTargets = pending.size
+    setResolvingMerchants(true)
+    setMerchantAiMessage(null)
+    try {
+      const { resolutions, failureReason } = await resolveMerchants(
+        [...pending.entries()].map(([guess, raw]) => ({ raw, guess })),
+        true,
+      )
+      // Derived from the response, not from a counter mutated inside the
+      // setState updater below — React does not guarantee that updater runs
+      // synchronously before this line (it did not, in practice, after an
+      // await), so a side-effect counter there always read back as 0.
+      const resolvedCount = resolutions.length
+      const byGuess = new Map(resolutions.map((r) => [r.guess, r.name]))
+      setImportRows((prev) =>
+        prev.map((row) => {
+          if (!row.merchantUnresolved) return row
+          const name = byGuess.get(row.merchant)
+          return name ? { ...row, merchant: name, merchantUnresolved: false } : row
+        }),
+      )
+
+      // Every outcome says something (rule 13) — a click that resolves
+      // nothing and explains nothing is the one result this must avoid.
+      if (resolvedCount === 0) {
+        setMerchantAiMessage({
+          tone: failureReason ? 'error' : 'info',
+          text: failureReason
+            ? `Couldn't clean up merchant names — ${failureReason}`
+            : `Claude had no confident cleanup for the remaining merchant name${totalTargets !== 1 ? 's' : ''}.`,
+        })
+      } else if (resolvedCount < totalTargets) {
+        setMerchantAiMessage({
+          tone: 'info',
+          text: `Cleaned up ${resolvedCount} of ${totalTargets} merchant name${totalTargets !== 1 ? 's' : ''}${
+            failureReason ? ` (${failureReason})` : ''
+          } — ask AI again to retry those.`,
+        })
+      } else {
+        setMerchantAiMessage({ tone: 'info', text: `Cleaned up ${resolvedCount} merchant name${resolvedCount !== 1 ? 's' : ''}.` })
+      }
+    } catch (err) {
+      setMerchantAiMessage({ tone: 'error', text: errorMessage(err, 'Could not resolve merchant names — please try again.') })
+    } finally {
+      setResolvingMerchants(false)
     }
   }, [importRows])
 
@@ -304,6 +367,9 @@ export function CsvImport() {
         askingAI={askingAI}
         aiMessage={aiMessage}
         onAskAI={() => void handleAskAI()}
+        resolvingMerchants={resolvingMerchants}
+        merchantAiMessage={merchantAiMessage}
+        onResolveMerchantsAI={() => void handleResolveMerchantsAI()}
       />
 
       {selectedCount > 0 && (

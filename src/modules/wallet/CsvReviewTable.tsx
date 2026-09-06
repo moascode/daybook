@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, X } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -29,6 +29,15 @@ interface CsvReviewTableProps {
   aiMessage: { tone: 'error' | 'info'; text: string } | null
   /** Asks Claude for the rows still uncategorised after the rules pass. */
   onAskAI: () => void
+  /**
+   * Same split as category suggestion: the automatic on-import pass only
+   * runs the free rules ladder (corrections cache + own history) — AI is
+   * reached only via this explicit "Ask AI to resolve merchant names"
+   * action, for whatever the rules pass left unresolved (`row.merchantUnresolved`).
+   */
+  resolvingMerchants: boolean
+  merchantAiMessage: { tone: 'error' | 'info'; text: string } | null
+  onResolveMerchantsAI: () => void
 }
 
 export function CsvReviewTable({
@@ -43,6 +52,9 @@ export function CsvReviewTable({
   askingAI,
   aiMessage,
   onAskAI,
+  resolvingMerchants,
+  merchantAiMessage,
+  onResolveMerchantsAI,
 }: CsvReviewTableProps) {
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
@@ -78,9 +90,49 @@ export function CsvReviewTable({
   const uncategorizedCount = rows.filter(
     (r) => r.included && r.type !== 'transfer' && !r.categoryId,
   ).length
+  const merchantUnresolvedCount = rows.filter((r) => r.included && r.merchantUnresolved).length
 
   return (
     <div>
+      {merchantUnresolvedCount > 0 && (
+        <div
+          data-testid="csv-merchant-banner"
+          className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
+        >
+          <span className="text-fg-muted">
+            {merchantUnresolvedCount} merchant name{merchantUnresolvedCount !== 1 ? 's' : ''} couldn't be cleaned up automatically
+            {!hasAnthropicKey && (
+              <>
+                {' — set an '}
+                <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                {' to ask AI'}
+              </>
+            )}
+          </span>
+          {hasAnthropicKey && (
+            <button
+              type="button"
+              onClick={onResolveMerchantsAI}
+              disabled={resolvingMerchants}
+              data-testid="csv-ask-ai-merchants"
+              className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+            >
+              {resolvingMerchants ? 'Asking AI…' : 'Ask AI to suggest'}
+            </button>
+          )}
+        </div>
+      )}
+      {merchantAiMessage && (
+        <p
+          data-testid="csv-merchant-ai-message"
+          className={cn(
+            'mb-3 rounded-lg px-3 py-2 text-xs',
+            merchantAiMessage.tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-surface-sunken text-fg-subtle',
+          )}
+        >
+          {merchantAiMessage.text}
+        </p>
+      )}
       {(suggestedCount > 0 || uncategorizedCount > 0) && (
         <div
           data-testid="csv-suggestions-banner"
@@ -128,9 +180,11 @@ export function CsvReviewTable({
               <button
                 type="button"
                 onClick={onClearSuggestions}
-                className="font-medium text-brand-600 hover:text-brand-700"
+                aria-label="Clear suggestions"
+                title="Clear suggestions"
+                className="flex-shrink-0 rounded-full p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
               >
-                Clear suggestions
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             )}
           </div>

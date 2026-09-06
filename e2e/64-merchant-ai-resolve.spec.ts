@@ -35,8 +35,13 @@ async function mockMerchantAiResponse(page: Page, text: string) {
   expect(res.ok()).toBeTruthy()
 }
 
-async function resolveMerchants(page: Page, items: Array<{ raw: string; guess: string }>) {
-  return page.request.post(`${API}/merchants/resolve`, { data: { items } })
+// useAI defaults true here: every test in the "POST /merchants/resolve"
+// describe block below is specifically exercising the ladder's AI-reaching
+// behavior (Stage 3) — the same opt-in the review page's explicit "Ask AI to
+// resolve merchant names" button now sends. The automatic on-import pass
+// (tested separately below) omits it.
+async function resolveMerchants(page: Page, items: Array<{ raw: string; guess: string }>, useAI = true) {
+  return page.request.post(`${API}/merchants/resolve`, { data: { items, useAI } })
 }
 
 // ── Server contract: POST /merchants/resolve ────────────────────────────
@@ -195,7 +200,7 @@ test.describe('POST /merchants/resolve', () => {
 // ── UI flow: CSV import round-trips through the ladder ──────────────────
 
 test.describe('CSV import: merchant AI resolution', () => {
-  test('a fresh narrative resolves via AI and lands on the imported transaction; an unresolved one is visibly marked', async ({
+  test('the automatic pass never reaches AI; the explicit "Ask AI" button resolves what rules could not', async ({
     browser,
   }) => {
     const page = await newAppPage(browser, '/wallet/accounts')
@@ -204,8 +209,13 @@ test.describe('CSV import: merchant AI resolution', () => {
     await expect(accountCardFor(page, 'Merchant AI Import Acct')).toBeVisible()
 
     await setApiKey(page, 'sk-ant-test-dummy')
-    // AI resolves the first two guesses; the third ("Warung Pak Cik Abu") is
-    // deliberately left unanswered so the row surfaces as unresolved.
+    // hasAnthropicKey is read once at app load and cached in app.store — a
+    // key set afterwards via a raw API call needs a reload to be picked up
+    // (see 59-merchant-suggestions.spec.ts's identical note).
+    await page.reload()
+    // Left in place for the WHOLE test but must not be consulted until the
+    // explicit button click — proving the automatic on-import pass is
+    // rules-only (corrections cache + own history), never AI.
     await mockMerchantAiResponse(
       page,
       JSON.stringify({
@@ -231,16 +241,25 @@ test.describe('CSV import: merchant AI resolution', () => {
     // Account is picked on the review page (shared by both import types).
     await selectReviewAccount(page, 'Merchant AI Import Acct')
 
-    // Toast names the one unresolved row.
-    await expect(page.getByText(/Couldn.t clean up 1 merchant name/)).toBeVisible({ timeout: 10_000 })
+    // A fresh account with no history and no cached corrections: the free
+    // rules pass resolves nothing, so all 3 rows are marked unresolved and
+    // the banner offers the explicit button — no toast, this is a normal
+    // outcome, not a failure.
+    await expect(page.getByTestId('csv-merchant-banner')).toContainText("3 merchant names couldn't be cleaned up automatically")
+    const merchantInputsBefore = page.getByRole('textbox', { name: /^Merchant for row/ })
+    await expect(merchantInputsBefore).toHaveCount(3)
+    await expect(page.getByText('Merchant name not resolved automatically').first()).toBeVisible()
+
+    // Explicit click reaches AI: 2 of the 3 resolve, 1 stays marked.
+    await page.getByTestId('csv-ask-ai-merchants').click()
+    await expect(page.getByTestId('csv-merchant-ai-message')).toContainText('Cleaned up 2 of 3 merchant names')
 
     const merchantInputs = page.getByRole('textbox', { name: /^Merchant for row/ })
-    await expect(merchantInputs).toHaveCount(3)
     const values = await merchantInputs.evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value))
     expect(values).toContain('Dodo Korea Restaurant')
     expect(values).toContain('Nasi Kandar Pelangi')
 
-    // The unresolved row keeps its regex guess and is visually marked.
+    // The unresolved row keeps its regex guess and is still visually marked.
     await expect(page.getByText('Merchant name not resolved automatically')).toBeVisible()
 
     await page.context().close()

@@ -422,11 +422,19 @@ export interface MerchantResolveResult {
   failureReason?: string
 }
 
+/**
+ * `useAI` mirrors A4's category-suggestion split: the automatic on-import
+ * pass (ImportModal.tsx) calls this with `useAI: false` — corrections cache
+ * and the caller's own history only, zero AI spend — and the review page's
+ * explicit "Ask AI to resolve merchant names" button calls it again with
+ * `useAI: true` for whatever rules left unresolved.
+ */
 export async function resolveMerchants(
   items: Array<{ raw: string; guess: string }>,
+  useAI: boolean,
 ): Promise<MerchantResolveResult> {
   if (items.length === 0) return { resolutions: [], failedGuesses: [] }
-  return api.post<MerchantResolveResult>('/merchants/resolve', { items })
+  return api.post<MerchantResolveResult>('/merchants/resolve', { items, useAI })
 }
 
 // ── Parse date string to ISO format ─────────────────
