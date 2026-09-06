@@ -87,22 +87,26 @@ export function CsvReviewTable({
           className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
         >
           <span>
-            {suggestedCount > 0 && (
-              <>Suggested a category for {suggestedCount} of {rows.length} row{rows.length !== 1 ? 's' : ''}.</>
-            )}
-            {suggestedCount > 0 && uncategorizedCount > 0 && ' '}
-            {uncategorizedCount > 0 && (
+            {uncategorizedCount > 0 ? (
               <>
-                {uncategorizedCount} row{uncategorizedCount !== 1 ? 's' : ''} {uncategorizedCount !== 1 ? 'have' : 'has'} no category
-                {!hasAnthropicKey && (
-                  <>
-                    {' — set an '}
-                    <a href="/settings" className="underline">Anthropic API key in Settings</a>
-                    {' to ask AI'}
-                  </>
+                <span className="text-fg-muted">
+                  {uncategorizedCount} row{uncategorizedCount !== 1 ? 's' : ''} still {uncategorizedCount !== 1 ? 'need' : 'needs'} a category
+                  {!hasAnthropicKey && (
+                    <>
+                      {' — set an '}
+                      <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                      {' to ask AI'}
+                    </>
+                  )}
+                </span>
+                {suggestedCount > 0 && (
+                  <span className="text-fg-faint"> · {suggestedCount} filled in automatically</span>
                 )}
-                .
               </>
+            ) : (
+              <span className="text-fg-muted">
+                {suggestedCount} row{suggestedCount !== 1 ? 's' : ''} filled in automatically
+              </span>
             )}
           </span>
           <div className="flex flex-shrink-0 items-center gap-2">

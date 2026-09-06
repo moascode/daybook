@@ -284,7 +284,7 @@ test('review step pre-fills a category from history with a match-count caption',
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
-  await expect(page.getByTestId('csv-suggestions-banner')).toContainText('Suggested a category for 1 of 1 row')
+  await expect(page.getByTestId('csv-suggestions-banner')).toContainText('1 row filled in automatically')
   await expect(page.getByText('MCDONALDS · you categorised this 3×')).toBeVisible()
 
   const categorySelect = page.getByTestId('csv-review-row').first().getByTestId('csv-row-category')
@@ -349,8 +349,8 @@ test('Clear suggestions nulls only the pre-filled rows, hand-picked categories u
   await expect(manualRow.getByTestId('csv-row-category')).toHaveValue(other)
   // The suggestion is gone, so "Clear suggestions" has nothing left to clear —
   // but the banner itself stays (A4: the now-uncategorised row still gets an
-  // "N rows have no category" line, since that's a live fact about the table,
-  // not something tied to whether a suggestion was ever applied).
+  // "N rows still need a category" line, since that's a live fact about the
+  // table, not something tied to whether a suggestion was ever applied).
   await expect(page.getByRole('button', { name: 'Clear suggestions' })).not.toBeVisible()
 
   await ctx.close()
@@ -370,7 +370,8 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('To import: 1')).toBeVisible()
   // No rule-based suggestion applied, so no "Clear suggestions" — the banner
-  // itself still shows (A4's "1 row has no category" line is a separate fact).
+  // itself still shows (A4's "1 row still needs a category" line is a
+  // separate fact).
   await expect(page.getByRole('button', { name: 'Clear suggestions' })).not.toBeVisible()
 
   // …and says why every row came back uncategorised. Proceeding is right;
@@ -462,7 +463,7 @@ test('no key set: no Ask AI button, a Settings link instead', async ({ browser }
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   const banner = page.getByTestId('csv-suggestions-banner')
-  await expect(banner).toContainText('1 row has no category')
+  await expect(banner).toContainText('1 row still needs a category')
   await expect(banner.getByRole('link', { name: /Anthropic API key in Settings/ })).toBeVisible()
   await expect(page.getByTestId('csv-ask-ai')).not.toBeVisible()
 
@@ -492,8 +493,8 @@ test('key set: Ask AI to suggest fills in only the uncategorised rows, marked as
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 
   const banner = page.getByTestId('csv-suggestions-banner')
-  await expect(banner).toContainText('Suggested a category for 1 of 2 rows')
-  await expect(banner).toContainText('1 row has no category')
+  await expect(banner).toContainText('1 row still needs a category')
+  await expect(banner).toContainText('1 filled in automatically')
   const askButton = page.getByTestId('csv-ask-ai')
   await expect(askButton).toHaveText('Ask AI to suggest')
 
