@@ -23,6 +23,12 @@ interface CsvReviewTableProps {
    * all-photo, never mixed.
    */
   photoMode?: boolean
+  /** A4 (approved 2026-09-06) — gates the "Ask AI to suggest" action. No key, no button. */
+  hasAnthropicKey: boolean
+  askingAI: boolean
+  aiMessage: { tone: 'error' | 'info'; text: string } | null
+  /** Asks Claude for the rows still uncategorised after the rules pass. */
+  onAskAI: () => void
 }
 
 export function CsvReviewTable({
@@ -33,6 +39,10 @@ export function CsvReviewTable({
   onToggleInclude,
   onClearSuggestions,
   photoMode,
+  hasAnthropicKey,
+  askingAI,
+  aiMessage,
+  onAskAI,
 }: CsvReviewTableProps) {
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
@@ -63,26 +73,75 @@ export function CsvReviewTable({
   }
 
   const suggestedCount = rows.filter((r) => r.suggestionApplied).length
+  // Same "affected" shape BulkEditDialog's noSuggestionCount uses: transfers
+  // are never categorised, and an excluded row isn't going anywhere either.
+  const uncategorizedCount = rows.filter(
+    (r) => r.included && r.type !== 'transfer' && !r.categoryId,
+  ).length
 
   return (
     <div>
-      {suggestedCount > 0 && (
+      {(suggestedCount > 0 || uncategorizedCount > 0) && (
         <div
           data-testid="csv-suggestions-banner"
           className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken border border-line px-3 py-2 text-xs text-fg-subtle"
         >
           <span>
-            Suggested a category for {suggestedCount} of {rows.length} row{rows.length !== 1 ? 's' : ''} — check the
-            Category column before importing.
+            {suggestedCount > 0 && (
+              <>Suggested a category for {suggestedCount} of {rows.length} row{rows.length !== 1 ? 's' : ''}.</>
+            )}
+            {suggestedCount > 0 && uncategorizedCount > 0 && ' '}
+            {uncategorizedCount > 0 && (
+              <>
+                {uncategorizedCount} row{uncategorizedCount !== 1 ? 's' : ''} {uncategorizedCount !== 1 ? 'have' : 'has'} no category
+                {!hasAnthropicKey && (
+                  <>
+                    {' — set an '}
+                    <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                    {' to ask AI'}
+                  </>
+                )}
+                .
+              </>
+            )}
           </span>
-          <button
-            type="button"
-            onClick={onClearSuggestions}
-            className="flex-shrink-0 font-medium text-brand-600 hover:text-brand-700"
-          >
-            Clear suggestions
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {uncategorizedCount > 0 && hasAnthropicKey && (
+              <button
+                type="button"
+                onClick={onAskAI}
+                disabled={askingAI}
+                data-testid="csv-ask-ai"
+                className="font-medium text-brand-600 hover:text-brand-700 disabled:opacity-50"
+              >
+                {askingAI ? 'Asking AI…' : 'Ask AI to suggest'}
+              </button>
+            )}
+            {uncategorizedCount > 0 && hasAnthropicKey && suggestedCount > 0 && (
+              <div className="h-4 w-px bg-line" />
+            )}
+            {suggestedCount > 0 && (
+              <button
+                type="button"
+                onClick={onClearSuggestions}
+                className="font-medium text-brand-600 hover:text-brand-700"
+              >
+                Clear suggestions
+              </button>
+            )}
+          </div>
         </div>
+      )}
+      {aiMessage && (
+        <p
+          data-testid="csv-ai-message"
+          className={cn(
+            'mb-3 rounded-lg px-3 py-2 text-xs',
+            aiMessage.tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-surface-sunken text-fg-subtle',
+          )}
+        >
+          {aiMessage.text}
+        </p>
       )}
     <div className="overflow-x-auto">
       <table className="w-full text-sm">

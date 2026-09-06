@@ -347,7 +347,11 @@ test('Clear suggestions nulls only the pre-filled rows, hand-picked categories u
 
   await expect(suggestedRow.getByTestId('csv-row-category')).toHaveValue('')
   await expect(manualRow.getByTestId('csv-row-category')).toHaveValue(other)
-  await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
+  // The suggestion is gone, so "Clear suggestions" has nothing left to clear —
+  // but the banner itself stays (A4: the now-uncategorised row still gets an
+  // "N rows have no category" line, since that's a live fact about the table,
+  // not something tied to whether a suggestion was ever applied).
+  await expect(page.getByRole('button', { name: 'Clear suggestions' })).not.toBeVisible()
 
   await ctx.close()
 })
@@ -365,7 +369,9 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('To import: 1')).toBeVisible()
-  await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
+  // No rule-based suggestion applied, so no "Clear suggestions" — the banner
+  // itself still shows (A4's "1 row has no category" line is a separate fact).
+  await expect(page.getByRole('button', { name: 'Clear suggestions' })).not.toBeVisible()
 
   // …and says why every row came back uncategorised. Proceeding is right;
   // proceeding without a word is what left the reviewer guessing whether the
@@ -395,7 +401,7 @@ test('a money-in row is not pre-filled with an expense suggestion', async ({ bro
 
   await expect(page.getByTestId('csv-review-row').first().getByTestId('csv-row-type')).toHaveValue('income')
   await expect(page.getByText('KFC · common merchant')).not.toBeVisible()
-  await expect(page.getByTestId('csv-suggestions-banner')).not.toBeVisible()
+  await expect(page.getByRole('button', { name: 'Clear suggestions' })).not.toBeVisible()
   await expect(page.getByTestId('csv-review-row').first().getByTestId('csv-row-category')).toHaveValue('')
 
   await page.context().close()
@@ -423,6 +429,110 @@ test('re-importing the same file after suggestions still detects duplicates (G11
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('To import: 0')).toBeVisible()
   await expect(page.getByText('Duplicates: 1')).toBeVisible()
+
+  await page.context().close()
+})
+
+// ── A4: "Ask AI to suggest" in the review table (ai-usage.md, approved 2026-09-06) ──
+//
+// Same call BulkEditDialog's own "Ask AI" button makes
+// (suggestCategoriesAI -> POST /transactions/suggest-categories-ai), just
+// reachable from the import review table for the rows the rules pass left
+// uncategorised, rather than requiring an import-then-bulk-edit round trip.
+
+async function setApiKey(page: Page, value: string) {
+  const res = await page.request.put(`${API}/settings/anthropic_api_key`, { data: { value } })
+  expect(res.ok()).toBeTruthy()
+}
+
+async function mockAiResponse(page: Page, text: string) {
+  const res = await page.request.post(`${API}/test/mock-ai-response`, { data: { text } })
+  expect(res.ok()).toBeTruthy()
+}
+
+test('no key set: no Ask AI button, a Settings link instead', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  const { fillAccountForm } = await import('./helpers')
+  await fillAccountForm(page, { name: 'Card', type: 'bank' })
+
+  await navigateToImportCsv(page)
+  await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-9.00,Totally Unknown Shop\n', 'unknown.csv')
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+
+  const banner = page.getByTestId('csv-suggestions-banner')
+  await expect(banner).toContainText('1 row has no category')
+  await expect(banner.getByRole('link', { name: /Anthropic API key in Settings/ })).toBeVisible()
+  await expect(page.getByTestId('csv-ask-ai')).not.toBeVisible()
+
+  await page.context().close()
+})
+
+test('key set: Ask AI to suggest fills in only the uncategorised rows, marked as AI-sourced', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  const { fillAccountForm } = await import('./helpers')
+  await fillAccountForm(page, { name: 'Card', type: 'bank' })
+  await setApiKey(page, 'sk-ant-test-dummy')
+  await mockAiResponse(page, JSON.stringify({ suggestions: [{ merchant: 'Totally Unknown Shop', category: 'Shopping' }] }))
+  // hasAnthropicKey is read once at app load and cached in app.store — a key
+  // set afterwards via a raw API call needs a reload to be picked up.
+  await page.reload()
+
+  await navigateToImportCsv(page)
+  // KFC hits the builtin map (rules-based, no AI needed); the second row has
+  // no history and no builtin entry, so only it is left for "Ask AI".
+  await uploadCsv(
+    page,
+    'Date,Amount,Merchant\n2026-07-20,-12.00,KFC 4471102\n2026-07-21,-9.00,Totally Unknown Shop\n',
+    'mixed-unknown.csv',
+  )
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+
+  const banner = page.getByTestId('csv-suggestions-banner')
+  await expect(banner).toContainText('Suggested a category for 1 of 2 rows')
+  await expect(banner).toContainText('1 row has no category')
+  const askButton = page.getByTestId('csv-ask-ai')
+  await expect(askButton).toHaveText('Ask AI to suggest')
+
+  const rows = page.getByTestId('csv-review-row')
+  const kfcRow = rows.nth(0)
+  const unknownRow = rows.nth(1)
+  await expect(kfcRow.getByTestId('csv-row-category')).not.toHaveValue('')
+  await expect(unknownRow.getByTestId('csv-row-category')).toHaveValue('')
+
+  await askButton.click()
+
+  await expect(unknownRow.getByTestId('csv-row-category')).not.toHaveValue('')
+  const shoppingId = await categoryId(page, 'Shopping')
+  await expect(unknownRow.getByTestId('csv-row-category')).toHaveValue(shoppingId)
+  // KFC's rule-based suggestion is untouched by the AI pass.
+  await expect(kfcRow.getByTestId('csv-row-category')).not.toHaveValue('')
+  await expect(page.getByTestId('csv-ask-ai')).not.toBeVisible() // nothing left to ask about
+
+  await page.context().close()
+})
+
+test('Ask AI reports when Claude has no confident suggestion, without breaking the import', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  const { fillAccountForm } = await import('./helpers')
+  await fillAccountForm(page, { name: 'Card', type: 'bank' })
+  await setApiKey(page, 'sk-ant-test-dummy')
+  await mockAiResponse(page, JSON.stringify({ suggestions: [] }))
+  await page.reload()
+
+  await navigateToImportCsv(page)
+  await uploadCsv(page, 'Date,Amount,Merchant\n2026-07-20,-9.00,Totally Unknown Shop\n', 'unknown.csv')
+  await page.getByRole('button', { name: 'Review rows' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+
+  await page.getByTestId('csv-ask-ai').click()
+  await expect(page.getByTestId('csv-ai-message')).toContainText('no confident suggestion')
+  // The row stays uncategorised, but the import itself is never blocked by this.
+  await expect(page.getByTestId('import-confirm-btn')).toBeVisible()
 
   await page.context().close()
 })

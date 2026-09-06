@@ -5,6 +5,9 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
+import { useAppStore } from '@/stores/app.store'
+import { suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
+import { errorMessage } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
@@ -30,6 +33,7 @@ export function CsvImport() {
   const location = useLocation()
   const { accounts, categories, importTransactions, setFilters } = useWallet()
   const { addToast } = useToastStore()
+  const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
 
   const state = location.state as ImportLocationState | null
   const [importRows, setImportRows] = useState<ImportRow[]>(state?.rows ?? [])
@@ -38,6 +42,8 @@ export function CsvImport() {
   const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
+  const [askingAI, setAskingAI] = useState(false)
+  const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
@@ -58,6 +64,70 @@ export function CsvImport() {
       ),
     )
   }, [])
+
+  // A4 (docs/v2/cross-cutting/ai-usage.md, approved 2026-09-06) — same call,
+  // same chunking/rate-limit bucket, same messaging as BulkEditDialog's own
+  // "Ask AI" button. Only asks about rows the rules pass left uncategorised.
+  const handleAskAI = useCallback(async () => {
+    const merchants = [
+      ...new Set(
+        importRows
+          .filter((r) => r.included && r.type !== 'transfer' && !r.categoryId && r.merchant)
+          .map((r) => r.merchant),
+      ),
+    ]
+    if (merchants.length === 0) return
+    setAskingAI(true)
+    setAiMessage(null)
+    try {
+      const { suggestions, askedMerchants, failedMerchants, failureReason } = await suggestCategoriesAI(merchants)
+      if (suggestions.length > 0) {
+        const byMerchant = new Map(suggestions.map((s) => [s.raw, s]))
+        setImportRows((prev) =>
+          prev.map((row) => {
+            if (row.categoryId || row.type === 'transfer' || !row.included) return row
+            const hit = byMerchant.get(row.merchant)
+            if (!hit || !suggestionFitsType(hit, row.type)) return row
+            return {
+              ...row,
+              categoryId: hit.categoryId,
+              suggestedFrom: { canonical: hit.canonical, matchCount: hit.matchCount },
+              suggestionApplied: true,
+            }
+          }),
+        )
+      }
+
+      // Every outcome says something — a click on a paid button that changes
+      // nothing on screen and explains nothing is the one result this must
+      // never produce (rule 13).
+      if (failedMerchants > 0 && suggestions.length === 0) {
+        setAiMessage({
+          tone: 'error',
+          text: failureReason
+            ? `AI categorisation failed: ${failureReason}`
+            : 'AI categorisation failed — nothing came back. Please try again.',
+        })
+      } else if (failedMerchants > 0) {
+        setAiMessage({
+          tone: 'error',
+          text: `${failedMerchants} of ${askedMerchants} merchants could not be categorised${failureReason ? ` (${failureReason})` : ''} — ask AI again to retry those.`,
+        })
+      } else if (suggestions.length === 0) {
+        setAiMessage({
+          tone: 'info',
+          text:
+            askedMerchants === 1
+              ? 'Claude had no confident suggestion for this merchant.'
+              : `Claude had no confident suggestion for any of these ${askedMerchants} merchants.`,
+        })
+      }
+    } catch (err) {
+      setAiMessage({ tone: 'error', text: errorMessage(err, 'Could not ask AI — please try again.') })
+    } finally {
+      setAskingAI(false)
+    }
+  }, [importRows])
 
   const handleImport = useCallback(async () => {
     if (!selectedAccountId) return
@@ -175,6 +245,10 @@ export function CsvImport() {
         onToggleInclude={(index) => updateRow(index, { included: !importRows[index].included })}
         onClearSuggestions={clearSuggestions}
         photoMode={photoMode}
+        hasAnthropicKey={hasAnthropicKey}
+        askingAI={askingAI}
+        aiMessage={aiMessage}
+        onAskAI={() => void handleAskAI()}
       />
 
       {selectedCount > 0 && (
