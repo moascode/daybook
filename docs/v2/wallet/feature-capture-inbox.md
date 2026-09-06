@@ -1,6 +1,6 @@
 # R18 — Machine capture: token auth + pending inbox
 
-**Release:** R18 · `v3.1.1` · runs **next**, before R8.
+**Release:** R18 · `v3.6.0` · runs **next**, before R8.
 **Status:** planned. Six product decisions locked by the owner 2026-09-06 (§1).
 Governed by [../execution-playbook.md](../execution-playbook.md) per CLAUDE.md
 §2 rule 14 — Gate 1 (plan + criteria) and Gate 2 (review verdict) both apply.
@@ -29,10 +29,11 @@ what in it is now stale).
 | D-F | Where does the inbox live? | **The generalised review page**, plus a count badge | Inherits the AI buttons, duplicate hints, account control and inline edit that `CsvReviewTable` already has. A separate inbox UI converges on this having paid twice. |
 | D-G | Bank posting-date drift? | **In scope** (§5.3) | Capture can only ever *overlay* CSV import, never replace it, so every captured payment reappears in the statement. Date-exact matching misses it. |
 
-**Tag choice.** R18 is an out-of-band insertion after R7 (`v3.1.0`).
-Renumbering R8–R16 to make room would touch six docs and twelve headings —
-the exact churn CLAUDE.md §13 blames for three prior tag drifts. `v3.1.1`
-keeps every existing tag reference correct.
+**Tag choice.** `v3.6.0` — the next tag after `v3.5.0` (shipped 2026-09-07).
+Note the roadmap's tag column is **stale fiction**: it still assigns `v3.2.0` to
+R8, but `v3.2.0`–`v3.5.0` are already real tags on other work. Tags are cut from
+`git tag` at release time, never from that table — CLAUDE.md §13's standing
+warning. R18 is the only row here with a tag that matches reality.
 
 ---
 
@@ -222,7 +223,9 @@ Content-Type: application/json
   would lose a real payment.
 - **`occurredAt` is optional.** Absent → server-stamps in **Asia/Kuala_Lumpur**,
   never UTC (CLAUDE.md §16 trap 1). A supplied value is trusted but must parse.
-- `source` defaults to `'api'`.
+- `source` defaults to `'api'`. `type` is optional (`expense` | `income` |
+  `transfer`), defaulting to `expense`; an unrecognised value → 400.
+  `destinationCard` is optional and only meaningful for a transfer.
 - **Idempotency** is the `Idempotency-Key` *header* (a standard, since this
   serves many clients), enforced by `UNIQUE (user_id, idempotency_key)` on the
   table — a database guarantee, not a check-then-insert race. Shortcuts has no
@@ -253,9 +256,8 @@ All of it is **free and deterministic** — no key, no AI, no register entry:
 The AI buttons already on the review page (**A4** "Ask AI to suggest"
 categories, **A5** "Ask AI to clean up" merchant names) then serve capture rows
 unchanged — same chunking, same rate-limit buckets, same "no key → button
-hidden" gating. **This needs a one-line owner confirmation at Gate 1** (§10):
-it is the same call and the same button, but a third surface, and rule 2 says
-warn before wiring rather than assume.
+hidden" gating. **Approved by the owner 2026-09-07** — it is the same call and the same button,
+but a third surface, and rule 2 says warn before wiring rather than assume.
 
 ### 5.3 Duplicate detection — the two gaps
 
@@ -301,9 +303,15 @@ mapped at review load through `settings` key `capture_card_map`, a JSON object
 `{"Visa •••• 1234": "<accountId>"}` maintained in the Settings UI beside the
 tokens.
 
+The map may point at **any account the user can write to**, own or shared-in
+(§13.1) — the picker is populated from `writableAccountIds`, the same set manual
+add and CSV import use.
+
 Unmapped card → fall back to `default_account_id`, **and say so on the row**
 ("unmapped card — check the account"). Silently guessing an account is exactly
-the rule-13 failure this app keeps having to fix.
+the rule-13 failure this app keeps having to fix. A `transfer` whose
+`destinationCard` does not resolve is flagged the same way and **cannot be
+accepted** until a destination is chosen.
 
 ### 5.5 Accept and dismiss
 
@@ -311,6 +319,9 @@ the rule-13 failure this app keeps having to fix.
   Creates the transactions through `insertTransactionStmt` and marks the pending
   rows `accepted` with their `transaction_id`, in **one `db.batch()`** so a
   partial accept cannot leave a row both in the ledger and in the queue.
+  **Re-checks `writableAccountIds` here**, not only at capture time — a share
+  revoked in between must block the accept (§13.1) — and refuses a `transfer`
+  with no destination account.
 - `POST /api/captures/dismiss` `{ids}` — marks them `dismissed`.
 - **Rows are never deleted.** Accepted and dismissed rows are retained, because
   the `UNIQUE (user_id, idempotency_key)` row *is* the idempotency guarantee — a
@@ -429,7 +440,10 @@ is rejected by `PUT /settings/:key`.
 and flagged; a missing `occurredAt` stamps today in Asia/Kuala_Lumpur.
 
 **PR-4** — Pending rows appear in the review surface with merchant, category and
-account resolved by rules only, with **zero** Anthropic requests made. Accept
+account resolved by rules only, with **zero** Anthropic requests made. A row on a
+shared-in writable account accepts normally; the same row after the share is
+revoked is refused. A `transfer` with no destination cannot be accepted and says
+why. Accept
 creates the transaction through the existing insert path and marks the row
 `accepted` in one batch. Dismiss marks it `dismissed`. Badge count matches
 `status='pending'`. An unmapped card is visibly flagged. Settings shows the
@@ -472,8 +486,8 @@ Add to [../cross-cutting/ai-usage.md](../cross-cutting/ai-usage.md):
   account)". Listed precisely so no future release quietly turns it into an API
   call without hitting rule 2.
 - **§2.1** — a note that A4 and A5 now serve a third surface (capture rows in the
-  review page). Same call, same buckets, same explicit button; **confirm at
-  Gate 1** rather than assume.
+  review page). Same call, same buckets, same explicit button. **Approved by the
+  owner 2026-09-07** in chat, ahead of implementation, per rule 2.
 - **§4 approval log** — R18's entry, dated.
 
 No new outbound Claude call is added by this release.
@@ -482,14 +496,26 @@ No new outbound Claude call is added by this release.
 
 ## 13. Assumptions taken (push back at Gate 1)
 
-1. **Own accounts only.** A capture cannot target a shared-in account in v1 —
-   accepted rows on a shared account can be split and settled against, and
-   `writableAccountIds` was designed for interactive callers.
+1. **Shared accounts are allowed** (owner, 2026-09-07 — overrides the original
+   own-accounts-only assumption). A capture may target any account the user can
+   write to, resolved through `writableAccountIds` exactly as manual add and CSV
+   import already do. Write permission is re-checked **at accept time**, not just
+   at capture time, so a share revoked between capture and review cannot slip a
+   row into an account the user no longer writes to.
 2. **60 requests/hour per token.**
 3. **±3 days** for gap 2's window.
 4. **No token expiry** (§4.1).
 5. **Pending rows are retained forever**, never auto-expired (§5.5).
 6. **Tokens live in Settings**, in a "Connected devices" section beside the
    existing AI-key section.
-7. **Transfers, splits and income are out of scope.** A capture is always
-   `type: 'expense'`; an Apple Pay refund is handled by editing at review.
+7. **Income and transfers are allowed** (owner, 2026-09-07 — overrides the
+   original expense-only assumption). `type` is an optional payload field
+   (`expense` | `income` | `transfer`), defaulting to `expense`. Apple's trigger
+   carries no direction signal so it always sends the default; the manual
+   quick-add and Claude paths can state it. **A `transfer` needs a destination**,
+   which the payload cannot always supply — an optional `destinationCard` is
+   mapped the same way `card` is, and a transfer whose destination does not
+   resolve is **flagged and unacceptable until the user picks one at review**,
+   never silently downgraded to an expense (rule 13). Splits remain out of
+   scope — a captured row can be split after it is accepted, through the
+   existing dialog.

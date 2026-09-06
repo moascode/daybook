@@ -227,12 +227,14 @@ Spec: [trips/03-feature-waves.md](trips/03-feature-waves.md).
 
 Spec: [day/03-feature-waves.md](day/03-feature-waves.md).
 
-## R18 · **`v3.1.1`** · Machine capture: token auth + pending inbox
+## R18 · **`v3.6.0`** · Machine capture: token auth + pending inbox
 
 Spec: [wallet/feature-capture-inbox.md](wallet/feature-capture-inbox.md).
 
-**Runs next, before R8** (owner, 2026-09-06). Out-of-band insertion after R7, so
-it takes a patch-level tag rather than renumbering R8–R16 across six docs.
+**Runs next, before R8** (owner, 2026-09-06). Takes `v3.6.0`, the next tag after
+`v3.5.0` (2026-09-07). ⚠️ Every *other* tag in this document is stale — `v3.2.0`
+through `v3.5.0` are already cut against other work. Read `git tag`, not this
+column.
 
 A scoped bearer token (`capture:write` only) plus `POST /api/capture/transaction`,
 landing every machine-written transaction in a **pending inbox** the owner accepts
