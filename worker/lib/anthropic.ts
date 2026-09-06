@@ -122,6 +122,48 @@ function buildPhotoImportUserMessage(kind: PhotoImportKind, categoryNames: strin
   return `Categories: ${categoryNames.join(', ')}\nThis photo is a ${kind === 'receipt' ? 'retail receipt' : 'bank/e-statement screenshot'}.`
 }
 
+/**
+ * Build the Error thrown for a non-2xx Anthropic response, shared by every
+ * fetchClaude*Text function below (previously four copies of the same
+ * body-parsing logic, each missing the same diagnostic fields).
+ *
+ * Captures three things, all of which the caller can't guess and Anthropic's
+ * bare status code doesn't distinguish: the error `type` (e.g.
+ * `permission_error` vs `invalid_request_error` vs `rate_limit_error` — the
+ * difference between a blocked key/connection, a malformed request, and
+ * spend/rate exhaustion), the `message`, and Anthropic's own `request-id`
+ * response header. The request-id's presence is itself diagnostic: if it's
+ * there, Anthropic's application layer issued the rejection and that id can
+ * be handed to Anthropic support to get a real answer; if it's absent, the
+ * rejection likely never reached Anthropic at all (a network-level block on
+ * the connection itself — e.g. an IP-range block — happening before their
+ * server had a chance to stamp a request-id). `cf-ray` is included too,
+ * since this Worker's own edge hop is the other half of that same question.
+ */
+async function anthropicErrorFromResponse(res: Response): Promise<Error> {
+  const requestId = res.headers.get('request-id') ?? res.headers.get('anthropic-request-id')
+  const cfRay = res.headers.get('cf-ray')
+  const body = await res.text().catch(() => '')
+  let type: string | undefined
+  let message: string | undefined
+  try {
+    const parsed: unknown = JSON.parse(body)
+    const err = typeof parsed === 'object' && parsed !== null ? (parsed as { error?: unknown }).error : undefined
+    if (typeof err === 'object' && err !== null) {
+      const e = err as { type?: unknown; message?: unknown }
+      if (typeof e.type === 'string') type = e.type
+      if (typeof e.message === 'string') message = e.message
+    }
+  } catch {
+    // body wasn't JSON at all — fall through to the raw text slice below
+  }
+  const detail = message ?? (body ? body.slice(0, 200) : '')
+  let text = `Anthropic API responded ${res.status}${type ? ` (${type})` : ''}${detail ? `: ${detail}` : ''}`
+  if (requestId) text += ` [request-id ${requestId}]`
+  if (cfRay) text += ` [cf-ray ${cfRay}]`
+  return new Error(text)
+}
+
 async function fetchClaudeText(apiKey: string, categoryNames: string[], merchants: string[]): Promise<string> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
@@ -138,24 +180,7 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
       messages: [{ role: 'user', content: buildUserMessage(categoryNames, merchants) }],
     }),
   })
-  if (!res.ok) {
-    // Anthropic's own message is the only thing that distinguishes an invalid
-    // key from an exhausted credit balance from a bad model id — all of which
-    // are the user's to fix and none of which the caller can guess. The body
-    // is `{error: {type, message}}`; it never echoes the API key back.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const text = data.content?.find((block) => block.type === 'text')?.text
   if (!text) throw new Error('no text content in Anthropic response')
@@ -178,23 +203,7 @@ async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: strin
       messages: [{ role: 'user', content: buildMerchantUserMessage(items) }],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const text = data.content?.find((block) => block.type === 'text')?.text
   if (!text) throw new Error('no text content in Anthropic response')
@@ -222,23 +231,7 @@ async function fetchClaudeComposerText(
       messages: [{ role: 'user', content: buildComposerUserMessage(text, accountNames, categoryNames) }],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[] }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
@@ -283,23 +276,7 @@ async function fetchClaudePhotoText(
       ],
     }),
   })
-  if (!res.ok) {
-    // Same rationale as fetchClaudeText: distinguishing an invalid key from an
-    // exhausted balance from a bad model id is on Anthropic's error body, and
-    // the caller can't guess which one it is otherwise.
-    const detail = await res
-      .text()
-      .then((body) => {
-        const parsed: unknown = JSON.parse(body)
-        const message =
-          typeof parsed === 'object' && parsed !== null
-            ? (parsed as { error?: { message?: unknown } }).error?.message
-            : undefined
-        return typeof message === 'string' ? message : body.slice(0, 200)
-      })
-      .catch(() => '')
-    throw new Error(`Anthropic API responded ${res.status}${detail ? `: ${detail}` : ''}`)
-  }
+  if (!res.ok) throw await anthropicErrorFromResponse(res)
   const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string }
   const resultText = data.content?.find((block) => block.type === 'text')?.text
   if (!resultText) throw new Error('no text content in Anthropic response')
