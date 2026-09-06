@@ -33,15 +33,17 @@ test.afterAll(async () => {
 })
 
 test('imports a US-format date and a European-decimal amount correctly', async () => {
+  // Account is picked in the pick view (shared by both import types), before upload.
+  await page.getByLabel('Import into account').selectOption('Import Account')
+
   const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(CSV_PATH, 'utf-8'))
   await page.evaluate(async (content) => {
     const file = new File([content], 'european-format.csv', { type: 'text/csv' })
     await window.__testCsvFileSelect(file)
   }, csvContent)
 
-  // Map view: headers auto-detect; pick the import account, then review.
+  // Map view: headers auto-detect, then review.
   await expect(page.getByText('rows detected')).toBeVisible({ timeout: 10_000 })
-  await page.getByLabel('Import into account').selectOption('Import Account')
   await page.getByRole('button', { name: 'Review rows' }).click()
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
 

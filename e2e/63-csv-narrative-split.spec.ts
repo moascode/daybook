@@ -47,6 +47,11 @@ test('navigate to Import CSV via the account menu', async () => {
   await navigateToImportCsv(page)
 })
 
+test('account selector (shared by both import types) shows Narrative Only Account, in the pick view', async () => {
+  const accountSelect = page.getByLabel('Import into account')
+  await accountSelect.selectOption('Narrative Only Account')
+})
+
 // ── Upload the CSV ──────────────────────────────────────────────────────
 
 test('upload CSV file with only a Description column', async () => {
@@ -81,11 +86,6 @@ test('the separate description selector is left unmapped', async () => {
   // copying the column verbatim.
   const descriptionSelect = page.getByLabel('Description column')
   await expect(descriptionSelect).toHaveValue('')
-})
-
-test('account selector shows Narrative Only Account', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await accountSelect.selectOption('Narrative Only Account')
 })
 
 test('proceed to review', async () => {

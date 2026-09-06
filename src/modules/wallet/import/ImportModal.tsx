@@ -291,29 +291,31 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
                 </div>
               )}
 
+              {/* Shared by both import types — one account, chosen once, up front,
+                  rather than CSV asking for it later in the map view and photo
+                  asking earlier: the same field in the same place either way. */}
+              <div className="mb-4">
+                <p className="field-label">Import into account</p>
+                <Select
+                  aria-label="Import into account"
+                  options={accounts.map((acc) => ({ value: acc.id, label: acc.name }))}
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                />
+              </div>
+
               {importType === 'photo' && (
-                <>
-                  <div className="mb-4">
-                    <p className="field-label">What are these photos?</p>
-                    <div className="segment" role="tablist">
-                      <button type="button" role="tab" aria-selected={photoKind === 'receipt'} onClick={() => setPhotoKind('receipt')}>
-                        Receipt
-                      </button>
-                      <button type="button" role="tab" aria-selected={photoKind === 'statement'} onClick={() => setPhotoKind('statement')}>
-                        Bank statement
-                      </button>
-                    </div>
+                <div className="mb-4">
+                  <p className="field-label">What are these photos?</p>
+                  <div className="segment" role="tablist">
+                    <button type="button" role="tab" aria-selected={photoKind === 'receipt'} onClick={() => setPhotoKind('receipt')}>
+                      Receipt
+                    </button>
+                    <button type="button" role="tab" aria-selected={photoKind === 'statement'} onClick={() => setPhotoKind('statement')}>
+                      Bank statement
+                    </button>
                   </div>
-                  <div className="mb-4">
-                    <p className="field-label">Import into account</p>
-                    <Select
-                      aria-label="Import into account"
-                      options={accounts.map((acc) => ({ value: acc.id, label: acc.name }))}
-                      value={selectedAccountId}
-                      onChange={(e) => setSelectedAccountId(e.target.value)}
-                    />
-                  </div>
-                </>
+                </div>
               )}
 
               {importType === 'csv' ? (
@@ -477,15 +479,6 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
                 options={headerOptions}
                 value={mapping.description ?? ''}
                 onChange={(e) => setMapping((m) => ({ ...m, description: e.target.value || null }))}
-              />
-            </div>
-            <div className="maprow">
-              <span className="maprow-field">Account<span className="req">*</span></span>
-              <Select
-                aria-label="Import into account"
-                options={accounts.map((a) => ({ value: a.id, label: a.name }))}
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
               />
             </div>
           </div>

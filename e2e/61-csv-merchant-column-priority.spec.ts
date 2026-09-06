@@ -43,6 +43,11 @@ test('navigate to Import CSV via the account menu', async () => {
   await navigateToImportCsv(page)
 })
 
+test('account selector (shared by both import types) shows Narrative Account, in the pick view', async () => {
+  const accountSelect = page.getByLabel('Import into account')
+  await accountSelect.selectOption('Narrative Account')
+})
+
 // ── Upload the CSV ──────────────────────────────────────────────────────
 
 test('upload CSV file with both Payee and Description columns', async () => {
@@ -70,11 +75,6 @@ test('merchant column is auto-detected as "Payee", not "Description"', async () 
 test('description column is separately auto-detected as "Description"', async () => {
   const descriptionSelect = page.getByLabel('Description column')
   await expect(descriptionSelect).toHaveValue('Description')
-})
-
-test('account selector shows Narrative Account', async () => {
-  const accountSelect = page.getByLabel('Import into account')
-  await accountSelect.selectOption('Narrative Account')
 })
 
 test('proceed to review', async () => {
