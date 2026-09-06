@@ -12,12 +12,25 @@ import { insertTransactionStmt } from '../lib/insert-transaction.ts'
 export const captures = new Hono<AppEnv>()
 
 captures.get('/captures', async (c) => {
+  // `already_in_ledger` is the other half of R18 gap 1. The CSV importer is
+  // told about waiting captures; this tells the inbox about payments the
+  // ledger already has — the same real transaction reaching the app twice, once
+  // through a device and once through a bank statement. A duplicate_key match
+  // is the same confidence layer 2 auto-excludes on, so the row arrives
+  // pre-excluded rather than merely flagged.
+  //
+  // Evaluated live rather than stored: the CSV import that creates the collision
+  // usually happens AFTER the capture row was written.
   const { results } = await c.env.DB.prepare(
-    `SELECT id, source, raw_merchant, raw_card, raw_destination_card, amount,
-            type, occurred_at, duplicate_key, status, created_at
-       FROM pending_captures
-      WHERE user_id = ? AND status = 'pending'
-      ORDER BY occurred_at DESC, created_at DESC`,
+    `SELECT pc.id, pc.source, pc.raw_merchant, pc.raw_card, pc.raw_destination_card,
+            pc.amount, pc.type, pc.occurred_at, pc.duplicate_key, pc.status, pc.created_at,
+            EXISTS (
+              SELECT 1 FROM transactions t
+               WHERE t.user_id = pc.user_id AND t.duplicate_key = pc.duplicate_key
+            ) AS already_in_ledger
+       FROM pending_captures pc
+      WHERE pc.user_id = ? AND pc.status = 'pending'
+      ORDER BY pc.occurred_at DESC, pc.created_at DESC`,
   )
     .bind(c.get('userId'))
     .all()

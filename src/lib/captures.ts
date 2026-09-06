@@ -15,6 +15,10 @@ export interface PendingCapture {
   duplicate_key: string
   status: string
   created_at: string
+  /** 1 when a transaction with this capture's duplicate_key already exists —
+   *  the same payment reached the ledger another way (usually a bank CSV
+   *  imported after the capture arrived). R18 gap 1, reverse direction. */
+  already_in_ledger?: number
 }
 
 /** settings key holding the card→account map. A plain JSON object so it can be
@@ -95,8 +99,11 @@ export function captureToRow(
     categoryId: null,
     destinationAccountId: usableDestination,
     importHash: '',
-    isDuplicate: false,
-    included: true,
+    // A duplicate_key match is the same confidence layer 2 auto-excludes on,
+    // so an already-banked payment arrives pre-excluded and badged rather
+    // than quietly waiting to be double-counted.
+    isDuplicate: Number(capture.already_in_ledger ?? 0) === 1,
+    included: Number(capture.already_in_ledger ?? 0) !== 1,
     originalRow: {},
     accountId: usable || fallbackAccountId,
     accountUnmapped: !usable,

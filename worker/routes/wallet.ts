@@ -804,11 +804,26 @@ interface CheckDuplicatesItem {
   type: string
 }
 
+/** A capture still waiting in the inbox that matches an import row. Reported
+ *  separately from `possibleDuplicates` so the review table can say the true
+ *  thing — "a capture is waiting for this" — rather than "might already be in
+ *  your ledger", which it is not. */
+interface PendingCaptureMatch {
+  id: string
+  merchant: string
+  date: string
+  amount: number
+}
+
 interface PossibleDuplicateCandidate {
   id: string
   merchant: string
   date: string
   amount: number
+  /** True when this existing row was created by accepting a capture. Only such
+   *  rows are matched outside the exact-date window (R18 gap 2), and the review
+   *  table words the hint differently for them. */
+  fromCapture?: boolean
 }
 
 // Three layers, cheapest-and-safest first (docs/v2/wallet/duplicate-detection.md):
@@ -836,6 +851,10 @@ interface PossibleDuplicateCandidate {
 // single-table statements (userId + chunk = chunk+1 params apiece) rather
 // than one UNION query binding userId twice, matching the layer-1 approach
 // this replaces (that shape hit the cap on any import over ~49 rows).
+// R18 gap 2 (docs/v2/wallet/feature-capture-inbox.md §5.3). Bank posting dates
+// trail the payment date; three days covers a Friday charge posting on Monday.
+const CAPTURE_DATE_WINDOW_DAYS = 3
+
 wallet.post('/transactions/check-duplicates', async (c) => {
   const b = await body(c)
   const rawItems = Array.isArray(b.items) ? b.items : []
@@ -848,7 +867,7 @@ wallet.post('/transactions/check-duplicates', async (c) => {
       merchant: String(r.merchant ?? ''),
       type: String(r.type ?? ''),
     }))
-  if (items.length === 0) return c.json({ duplicateHashes: [], possibleDuplicates: {} })
+  if (items.length === 0) return c.json({ duplicateHashes: [], possibleDuplicates: {}, pendingCaptureMatches: {} })
 
   const userId = c.get('userId')
   const BATCH = 45 // two placeholder sets per chunk (hash + duplicateKey) stay under the 100-param cap
@@ -884,12 +903,50 @@ wallet.post('/transactions/check-duplicates', async (c) => {
         .prepare(`SELECT DISTINCT duplicate_key AS key FROM transactions WHERE user_id = ? AND duplicate_key IN (${keyPlaceholders})`)
         .bind(userId, ...keyChunk),
     )
+    // R18 gap 1: a capture sitting UNACCEPTED in the inbox is not in
+    // `transactions` yet, so without this read a CSV import running that
+    // afternoon imports the same payment cleanly — and then the user accepts
+    // the capture too. Double-counted, through the very inbox meant to prevent
+    // it. Collected separately from `foundKeys` because it must NOT
+    // auto-exclude: the ledger genuinely does not have this row, so excluding
+    // it could lose the transaction entirely if the capture is never accepted.
+    exactStmts.push(
+      c.env.DB
+        .prepare(
+          `SELECT id, raw_merchant AS merchant, occurred_at AS date, amount, duplicate_key AS key
+             FROM pending_captures
+            WHERE user_id = ? AND status = 'pending' AND duplicate_key IN (${keyPlaceholders})`,
+        )
+        .bind(userId, ...keyChunk),
+    )
   }
-  const exactResults = await c.env.DB.batch<{ hash?: string; key?: string }>(exactStmts)
+  const pendingByKey = new Map<string, PendingCaptureMatch[]>()
+  const exactResults = await c.env.DB.batch<{
+    hash?: string
+    key?: string
+    id?: string
+    merchant?: string
+    date?: string
+    amount?: number
+  }>(exactStmts)
   for (const r of exactResults) {
     for (const row of r.results) {
       if (row.hash) foundHashes.add(row.hash)
-      if (row.key) foundKeys.add(row.key)
+      // The pending-capture rows are the only ones carrying an `id` alongside a
+      // `key`; a bare `key` is the transactions-table layer, which DOES
+      // auto-exclude.
+      if (row.key && row.id) {
+        const list = pendingByKey.get(row.key) ?? []
+        list.push({
+          id: row.id,
+          merchant: row.merchant ?? '',
+          date: row.date ?? '',
+          amount: Number(row.amount ?? 0),
+        })
+        pendingByKey.set(row.key, list)
+      } else if (row.key) {
+        foundKeys.add(row.key)
+      }
     }
   }
 
@@ -911,23 +968,43 @@ wallet.post('/transactions/check-duplicates', async (c) => {
   const possibleDuplicates: Record<string, PossibleDuplicateCandidate[]> = {}
   if (distinctPairs.size > 0) {
     const pairs = [...distinctPairs.values()]
+    // R18 gap 2: the same-DATE window is right for CSV-vs-CSV, but a capture is
+    // stamped at PAYMENT time while the bank statement carries the POSTING
+    // date — often one to three days later, and a weekend charge routinely
+    // posts on Monday. So the window widens to ±3 days, but ONLY for rows that
+    // came from a capture (`from_capture` below). That restriction is what
+    // keeps it quiet: two ordinary RM12 Grab rides on consecutive days are
+    // still not flagged for anyone. No new column is needed — "was this
+    // created from a capture" is a join through pending_captures.
     const pairStmts = pairs.map((p) =>
       c.env.DB
-        .prepare('SELECT id, merchant, date, amount, duplicate_key FROM transactions WHERE user_id = ? AND date = ? AND amount = ?')
-        .bind(userId, p.date, p.amount),
+        .prepare(
+          `SELECT t.id, t.merchant, t.date, t.amount, t.duplicate_key,
+                  EXISTS (SELECT 1 FROM pending_captures pc WHERE pc.transaction_id = t.id) AS from_capture
+             FROM transactions t
+            WHERE t.user_id = ? AND t.amount = ?
+              AND t.date BETWEEN date(?, '-${CAPTURE_DATE_WINDOW_DAYS} day') AND date(?, '+${CAPTURE_DATE_WINDOW_DAYS} day')`,
+        )
+        .bind(userId, p.amount, p.date, p.date),
     )
-    const pairResults = await c.env.DB.batch<{ id: string; merchant: string; date: string; amount: number; duplicate_key: string }>(pairStmts)
-    const candidatesByPair = new Map<string, (PossibleDuplicateCandidate & { duplicateKey: string })[]>()
+    const pairResults = await c.env.DB.batch<{ id: string; merchant: string; date: string; amount: number; duplicate_key: string; from_capture: number }>(pairStmts)
+    const candidatesByPair = new Map<string, (PossibleDuplicateCandidate & { duplicateKey: string; fromCapture: boolean })[]>()
     pairs.forEach((p, idx) => {
       candidatesByPair.set(
         pairKey(p.date, p.amount),
-        pairResults[idx].results.map((row) => ({
-          id: row.id,
-          merchant: row.merchant,
-          date: row.date,
-          amount: row.amount,
-          duplicateKey: row.duplicate_key,
-        })),
+        pairResults[idx].results
+          // Same-date candidates behave exactly as before. A different date is
+          // only a candidate when the existing row came from a capture — see
+          // the query's comment.
+          .filter((row) => row.date === p.date || Number(row.from_capture) === 1)
+          .map((row) => ({
+            id: row.id,
+            merchant: row.merchant,
+            date: row.date,
+            amount: row.amount,
+            duplicateKey: row.duplicate_key,
+            fromCapture: Number(row.from_capture) === 1,
+          })),
       )
     })
 
@@ -939,12 +1016,18 @@ wallet.post('/transactions/check-duplicates', async (c) => {
     for (const item of candidateItems) {
       const candidates = (candidatesByPair.get(pairKey(item.date, item.amount)) ?? [])
         .filter((cand) => cand.duplicateKey !== item.duplicateKey)
-        .map(({ id, merchant, date, amount }) => ({ id, merchant, date, amount }))
+        .map(({ id, merchant, date, amount, fromCapture }) => ({ id, merchant, date, amount, fromCapture }))
       if (candidates.length > 0) possibleDuplicates[item.hash] = candidates
     }
   }
 
-  return c.json({ duplicateHashes, possibleDuplicates })
+  const pendingCaptureMatches: Record<string, PendingCaptureMatch[]> = {}
+  for (const item of withKey) {
+    const hits = pendingByKey.get(item.duplicateKey)
+    if (hits && hits.length > 0) pendingCaptureMatches[item.hash] = hits
+  }
+
+  return c.json({ duplicateHashes, possibleDuplicates, pendingCaptureMatches })
 })
 
 // docs/auto-categorisation-plan.md. Nothing is persisted — the user's own

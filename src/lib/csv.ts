@@ -61,7 +61,16 @@ export interface ImportRow {
    * dismissible hint for the review table; the row stays `included` by
    * default.
    */
-  possibleDuplicateOf?: { id: string; merchant: string; date: string; amount: number }[]
+  possibleDuplicateOf?: { id: string; merchant: string; date: string; amount: number; fromCapture?: boolean }[]
+  /**
+   * A capture still WAITING in the inbox that matches this row (R18 gap 1).
+   * Deliberately distinct from `possibleDuplicateOf`: that one means "might
+   * already be in your ledger", while this means "you are about to import
+   * something a device already sent you". The row still imports by default —
+   * the ledger genuinely does not have it yet, and auto-excluding could lose
+   * the transaction entirely if the capture is never accepted.
+   */
+  pendingCaptureOf?: { id: string; merchant: string; date: string; amount: number }[]
   /**
    * Capture inbox (R18) only. CSV and photo rows all land in ONE account
    * chosen once in the review header, but a capture carries its own card, so
@@ -396,6 +405,8 @@ export interface PossibleDuplicateCandidate {
 export interface DuplicateCheckResult {
   duplicateHashes: Set<string>
   possibleDuplicates: Map<string, PossibleDuplicateCandidate[]>
+  /** Captures still waiting in the inbox that match an import row (R18 gap 1). */
+  pendingCaptureMatches: Map<string, PossibleDuplicateCandidate[]>
 }
 
 /**
@@ -408,17 +419,21 @@ export interface DuplicateCheckResult {
 export async function checkDuplicates(
   items: { importHash: string; date: string; amount: number; merchant: string; type: string }[],
 ): Promise<DuplicateCheckResult> {
-  if (items.length === 0) return { duplicateHashes: new Set(), possibleDuplicates: new Map() }
+  if (items.length === 0) {
+    return { duplicateHashes: new Set(), possibleDuplicates: new Map(), pendingCaptureMatches: new Map() }
+  }
 
   const res = await api.post<{
     duplicateHashes: string[]
     possibleDuplicates: Record<string, PossibleDuplicateCandidate[]>
+    pendingCaptureMatches?: Record<string, PossibleDuplicateCandidate[]>
   }>('/transactions/check-duplicates', {
     items: items.map((r) => ({ hash: r.importHash, date: r.date, amount: r.amount, merchant: r.merchant, type: r.type })),
   })
   return {
     duplicateHashes: new Set(res.duplicateHashes),
     possibleDuplicates: new Map(Object.entries(res.possibleDuplicates ?? {})),
+    pendingCaptureMatches: new Map(Object.entries(res.pendingCaptureMatches ?? {})),
   }
 }
 
@@ -608,7 +623,7 @@ export async function buildImportRows(
   }
 
   // Second pass: check duplicates
-  const { duplicateHashes, possibleDuplicates } = await checkDuplicates(importRows)
+  const { duplicateHashes, possibleDuplicates, pendingCaptureMatches } = await checkDuplicates(importRows)
   for (const importRow of importRows) {
     if (duplicateHashes.has(importRow.importHash)) {
       importRow.isDuplicate = true
@@ -617,6 +632,8 @@ export async function buildImportRows(
     }
     const candidates = possibleDuplicates.get(importRow.importHash)
     if (candidates && candidates.length > 0) importRow.possibleDuplicateOf = candidates
+    const waiting = pendingCaptureMatches.get(importRow.importHash)
+    if (waiting && waiting.length > 0) importRow.pendingCaptureOf = waiting
   }
 
   return importRows
