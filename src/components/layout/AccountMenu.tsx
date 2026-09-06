@@ -189,7 +189,9 @@ export function AccountMenu() {
             Log out
           </button>
 
-          <div className="menu-foot">Daybook · v3.0.0</div>
+          {/* release.yml bakes VITE_APP_VERSION into the build from the
+              triggering tag — see ModuleSidebar.tsx's identical footer. */}
+          <div className="menu-foot">Daybook · {import.meta.env.VITE_APP_VERSION ?? 'dev'}</div>
         </div>
 
         {/* ── Settings pane ─────────────────────────────────────── */}

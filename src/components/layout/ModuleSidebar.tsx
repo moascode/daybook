@@ -245,8 +245,10 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
           )}
         </div>
 
-        {/* Version bump: update on each release tag (see CLAUDE.md §13). */}
-        <p className="mt-2 px-2 text-xs text-fg-faint">Daybook · v3.0.0</p>
+        {/* release.yml bakes VITE_APP_VERSION into the build from the
+            triggering tag (github.ref_name) — never hand-edit this string,
+            it drifts the moment a release ships and nobody remembers. */}
+        <p className="mt-2 px-2 text-xs text-fg-faint">Daybook · {import.meta.env.VITE_APP_VERSION ?? 'dev'}</p>
       </aside>
     </>
   )
