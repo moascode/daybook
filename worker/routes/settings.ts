@@ -9,7 +9,10 @@ export const settings = new Hono<AppEnv>()
 // Prefixes for settings rows that are Worker-internal bookkeeping, not a user
 // preference — never surfaced to the client and never writable through the
 // generic PUT below (docs/ai-bulk-categorize-feature.md §2, §4).
-const INTERNAL_KEY_PREFIXES = ['ai_rate_limit_', '_test_']
+// `capture_rate_limit_` is here for the same reason as `ai_rate_limit_`:
+// without it a user could reset their own capture token's hourly counter
+// through this generic PUT, making the cap advisory (R18, spec §4.4).
+const INTERNAL_KEY_PREFIXES = ['ai_rate_limit_', 'capture_rate_limit_', '_test_']
 
 function isInternalKey(key: string): boolean {
   return INTERNAL_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))

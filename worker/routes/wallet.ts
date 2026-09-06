@@ -20,6 +20,7 @@ import {
 } from '../lib/sharing.ts'
 import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey, buildDuplicateKey } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
+import { overRateLimit } from '../lib/rate-limit.ts'
 import {
   suggestCategoriesWithAI,
   resolveMerchantsWithAI,
@@ -1192,48 +1193,15 @@ const PHOTO_AI_RATE_LIMIT_KEY = 'ai_rate_limit_photo_import'
 // directly (spec §3.2).
 const ALLOWED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
-// Per-user hourly cap, stored as a JSON blob in the settings key/value table —
-// the app owns no queue, KV namespace, or Durable Object today.
-//
-// ONE UNIT PER REQUEST, not per Claude call: a request may fan out to several
-// chunks, but the cap exists to stop a runaway UI loop, and a user who clicked
-// once should not find they have spent half their hour's budget because the
-// selection was large.
-//
-// Atomic. The whole read-modify-write — window expiry, increment, and the
-// fresh-window reset — happens inside one INSERT … ON CONFLICT … RETURNING,
-// and a single SQLite statement cannot interleave with another. json_valid()
-// guards the CASE so a corrupt row resets the window instead of throwing.
-// Note the counter still increments on a rejected request; that is harmless
-// (it is already over the cap) and the window start is preserved either way,
-// so it self-heals on the hour rather than sliding forward forever.
+// Thin wrapper over the shared limiter (worker/lib/rate-limit.ts), which this
+// function used to be before R18 extracted it verbatim so the capture endpoint
+// could reuse the mechanism with its own ceiling. Behaviour is unchanged.
 async function overAiRateLimit(
   db: D1Database,
   userId: string,
   key: string = AI_RATE_LIMIT_KEY,
 ): Promise<boolean> {
-  const now = Date.now()
-  const row = await db
-    .prepare(
-      `INSERT INTO settings (user_id, key, value)
-       VALUES (?, ?, json_object('windowStart', ?, 'count', 1))
-       ON CONFLICT (user_id, key) DO UPDATE SET value =
-         CASE
-           WHEN json_valid(settings.value)
-            AND json_extract(settings.value, '$.windowStart') IS NOT NULL
-            AND ? - json_extract(settings.value, '$.windowStart') <= ?
-           THEN json_object(
-             'windowStart', json_extract(settings.value, '$.windowStart'),
-             'count', COALESCE(json_extract(settings.value, '$.count'), 0) + 1)
-           ELSE json_object('windowStart', ?, 'count', 1)
-         END
-       RETURNING value`,
-    )
-    .bind(userId, key, now, now, AI_RATE_LIMIT_WINDOW_MS, now)
-    .first<{ value: string }>()
-
-  const count = Number(JSON.parse(row?.value ?? '{}')?.count ?? 1)
-  return count > AI_RATE_LIMIT_MAX
+  return overRateLimit(db, userId, key, AI_RATE_LIMIT_MAX, AI_RATE_LIMIT_WINDOW_MS)
 }
 
 wallet.post('/transactions/suggest-categories-ai', async (c) => {

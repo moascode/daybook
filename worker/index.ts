@@ -8,6 +8,8 @@ import { settings } from './routes/settings.ts'
 import { groups } from './routes/groups.ts'
 import { settlements } from './routes/settlements.ts'
 import { wallet } from './routes/wallet.ts'
+import { capture } from './routes/capture.ts'
+import { captureTokens } from './routes/capture-tokens.ts'
 import { test } from './routes/test.ts'
 
 // ─────────────────────────────────────────────────────────────
@@ -67,6 +69,20 @@ app.use('/api/test/*', async (c, next) => {
 })
 app.route('/api', test)
 
+// The machine surface (R18). A THIRD credential domain, deliberately mounted
+// beside the other two rather than inside protectedApi: every route under it
+// authenticates with a bearer capture token and none of them accepts the
+// session cookie. See worker/routes/capture.ts for why that separation is
+// structural rather than a convention.
+//
+// Mounted at `/api/capture`, NOT at `/api`: the sub-app's own `use('*', …)`
+// guard then applies to exactly its own routes and can never reach a
+// cookie-authenticated one. Mounting it at `/api` made that guard swallow every
+// API route in the app.
+//
+// Before protectedApi, so no cookie guard can ever run in front of it either.
+app.route('/api/capture', capture)
+
 // Everything below requires an authenticated session.
 //
 // The Express app relies on registration order for this — `app.use('/api',
@@ -86,6 +102,10 @@ protectedApi.route('/', settings)
 protectedApi.route('/', groups)
 protectedApi.route('/', settlements)
 protectedApi.route('/', wallet)
+// Managing capture tokens is the OWNER's job, done in the browser — so it is
+// cookie-authenticated like everything else here. A capture token can never
+// mint or revoke another (spec §4.2).
+protectedApi.route('/', captureTokens)
 
 app.route('/api', protectedApi)
 
