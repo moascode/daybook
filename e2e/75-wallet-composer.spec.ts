@@ -14,7 +14,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, transactionRowFor } from './helpers'
+import { newAppPage, fillAccountForm, transactionRowFor, waitForApp } from './helpers'
 
 const API = '/api'
 
@@ -156,6 +156,9 @@ test.describe('N hotkey', () => {
     await page.getByRole('button', { name: 'Add Account' }).first().click()
     await fillAccountForm(page, { name: 'Bank' })
     await page.goto('/wallet')
+    // The route is a lazy chunk (v3 P3), so the shell mounts before the
+    // composer exists. Pressing the hotkey without this races the download.
+    await waitForApp(page)
 
     await page.locator('body').click()
     await page.keyboard.press('n')

@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { WalletLayout } from '@/modules/wallet/WalletLayout'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
+import { RouteFallback } from '@/components/layout/RouteFallback'
 
 /**
  * Every page is code-split (v3 P3). Before this the whole app — all four
@@ -44,16 +45,6 @@ const SettingsPage = page(() => import('@/modules/settings/SettingsPage'), 'Sett
 const SharingPage = page(() => import('@/modules/settings/SharingPage'), 'SharingPage')
 const HelpPage = page(() => import('@/modules/help/HelpPage'), 'HelpPage')
 const UATPage = page(() => import('@/modules/uat/UATPage'), 'UATPage')
-
-/** Shown while a route's chunk downloads. Matches the app's existing loading
- *  copy (CaptureInbox, SharedPage) rather than inventing a spinner. */
-function RouteFallback() {
-  return (
-    <p className="py-12 text-center text-sm text-fg-subtle" data-testid="route-loading">
-      Loading…
-    </p>
-  )
-}
 
 /** Suspense sits per route rather than once around the shell's Outlet, so the
  *  sidebar, app bar and offline banner never blank out mid-navigation. */
