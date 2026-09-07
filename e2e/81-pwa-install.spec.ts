@@ -8,7 +8,6 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { newAppPage } from './helpers'
 
 test.describe('PWA install surface', () => {
   test('serves a manifest with real PNG icons', async ({ page }) => {
