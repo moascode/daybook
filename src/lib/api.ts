@@ -26,12 +26,28 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    credentials: 'include',
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method,
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: 'include',
+    })
+  } catch {
+    // fetch() rejects (rather than returning a response) when the request never
+    // reached the server at all — offline, DNS, a dropped connection. Without
+    // this it surfaces as a bare "Failed to fetch" TypeError, which every
+    // caller's catch block then shows the user verbatim. Status 0 marks
+    // "never reached the server", which is a materially different thing from
+    // any HTTP error: for a write, it means nothing was saved.
+    throw new ApiError(
+      0,
+      navigator.onLine
+        ? "Couldn't reach Daybook. Check your connection and try again — nothing was saved."
+        : "You're offline, so this wasn't saved. It will work once you reconnect.",
+    )
+  }
 
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/auth')) {
