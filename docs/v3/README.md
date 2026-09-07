@@ -44,11 +44,11 @@ Update the row when a release merges.
 
 | Release | Scope | Status |
 |---|---|---|
-| P1 | Install quality — touch icon, manifest, iOS input/feel details | — |
+| P1 | Install quality — touch icon, manifest, iOS input/feel details | ✅ merged |
 | P2 | Offline honesty — make the service worker actually work, and say so when it can't | — |
 | P3 | First load — code-split the 1.25 MB single bundle | — |
 | P4 | Push notifications — inbox count, silence alert, split claims | — |
-| P5 | Themed splash screens | ⛔ blocked — needs owner sign-off, see [release-plan.md](release-plan.md#p5) |
+| P5 | Themed splash screens | ✅ approved 2026-09-07 — not started |
 
 ---
 

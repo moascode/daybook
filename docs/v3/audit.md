@@ -72,11 +72,14 @@ white rectangle instead of a mark. Fixed in [P1](release-plan.md#p1).
 | `index.html:8` | `#10a37a` |
 | `manifest.json` | `#1D9E75` |
 
-`index.html` carries a pre-paint script that swaps `theme-color` by theme
-(CLAUDE.md §18 rule 5), so the static value is only the starting point — but the
-manifest's colour and the light-theme colour should be the same one, and the
-brand green in CLAUDE.md §6 is `#1D9E75`. One of the two is wrong. Resolved in
-[P1](release-plan.md#p1).
+**Resolved in P1 — and the manifest was the stale one, not `index.html`.**
+`src/lib/theme.ts:22` records it explicitly: `#10a37a` is the v2 brand emerald
+(`--g-500`), and *"the old #1D9E75 sat off the corrected ramp"* — it was
+superseded by R1's token rewrite. CLAUDE.md §6's `#1D9E75` is the pre-v2
+account default, not the current brand.
+
+So the fix was to bring `manifest.json` up to `#10a37a`, and spec 81 now
+asserts the two can never drift apart again.
 
 ---
 
