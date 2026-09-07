@@ -226,9 +226,19 @@ Content-Type: application/json
 - `source` defaults to `'api'`. `type` is optional (`expense` | `income` |
   `transfer`), defaulting to `expense`; an unrecognised value → 400.
   `destinationCard` is optional and only meaningful for a transfer.
-- **Idempotency** is the `Idempotency-Key` *header* (a standard, since this
-  serves many clients), enforced by `UNIQUE (user_id, idempotency_key)` on the
-  table — a database guarantee, not a check-then-insert race. Shortcuts has no
+- **Idempotency** is the `Idempotency-Key` header **or an `idempotencyKey` body
+  field** — header wins when both are present. Enforced by
+  `UNIQUE (user_id, idempotency_key)` on the table: a database guarantee, not a
+  check-then-insert race.
+
+  The body field is not a convenience. **iOS Shortcuts does not send a header
+  whose value is a variable** — a typed literal arrives, a magic variable
+  arrives empty, confirmed on-device 2026-09-07 when the identical automation
+  started working the moment the value was typed by hand. Variables in the JSON
+  body serialise fine, which is where `merchant`/`amount`/`card` already come
+  from. Since a *constant* key would mean the first payment lands and every one
+  after it is silently absorbed as a duplicate, the header-only design made the
+  primary client's only correct option unreachable. Shortcuts has no
   UUID action, so the client builds one from actions that exist: `Format Date`
   (`yyyyMMdd'T'HHmmss`, business timezone) + amount in cents + `Random Number`
   100000–999999. The random component stops two genuinely distinct same-second,
