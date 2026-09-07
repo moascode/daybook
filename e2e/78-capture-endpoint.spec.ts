@@ -127,7 +127,49 @@ test.describe('capture endpoint', () => {
     await anon.dispose()
   })
 
-  test('requires an Idempotency-Key', async ({ browser, baseURL }) => {
+  test('accepts the idempotency key as a body field, and dedupes on it', async ({ browser, baseURL }) => {
+    const page = await newAppPage(browser)
+    const token = await tokenFor(page)
+    const anon = await playwrightRequest.newContext({ baseURL })
+    const idem = key()
+
+    // No header at all — iOS Shortcuts cannot send one whose value is a
+    // variable, so the body field has to work on its own.
+    const send = () =>
+      anon.post(`${API}/capture/transaction`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: { merchant: 'Body key', amount: 4.5, idempotencyKey: idem },
+      })
+
+    expect((await send()).status()).toBe(201)
+    const replay = await send()
+    expect(replay.status()).toBe(200)
+    expect((await replay.json()).status).toBe('duplicate')
+
+    expect(await (await page.request.get(`${API}/captures`)).json()).toHaveLength(1)
+    await anon.dispose()
+  })
+
+  test('the header wins when both are supplied', async ({ browser, baseURL }) => {
+    const page = await newAppPage(browser)
+    const token = await tokenFor(page)
+    const anon = await playwrightRequest.newContext({ baseURL })
+    const headerKey = key()
+
+    await anon.post(`${API}/capture/transaction`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': headerKey },
+      data: { merchant: 'Both', amount: 1, idempotencyKey: 'a-different-value' },
+    })
+    // Replaying the HEADER value is what must be recognised as the duplicate.
+    const replay = await anon.post(`${API}/capture/transaction`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': headerKey },
+      data: { merchant: 'Both', amount: 1, idempotencyKey: 'yet-another-value' },
+    })
+    expect((await replay.json()).status).toBe('duplicate')
+    await anon.dispose()
+  })
+
+  test('requires an idempotency key from one place or the other', async ({ browser, baseURL }) => {
     const page = await newAppPage(browser)
     const token = await tokenFor(page)
     const anon = await playwrightRequest.newContext({ baseURL })
@@ -137,6 +179,14 @@ test.describe('capture endpoint', () => {
       data: { merchant: 'X', amount: 1 },
     })
     expect(res.status()).toBe(400)
+    expect((await res.json()).error).toContain('idempotencyKey')
+
+    // An empty body field is as absent as a missing one.
+    const blank = await anon.post(`${API}/capture/transaction`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { merchant: 'X', amount: 1, idempotencyKey: '   ' },
+    })
+    expect(blank.status()).toBe(400)
     await anon.dispose()
   })
 

@@ -151,6 +151,7 @@ const CAPTURE_TYPES = new Set(['expense', 'income', 'transfer'])
 const MAX_TEXT = 200
 
 interface CaptureBody {
+  idempotencyKey?: unknown
   merchant?: unknown
   amount?: unknown
   card?: unknown
@@ -171,10 +172,33 @@ capture.post('/transaction', requireScope(SCOPE_CAPTURE_WRITE), async (c) => {
   // The header, not a body field — it is a standard, and this endpoint serves
   // many clients. Shortcuts has no UUID action, so the setup guide builds one
   // from actions that do exist (Format Date + amount in cents + Random Number).
-  const idempotencyKey = (c.req.header('Idempotency-Key') ?? '').trim().slice(0, MAX_TEXT)
-  if (!idempotencyKey) return c.json({ error: 'Idempotency-Key header is required' }, 400)
-
   const b = (await c.req.json().catch(() => ({}))) as CaptureBody
+
+  // Header first — it is the conventional place and what a normal HTTP client
+  // will send. The body field is an equal alternative, not a grudging fallback,
+  // because the FIRST real client cannot use the header at all:
+  //
+  //   iOS Shortcuts does not send a header whose value is a variable. A typed
+  //   literal works; a magic variable arrives empty. Confirmed on-device — the
+  //   same automation that failed with the Text variable in the header
+  //   succeeded the moment the value was typed by hand. Variables in the JSON
+  //   *body* serialise fine, which is where merchant/amount/card come from.
+  //
+  // A fixed literal is NOT an acceptable workaround: the key is what makes a
+  // replay a no-op, so a constant one means the first payment lands and every
+  // payment after it is silently absorbed as a duplicate. Silent loss is the
+  // one failure this endpoint exists to prevent (CLAUDE.md rule 13), so the
+  // key has to be reachable from somewhere a variable survives.
+  const idempotencyKey = (
+    (c.req.header('Idempotency-Key') ?? '').trim() ||
+    (typeof b.idempotencyKey === 'string' ? b.idempotencyKey.trim() : '')
+  ).slice(0, MAX_TEXT)
+  if (!idempotencyKey) {
+    return c.json(
+      { error: 'an Idempotency-Key header or idempotencyKey field is required' },
+      400,
+    )
+  }
 
   // Reject at the door rather than at review: a non-positive amount is how a
   // DECLINED payment and the documented `0.0` bug both arrive, and neither is
