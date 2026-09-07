@@ -44,6 +44,9 @@ The status board below tracks *state*, not version numbers it cannot know.
 
 Update the row when a release merges.
 
+**All five shipped 2026-09-07/08.** Tags: P1 `v3.7.0`, P2 `v3.8.0`,
+P3 `v3.9.0`, P5 `v3.10.0`, P4 `v3.11.0`.
+
 | Release | Scope | Status |
 |---|---|---|
 | P1 | Install quality — touch icon, manifest, iOS input/feel details | ✅ merged |
