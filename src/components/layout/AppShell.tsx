@@ -5,6 +5,7 @@ import { ModuleSidebar } from './ModuleSidebar'
 import { MobileTabBar } from './MobileTabBar'
 import { useNotificationBadges } from '@/hooks/useNotificationBadges'
 import { ToastContainer } from '@/components/ui/Toast'
+import { OfflineBanner } from './OfflineBanner'
 
 /**
  * v2 shell: a full-width AppBar on top, a module-scoped ModuleSidebar +
@@ -26,6 +27,9 @@ export function AppShell() {
   return (
     <>
       <AppBar onOpenMobileMenu={() => setMobileSidebarOpen(true)} />
+      {/* Directly under the app bar and above every page, so it is the first
+          thing read on any route rather than something a page has to opt into. */}
+      <OfflineBanner />
       <div className="shell">
         <ModuleSidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
         <div className="main-col">

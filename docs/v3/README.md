@@ -45,7 +45,7 @@ Update the row when a release merges.
 | Release | Scope | Status |
 |---|---|---|
 | P1 | Install quality — touch icon, manifest, iOS input/feel details | ✅ merged |
-| P2 | Offline honesty — make the service worker actually work, and say so when it can't | — |
+| P2 | Offline honesty — make the service worker actually work, and say so when it can't | ✅ merged |
 | P3 | First load — code-split the 1.25 MB single bundle | — |
 | P4 | Push notifications — inbox count, silence alert, split claims | — |
 | P5 | Themed splash screens | ✅ approved 2026-09-07 — not started |
