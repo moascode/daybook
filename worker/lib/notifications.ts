@@ -21,6 +21,14 @@ export interface Notification {
   body: string
   /** Where tapping it should land. */
   url: string
+  /**
+   * True when this is something to DO. The bell counts only these.
+   *
+   * The evening spend summary is informational and always true of any day with
+   * spending, so counting it would leave a permanent badge — and a badge that
+   * is always lit stops meaning anything.
+   */
+  attention: boolean
 }
 
 const SILENCE_DAYS = 5
@@ -47,6 +55,7 @@ async function tasksDue(db: D1Database, userId: string): Promise<Notification | 
     title: n === 1 ? '1 task due' : `${n} tasks due`,
     body: n === 1 ? 'One thing is due today or overdue.' : `${n} things are due today or overdue.`,
     url: '/tasks',
+    attention: true,
   }
 }
 
@@ -62,6 +71,7 @@ async function capturesWaiting(db: D1Database, userId: string): Promise<Notifica
     title: n === 1 ? '1 payment to review' : `${n} payments to review`,
     body: 'Captured from your phone and waiting to be accepted.',
     url: '/wallet/inbox',
+    attention: true,
   }
 }
 
@@ -95,6 +105,7 @@ async function captureSilence(db: D1Database, userId: string): Promise<Notificat
       ? `Nothing since ${lastDate}. Your phone's automation may have stopped — worth checking Shortcuts.`
       : 'Your device is set up but has never sent a payment. Worth checking the automation in Shortcuts.',
     url: '/settings',
+    attention: true,
   }
 }
 
@@ -117,6 +128,7 @@ async function openClaims(db: D1Database, userId: string): Promise<Notification 
     title: n === 1 ? '1 split to review' : `${n} splits to review`,
     body: 'Someone has split a transaction with you.',
     url: '/wallet/shared',
+    attention: true,
   }
 }
 
@@ -155,6 +167,44 @@ async function budgetThreshold(db: D1Database, userId: string): Promise<Notifica
         ? `${money(Number(top.spent))} of ${money(Number(top.lim))} this month.`
         : `${money(Number(top.spent))} of ${money(Number(top.lim))} this month, and ${over.length - 1} other budget${over.length > 2 ? 's' : ''} near the limit.`,
     url: '/wallet/budgets',
+    attention: true,
+  }
+}
+
+/** Group invitations waiting for an answer. */
+async function pendingInvites(db: D1Database, userId: string): Promise<Notification | null> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM group_invites WHERE invitee_id = ? AND status = 'pending'`)
+    .bind(userId)
+    .first<{ n: number }>()
+  const n = Number(row?.n ?? 0)
+  if (n === 0) return null
+  return {
+    kind: 'invites',
+    title: n === 1 ? '1 group invitation' : `${n} group invitations`,
+    body: 'Someone wants to share accounts with you.',
+    url: '/settings/sharing',
+    attention: true,
+  }
+}
+
+/** Recurring bills falling due in the next week. */
+async function billsDue(db: D1Database, userId: string): Promise<Notification | null> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM recurring_transactions
+        WHERE user_id = ? AND next_due_date >= ? AND next_due_date <= ?`,
+    )
+    .bind(userId, todayStr(), businessDatePlus(7))
+    .first<{ n: number }>()
+  const n = Number(row?.n ?? 0)
+  if (n === 0) return null
+  return {
+    kind: 'bills',
+    title: n === 1 ? '1 bill due soon' : `${n} bills due soon`,
+    body: 'Falling due in the next seven days.',
+    url: '/wallet/recurring',
+    attention: true,
   }
 }
 
@@ -172,14 +222,16 @@ async function todaySpend(db: D1Database, userId: string): Promise<Notification 
 
   const total = Number(row?.total ?? 0)
   const n = Number(row?.n ?? 0)
-  if (n === 0) {
-    return { kind: 'spend', title: 'Nothing spent today', body: 'No expenses recorded.', url: '/wallet' }
-  }
+  // Nothing spent is not news. Returning an item here would also mean the
+  // notifications panel could never show its empty state, since this check
+  // runs for every user on every open.
+  if (n === 0) return null
   return {
     kind: 'spend',
     title: `${money(total)} spent today`,
     body: n === 1 ? 'Across 1 transaction.' : `Across ${n} transactions.`,
     url: '/wallet',
+    attention: false,
   }
 }
 
@@ -195,7 +247,7 @@ export async function notificationsFor(
   userId: string,
   slot?: Slot,
 ): Promise<Notification[]> {
-  const morning = [captureSilence, openClaims, capturesWaiting, budgetThreshold, tasksDue]
+  const morning = [captureSilence, pendingInvites, openClaims, capturesWaiting, billsDue, budgetThreshold, tasksDue]
   const evening = [todaySpend]
   const checks = slot === 'morning' ? morning : slot === 'evening' ? evening : [...morning, ...evening]
 

@@ -1,11 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Bell, Menu, Plus } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { modules } from './modules'
 import { SearchField } from './SearchField'
+import { NotificationsPanel } from './NotificationsPanel'
+import { QuickAddMenu } from './QuickAddMenu'
 import { AccountMenu } from './AccountMenu'
-import { useHouseholdStore } from '@/stores/household.store'
 import { useNotificationBadgeStore } from '@/stores/notifications.store'
-import { useToastStore } from '@/stores/toast.store'
 
 interface AppBarProps {
   onOpenMobileMenu: () => void
@@ -30,14 +30,15 @@ function modTabTestId(id: string): string {
  */
 export function AppBar({ onOpenMobileMenu }: AppBarProps) {
   const location = useLocation()
-  const pendingInvites = useHouseholdStore((s) => s.pendingInvites.length)
-  const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
-  const billsDueCount = useNotificationBadgeStore((s) => s.billsDueCount)
+  // Still used by the Tasks module tab's own badge, which is a per-destination
+  // count and a different question from the bell's "what needs attention".
   const tasksDueCount = useNotificationBadgeStore((s) => s.tasksDueCount)
-  const addToast = useToastStore((s) => s.addToast)
 
-  // Bell = pending invites + unresolved split claims + bills due (design §2 / D-8).
-  const bellCount = pendingInvites + pendingClaimCount + billsDueCount
+  // The bell's own count now comes from GET /notifications/pending, inside
+  // NotificationsPanel — one computation shared with the push digest, so the
+  // badge and your phone can never disagree. The client-side sum that used to
+  // live here counted a different set (invites + claims + bills) and would have
+  // drifted the moment either side gained a source.
   const hasModuleSidebar = modules.some((m) => !m.disabled && location.pathname.startsWith(m.path))
 
   return (
@@ -106,37 +107,8 @@ export function AppBar({ onOpenMobileMenu }: AppBarProps) {
       </nav>
 
       <div className="appbar-right">
-        {/* Quick-add's form/modal is out of scope for R2 (design shell only)
-            — a toast beats a click that silently does nothing (rule 13),
-            same treatment AccountMenu's "Report a problem" already gets. */}
-        <button
-          type="button"
-          className="circle-btn"
-          aria-label="Quick add"
-          data-testid="quick-add"
-          onClick={() => addToast({ message: "Quick add isn't wired up yet — use New Task or Add Transaction for now." })}
-        >
-          <Plus className="icon" />
-        </button>
-        {/* No dropdown panel in R2 — just the live count (design §2); the
-            click still needs to say something rather than nothing. */}
-        <button
-          type="button"
-          className="circle-btn"
-          aria-label="Notifications"
-          data-testid="notifications-bell"
-          onClick={() =>
-            addToast({
-              message:
-                bellCount > 0
-                  ? `${bellCount} notification${bellCount === 1 ? '' : 's'} — see Settings → Sharing for invites and claims, Wallet → Recurring for bills due.`
-                  : "Nothing pending right now — this'll open a panel here in a future release.",
-            })
-          }
-        >
-          <Bell className="icon" />
-          {bellCount > 0 && <span className="count">{bellCount > 99 ? '99+' : bellCount}</span>}
-        </button>
+        <QuickAddMenu />
+        <NotificationsPanel />
         <AccountMenu />
       </div>
     </header>
