@@ -497,3 +497,52 @@
     color-scheme: inherit;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   TOUCH DEVICES (P1)
+
+   Deliberately UNLAYERED and last: these have to beat Tailwind utility
+   classes applied per component, and a rule inside @layer base or
+   @layer components loses to any unlayered utility regardless of source
+   order.
+
+   Specificity is doing real work here too. '.text-sm' is (0,1,0), so a bare
+   'input { }' at (0,0,1) would lose even placed last. The ':not()' arguments
+   carry their own specificity, lifting each selector above a single utility
+   class without reaching for !important.
+   ───────────────────────────────────────────────────────────── */
+
+@media (pointer: coarse) {
+  /* iOS Safari zooms the viewport when a focused field's text is under 16px,
+     and never zooms back out. Every form primitive here is text-sm (14px) and
+     the CSV/capture review tables use text-xs (12px), so every tap on a date,
+     amount or merchant field yanked the layout. Desktop keeps the designed
+     density — this applies only to coarse pointers. */
+  input:not([type='checkbox']):not([type='radio']),
+  select:not([size]),
+  textarea:not([hidden]) {
+    font-size: 16px;
+  }
+}
+
+/* Stops iOS inflating body text when the phone is turned to landscape. */
+html:not([data-no-text-adjust]) {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* The grey flash on tap reads as "web page", not "app". Controls only — never
+   text, where the long-press callout is how you select and copy an amount. */
+button:not([data-allow-callout]),
+[role='button']:not([data-allow-callout]),
+a:not([data-allow-callout]) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Keeps a scrolled list from rubber-banding the whole page behind it. */
+.overflow-x-auto,
+.overflow-y-auto,
+.overflow-auto {
+  overscroll-behavior: contain;
+}
