@@ -36,6 +36,11 @@ migrations_dir = "worker/migrations"
 # Non-secret configuration. SESSION_SECRET is deliberately NOT here — it is a
 # secret, set once with `wrangler secret put SESSION_SECRET`, and session.ts
 # throws rather than falling back to a default if it is missing.
+# Cron Triggers (v3 P4). UTC — these are 08:10 and 21:10 Asia/Kuala_Lumpur.
+# Off-the-hour on purpose: every scheduler on the planet fires at :00.
+[triggers]
+crons = ["10 0 * * *", "10 13 * * *"]
+
 [vars]
 # Blocker 4.2: signup is closed in production. Both users are already
 # provisioned, so an open endpoint is pure attack surface on a public URL.
@@ -49,6 +54,13 @@ DAYBOOK_ALLOW_SIGNUP = "false"
 DAYBOOK_ALLOW_SIGNUP = "true"
 DAYBOOK_TEST = "1"
 SESSION_SECRET = "daybook-dev-secret-change-me"
+# Dev-only VAPID pair (v3 P4), so the e2e suite can drive subscribe/unsubscribe.
+# Production sets both with `wrangler secret put` — a keypair in the repo is a
+# keypair anyone can send pushes with, which is exactly why the real private key
+# is never here.
+VAPID_SUBJECT = "mailto:dev@daybook.local"
+VAPID_PUBLIC_KEY = "BATAtvk5AffnTI_P87N2ygAqwv1NXH-BrEaoDIFzvGlCiK-lbPy8_m-H82uM95bDjmwwZ0EiBPmx7SBXMLwpV3I"
+VAPID_PRIVATE_KEY = "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQggtNYrRptbqYnDIuAEwKwZQAM1Q_XC5wNW0O_476eboChRANCAAQEwLb5OQH350yPz_OzdsoAKsL9TVx_gaxGqAyBc7xpQoivpWz8vP5vh_NrjPeWw45sMGdBIgT5se0gVzC8KVdy"
 
 [[env.dev.d1_databases]]
 binding = "DB"

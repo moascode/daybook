@@ -30,6 +30,22 @@ export interface Env {
    */
   DAYBOOK_ALLOW_SIGNUP?: string
 
+  /**
+   * VAPID keypair for Web Push (v3 P4).
+   *
+   * The PRIVATE key is a secret — `wrangler secret put VAPID_PRIVATE_KEY` —
+   * never wrangler.toml, never the repo. The public key is not secret (the
+   * browser needs it to subscribe) but lives beside it for symmetry.
+   *
+   * Both absent is a supported state: /notifications/config reports push
+   * disabled, the Settings toggle hides itself, and the cron sends nothing. A
+   * deploy without them is degraded, not broken.
+   */
+  VAPID_PUBLIC_KEY?: string
+  VAPID_PRIVATE_KEY?: string
+  /** mailto: or https: identifying the sender to the push service, per RFC 8292. */
+  VAPID_SUBJECT?: string
+
   /** `'1'` mounts POST /api/test/reset. Never set in production. */
   DAYBOOK_TEST?: string
   // '1' silences the per-request log line. Set only by the Playwright harness

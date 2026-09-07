@@ -12,6 +12,7 @@ money math, the ledger, or the API's existing contracts.
 | [audit.md](audit.md) | Measured current state — what's live, what's missing, what's defective, with evidence |
 | [release-plan.md](release-plan.md) | `P1`–`P5`: what each ships and when it's done |
 | [splash-generation.md](splash-generation.md) | How the iOS launch images are made, and how to add a device |
+| [push-setup.md](push-setup.md) | The one-time VAPID secret setup, and what arrives when |
 
 ---
 
@@ -48,7 +49,7 @@ Update the row when a release merges.
 | P1 | Install quality — touch icon, manifest, iOS input/feel details | ✅ merged |
 | P2 | Offline honesty — make the service worker actually work, and say so when it can't | ✅ merged |
 | P3 | First load — code-split the 1.25 MB single bundle | ✅ merged — entry 1,251 kB → 390 kB (355 → 125 kB gz) |
-| P4 | Push notifications — inbox count, silence alert, split claims | — |
+| P4 | Push notifications — six digests, two daily slots | ✅ merged — **needs [two secrets set](push-setup.md)** before it does anything |
 | P5 | Themed splash screens | ✅ merged — see [splash-generation.md](splash-generation.md) |
 
 ---
