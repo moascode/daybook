@@ -1432,10 +1432,16 @@ git push origin vX.Y.Z
 3. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-4. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
+4. **PWA quality track — `docs/v3/`.** P1–P5: install quality, a service
+   worker whose offline fallback actually works (it currently cannot — see
+   `docs/v3/audit.md` §2), code-splitting the 1.25 MB single bundle, push
+   notifications, and themed splash screens. P5 alone needs sign-off; the rest
+   are ready to build. This is the cheaper alternative to a native iOS app,
+   which was deferred 2026-09-07 pending real capture-failure numbers.
+5. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
    `docs/v1/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
    already exists).
-5. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
+6. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
    per-group "we trust each other" setting; the parked D-items/C9 in
    `docs/v1/phase-5c-wallet-ux.md` §D.
 
