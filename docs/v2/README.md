@@ -78,7 +78,7 @@ yet even though the code is merged to `main`; see the warning below.
 | R14 | v3.8.0 | Trips P3 — trip mode, multi-currency | — |
 | R15 | v3.9.0 | Day D1 — timeline, hour ribbon, day figures | — |
 | R16 | v3.10.0 | Day D2 — Close the day, usual, on-this-day, month grid | — |
-| R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states | — |
+| R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states | 🔨 partial — §1 search, §2 quick add, §3 notifications shipped in `v3.12.0` ([PR 194](https://github.com/moascode/daybook/pull/194)), outside the playbook at the owner's direct request. ⌘K, states, density, D-9 and §7's two risks remain |
 
 > ⚠️ **The Tag column below R7 is stale.** `v3.2.0`–`v3.5.0` are already real
 > tags cut against other work (latest: `v3.5.0`, 2026-09-07), so R8's "v3.2.0"
