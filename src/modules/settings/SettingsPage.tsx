@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/Input'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { CaptureTokens } from './CaptureTokens'
 import { CaptureCardMap } from './CaptureCardMap'
+import { PushNotifications } from './PushNotifications'
 
 export function SettingsPage() {
   const { theme, changeTheme } = useThemePreference()
@@ -272,6 +273,8 @@ export function SettingsPage() {
             </div>
           </form>
         </section>
+
+        <PushNotifications />
 
         <CaptureTokens />
 

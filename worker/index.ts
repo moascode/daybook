@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { secureHeaders } from 'hono/secure-headers'
-import type { AppEnv } from './types.ts'
+import type { AppEnv, Env } from './types.ts'
 import { health } from './routes/health.ts'
 import { auth, requireAuth } from './routes/auth.ts'
 import { tasks } from './routes/tasks.ts'
@@ -11,6 +11,8 @@ import { wallet } from './routes/wallet.ts'
 import { capture } from './routes/capture.ts'
 import { captureTokens } from './routes/capture-tokens.ts'
 import { captures } from './routes/captures.ts'
+import { notifications } from './routes/notifications.ts'
+import { runDigest } from './scheduled.ts'
 import { test } from './routes/test.ts'
 
 // ─────────────────────────────────────────────────────────────
@@ -108,6 +110,7 @@ protectedApi.route('/', wallet)
 // mint or revoke another (spec §4.2).
 protectedApi.route('/', captureTokens)
 protectedApi.route('/', captures)
+protectedApi.route('/', notifications)
 
 app.route('/api', protectedApi)
 
@@ -127,4 +130,20 @@ app.onError((err, c) => {
   return c.json({ error: message }, status as 400)
 })
 
-export default app
+// ─────────────────────────────────────────────────────────────
+// Cron Triggers (v3 P4). The first scheduled work in the app — even recurring
+// transactions are processed on demand today.
+//
+// Two slots, both in Asia/Kuala_Lumpur terms (wrangler crons are UTC, so the
+// hours below are the business times minus 8): a morning digest of what needs
+// attention, and an evening summary of what was spent. Deliberately no more
+// than that — a notification you learn to swipe away is worse than none.
+// ─────────────────────────────────────────────────────────────
+export default {
+  fetch: app.fetch,
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    // 00:10 UTC = 08:10 MYT, 13:10 UTC = 21:10 MYT.
+    const slot = event.cron.startsWith('10 0') ? 'morning' : 'evening'
+    ctx.waitUntil(runDigest(env, slot))
+  },
+}

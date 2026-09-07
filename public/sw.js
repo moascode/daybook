@@ -101,3 +101,80 @@ self.addEventListener('fetch', (event) => {
     )
   }
 })
+
+
+// ─────────────────────────────────────────────────────────────
+// Web Push (v3 P4).
+//
+// Pushes carry NO payload — see worker/lib/webpush.ts for why. So the handler
+// asks the server what to say. The fetch is same-origin, so it carries the
+// session cookie and is authenticated exactly like a page read.
+//
+// iOS requires that a push event ALWAYS results in a visible notification.
+// Every failure path below therefore still shows something rather than
+// swallowing the event, which would eventually cost us the permission.
+// ─────────────────────────────────────────────────────────────
+
+const FALLBACK = {
+  title: 'Daybook',
+  body: 'Something is waiting for you.',
+  url: '/',
+}
+
+self.addEventListener('push', (event) => {
+  event.waitUntil(
+    (async () => {
+      let n = FALLBACK
+      try {
+        const res = await fetch('/api/notifications/pending', { credentials: 'include' })
+        if (res.ok) {
+          const data = await res.json()
+          const list = Array.isArray(data.notifications) ? data.notifications : []
+          if (list.length > 0) {
+            const first = list[0]
+            n = {
+              title: first.title || FALLBACK.title,
+              // More than one thing to say: lead with the most urgent and
+              // count the rest, rather than firing several notifications.
+              body: list.length > 1 ? `${first.body} +${list.length - 1} more` : first.body,
+              url: first.url || '/',
+            }
+          } else {
+            // The server says there is nothing — the state changed between the
+            // push being sent and this running. Still must show something.
+            n = { title: 'Daybook', body: 'Nothing needs your attention right now.', url: '/' }
+          }
+        }
+      } catch {
+        // Offline or signed out. FALLBACK stands.
+      }
+
+      await self.registration.showNotification(n.title, {
+        body: n.body,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        tag: 'daybook-digest',
+        data: { url: n.url },
+      })
+    })(),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = (event.notification.data && event.notification.data.url) || '/'
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      // Focus an open Daybook rather than opening a second copy.
+      for (const client of all) {
+        if (new URL(client.url).origin === self.location.origin) {
+          await client.focus()
+          if ('navigate' in client) await client.navigate(target)
+          return
+        }
+      }
+      await self.clients.openWindow(target)
+    })(),
+  )
+})
