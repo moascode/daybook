@@ -268,6 +268,9 @@ export function TransactionForm({
               <button
                 key={opt.value}
                 type="button"
+                // The selected type was conveyed by colour alone, which a
+                // screen reader cannot see and a test cannot assert.
+                aria-pressed={form.type === opt.value}
                 className={cn(
                   'flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   form.type === opt.value

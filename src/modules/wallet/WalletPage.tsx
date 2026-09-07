@@ -30,7 +30,7 @@ import { useCrudModal } from '@/hooks/useCrudModal'
 import { api } from '@/lib/api'
 import { cn, formatMYR, errorMessage, monthRange, dateRangePreset } from '@/lib/utils'
 import { UNCATEGORISED } from '@/modules/wallet/dashboard/insights'
-import type { Transaction } from '@/types/wallet.types'
+import type { Transaction, TransactionType } from '@/types/wallet.types'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 
 export function WalletPage() {
@@ -110,10 +110,22 @@ export function WalletPage() {
     setImportModalOpen(true)
     setHandledImportKey(location.key)
   }
+  // Quick add (R17) navigates here with a transaction type to open the create
+  // form pre-set. Same one-shot nav-state mechanism and the same location.key
+  // guard as the import flag above — a navigation to the route we are already
+  // on updates `location` without remounting, so a lazy initializer misses it.
+  const quickAddType = (location.state as { quickAddType?: TransactionType } | null)?.quickAddType
+  const [handledQuickAddKey, setHandledQuickAddKey] = useState<string | null>(null)
+  if (quickAddType && location.key !== handledQuickAddKey) {
+    setHandledQuickAddKey(location.key)
+    setComposerDraft({ type: quickAddType } as Partial<TransactionFormData>)
+    crud.openCreate()
+  }
   // Clears the one-shot nav state (a side effect on the router, not local
   // state) so navigating back here again doesn't reopen the modal.
   useEffect(() => {
-    if ((location.state as { openImport?: boolean } | null)?.openImport) {
+    const st = location.state as { openImport?: boolean; quickAddType?: string } | null
+    if (st?.openImport || st?.quickAddType) {
       navigate(location.pathname, { replace: true, state: null })
     }
   }, [location, navigate])

@@ -12,6 +12,7 @@ import { capture } from './routes/capture.ts'
 import { captureTokens } from './routes/capture-tokens.ts'
 import { captures } from './routes/captures.ts'
 import { notifications } from './routes/notifications.ts'
+import { search } from './routes/search.ts'
 import { runDigest } from './scheduled.ts'
 import { test } from './routes/test.ts'
 
@@ -111,6 +112,7 @@ protectedApi.route('/', wallet)
 protectedApi.route('/', captureTokens)
 protectedApi.route('/', captures)
 protectedApi.route('/', notifications)
+protectedApi.route('/', search)
 
 app.route('/api', protectedApi)
 
