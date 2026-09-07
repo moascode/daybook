@@ -1856,6 +1856,19 @@ Tailwind's own hexes; the dark theme serves the same ramp **mirrored**
    media-query form, and the OS caches the manifest at install time, so unlike
    `<meta name="theme-color">` (which `index.html` already swaps pre-paint) it
    **cannot** follow the theme. The only choice is which single colour to commit
-   to, and `#ffffff` matches the default Light theme both users are on. A
-   dark-theme user gets a brief white splash; the alternative is a dark splash in
-   front of a white app for everyone else.
+   to, and `#ffffff` matches the default Light theme both users are on.
+
+   > **Scope, clarified 2026-09-07 (v3 P5).** This rule is about
+   > `background_color`, and only that. It was being read as "the launch screen
+   > cannot follow the theme", which is not true and cost the dark-theme white
+   > flash longer than it needed to.
+   >
+   > `<link rel="apple-touch-startup-image">` is a **different mechanism** and
+   > **does** accept a `media` attribute, `prefers-color-scheme` included.
+   > `index.html` now carries light and dark launch images per device size, so
+   > iOS picks the right one. A device whose dimensions match no tag simply gets
+   > no splash and falls back to `background_color` — which is why adding sizes
+   > is additive and can never break an unlisted phone.
+   >
+   > So: the manifest colour still cannot follow the theme. The splash can, and
+   > now does.
