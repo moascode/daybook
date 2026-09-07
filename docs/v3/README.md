@@ -46,7 +46,7 @@ Update the row when a release merges.
 |---|---|---|
 | P1 | Install quality — touch icon, manifest, iOS input/feel details | ✅ merged |
 | P2 | Offline honesty — make the service worker actually work, and say so when it can't | ✅ merged |
-| P3 | First load — code-split the 1.25 MB single bundle | — |
+| P3 | First load — code-split the 1.25 MB single bundle | ✅ merged — entry 1,251 kB → 390 kB (355 → 125 kB gz) |
 | P4 | Push notifications — inbox count, silence alert, split claims | — |
 | P5 | Themed splash screens | ✅ approved 2026-09-07 — not started |
 

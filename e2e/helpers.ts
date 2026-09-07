@@ -41,6 +41,14 @@ export async function waitForApp(page: Page) {
   // On desktop the sidebar aside is visible; on mobile the main element is visible.
   // We check for the main content area which is always present in both viewports.
   await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
+
+  // …and then for the ROUTE inside it (v3 P3). Every page is a lazy chunk now,
+  // so `main` is visible as soon as the shell mounts while the route is still
+  // downloading and Suspense is showing the fallback. Without this, a spec that
+  // queries page content immediately after waitForApp races the chunk and finds
+  // nothing — which is not a flake, it is the shell being genuinely ready
+  // before the page is.
+  await expect(page.getByTestId('route-loading')).toHaveCount(0, { timeout: 20_000 })
 }
 
 let userSeq = 0
