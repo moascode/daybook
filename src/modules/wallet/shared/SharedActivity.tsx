@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Ban, Check, Receipt, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Modal } from '@/components/ui/Modal'
 import { MultiSelect } from '@/components/ui/MultiSelect'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -402,24 +403,23 @@ export function SharedActivity({
           and shape as WalletPage's own bulk-action bar (WalletPage.tsx),
           including the "Select all" link when the selection is partial. */}
       {selectedRows.length > 0 && (
-        <div
-          data-testid="split-bulk-bar"
-          className="fixed inset-x-0 bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 shadow-xl shadow-brand-900/10"
+        <BulkActionBar
+          testId="split-bulk-bar"
+          count={selectedRows.length}
+          onClear={() => setSelected(new Set())}
+          selectAll={
+            !allSelected ? (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                data-testid="split-select-all"
+                className="whitespace-nowrap text-sm font-medium text-brand-600 hover:underline"
+              >
+                Select all {selectableIds.size}
+              </button>
+            ) : undefined
+          }
         >
-          <span className="whitespace-nowrap px-2 text-sm font-medium text-brand-700">
-            {selectedRows.length} selected
-          </span>
-          {!allSelected && (
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              data-testid="split-select-all"
-              className="whitespace-nowrap text-sm font-medium text-brand-600 hover:underline"
-            >
-              Select all {selectableIds.size}
-            </button>
-          )}
-          <div className="mx-1 h-5 w-px bg-brand-200" />
           {selectedApprovable.length > 0 && (
             <Button size="sm" onClick={handleBulkApprove} disabled={busy} data-testid="split-bulk-approve">
               <Check className="h-3.5 w-3.5" /> Agree to {selectedApprovable.length}
@@ -435,16 +435,7 @@ export function SharedActivity({
               <Ban className="h-3.5 w-3.5" /> Cancel {selectedCancellable.length}
             </Button>
           )}
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            aria-label="Clear selection"
-            title="Clear selection"
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-brand-700 transition-colors hover:bg-brand-100"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        </BulkActionBar>
       )}
 
       <Modal

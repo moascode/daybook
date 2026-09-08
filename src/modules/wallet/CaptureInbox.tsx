@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Inbox } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { useWallet } from '@/hooks/useWallet'
@@ -327,19 +328,14 @@ export function CaptureInbox() {
       />
 
       {selected.length > 0 && (
-        <div
-          data-testid="capture-action-bar"
-          className="fixed inset-x-0 bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 shadow-xl shadow-brand-900/10"
-        >
-          <span className="whitespace-nowrap px-2 text-sm font-medium text-brand-700">{selected.length} selected</span>
-          <div className="mx-1 h-5 w-px bg-brand-200" />
+        <BulkActionBar testId="capture-action-bar" count={selected.length}>
           <Button variant="secondary" size="sm" disabled={working} onClick={() => setConfirmDismiss(true)} data-testid="capture-dismiss-btn">
             Dismiss
           </Button>
           <Button variant="primary" size="sm" disabled={working} onClick={() => void handleAccept()} data-testid="capture-accept-btn">
             {working ? 'Working…' : `Accept ${selected.length}`}
           </Button>
-        </div>
+        </BulkActionBar>
       )}
 
       <ConfirmDeleteModal

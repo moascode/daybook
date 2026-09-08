@@ -9,6 +9,7 @@ import { DateRangeControl } from '@/components/ui/DateRangeControl'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { TransactionList } from '@/modules/wallet/TransactionList'
 import { TransactionForm } from '@/modules/wallet/TransactionForm'
@@ -1257,23 +1258,22 @@ export function WalletPage() {
           scrolls out of view. Appears purely because selectedIds is
           non-empty; no separate "mode" gates it. */}
       {selectedIds.size > 0 && (
-        <div
-          data-testid="bulk-action-bar"
-          className="fixed inset-x-0 bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 shadow-xl shadow-brand-900/10"
+        <BulkActionBar
+          testId="bulk-action-bar"
+          count={selectedIds.size}
+          onClear={clearSelection}
+          selectAll={
+            !allSelected ? (
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="whitespace-nowrap text-sm font-medium text-brand-600 hover:underline"
+              >
+                Select all {visibleTransactions.length}
+              </button>
+            ) : undefined
+          }
         >
-          <span className="whitespace-nowrap px-2 text-sm font-medium text-brand-700">
-            {selectedIds.size} selected
-          </span>
-          {!allSelected && (
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              className="whitespace-nowrap text-sm font-medium text-brand-600 hover:underline"
-            >
-              Select all {visibleTransactions.length}
-            </button>
-          )}
-          <div className="mx-1 h-5 w-px bg-brand-200" />
           <Button data-testid="bulk-edit-btn" variant="secondary" size="sm" onClick={() => setBulkEditOpen(true)}>
             <Tag className="h-3.5 w-3.5" /> Categorise {selectedIds.size}
           </Button>
@@ -1286,16 +1286,7 @@ export function WalletPage() {
           <Button data-testid="bulk-export-btn" variant="secondary" size="sm" onClick={() => setExportOpen(true)}>
             <Download className="h-3.5 w-3.5" /> Export
           </Button>
-          <button
-            type="button"
-            onClick={clearSelection}
-            aria-label="Clear selection"
-            title="Clear selection"
-            className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-brand-700 transition-colors hover:bg-brand-100"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        </BulkActionBar>
       )}
 
       <TransactionForm
