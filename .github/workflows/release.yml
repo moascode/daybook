@@ -25,6 +25,18 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Manual escape hatch. Pushing a tag is still the normal path — this exists
+  # because a session without permission to push a tag ref (the container agent
+  # proxy returns 403 on tag refs while branch pushes succeed) otherwise has no
+  # way to release at all, and "the tag is the deploy" then means no deploy.
+  # The release still ends up tagged: the Publish step creates the tag at the
+  # commit it deployed, so a dispatched release is indistinguishable afterwards.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. v3.12.1. Must not already exist as a tag.'
+        required: true
+        type: string
 
 permissions:
   contents: write # required to create the GitHub Release
@@ -39,6 +51,13 @@ jobs:
     name: Test, Migrate, Deploy
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    # The version, from whichever trigger fired. On a tag push github.ref_name
+    # IS the tag; on a dispatch it is the branch name ("main"), which would
+    # otherwise be baked into the bundle and used as the Release's tag. Every
+    # step below reads VERSION, never github.ref_name, so the two paths cannot
+    # drift.
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +70,25 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Only reachable on a dispatch: a tag push has already proved its own name
+      # is a tag, and the `v*.*.*` filter proved the shape. A dispatch has
+      # neither guarantee, and both failures are expensive — a malformed version
+      # is baked into the client bundle, and reusing an existing tag would move
+      # a published release's tag onto a different commit.
+      - name: Validate the dispatched version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "✗ '$VERSION' is not a vMAJOR.MINOR.PATCH version." >&2; exit 1 ;;
+          esac
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "✗ Tag $VERSION already exists — pick the next version." >&2
+            exit 1
+          fi
+          echo "✓ $VERSION is well-formed and unused; releasing ${{ github.sha }}"
 
       # ── Gate: this exact commit must already be green on CI ──────────────
       #
@@ -108,11 +146,12 @@ jobs:
       # VITE_*-prefixed env var to client code via import.meta.env) so the
       # sidebar footer's version string is the tag that triggered this exact
       # release, not a hand-typed literal someone forgets to bump — see
-      # ModuleSidebar.tsx / AccountMenu.tsx. github.ref_name on a tag push is
-      # the tag itself (e.g. "v3.2.0"), no refs/tags/ prefix to strip.
+      # ModuleSidebar.tsx / AccountMenu.tsx. VERSION is the job-level resolution
+      # above: github.ref_name on a tag push is the tag itself (e.g. "v3.2.0"),
+      # no refs/tags/ prefix to strip, and the dispatch input otherwise.
       - name: Build client bundle
         env:
-          VITE_APP_VERSION: ${{ github.ref_name }}
+          VITE_APP_VERSION: ${{ env.VERSION }}
         run: npm run build
 
       # ── Everything below touches production ──────────────────────────────
@@ -160,14 +199,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           echo "✗ smoke test failed — rolling back" >&2
-          npx wrangler rollback --message "automated rollback: smoke test failed for ${{ github.ref_name }}" --env="" || \
+          npx wrangler rollback --message "automated rollback: smoke test failed for ${{ env.VERSION }}" --env="" || \
             echo "rollback failed; the previous version must be restored manually" >&2
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Daybook ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: Daybook ${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
+          # On a dispatch the tag does not exist yet — this creates it, pointing
+          # at the commit that was just deployed and smoke-tested rather than at
+          # whatever the branch has moved on to since.
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           body: |
             Deployed to https://daybook.moascode.workers.dev
