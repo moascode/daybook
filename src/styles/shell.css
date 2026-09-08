@@ -413,8 +413,81 @@ html { scroll-padding-top: 64px; }
   .appbar-right { flex: 0 0 auto; }
 }
 @media (max-width: 680px) {
-  .appbar-right .circle-btn:first-of-type { display: none; }  /* quick-add lives in the FAB */
+  /* Quick add lives in the FAB on a phone, so the app bar's copy stands down.
+     This used to say `.circle-btn:first-of-type`, which was true only while
+     the cluster was bare buttons: R17 wrapped quick-add AND notifications in
+     their own `.pop-anchor`, so each button became the first (and only)
+     button of its type inside its own wrapper and the selector matched BOTH.
+     The bell vanished from every phone. Target the one control by name. */
+  .appbar-right .quick-add-btn { display: none; }
   .appbar .search { flex: 1 1 auto; min-width: 0; }
+}
+
+
+/* ---- floating bulk-action bar --------------------------------------------
+   One shared component (src/components/ui/BulkActionBar.tsx) behind four
+   selection surfaces: the transaction list, CSV review, the capture inbox and
+   shared activity. Its layout lives here, next to the mobile chrome it has to
+   coexist with, because that coexistence is the only hard part. */
+.bulk-bar {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem));
+  /* Below Modal's overlay (z-40) on purpose: every button in here opens a
+     dialog, and a selection bar floating over its own confirm modal is worse
+     than one that is briefly covered. Do not raise this to clear the tab bar
+     — the fix for that is position, below. */
+  z-index: 30;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: var(--s2);
+  width: fit-content; max-width: calc(100vw - 2rem);
+  margin-inline: auto;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-full);
+}
+.bulk-bar-lead { display: flex; align-items: center; gap: var(--s3); padding-inline: var(--s2); }
+.bulk-bar-count { white-space: nowrap; font-size: var(--t-sm); font-weight: 500; }
+.bulk-bar-sep { width: 1px; height: 20px; margin-inline: 4px; background: currentColor; opacity: .25; }
+.bulk-bar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--s2); }
+.bulk-bar-clear {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: var(--r-full);
+  transition: background .15s var(--ease);
+}
+
+@media (max-width: 680px) {
+  /* THE PHONE BUG (post-R17): the tab bar is fixed at bottom:0 with z-index
+     50, so a pill at bottom:1rem/z-30 rendered underneath it and a selection
+     on a phone looked like it had no actions at all. Sitting on top of the
+     tab bar — rather than winning a z-index race the modals would then lose —
+     is what actually fixes it.
+
+     And the desktop shape does not survive the trip: a centred pill holding a
+     count, a "select all" link and four buttons is wider than 360px, and one
+     that scrolls sideways hides its own Delete. On a phone it becomes a
+     full-width tier flush on the tab bar, count and dismiss on the first row,
+     actions on the second — placed by grid areas, so DOM order can stay the
+     natural desktop order. */
+  .bulk-bar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    row-gap: var(--s2);
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    width: auto; max-width: none; margin-inline: 0;
+    padding: var(--s3);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
+    box-shadow: 0 -8px 24px rgb(0 0 0 / .14);
+  }
+  .bulk-bar-lead { grid-column: 1; grid-row: 1; padding-inline: 0; }
+  .bulk-bar-clear { grid-column: 2; grid-row: 1; }
+  .bulk-bar-sep { display: none; }
+  .bulk-bar-actions { grid-column: 1 / -1; grid-row: 2; justify-content: stretch; }
+  .bulk-bar-actions > * { flex: 1 1 auto; justify-content: center; }
+  /* The FAB sits at 72-124px on the right, straight through the tier's band.
+     A live selection has its own primary action and quick-add has nothing to
+     add to it, so the FAB stands down while the bar is up. */
+  body:has(.bulk-bar) .fab { display: none; }
 }
 
 /* =====================================================================

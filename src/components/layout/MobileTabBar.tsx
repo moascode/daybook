@@ -1,8 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { modules } from './modules'
-import { useToastStore } from '@/stores/toast.store'
+import { QuickAddMenu } from './QuickAddMenu'
 
 // Same reuse rule as AppBar's modtabs (context map): keep nav-tasks/nav-wallet
 // so navTo(page,'tasks'|'wallet') e2e callers work at any viewport, since only
@@ -20,8 +19,6 @@ function tabTestId(id: string): string {
  * old shell had no mobile-specific primary nav.
  */
 export function MobileTabBar() {
-  const addToast = useToastStore((s) => s.addToast)
-
   return (
     <>
       <nav className="tabbar" aria-label="Modules, mobile">
@@ -57,17 +54,11 @@ export function MobileTabBar() {
           ),
         )}
       </nav>
-      {/* Same not-wired-up quick-add as AppBar's — shell only in R2, but the
-          click still needs to say something rather than nothing (rule 13). */}
-      <button
-        type="button"
-        className="fab"
-        aria-label="Quick add"
-        data-testid="fab-quick-add"
-        onClick={() => addToast({ message: "Quick add isn't wired up yet — use New Task or Add Transaction for now." })}
-      >
-        <Plus className="icon" />
-      </button>
+      {/* The FAB IS quick add on a phone — shell.css hides the app bar's copy
+          in favour of this one. R17 wired the app bar and left this raising the
+          R2 "isn't wired up yet" toast, so the feature existed everywhere
+          except the only place it was reachable from. Same component now. */}
+      <QuickAddMenu variant="fab" />
     </>
   )
 }

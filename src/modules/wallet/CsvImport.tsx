@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { CheckCircle2, ChevronDown, Check } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
@@ -419,12 +420,7 @@ export function CsvImport() {
       />
 
       {selectedCount > 0 && (
-        <div
-          data-testid="import-bulk-action-bar"
-          className="fixed inset-x-0 bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.75rem))] z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-3 py-2 shadow-xl shadow-brand-900/10"
-        >
-          <span className="whitespace-nowrap px-2 text-sm font-medium text-brand-700">{selectedCount} selected</span>
-          <div className="mx-1 h-5 w-px bg-brand-200" />
+        <BulkActionBar testId="import-bulk-action-bar" count={selectedCount}>
           <Button variant="secondary" size="sm" onClick={() => navigate('/wallet')}>Cancel</Button>
           <Button
             variant="primary"
@@ -435,7 +431,7 @@ export function CsvImport() {
           >
             {importing ? 'Importing…' : `Import ${includedCount} transaction${includedCount !== 1 ? 's' : ''}`}
           </Button>
-        </div>
+        </BulkActionBar>
       )}
     </div>
   )
