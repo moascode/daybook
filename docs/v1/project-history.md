@@ -20,7 +20,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-08-25. Regenerate with:
+Reconciled against `git tag` on 2026-09-07. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -28,6 +28,18 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.6.0 | 2026-09-07 | **R18 machine capture** — capture tokens, `POST /api/capture/transaction`, pending inbox, both duplicate gaps (#178, #181–#184) |
+| v3.5.0 | 2026-09-07 | Statement photo imports: populate description, show filename over a tiny thumbnail |
+| v3.4.1 | 2026-09-06 | Surface Anthropic error type + request-id on AI failures |
+| v3.4.0 | 2026-09-06 | Fix photo-import truncation on long statements; flag remaining truncation for crop-and-retry |
+| v3.3.0 | 2026-09-06 | Unified CSV+photo import, AI merchant cleanup, cross-source dedup |
+| v3.2.0 | 2026-09-06 | Accounts rebuilt to mockup parity: composition/net-worth/sparklines, credit-limit + statement-date |
+| v3.1.4 | 2026-09-05 | Shared page rebuilt as a literal port of the design mockup |
+| v3.1.3 | 2026-09-05 | Manual "Link as transfer" moved into the modal header |
+| v3.1.2 | 2026-09-04 | Date range split: This/Last month outside, All time/Custom inside Filters |
+| v3.1.1 | 2026-09-04 | Date range moved back into the Filters popup |
+| v3.1.0 | 2026-09-04 | Proactive transfer-link suggestions (create + edit forms) |
+| v3.0.0 | 2026-09-02 | **Trips + Day design adoption** — completes v3.0 |
 | v2.9.2 | 2026-08-11 | Dashboard: monthly average alongside multi-month totals (#122) |
 | v2.9.1 | 2026-08-11 | Release-record drift-proofing only (chore, #120, #121) |
 | v2.9.0 | 2026-08-09 | Split percentage auto-adjust + uniform bulk split (#119) |
