@@ -217,8 +217,24 @@ Content-Type: application/json
   straight into a notification, which is how the user learns it worked.
 - Errors use the same `{error}` shape everything else does, so `src/lib/api.ts`
   needs no special case.
-- **`amount` must be a finite number > 0** → 400 otherwise. This is the
+- **`amount` must resolve to a finite number > 0** → 400 otherwise. This is the
   declined-payment and `0.0` filter at the door.
+
+  A JSON number is taken as-is. A **string is parsed tolerantly**: currency
+  symbol or code, spaces and thousands separators are all stripped, so
+  `86.9`, `"86.90"`, `"RM 86.90"`, `"MYR86.90"` and `"RM 1,234.56"` are
+  equivalent. This is for the primary client, not for looseness' sake — iOS
+  Shortcuts' Wallet trigger yields its `Amount` variable already formatted for
+  the locale (`"RM 86.90"`, never `86.9`), so a strict `Number()` made the one
+  variable the client has unusable and forced a `Match Text` step on the phone
+  whose failure mode is silent: it yields an empty string, which arrives as `0`
+  and is indistinguishable from a decline. Cost a live automation three
+  debugging rounds (2026-09-13) before being parsed here instead.
+
+  The leniency stops at the sign: it is read **before** the symbols are
+  stripped, so `"-RM 5.00"` and `"(5.00)"` still fail the `> 0` check rather
+  than shedding the minus and booking as a payment. `"RM 0.00"` is likewise
+  still a decline, and a boolean is not money (`Number(true)` used to be `1`).
 - **`merchant` may be empty** — accepted and flagged for review. Dropping it
   would lose a real payment.
 - **`occurredAt` is optional.** Absent → server-stamps in **Asia/Kuala_Lumpur**,

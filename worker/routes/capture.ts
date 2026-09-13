@@ -166,6 +166,47 @@ function money(amount: number): string {
   return `RM${amount.toFixed(2)}`
 }
 
+/**
+ * Money as a machine actually sends it. A number passes through untouched; a
+ * string is parsed tolerantly, currency and grouping included.
+ *
+ * This is deliberate leniency, not sloppiness. iOS Shortcuts' Wallet trigger
+ * hands over its `Amount` variable already formatted for the locale — the
+ * on-device value is "RM 86.90", never 86.9 — so a bare `Number()` here made
+ * the one variable the client has unusable. Extracting the digits on the phone
+ * instead takes a Match Text step whose failure mode is invisible: it yields an
+ * empty string, which arrives as 0 and is indistinguishable from a decline.
+ * Parsing the currency off server-side is what lets that variable be wired
+ * straight into the request body with no regex in between.
+ *
+ * Sign is detected BEFORE the symbols are stripped, so a refund or a
+ * parenthesised negative still fails the caller's `<= 0` check instead of
+ * silently shedding its minus and booking as a payment.
+ *
+ * `src/lib/csv.ts`'s `parseAmount` is the sibling of this logic and stays
+ * separate: it lives in the browser bundle behind a PapaParse import, and the
+ * Worker must not pull that in for six lines.
+ */
+function parseCaptureAmount(v: unknown): number {
+  if (typeof v === 'number') return v
+  if (typeof v !== 'string') return NaN
+
+  const negative = /^\s*-/.test(v) || /-\s*$/.test(v) || /\(.*\)/.test(v)
+
+  // Keep digits and separators, then decide which separator is the decimal
+  // point: a trailing "[.,]dd" is, and every other one is a thousands group.
+  // Both "1,234.56" and the European "1.234,56" therefore reach 1234.56
+  // rather than 1.23456.
+  let s = v.replace(/[^\d.,]/g, '')
+  const decimal = s.match(/[.,](\d{1,2})$/)
+  s = decimal
+    ? `${s.slice(0, s.length - decimal[0].length).replace(/[.,]/g, '')}.${decimal[1]}`
+    : s.replace(/[.,]/g, '')
+
+  const n = parseFloat(s)
+  return negative ? -n : n
+}
+
 capture.post('/transaction', requireScope(SCOPE_CAPTURE_WRITE), async (c) => {
   const userId = c.get('userId')
 
@@ -204,7 +245,7 @@ capture.post('/transaction', requireScope(SCOPE_CAPTURE_WRITE), async (c) => {
   // DECLINED payment and the documented `0.0` bug both arrive, and neither is
   // a transaction. Everything else is accepted and flagged instead, because
   // dropping a row would lose a real payment.
-  const amount = Number(b.amount)
+  const amount = parseCaptureAmount(b.amount)
   if (!Number.isFinite(amount) || amount <= 0) {
     return c.json({ error: 'amount must be greater than zero' }, 400)
   }
