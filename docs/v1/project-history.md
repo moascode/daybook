@@ -20,7 +20,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-08-25. Regenerate with:
+Reconciled against `git tag` on 2026-09-13. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -28,6 +28,27 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.12.2 | 2026-09-13 | Capture endpoint accepts currency-formatted amounts (#198) |
+| v3.12.1 | 2026-09-08 | Three R17 phone regressions + `release.yml` manual-dispatch path (#196, #197) |
+| v3.12.0 | 2026-09-08 | R17 §1–§3: quick add, notifications panel, global search (#194, #195) |
+| v3.11.0 | 2026-09-08 | P4: push notifications |
+| v3.10.0 | 2026-09-08 | P5: themed iOS launch screens |
+| v3.9.0 | 2026-09-07 | P3: code-split every route |
+| v3.8.0 | 2026-09-07 | P2: offline works, and says so when it can't |
+| v3.7.0 | 2026-09-07 | P1: PWA install quality |
+| v3.6.1 | 2026-09-07 | Capture: accept the idempotency key as a body field |
+| v3.6.0 | 2026-09-07 | R18 machine capture: token auth + pending inbox |
+| v3.5.0 | 2026-09-07 | Photo-import descriptions; filename instead of a tiny thumbnail |
+| v3.4.1 | 2026-09-06 | Surface Anthropic error type + request-id on AI failures |
+| v3.4.0 | 2026-09-06 | Fix photo-import truncation on long statements; flag for crop-and-retry |
+| v3.3.0 | 2026-09-06 | Unified CSV+photo import, AI merchant cleanup, cross-source dedup |
+| v3.2.0 | 2026-09-06 | Accounts page mockup-parity port; credit-limit/statement-date fields |
+| v3.1.4 | 2026-09-05 | Wallet Shared page ported to the design mockup |
+| v3.1.3 | 2026-09-05 | Manual "Link as transfer" moved into the modal header |
+| v3.1.2 | 2026-09-04 | Transaction date range split: This/Last month outside Filters |
+| v3.1.1 | 2026-09-04 | Transaction date range moved back into the Filters popup |
+| v3.1.0 | 2026-09-04 | Proactive transfer-link suggestions (create + edit forms) |
+| v3.0.0 | 2026-09-02 | Trips + Day design adoption; completes v3.0 |
 | v2.9.2 | 2026-08-11 | Dashboard: monthly average alongside multi-month totals (#122) |
 | v2.9.1 | 2026-08-11 | Release-record drift-proofing only (chore, #120, #121) |
 | v2.9.0 | 2026-08-09 | Split percentage auto-adjust + uniform bulk split (#119) |
@@ -50,21 +71,29 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 Releases are tag-triggered: `release.yml` gates on the full suite, applies
 pending D1 migrations, deploys the Worker, smoke-tests it, then publishes the
-GitHub Release. **The tag is the deploy.**
+GitHub Release. **The tag is the deploy.** When a tag ref cannot be pushed
+(the container-agent-proxy 403 — see CLAUDE.md §13), the same workflow is
+reachable as `gh workflow run release.yml --ref main -f version=vX.Y.Z`, which
+creates the tag at the commit it deployed. `v3.12.1` and `v3.12.2` went out
+that way.
 
-> **`main` is currently ahead of `v2.9.2` and untagged — do not assume main is
-> released.** As of 2026-08-25, `main` carries the v2 design-adoption work
-> (`docs/v2/`: R1 tokens #125, R2 app shell #130, R3 wallet adoption #132–#135)
-> plus the AI-assisted merchant-resolution follow-up (#136) — 47+ commits, none
-> tagged. Verify before relying on this table:
+> **Do not assume this table is current, and never write down whether `main` is
+> released.** The block that used to sit here asserted "47+ commits ahead of
+> `v2.9.2`, none tagged" — true on 2026-08-25, stale within a week, and still
+> being read as fact on 2026-09-13, by which point 21 further releases had
+> shipped. A written release state decays the moment anything merges. Measure:
 > ```
-> git log --oneline v2.9.2..main
+> git fetch origin main --tags
+> git log --oneline "$(git describe --tags --abbrev=0 origin/main)..origin/main"
 > ```
-> Cut a release the normal way (`git tag -a vX.Y.Z && git push origin vX.Y.Z`)
-> when the owner wants this live. The v2 design-adoption release plan
-> (`docs/v2/release-plan.md`) continues this same `v2.x.0` tag sequence — R1 is
-> due to ship as `v2.10.0`, R2 as `v2.11.0`, and so on — it is not a separate
-> numbering track.
+> Empty → `main` is released. Non-empty → those commits ship with the next tag.
+>
+> The `v2.x.0` continuation that block predicted (R1 as `v2.10.0`, R2 as
+> `v2.11.0`) never happened: the v2 design-adoption work shipped as **`v3.0.0`**
+> on 2026-09-02, and `v2.10.0`/`v2.11.0` do not exist. `docs/v2/release-plan.md`
+> numbers *releases* (R1–R18), which do not map onto tag numbers — R17 shipped
+> as `v3.12.0`, R18 as `v3.6.0`. Read the tag list, not the release plan, to
+> learn what is deployed.
 
 ---
 

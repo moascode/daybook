@@ -56,19 +56,21 @@ modules — link to it.
 ## Status board
 
 Update the row when a release merges. `—` means not started. **This board
-tracks releases, not tags** — none of R1–R3 has actually been tagged/deployed
-yet even though the code is merged to `main`; see the warning below.
+tracks releases, not tags** — the two do not map onto each other, so derive
+deployment state from `git tag`, never from the Tag column here (see the
+warning below). Every row marked merged below is deployed: `main` has been
+fully released since `v3.12.2` (2026-09-13).
 
 | Release | Tag | Scope | Status |
 |---|---|---|---|
-| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | ✅ merged [PR 125](https://github.com/moascode/daybook/pull/125) — **not tagged** |
-| R2 | v2.11.0 | Foundation — app shell | ✅ merged [PR 130](https://github.com/moascode/daybook/pull/130) — **not tagged** |
-| R3 | v2.12.0 | Wallet — design adoption (8 pages) | ✅ merged [PR 132](https://github.com/moascode/daybook/pull/132)–[135](https://github.com/moascode/daybook/pull/135) (4 PRs) — **not tagged** |
-| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | ✅ merged [PR 138](https://github.com/moascode/daybook/pull/138) — **not tagged** |
-| R5 | v2.14.0 | Tasks — design adoption (4 pages) | ✅ merged [PR 142](https://github.com/moascode/daybook/pull/142)–[145](https://github.com/moascode/daybook/pull/145) (4 PRs) — **not tagged** |
-| R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — tagging now |
-| R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151), plus design-parity follow-ups [152](https://github.com/moascode/daybook/pull/152), [154](https://github.com/moascode/daybook/pull/154) (4 PRs) — **not tagged** |
-| R18 | **v3.6.0** | Machine capture — token auth, capture endpoint, pending inbox | 🔨 in review — [spec](wallet/feature-capture-inbox.md); PRs [181](https://github.com/moascode/daybook/pull/181)→[182](https://github.com/moascode/daybook/pull/182)→[183](https://github.com/moascode/daybook/pull/183)→[184](https://github.com/moascode/daybook/pull/184) (stacked). PR-6 (clients) blocked on the Gate 0 probe |
+| R1 | v2.10.0 | Foundation — tokens, component layer, AA gate | ✅ merged [PR 125](https://github.com/moascode/daybook/pull/125) — deployed |
+| R2 | v2.11.0 | Foundation — app shell | ✅ merged [PR 130](https://github.com/moascode/daybook/pull/130) — deployed |
+| R3 | v2.12.0 | Wallet — design adoption (8 pages) | ✅ merged [PR 132](https://github.com/moascode/daybook/pull/132)–[135](https://github.com/moascode/daybook/pull/135) (4 PRs) — deployed |
+| R4 | v2.13.0 | Tasks — minimum schema for the designed rows | ✅ merged [PR 138](https://github.com/moascode/daybook/pull/138) — deployed |
+| R5 | v2.14.0 | Tasks — design adoption (4 pages) | ✅ merged [PR 142](https://github.com/moascode/daybook/pull/142)–[145](https://github.com/moascode/daybook/pull/145) (4 PRs) — deployed |
+| R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — deployed in `v3.0.0` |
+| R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151), plus design-parity follow-ups [152](https://github.com/moascode/daybook/pull/152), [154](https://github.com/moascode/daybook/pull/154) (4 PRs) — deployed |
+| R18 | **v3.6.0** | Machine capture — token auth, capture endpoint, pending inbox | ✅ deployed in `v3.6.0` — [spec](wallet/feature-capture-inbox.md); PRs [181](https://github.com/moascode/daybook/pull/181)→[182](https://github.com/moascode/daybook/pull/182)→[183](https://github.com/moascode/daybook/pull/183)→[184](https://github.com/moascode/daybook/pull/184) (stacked). Live-client follow-ups since: `v3.6.1` idempotency key as a body field, `v3.12.2` currency-formatted amounts ([PR 198](https://github.com/moascode/daybook/pull/198)) — both found by running the real iOS Shortcut |
 | R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — |
 | R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — |
 | R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — |
@@ -95,9 +97,18 @@ yet even though the code is merged to `main`; see the warning below.
 > table (PR #138, merged 2026-08-25) is the Tasks schema bump — unrelated to
 > PR #136.
 >
-> **Next tag due is `v2.10.0`**, covering R1 (already merged). Verify current
-> state before trusting this table — `git log --oneline v2.9.2..main` on
-> 2026-08-25 showed R1–R4 merged and unreleased.
+> ⚠️ **Never record whether `main` is released.** This spot used to read "next
+> tag due is `v2.10.0`, covering R1 (already merged)". `v2.10.0` was never cut —
+> R1–R6 shipped as `v3.0.0` — and the line was still being read as current on
+> 2026-09-13, 21 releases later, where it cost a session a wrong answer to the
+> owner about what a release would ship. Measure instead:
+>
+> ```
+> git fetch origin main --tags
+> git log --oneline "$(git describe --tags --abbrev=0 origin/main)..origin/main"
+> ```
+>
+> Empty → `main` is released. Non-empty → those commits ship with the next tag.
 
 ---
 
