@@ -103,13 +103,60 @@ test.describe('capture endpoint', () => {
     const token = await tokenFor(page)
     const anon = await playwrightRequest.newContext({ baseURL })
 
-    // 0.0 is the documented Apple bug; a decline arrives the same way.
-    for (const amount of [0, -5, 'abc', null, undefined]) {
+    // 0.0 is the documented Apple bug; a decline arrives the same way. The
+    // formatted variants matter because the currency parse must not be a hole
+    // in this filter: "RM 0.00" is a decline wearing a currency symbol, and a
+    // negative must not shed its sign and book as a payment. `true` is here
+    // because `Number(true)` was 1 — a boolean is not money.
+    for (const amount of [0, -5, 'abc', null, undefined, 'RM 0.00', '-RM 5.00', '(5.00)', 'RM', true]) {
       const res = await post(anon, token, { merchant: 'X', amount })
       expect(res.status(), `amount=${String(amount)}`).toBe(400)
       expect((await res.json()).error).toContain('greater than zero')
     }
     expect(await (await page.request.get(`${API}/captures`)).json()).toHaveLength(0)
+    await anon.dispose()
+  })
+
+  test('accepts an amount with or without its currency', async ({ browser, baseURL }) => {
+    const page = await newAppPage(browser)
+    const token = await tokenFor(page)
+    const anon = await playwrightRequest.newContext({ baseURL })
+
+    // iOS Shortcuts' Wallet trigger yields its `Amount` variable already
+    // formatted for the locale ("RM 86.90"), so every one of these is a shape
+    // a real client sends. Extracting the digits on the phone instead needs a
+    // Match Text step whose failure is silent, which is the whole reason this
+    // is parsed here — see parseCaptureAmount.
+    const cases: [unknown, number][] = [
+      [86.9, 86.9],
+      ['86.90', 86.9],
+      ['RM 86.90', 86.9],
+      ['RM86.90', 86.9],
+      ['MYR86.90', 86.9],
+      ['86.90 RM', 86.9],
+      ['RM 1,234.56', 1234.56],
+      ['RM 1.234,56', 1234.56], // European grouping — the decimal is the tail
+      ['RM 1,234', 1234],
+    ]
+
+    for (const [amount, expected] of cases) {
+      const res = await post(anon, token, { merchant: 'Big Pharmacy', amount })
+      expect(res.status(), `amount=${String(amount)}`).toBe(201)
+      expect((await res.json()).message, `amount=${String(amount)}`).toBe(
+        `Big Pharmacy RM${expected.toFixed(2)} — 1 to review`,
+      )
+
+      // Read the stored value back, then dismiss the row so the next case's
+      // "1 to review" count is its own.
+      const inbox = await (await page.request.get(`${API}/captures`)).json()
+      expect(inbox, `amount=${String(amount)}`).toHaveLength(1)
+      expect(inbox[0].amount, `amount=${String(amount)}`).toBe(expected)
+      const dismissed = await page.request.post(`${API}/captures/dismiss`, {
+        data: { ids: [inbox[0].id] },
+      })
+      expect((await dismissed.json()).dismissed).toBe(1)
+    }
+
     await anon.dispose()
   })
 
