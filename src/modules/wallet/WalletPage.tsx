@@ -168,8 +168,10 @@ export function WalletPage() {
   useEffect(() => {
     api.get<unknown[]>('/groups')
       .then((groups) => setHasGroups(groups.length > 0))
-      .catch(() => {})
-  }, [])
+      .catch((err: unknown) => {
+        addToast({ message: errorMessage(err, "Couldn't check sharing status — try again.") })
+      })
+  }, [addToast])
 
   // Multi-select state — no explicit "mode" anymore. Every row has an
   // always-visible checkbox (industry convention: Gmail, Drive, Notion never

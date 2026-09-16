@@ -5,8 +5,9 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { api } from '@/lib/api'
-import { formatMYR, formatPercent, equalPercents, redistributePercents, splitEqually, splitByPercents } from '@/lib/utils'
+import { formatMYR, formatPercent, equalPercents, redistributePercents, splitEqually, splitByPercents, errorMessage } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
+import { useToastStore } from '@/stores/toast.store'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
 
@@ -89,12 +90,15 @@ export function BulkSplitDialog({
   const [bulkMode, setBulkMode] = useState<BulkMode>('perTransaction')
   const [uniform, setUniform] = useState<UniformState>(emptyUniform)
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { addToast } = useToastStore()
 
   const loadData = useCallback(async () => {
     if (selectedTransactionIds.length === 0) return
     setLoadingMembers(true)
+    setLoadError(false)
     try {
       const txns = selectedTransactionIds
         .map((txnId) => transactions.find((t) => t.id === txnId))
@@ -106,7 +110,12 @@ export function BulkSplitDialog({
             api
               .get<Record<string, unknown>[]>(`/transactions/${t.id}/splits`)
               .then((rows) => rows.map(mapTransactionShare))
-              .catch(() => [] as TransactionShare[]),
+              .catch((err: unknown) => {
+                addToast({
+                  message: errorMessage(err, `Couldn't load the existing split for "${t.merchant || 'a transaction'}" — it may show as unsplit.`),
+                })
+                return [] as TransactionShare[]
+              }),
           ),
         ),
       ])
@@ -121,10 +130,18 @@ export function BulkSplitDialog({
           existingShares: shareLists[i],
         })),
       )
+    } catch (err: unknown) {
+      // Unlike the per-transaction splits fetch above, a failure here (e.g. the
+      // /groups/members call) leaves no usable data to fall back to — there's no
+      // one to split with. `loadError` keeps the dialog from rendering the
+      // ordinary empty state ("No group members yet") in its place, which
+      // would misattribute a failed fetch as "you have nobody to split with".
+      setLoadError(true)
+      addToast({ message: errorMessage(err, 'Could not load group members for splitting — try again.') })
     } finally {
       setLoadingMembers(false)
     }
-  }, [selectedTransactionIds, transactions, currentUserId])
+  }, [selectedTransactionIds, transactions, currentUserId, addToast])
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- resetting the form when
@@ -353,6 +370,10 @@ export function BulkSplitDialog({
       <div className="space-y-4">
         {loadingMembers ? (
           <p className="text-sm text-fg-faint text-center py-2">Loading members…</p>
+        ) : loadError ? (
+          <p className="text-sm text-red-600 text-center py-2">
+            Couldn't load members — close and reopen to try again.
+          </p>
         ) : groupMembers.length === 0 ? (
           <p className="text-sm text-fg-subtle text-center py-2">
             <Users className="h-4 w-4 inline mr-1" />
