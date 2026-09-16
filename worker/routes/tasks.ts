@@ -21,7 +21,7 @@ const TASK_COLS: Record<string, string> = {
   parentId: 'parent_id',
   sortOrder: 'sort_order',
   dueDate: 'due_date',
-  // R4 (docs/v2/tasks/01-data-model.md): additive columns for the designed
+  // R4 (docs/roadmap/design-adoption/tasks/01-data-model.md): additive columns for the designed
   // row. A caller may set these directly via PATCH; nothing here auto-derives
   // completedAt from isCompleted — that derivation lives only in
   // POST /tasks/:id/complete below, so the outliner's existing
@@ -278,7 +278,7 @@ tasks.post('/tasks/:id/complete', async (c) => {
 })
 
 // Bulk due-date move for the overdue header's one-click action
-// (docs/v2/tasks/01-data-model.md §4). Scoped to the caller's own tasks only —
+// (docs/roadmap/design-adoption/tasks/01-data-model.md §4). Scoped to the caller's own tasks only —
 // not sharing-aware, since a shared task's due date is the owner's call.
 //
 // Registered before /tasks/:id so a literal "reschedule" path segment can
@@ -391,7 +391,7 @@ tasks.delete('/task-lists/:id', async (c) => {
   const id = c.req.param('id')
   if (!(await ownedList(c.env.DB, id, userId))) return c.json({ error: 'list not found' }, 404)
 
-  // Tasks survive; list_id → NULL (docs/v2/tasks/01-data-model.md §3). The FK
+  // Tasks survive; list_id → NULL (docs/roadmap/design-adoption/tasks/01-data-model.md §3). The FK
   // is ON DELETE SET NULL, but the update is issued explicitly in the same
   // batch rather than relied on implicitly, matching the accounts route's style.
   await c.env.DB.batch([

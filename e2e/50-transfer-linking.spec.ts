@@ -1,5 +1,5 @@
 /**
- * Wallet — "Link as transfer" (Item 2 of docs/csv-transfer-linking-plan.md).
+ * Wallet — "Link as transfer" (Item 2 of docs/archive/csv-transfer-linking-plan.md).
  * An expense in account A and a matching income in account B merge into one
  * single transfer row via the edit-form picker; the guards (same account,
  * mismatched amounts, same direction, already-split) reject bad links.

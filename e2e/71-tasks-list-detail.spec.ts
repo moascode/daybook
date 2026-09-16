@@ -1,5 +1,5 @@
 /**
- * R5 PR-3 — List detail page (docs/v2/.flow/R5-list-detail/flow-plan.md).
+ * R5 PR-3 — List detail page (docs/roadmap/design-adoption/.flow/R5-list-detail/flow-plan.md).
  *
  * Covers: the band renders a real list's name/colour and progress, the
  * List/Outline toggle switches views without losing the underlying task

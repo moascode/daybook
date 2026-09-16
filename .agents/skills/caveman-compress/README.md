@@ -90,7 +90,7 @@ caveman-compress/
 Examples:
 ```
 /caveman-compress CLAUDE.md
-/caveman-compress docs/preferences.md
+/caveman-compress docs/archive/preferences.md
 /caveman-compress todos.md
 ```
 

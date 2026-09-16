@@ -12,7 +12,7 @@ export interface Task {
   createdAt: string
   updatedAt: string
   children?: Task[]
-  // R4 fields (docs/v2/tasks/01-data-model.md) — additive, nullable/optional.
+  // R4 fields (docs/roadmap/design-adoption/tasks/01-data-model.md) — additive, nullable/optional.
   listId: string | null
   priority: TaskPriority
   dueTime: string | null

@@ -5,7 +5,7 @@
 //
 // ─── The iteration count is a constrained choice, not a default ───
 //
-// docs/option-2-spike-findings.md S1 measured the free tier's CPU ceiling by
+// docs/archive/option-2-spike-findings.md S1 measured the free tier's CPU ceiling by
 // deploying and bisecting: 100,000 iterations succeeded 15/15, 105,000 failed
 // 15/15. The cliff is deterministic (PBKDF2 is fixed work) and the failure mode
 // is a hard HTTP 500 — an over-budget login simply breaks, it does not degrade.

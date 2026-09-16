@@ -20,7 +20,7 @@ function formatDateLabel(iso: string): string {
 }
 
 /**
- * Day — the app's landing page (R6, docs/v2/day/02-design-adoption.md).
+ * Day — the app's landing page (R6, docs/roadmap/design-adoption/day/02-design-adoption.md).
  * Merges completed tasks, tasks due today, and today's transactions onto one
  * timeline. "Today" is addressable via `?date=` so the date stepper is
  * bookmarkable without a nested route.

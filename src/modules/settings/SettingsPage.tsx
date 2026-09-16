@@ -50,7 +50,7 @@ export function SettingsPage() {
 
   const MIN_PASSWORD = 12
 
-  // AI categorisation key (docs/ai-bulk-categorize-feature.md §2)
+  // AI categorisation key (docs/archive/ai-bulk-categorize-feature.md §2)
   const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
   const setHasAnthropicKey = useAppStore((s) => s.setHasAnthropicKey)
   const [apiKeyInput, setApiKeyInput] = useState('')

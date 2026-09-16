@@ -1,6 +1,6 @@
 /**
  * Wallet — re-import dedup after link-as-transfer (Item 4 of
- * docs/csv-transfer-linking-plan.md). Merging two imported legs into one
+ * docs/archive/csv-transfer-linking-plan.md). Merging two imported legs into one
  * transfer preserves the absorbed leg's import hash in
  * absorbed_import_hashes, so check-duplicates still reports it; deleting the
  * merged transfer releases both hashes so a re-import brings both sides back.

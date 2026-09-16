@@ -12,7 +12,7 @@
 # This repo's local D1 (Miniflare/workerd) is fragile under ANY concurrent
 # access to the same storage — even two `wrangler dev` processes pointed at
 # the same persisted state produced SQLITE_BUSY errors and hung requests
-# during R2's development (see docs/v2/.flow/R2-shell/.flow-log.md). The
+# during R2's development (see docs/roadmap/design-adoption/.flow/R2-shell/.flow-log.md). The
 # root cause was concurrent access to ONE shared SQLite file, not concurrency
 # itself, so the fix is real isolation, not raw parallelism: each shard here
 # gets its own `wrangler dev` process, own port, own `--persist-to` D1

@@ -30,7 +30,7 @@ interface AppState {
   // the value itself to 'set'/'', so this is the presence flag, not the key.
   // Loaded at boot alongside onboardingDismissed; SettingsPage updates it
   // directly on save/clear so the bulk-edit "Ask AI" button reacts without a
-  // reload (docs/ai-bulk-categorize-feature.md §3).
+  // reload (docs/archive/ai-bulk-categorize-feature.md §3).
   hasAnthropicKey: boolean
 
   setTheme: (theme: ThemePreference) => void

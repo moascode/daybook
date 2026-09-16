@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Compare the D1 schema against the schema the server's own migration runner
 // produces, so the two backends cannot silently diverge while both exist
-// (Phase 2 verification, docs/option-2-workers-d1-plan.md).
+// (Phase 2 verification, docs/archive/option-2-workers-d1-plan.md).
 //
 //   node scripts/schema-diff.mjs            # against local (Miniflare) D1
 //   node scripts/schema-diff.mjs --remote   # against production D1

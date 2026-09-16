@@ -1,0 +1,134 @@
+> **Status:** Live · **Last verified:** 2026-09-16
+
+# Go-live — what's done, and the two commands left for you
+
+> Written 2026-07-27 overnight. Read this first.
+
+## TL;DR
+
+The app is **deployed, migrated and holding your real data** at
+**https://daybook.moascode.workers.dev**
+
+**You cannot log in yet, and that is expected.** Two commands, below, finish it.
+
+---
+
+## Why you can't log in
+
+bcrypt and PBKDF2 are different algorithms. Your imported password hashes are
+bcrypt (from the Node server); the Worker verifies PBKDF2 and returns `false` for
+anything that isn't. There is no conversion — a hash is one-way.
+
+So **both accounts need their password set once on the new backend.** This is
+manual step M6 from the plan, and it is the one thing I cannot do: entering a
+password into any field is off-limits for me, and the script deliberately reads
+it from a hidden prompt so it never lands in argv, shell history, or a file.
+
+**Right now nobody can log in — including an attacker.** Signup is disabled, and
+no stored hash can verify. Your data is on Cloudflare but unreachable until you
+run the commands below.
+
+## The two commands
+
+Run from the repo root. Do it for **each** account (`kakon`, `tumpa`):
+
+```bash
+read -rs PW && printf %s "$PW" | \
+  node scripts/set-password.mjs kakon --stdin --out /tmp/pw.sql && unset PW
+```
+
+`read -rs` hides your typing and keeps the value out of shell history. The
+script writes the file **only on success**, so a failure leaves no file rather
+than an empty one that wrangler would run as a successful no-op.
+
+Then apply it:
+
+```bash
+npx wrangler d1 execute daybook --remote --file /tmp/pw.sql && rm /tmp/pw.sql
+```
+
+**Check the output says `1 row written`.** `0 rows written` means it matched no
+user and the password was NOT set.
+
+Repeat for `tumpa`. Then log in at the URL above.
+
+To confirm it took, this shows whether the stored hash actually matches the
+password you set — which a `pbkdf2$` prefix alone does **not** prove:
+
+```bash
+read -rs PW && printf %s "$PW" | node scripts/check-password.mjs kakon --stdin && unset PW
+```
+
+Your password never leaves your machine; only the comparison result is printed.
+
+### After the first login you can change it in the app
+
+Settings → **Change password** now exists (it did not before). It asks for your
+current password, requires 12+ characters, and **signs out every other device** —
+which is the point of changing a password after a suspected compromise.
+
+`set-password.mjs` remains for the bootstrap case only: the very first password
+on a new backend, when there is no working credential to authenticate the change.
+
+### About the password itself
+
+You said you'd start with `Welcome@daybook28` and rotate to a generated one
+later. That works, but the window matters more here than it normally would:
+
+The Workers free tier caps PBKDF2 at ~100k iterations (measured — see
+`docs/archive/option-2-spike-findings.md` §S1), so we ship **50,000, one twelfth of
+OWASP's 600,000**. At that cost, password entropy is doing the work the KDF
+normally does. `Welcome@daybook28` is 17 characters but structurally it is
+`word + symbol + word + year` — the first pattern an offline cracker tries.
+
+Rotating is cheap by design: the hash records its own iteration count, so you can
+re-run `set-password.mjs` any time with a generated 24+ character password, and
+if you ever move to Workers Paid the count can be raised with no reset and no
+migration (existing logins re-hash themselves).
+
+---
+
+## What is done
+
+| Phase | State |
+|---|---|
+| 0 Spikes | ✅ merged (#64) |
+| 1 Scaffold | ✅ merged (#66), deployed |
+| 2 D1 migrations + data layer | ✅ merged (#67) |
+| 3 PBKDF2 auth + sessions | ✅ merged (#68) |
+| 4 Route port — all 156 sites | ✅ merged (#69, #71, #72, #73, #74, #75) |
+| 5 Atomicity | ✅ done inside phases 4 and #72 |
+| 6 e2e suite on `wrangler dev` | ✅ **455/455 green against the Worker** |
+| 7 Cutover | 🟡 data imported; passwords + Mac shutdown outstanding |
+
+- **Production D1 holds 174 rows** — your 2 real accounts and their data.
+  Row counts verified against the export; `PRAGMA foreign_key_check` clean.
+- **The Mac is untouched and still running.** It remains the source of truth and
+  the rollback path. Nothing was stopped or deleted.
+- The 273 `e2e_*` test accounts were purged from the Mac's database first (#70),
+  with a backup at `~/daybook/shared/data/daybook.db.pre-e2e-purge-*`.
+
+## What is NOT done — read before relying on this
+
+1. **Rate limiting (blocker 4.3) is not configured.** It was to be Cloudflare
+   edge rules. The URL is public.
+2. **Your data now lives on Cloudflare**, per `docs/archive/option-2-workers-d1-plan.md`
+   §9.1. 2FA on that Cloudflare account is the real perimeter.
+3. **If you used the Mac app after this import**, the two databases have
+   diverged. Re-run the import before trusting the cloud copy:
+   ```bash
+   node scripts/export-to-d1.mjs --users kakon,tumpa --out /tmp/dbx
+   # then load /tmp/dbx/[0-9]*.sql with: npx wrangler d1 execute daybook --remote --file <each>
+   node scripts/verify-import.mjs --remote --in /tmp/dbx
+   ```
+   (Clear the old rows first, or you will get UNIQUE constraint failures.)
+
+## Recommended order in the morning
+
+1. Set both passwords (above) and log in.
+2. Check your data looks right — 92 transactions, 16 tasks, 5 accounts, the
+   household group and its split/settlement history.
+3. **Keep the Mac running** until you're satisfied. It costs nothing and it is
+   the rollback.
+4. The Mac can be retired whenever you're ready — that is the only remaining
+   step of Phase 7, and it is deliberately left to you.

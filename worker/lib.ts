@@ -265,7 +265,7 @@ export async function ownsAllRefs(
  * Batched counterpart to userOwns(): every id in `table` owned by `userId`,
  * as a Set for in-memory membership checks.
  *
- * This exists because of the finding in docs/option-2-spike-findings.md §S2:
+ * This exists because of the finding in docs/archive/option-2-spike-findings.md §S2:
  * the CSV import route calls userOwns()/ownsAllRefs() **per row**, which is free
  * under better-sqlite3's in-process driver and 2–3 network round trips per row
  * under D1 — 1,000–1,500 awaited queries for a 500-row import. Any route that

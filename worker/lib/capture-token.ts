@@ -1,6 +1,6 @@
 // Capture tokens — the credential a non-browser client (an iOS Shortcuts
 // automation, Claude, a future email worker) uses to create a pending capture.
-// Spec: docs/v2/wallet/feature-capture-inbox.md §4.
+// Spec: docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §4.
 //
 // Deliberately NOT PBKDF2, and this is the one place reusing worker/crypto.ts
 // would be cargo-culting. PBKDF2's 50k iterations exist to make dictionary

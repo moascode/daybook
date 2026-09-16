@@ -1,10 +1,10 @@
 /**
- * 75 — Wallet composer (R7, docs/v2/wallet/03-feature-waves.md).
+ * 75 — Wallet composer (R7, docs/roadmap/design-adoption/wallet/03-feature-waves.md).
  *
  * Free-text quick-add: "coffee 4.20 cash" → a parsed draft the user confirms,
  * never a silent write. Rules parse first; Claude Haiku is a fallback only
  * when rules can't find an amount, and only when an API key is configured —
- * see docs/v2/cross-cutting/ai-usage.md item A1.
+ * see docs/roadmap/design-adoption/cross-cutting/ai-usage.md item A1.
  *
  * Stubbing note (same as e2e/60-ai-bulk-categorize.spec.ts): DAYBOOK_TEST=1
  * is always on under this harness, so worker/lib/anthropic.ts reads a canned

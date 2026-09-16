@@ -47,7 +47,7 @@ interface TaskRow {
   due_date: string | null
   created_at: string
   updated_at: string
-  // R4 columns (docs/v2/tasks/01-data-model.md) — present on every row, but
+  // R4 columns (docs/roadmap/design-adoption/tasks/01-data-model.md) — present on every row, but
   // only populated by the caller when relevant; nullable/defaulted otherwise.
   list_id?: string | null
   priority?: TaskPriority | null

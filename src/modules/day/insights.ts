@@ -1,10 +1,10 @@
 /**
  * Pure aggregation for the Day landing page (R6,
- * docs/v2/day/02-design-adoption.md). No React, no fetching — same shape as
+ * docs/roadmap/design-adoption/day/02-design-adoption.md). No React, no fetching — same shape as
  * `src/modules/trips/insights.ts` and `src/modules/wallet/dashboard/insights.ts`.
  *
  * The merge's solid/hollow grammar needs no wall-clock math (D-6,
- * docs/v2/open-decisions.md): "happened" is exactly {completed tasks,
+ * docs/roadmap/design-adoption/open-decisions.md): "happened" is exactly {completed tasks,
  * transactions} and "planned" is exactly {open tasks due today} — the
  * grouping itself is the grammar. Sorting inside each group uses whatever
  * real timestamp each row has (`completedAt`, `dueTime`, `createdAt`); no row

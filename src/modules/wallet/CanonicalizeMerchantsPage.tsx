@@ -9,7 +9,7 @@ interface MerchantCanonical {
   current: string
   canonical: string
   transactionCount: number
-  /** Which ladder step resolved the canonical name (docs/v1/flow-plan.md). */
+  /** Which ladder step resolved the canonical name (docs/archive/flow-plan.md). */
   source: 'regex' | 'correction' | 'history' | 'builtin' | 'ai'
 }
 

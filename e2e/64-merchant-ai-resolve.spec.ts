@@ -1,5 +1,5 @@
 /**
- * 64 — AI-assisted merchant name resolution for CSV import (docs/v1/flow-plan.md).
+ * 64 — AI-assisted merchant name resolution for CSV import (docs/archive/flow-plan.md).
  *
  * Resolution ladder per row, run server-side in `resolveMerchantLadder`
  * (worker/routes/wallet.ts): regex guess -> `merchant_corrections` cache hit

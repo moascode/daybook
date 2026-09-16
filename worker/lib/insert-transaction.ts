@@ -7,7 +7,7 @@ import { buildDuplicateKey } from './merchant.ts'
  * accepting a capture from the inbox.
  *
  * Keeping it a single function is what makes `duplicate_key` universal: cross-
- * source duplicate detection (docs/v2/wallet/duplicate-detection.md) depends on
+ * source duplicate detection (docs/roadmap/design-adoption/wallet/duplicate-detection.md) depends on
  * every row having a normalized fingerprint, and a second INSERT written
  * somewhere else would silently opt its rows out of it.
  *

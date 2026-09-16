@@ -1,4 +1,4 @@
-// docs/auto-categorisation-plan.md §3.4. Cold-start fallback consulted only
+// docs/archive/auto-categorisation-plan.md §3.4. Cold-start fallback consulted only
 // when Stage 2 (the user's own history) has no suggestion for a canonical
 // name — covers the first two visits to a merchant, before history exists.
 //
@@ -7,7 +7,7 @@
 // resolved against the caller's own categories by name in the route handler
 // (categories are per-user rows referenced by id, not by this map). Scoped to
 // the ten seed expense categories — nothing else is guaranteed to exist for a
-// given user (docs/auto-categorisation-plan.md G5).
+// given user (docs/archive/auto-categorisation-plan.md G5).
 //
 // Growing the map: npm run merchant-map:gaps -- export.csv (§3.4). It runs via
 // tsx, not plain node — it imports this module directly.

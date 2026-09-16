@@ -1,4 +1,4 @@
-// docs/auto-categorisation-plan.md §3.2. Collapses a bank-written merchant
+// docs/archive/auto-categorisation-plan.md §3.2. Collapses a bank-written merchant
 // string to a stable matching key, so "MCDONALDS-MY TOWN00368 KUALA LUMPUR"
 // and "MCDONALDS-PAVILION KL" fold to the same bucket. Pure, no I/O — used by
 // the suggestion route (grouping both the request and the user's own history)

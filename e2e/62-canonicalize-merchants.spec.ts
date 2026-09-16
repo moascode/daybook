@@ -198,7 +198,7 @@ test('the page shows an empty state when there is no messy merchant data', async
   await emptyPage.context().close()
 })
 
-// docs/v1/flow-plan.md step 9: /merchants/canonicalize reuses the same
+// docs/archive/flow-plan.md step 9: /merchants/canonicalize reuses the same
 // resolve ladder as CSV import — a merchant the regex step alone leaves
 // unchanged (no card mask, no rail prefix, no separator to strip) can still
 // surface as a cleanup candidate via AI, with the preview naming the source.

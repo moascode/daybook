@@ -826,7 +826,7 @@ interface PossibleDuplicateCandidate {
   fromCapture?: boolean
 }
 
-// Three layers, cheapest-and-safest first (docs/v2/wallet/duplicate-detection.md):
+// Three layers, cheapest-and-safest first (docs/roadmap/design-adoption/wallet/duplicate-detection.md):
 //
 // 1. Exact import_hash match — catches re-importing the identical source
 //    (same CSV row, same photo) again. Unchanged from the original design.
@@ -851,7 +851,7 @@ interface PossibleDuplicateCandidate {
 // single-table statements (userId + chunk = chunk+1 params apiece) rather
 // than one UNION query binding userId twice, matching the layer-1 approach
 // this replaces (that shape hit the cap on any import over ~49 rows).
-// R18 gap 2 (docs/v2/wallet/feature-capture-inbox.md §5.3). Bank posting dates
+// R18 gap 2 (docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §5.3). Bank posting dates
 // trail the payment date; three days covers a Friday charge posting on Monday.
 const CAPTURE_DATE_WINDOW_DAYS = 3
 
@@ -1030,7 +1030,7 @@ wallet.post('/transactions/check-duplicates', async (c) => {
   return c.json({ duplicateHashes, possibleDuplicates, pendingCaptureMatches })
 })
 
-// docs/auto-categorisation-plan.md. Nothing is persisted — the user's own
+// docs/archive/auto-categorisation-plan.md. Nothing is persisted — the user's own
 // transaction history *is* the rule table (principle 1). §3.5 constants.
 // Lowered 2 -> 1 (2026-08-07): with only two users and a young history, almost
 // every merchant sat at exactly one sighting and the whole feature stayed
@@ -1189,7 +1189,7 @@ wallet.post('/transactions/suggest-categories', async (c) => {
   return c.json({ suggestions })
 })
 
-// docs/ai-bulk-categorize-feature.md. Fallback for whatever the rule pass
+// docs/archive/ai-bulk-categorize-feature.md. Fallback for whatever the rule pass
 // above found NO suggestion for — never the whole selection, only the
 // leftover the client already computed as noSuggestionCount. Reuses the
 // MerchantSuggestion shape above so the client merges both result sets
@@ -1366,7 +1366,7 @@ wallet.post('/transactions/suggest-categories-ai', async (c) => {
 
 // R7 composer: parse ONE free-text entry the client's rules parser couldn't
 // handle (no extractable amount). Fires once per submit, never per keystroke
-// — see docs/v2/.flow/R7-composer/flow-plan.md criterion #7.
+// — see docs/roadmap/design-adoption/.flow/R7-composer/flow-plan.md criterion #7.
 wallet.post('/transactions/parse-composer-ai', async (c) => {
   const userId = c.get('userId')
   const b = await body(c)
@@ -1448,7 +1448,7 @@ wallet.post('/transactions/parse-composer-ai', async (c) => {
   return c.json({ draft })
 })
 
-// docs/v2/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
+// docs/roadmap/design-adoption/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
 // photo per call, deliberately — the client fans a multi-select batch out
 // into N independent calls to this same endpoint (Promise.allSettled),
 // never one request carrying N images (spec §3.1: per-photo attribution and
@@ -1520,7 +1520,7 @@ wallet.post('/transactions/import', async (c) => {
   // (server/routes/wallet.ts:583-595). Each is 1-2 queries, so a 500-row import
   // issues 1,000-1,500 of them. In-process under better-sqlite3 that is free;
   // on D1 every one is a network round trip, and the import would time out long
-  // before it finished. See docs/option-2-spike-findings.md §S2.
+  // before it finished. See docs/archive/option-2-spike-findings.md §S2.
   //
   // Both permission sets are bounded by the user's own accounts and categories,
   // not by the import size — so they are read ONCE and checked in memory.
@@ -1891,7 +1891,7 @@ async function hasSettledShare(db: D1Database, transactionId: string): Promise<b
 
 
 // ── Link as transfer ──────────────────────────────────
-// Item 2 of docs/csv-transfer-linking-plan.md: merge two existing rows — the
+// Item 2 of docs/archive/csv-transfer-linking-plan.md: merge two existing rows — the
 // two legs of one inter-account movement, typically imported from two bank
 // statements — into a single transfer. The money-out (expense) row survives and
 // becomes the transfer; the money-in (income) row is deleted after its
@@ -3181,7 +3181,7 @@ wallet.delete('/goals/:id', async (c) => {
 
 // ── Merchant name resolution ladder ─────────────────────
 //
-// docs/v1/flow-plan.md ("AI-assisted merchant name resolution for CSV
+// docs/archive/flow-plan.md ("AI-assisted merchant name resolution for CSV
 // import"). Shared by POST /merchants/resolve (CSV import) and POST
 // /merchants/canonicalize (bulk cleanup) so the ladder logic exists exactly
 // once. Per guess (normalised via correctionKey): merchant_corrections table
@@ -3206,7 +3206,7 @@ async function resolveMerchantLadder(
   items: Array<{ raw: string; guess: string }>,
   // `useAI` gates Stage 3 only — Stages 1-2 (corrections cache + own history)
   // are free/deterministic and always run. Mirrors A4's category-suggestion
-  // split (docs/v2/cross-cutting/ai-usage.md): the rules pass runs
+  // split (docs/roadmap/design-adoption/cross-cutting/ai-usage.md): the rules pass runs
   // automatically on import, AI is reached only via an explicit "Ask AI"
   // action. Defaults true so /merchants/canonicalize's direct call (an
   // already-explicit, user-navigated bulk-cleanup action) is unaffected.
@@ -3414,7 +3414,7 @@ wallet.post('/merchants/canonicalize', async (c) => {
 
   // The stored merchant is treated as the raw input; the regex canonical form
   // is the first-stage guess. The ladder then runs corrections -> history ->
-  // AI on top of that guess exactly as CSV import does (docs/v1/flow-plan.md
+  // AI on top of that guess exactly as CSV import does (docs/archive/flow-plan.md
   // Q3) — a messy merchant with no direct regex win can still resolve via a
   // prior correction, the user's own history, or AI.
   const ladderItems = merchantRows.map((row) => ({

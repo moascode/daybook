@@ -1,6 +1,6 @@
 /**
  * Merchant canonicalisation + category suggestions
- * (docs/auto-categorisation-plan.md).
+ * (docs/archive/auto-categorisation-plan.md).
  *
  * Two layers:
  *  - API-level tests hit POST /transactions/suggest-categories directly —

@@ -5,7 +5,7 @@
 // `db.batch([...])`. D1 has no interactive transactions, but it does run a
 // batch as a single atomic unit, which is all this needed — there are no reads
 // between the writes and nothing conditional. This is the "easy" conversion
-// class described in docs/option-2-workers-d1-plan.md §5.5.
+// class described in docs/archive/option-2-workers-d1-plan.md §5.5.
 
 interface SeedCategory {
   name: string
@@ -42,7 +42,7 @@ interface SeedTaskList {
   color: string
 }
 
-// docs/v2/tasks/01-data-model.md §3 — matches the proposal's sidebar. Keep in
+// docs/roadmap/design-adoption/tasks/01-data-model.md §3 — matches the proposal's sidebar. Keep in
 // sync with server/seed.ts.
 const DEFAULT_TASK_LISTS: SeedTaskList[] = [
   { name: 'Household', color: '#2F6FEB' },

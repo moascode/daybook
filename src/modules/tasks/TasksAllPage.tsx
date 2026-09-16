@@ -38,7 +38,7 @@ const PRIORITY_OPTIONS = [
 
 /**
  * All tasks — the Tasks module's flat, filterable, everything-view page
- * (R5 PR-2, docs/v2/tasks/02-design-adoption.md §All tasks). Stat cards,
+ * (R5 PR-2, docs/roadmap/design-adoption/tasks/02-design-adoption.md §All tasks). Stat cards,
  * a filter bar with removable chips (mirrors WalletPage.tsx's pattern),
  * date-grouped rows including a "No due date" bucket, a twelve-week
  * completions chart, and an age-breakdown sentence.

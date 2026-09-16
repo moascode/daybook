@@ -32,7 +32,7 @@ import {
  *
  * AppBar (module tabs), ModuleSidebar (module-scoped nav), MobileTabBar (bottom
  * tab bar) and AccountMenu (MODULE SETTINGS rows) all read this list rather than
- * each owning a copy — see docs/v2/foundation/03-app-shell.md §7. Both Day and
+ * each owning a copy — see docs/roadmap/design-adoption/foundation/03-app-shell.md §7. Both Day and
  * Trips are live as of R6. Day's "Show on the timeline" toggles aren't listed
  * here — they're interactive checkboxes bound to `day.store.ts`, not links, so
  * ModuleSidebar injects them dynamically the same way it injects Tasks' Lists

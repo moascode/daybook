@@ -1,141 +1,141 @@
 # Daybook
 
-A personal productivity and finance app for your home network.
+A personal productivity and finance app for a household.
 
-**Tasks** (Workflowy-style bullet tree) + **Wallet** (BudgetBakers-style finance tracker) — multi-user on your local network, all data on your hardware.
+**Wallet** (BudgetBakers-style finance tracker) + **Tasks** (Workflowy-style
+outliner) + **Trips** + **Day**, running on Cloudflare's edge.
 
----
-
-## Overview
-
-Daybook runs on a Node.js backend with a local SQLite database. Access it from any device on your home network. All data stays on your hardware; no cloud, no monthly fees. Phase 4 (v1.0) adds multi-user authentication and per-device data isolation. Phase 5b (v1.0.1) adds household groups, shared accounts, transaction splits, and settlement tracking for family finances.
+🔗 <https://daybook.moascode.workers.dev>
 
 ---
 
 ## Features
 
-### Tasks
-- Infinite-depth bullet tree — like Workflowy or Notion outliner
-- Press **Enter** to add a sibling, **Tab** to indent, **Shift+Tab** to outdent
-- Click the **checkbox** to mark a task complete
-- Click the **bullet dot** to zoom in and focus on a subtree (breadcrumb navigation back)
-- **Drag the grip handle** to reorder tasks within a level
-- Collapse/expand child trees with the **›** chevron
-- Add notes to any task from the **⋯** options menu
-- **Hide/show completed** tasks with one click
-- Keyboard: `Cmd+Enter` — toggle complete · `Cmd+.` — collapse · `Backspace` (empty line) — delete
-
 ### Wallet
-- **Accounts** — cash, card, e-wallet, bank, investment. Balances auto-calculated.
-- **Transactions** — income, expense, transfer. Grouped by day. Filtered by date, type, account, category, and tag.
-- **CSV Import** — upload a bank export, map columns, review rows, detect duplicates automatically, import in bulk.
-- **Household Sharing** — create groups, invite family members, share accounts with optional write access, split transactions, settle balances with real ledger transfers.
-- **Dashboard** — weekly cash-flow bar chart, spending by category (pie), spending by account (bar), top merchants.
+- **Accounts** — cash, card, e-wallet, bank, investment. Balances computed from the ledger.
+- **Transactions** — income, expense, transfer. Grouped by day; filtered by date, type, account, category, tag and free-text search.
+- **CSV import** — upload a bank export, auto-detect columns, resolve merchant names, pre-fill categories from your own history, detect duplicates, review, import in bulk.
+- **Capture inbox** — an iOS Shortcut (or any client with a capture token) can post a transaction; nothing a machine writes reaches the ledger unreviewed.
+- **Budgets, goals, recurring rules, reports.**
+- **Household sharing** — groups, shared accounts with optional write access, transaction splits, and settlement that books real ledger entries.
+
+### Tasks
+- Infinite-depth bullet outliner: **Enter** for a sibling, **Tab**/**Shift+Tab** to indent and outdent, **Backspace** on an empty line to delete.
+- Today, All, per-list and Completed views; lists, priorities, due dates, assignees.
+- Click the bullet dot to zoom into a subtree; drag the grip to reorder.
+- `Cmd+Enter` toggle complete · `Cmd+.` collapse.
+
+### Trips & Day
+- **Day** — a timeline of what happened, with spend and task context.
+- **Trips** — travel framed as its own module.
+
+Both are live as designed first-run states; their depth is the current roadmap.
+
+### Everywhere
+- **Light and dark themes**, driven by one generated token layer with a WCAG-AA gate in CI.
+- **Installs as a PWA** — offline shell, themed iOS launch screens, push notifications.
+- **Optional AI** — bring your own Anthropic key for merchant-name resolution and bulk categorisation. The app is fully usable without one; with no key set, every AI entry point is hidden.
 
 ---
 
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | React 18 + TypeScript + Vite |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS (generated token layer, no `dark:` variants) |
 | State | Zustand |
-| Backend | Node.js + Express |
-| Database | SQLite (file-based, on your hardware) |
-| Routing (Frontend) | React Router v6 |
-| Routing (API) | Express routes |
-| Auth | Session cookies + bcrypt |
+| Backend | Cloudflare Workers + Hono (`worker/`) |
+| Database | Cloudflare D1 |
+| Auth | PBKDF2-HMAC-SHA256 via Web Crypto + D1-backed sessions behind an HMAC-signed cookie |
 | Charts | Recharts |
-| Drag & Drop | @dnd-kit |
-| Icons | Lucide React |
+| Drag & drop | @dnd-kit |
+| Tests | Playwright, sharded 8× in CI |
+
+> `server/` is an **Express + SQLite backend that is no longer deployed.** It
+> remains in the repo because `scripts/schema-diff.mjs` gates CI on D1 matching
+> `server/migrations`. It is a schema reference, not a deployable.
 
 ---
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
-- Node.js 20+
-- npm 9+
+Node.js 20+, npm 9+.
 
-### Install & Run
+### Run it
 
 ```bash
 git clone https://github.com/moascode/daybook.git
 cd daybook
 npm install
-npm run dev:all
+npm run dev:worker
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The `dev:all` command starts both the Vite frontend dev server and the Node.js backend API server.
+Open <http://localhost:8788>. This builds the client, applies D1 migrations to a
+local database, and runs the Worker — so `/api` works.
 
-### Build for Production
+> **Use port 8788, not 5173.** `npm run dev` is plain Vite with no API behind
+> it, and the Playwright harness owns 5173 with `reuseExistingServer`, so a
+> hand-started server on that port gets silently adopted by the test run.
+
+### Tests
 
 ```bash
-npm run build
-npm run preview
+npx playwright test e2e/01-tasks       # targeted — the normal case
+npm run test:e2e:parallel              # full local suite (CI already shards this)
 ```
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
-Frontend:
-src/
-├── stores/       — Zustand stores (tasks, wallet, app, user state)
-├── hooks/        — Data hooks (useTasks, useWallet, api calls)
-├── lib/          — Utilities (CSV parser, API client, formatters)
-├── modules/
-│   ├── tasks/    — Task tree components + pages
-│   └── wallet/   — Wallet pages, accounts, transactions, dashboard
-├── components/
-│   ├── layout/   — AppShell, Sidebar, TopBar
-│   ├── ui/       — Reusable primitives (Button, Modal, Select, …)
-│   └── auth/     — AuthPage, login/signup
-└── types/        — Shared TypeScript interfaces
+src/                 React client
+├── modules/         wallet · tasks · trips · day · settings — pages and features
+├── components/      layout (AppShell, AppBar, sidebars) · ui primitives · auth
+├── stores/          Zustand stores
+├── hooks/           data hooks
+├── lib/             api client, CSV, formatters, theme
+└── types/           shared interfaces
 
-Backend:
-server/
-├── index.ts      — Express app + server creation
-├── db.ts         — SQLite singleton + migration runner
-├── seed.ts       — Default category seed data (per-user)
-├── lib.ts        — Utilities (updateRow, ownsAllRefs)
-├── session-store.ts — express-session SQLite store
-├── routes/       — API endpoints (auth, tasks, wallet, settings)
-├── migrations/   — Database schema files (applied in order)
-└── data/         — SQLite database file (gitignored)
+worker/              Cloudflare Worker (production backend)
+├── index.ts         Hono app, route mounts, error handling
+├── routes/          auth · tasks · wallet · settings · groups · settlements
+├── migrations/      D1 migrations, applied in order
+├── crypto.ts        PBKDF2 via Web Crypto
+└── session.ts       D1-backed sessions
+
+server/              retired Express backend — schema reference only
+e2e/                 Playwright specs, NN-description.spec.ts
+docs/                see docs/README.md
 ```
 
 ---
 
-## Roadmap
+## Where things are documented
 
-| Phase | Goal | Status |
-|---|---|---|
-| 1 | Core scaffold (Vite + layout + UI primitives) | ✅ v1.0 |
-| 2 | Tasks module (Workflowy-style tree) | ✅ v1.0 |
-| 3 | Wallet module (accounts, transactions, CSV, dashboard) | ✅ v1.0 |
-| 4 | Home network multi-user (Node backend, auth) | ✅ v1.0 |
-| 5a | AI features (Claude integration) | 🔄 Deferred |
-| 5b | Household sharing (groups, splits, settlements) | ✅ v1.0.1 |
-| 5c | Wallet UX improvements (search, accessibility, mobile) | 🔄 In Progress |
-| 6 | Cloud hosting (Supabase + Vercel + RLS) | Planned |
-| 7 | Advanced features (budgets, goals, more) | Planned |
-
-See `CLAUDE.md` and `docs/` for detailed specifications and plans.
+| | |
+|---|---|
+| Rules Claude Code works under | [`CLAUDE.md`](CLAUDE.md) |
+| Docs index | [`docs/README.md`](docs/README.md) |
+| Deploy, release, rollback | [`docs/guides/ci-cd.md`](docs/guides/ci-cd.md) |
+| What's planned | [`docs/roadmap/design-adoption/README.md`](docs/roadmap/design-adoption/README.md) |
+| Features, bugs, ideas | [`docs/backlog/README.md`](docs/backlog/README.md) |
+| How it got here | [`docs/archive/project-history.md`](docs/archive/project-history.md) |
 
 ---
 
-## Data & Privacy
+## Data & privacy
 
-**Phase 4 (v1.0+)**: All data is stored in a SQLite database on your hardware (default: `~/daybook/shared/data/daybook.db`). The app runs on your local network via a Node.js backend. Nothing is sent to any external server or cloud provider.
+Data lives in **Cloudflare D1**, and the app runs on Cloudflare Workers. It is
+reachable from the public internet — this is a hosted app, not a home-network
+one. It served two users at the time of writing.
 
-**Per-user data**: Each user has their own authenticated session. Tasks, accounts, and transactions are scoped by user; one user cannot see another's private data.
-
-**Household sharing**: Data can be shared within groups (optional) — shared accounts and split transactions are visible to invited group members only.
-
-**Deployment**: Phase 6 (cloud) will add Supabase + Vercel as optional alternatives. The local version will always be available.
+- **Per-user scoping.** Every query is scoped by `user_id`; one user cannot read or write another's rows.
+- **Household sharing is opt-in.** Shared accounts and split transactions are visible only to invited group members.
+- **Signup is disabled in production.** Accounts are provisioned deliberately.
+- **AI keys never reach the browser.** A per-user Anthropic key is stored server-side and masked to `'set'`/`''` on read, so one user's spend can never land on another's bill.
 
 ---
 

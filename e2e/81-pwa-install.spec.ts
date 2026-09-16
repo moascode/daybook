@@ -1,5 +1,5 @@
 /**
- * 81 — PWA install surface (v3 P1, docs/v3/release-plan.md#p1).
+ * 81 — PWA install surface (v3 P1, docs/roadmap/pwa/release-plan.md#p1).
  *
  * None of this had coverage before: nothing asserted that the manifest is
  * served, that the icons exist, or that iOS has an icon it can actually use.

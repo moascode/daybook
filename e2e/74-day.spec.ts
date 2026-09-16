@@ -1,5 +1,5 @@
 /**
- * R6-day (docs/v2/.flow/R6-day/flow-plan.md, docs/v2/day/02-design-adoption.md).
+ * R6-day (docs/roadmap/design-adoption/.flow/R6-day/flow-plan.md, docs/roadmap/design-adoption/day/02-design-adoption.md).
  *
  * Covers: `/` lands on `/day`, the Day tab is live, the band figures
  * reconcile against an independent computation over seeded tasks +

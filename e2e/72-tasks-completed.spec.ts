@@ -1,6 +1,6 @@
 /**
  * R5 PR-4 — Completed page (final PR of R5,
- * docs/v2/.flow/R5-completed/flow-plan.md).
+ * docs/roadmap/design-adoption/.flow/R5-completed/flow-plan.md).
  *
  * Covers: completions render grouped by day, un-completing a row removes it
  * from the page, the sidebar's Completed nav item navigates correctly, and

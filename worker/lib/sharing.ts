@@ -44,7 +44,7 @@ export async function visibleAccountIds(db: D1Database, userId: string): Promise
  * ⚠️ Up to two round trips per call. The CSV import route calls this **per row**
  * (server/routes/wallet.ts:583-595), which is free under better-sqlite3 and
  * 1,000+ sequential awaited queries for a 500-row import under D1 — the N+1
- * documented in docs/option-2-spike-findings.md S2. Use writableAccountIds()
+ * documented in docs/archive/option-2-spike-findings.md S2. Use writableAccountIds()
  * once and check a Set instead whenever the caller has a list.
  */
 export async function canWriteAccount(
@@ -98,7 +98,7 @@ export async function writableAccountIds(db: D1Database, userId: string): Promis
 
 /**
  * SQL fragment projecting the amount a transaction actually costs the viewer
- * (docs/split-settlement-plan.md §3). Takes ONE bind — the viewer's user id —
+ * (docs/archive/split-settlement-plan.md §3). Takes ONE bind — the viewer's user id —
  * whose placeholder appears wherever this fragment is interpolated, so callers
  * must bind it in that position.
  *

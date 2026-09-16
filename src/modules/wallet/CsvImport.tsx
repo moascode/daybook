@@ -86,7 +86,7 @@ export function CsvImport() {
     )
   }, [])
 
-  // A4 (docs/v2/cross-cutting/ai-usage.md, approved 2026-09-06) — same call,
+  // A4 (docs/roadmap/design-adoption/cross-cutting/ai-usage.md, approved 2026-09-06) — same call,
   // same chunking/rate-limit bucket, same messaging as BulkEditDialog's own
   // "Ask AI" button. Only asks about rows the rules pass left uncategorised.
   const handleAskAI = useCallback(async () => {
