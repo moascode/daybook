@@ -1,6 +1,15 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Dropped · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
 
 # FEAT-006 — Responsive grid breakpoints (B7)
+
+**Dropped 2026-09-16.** Superseded by other work: Wallet's Dashboard/Reports
+grids moved off Tailwind `grid-cols-N` entirely onto a custom responsive CSS
+grid system (`src/styles/layout.css`), which already has its own breakpoints.
+The card/summary/chart grids this item was filed against no longer exist in
+that form. Two small leftover form grids (`TransactionForm.tsx:305`,
+`WalletPage.tsx:1055`) are tracked as part of
+[FEAT-007](FEAT-007-touch-targets.md) instead of kept open here — see
+[design.md](design.md).
 
 **What.** Wallet's card grids get `sm:`/`md:` column breakpoints so they reflow
 on a phone instead of rendering at a fixed column count.
