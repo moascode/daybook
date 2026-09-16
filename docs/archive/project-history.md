@@ -951,3 +951,18 @@ New spec `e2e/64-merchant-ai-resolve.spec.ts` (server contract + one UI-flow
 case); extended `e2e/62-canonicalize-merchants.spec.ts` with an AI-resolves
 case. Regression set (45, 49, 51, 60, 61, 62, 63) green; `schema-diff.mjs`
 and the migration-pair diff both clean.
+
+---
+
+## 2026-09-16 — Docs restructure (PRs #201–#206)
+
+Verified every doc against the code before touching it; most of the mess was
+drift, not disorder. `docs/v1|v2|v3` (which were never versions) became
+`guides/ reference/ backlog/ archive/`. CLAUDE.md went 1,958 → 529 lines by
+splitting rules from reference. Three non-functional skills removed (`cavecrew`,
+`caveman-stats`, `feature-flow`); `intake` and `daybook-flow` added, plus
+`scripts/flow-checks.sh`. Old proposals and the design-adoption roadmap became
+10 epics / 54 items in `docs/backlog/`, each epic folder owning its items and
+design doc. ~45 "todo" items in two consistency plans turned out to have shipped.
+Recovered `apple-wallet-capture-plan.md` from an unmerged branch. New CI gates:
+`check:doc-links`, `check:backlog`.
