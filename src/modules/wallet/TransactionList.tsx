@@ -287,7 +287,7 @@ function TransactionRow({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="icon-btn rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+                className="rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:h-[34px] md:w-[34px]"
                 aria-label="Transaction options"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />

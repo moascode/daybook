@@ -322,7 +322,7 @@ export function TasksListDetailPage() {
                       <button
                         key={color}
                         type="button"
-                        className="flex h-10 w-10 items-center justify-center rounded-full md:h-7 md:w-7"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
                         onClick={() => setColorDraft(color)}
                         aria-label={`Select colour ${color}`}
                         data-testid="list-detail-color-swatch"

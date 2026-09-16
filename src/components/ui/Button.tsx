@@ -29,7 +29,7 @@ const sizeStyles: Record<ButtonSize, string> = {
   // touch/narrow widths, shrinking to a compact 24x24px square from `md:`
   // up where a mouse makes precision easy. Replaces the old ad-hoc
   // `min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0` className hack.
-  icon: 'h-10 w-10 p-0 md:h-6 md:w-6',
+  icon: 'h-10 w-10 shrink-0 p-0 md:h-6 md:w-6',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

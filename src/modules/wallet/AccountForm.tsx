@@ -229,7 +229,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
               <button
                 key={color}
                 type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-full md:h-7 md:w-7"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
                 onClick={() => setForm((f) => ({ ...f, color }))}
                 aria-label={`Select color ${color}`}
               >

@@ -303,6 +303,21 @@ test('icon-only controls have at least a 40x40px tap target on mobile viewport',
   expect(filterBox!.width).toBeGreaterThanOrEqual(40)
   expect(filterBox!.height).toBeGreaterThanOrEqual(40)
 
+  // 5. CategoryManager's colour swatches (previously 24x24px, and the fix's
+  // first pass missed `flex-wrap`/`shrink-0` on the row — 8 swatches at 40px
+  // each overflow a narrow modal's flex row and silently get squashed back
+  // down unless the row wraps).
+  await page.goto('/settings')
+  await waitForApp(page)
+  await page.getByRole('button', { name: 'Manage categories' }).click()
+  const categorySwatchBox = await page
+    .getByRole('dialog')
+    .getByRole('button', { name: '#378ADD' })
+    .boundingBox()
+  expect(categorySwatchBox).not.toBeNull()
+  expect(categorySwatchBox!.width).toBeGreaterThanOrEqual(40)
+  expect(categorySwatchBox!.height).toBeGreaterThanOrEqual(40)
+
   await ctx.close()
 })
 
