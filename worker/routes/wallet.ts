@@ -826,7 +826,7 @@ interface PossibleDuplicateCandidate {
   fromCapture?: boolean
 }
 
-// Three layers, cheapest-and-safest first (docs/roadmap/design-adoption/wallet/duplicate-detection.md):
+// Three layers, cheapest-and-safest first (docs/archive/design-adoption/duplicate-detection.md):
 //
 // 1. Exact import_hash match — catches re-importing the identical source
 //    (same CSV row, same photo) again. Unchanged from the original design.
@@ -851,7 +851,7 @@ interface PossibleDuplicateCandidate {
 // single-table statements (userId + chunk = chunk+1 params apiece) rather
 // than one UNION query binding userId twice, matching the layer-1 approach
 // this replaces (that shape hit the cap on any import over ~49 rows).
-// R18 gap 2 (docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §5.3). Bank posting dates
+// R18 gap 2 (docs/archive/design-adoption/feature-capture-inbox.md §5.3). Bank posting dates
 // trail the payment date; three days covers a Friday charge posting on Monday.
 const CAPTURE_DATE_WINDOW_DAYS = 3
 
@@ -1448,7 +1448,7 @@ wallet.post('/transactions/parse-composer-ai', async (c) => {
   return c.json({ draft })
 })
 
-// docs/roadmap/design-adoption/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
+// docs/archive/design-adoption/feature-photo-import.md (P2, approved 2026-09-06). One
 // photo per call, deliberately — the client fans a multi-select batch out
 // into N independent calls to this same endpoint (Promise.allSettled),
 // never one request carrying N images (spec §3.1: per-photo attribution and
@@ -3206,7 +3206,7 @@ async function resolveMerchantLadder(
   items: Array<{ raw: string; guess: string }>,
   // `useAI` gates Stage 3 only — Stages 1-2 (corrections cache + own history)
   // are free/deterministic and always run. Mirrors A4's category-suggestion
-  // split (docs/roadmap/design-adoption/cross-cutting/ai-usage.md): the rules pass runs
+  // split (docs/reference/ai-usage.md): the rules pass runs
   // automatically on import, AI is reached only via an explicit "Ask AI"
   // action. Defaults true so /merchants/canonicalize's direct call (an
   // already-explicit, user-navigated bulk-cleanup action) is unaffected.

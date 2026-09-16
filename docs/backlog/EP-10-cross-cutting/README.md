@@ -6,7 +6,7 @@
 quick add and the notifications panel went out in `v3.12.0` outside the playbook
 at the owner's direct request; these four did not.
 
-**Spec:** [cross-cutting/README.md](../../roadmap/design-adoption/cross-cutting/README.md).
+**Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 
 **Is this epic still worth doing?** Partly, and the items differ a lot:
 

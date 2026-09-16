@@ -18,6 +18,9 @@ const ROOT = 'docs/backlog'
 const INDEX = path.join(ROOT, 'README.md')
 const PREFIXES = ['EP', 'FEAT', 'BUG', 'IDEA']
 
+/** Epic-level supporting documents. Not items; carry no ID; absent from the index. */
+const SUPPORTING = new Set(['design.md', 'data-model.md'])
+
 /** Every ID mentioned anywhere under docs/ — live, scheduled, shipped or dropped. */
 function allIds() {
   const ids = new Set()
@@ -75,8 +78,19 @@ function check() {
     }
     for (const name of readdirSync(dir)) {
       if (!name.endsWith('.md') || name === 'README.md') continue
+      // Supporting documents an epic may carry: the design thinking behind it,
+      // and a data model when it needs one. A single item may carry its own
+      // design as <ITEM-ID>-design.md. These are how-docs, not items — they
+      // never get an ID and never appear in the index.
+      if (SUPPORTING.has(name) || /^(?:FEAT|BUG|IDEA)-\d{3}-design\.md$/.test(name)) continue
       const m = name.match(/^(FEAT|BUG|IDEA)-(\d{3})-/)
-      if (!m) { problems.push(`${entry.name}/${name}: filename does not start with a valid item ID`); continue }
+      if (!m) {
+        problems.push(
+          `${entry.name}/${name}: not an item (EP-scoped IDs look like FEAT-123-slug.md) ` +
+            `and not a recognised supporting doc (${[...SUPPORTING].join(', ')}, or <ITEM-ID>-design.md)`,
+        )
+        continue
+      }
       const id = `${m[1]}-${m[2]}`
       filed.set(id, path.join(dir, name))
       epicOf.set(id, epicId)

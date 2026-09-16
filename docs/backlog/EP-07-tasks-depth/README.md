@@ -6,7 +6,7 @@
 (Upcoming, Assigned to me, Habits), task recurrence, and analytics on the
 Completed page that currently renders as a plain list.
 
-**Spec:** [tasks/03-feature-waves.md](../../roadmap/design-adoption/tasks/03-feature-waves.md).
+**Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 
 **Is this epic still worth doing?** Yes, with one strong argument in its favour:
 **R4 already paid the schema cost.** `assigneeId`, priorities, lists and due

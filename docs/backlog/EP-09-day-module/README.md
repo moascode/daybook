@@ -6,7 +6,7 @@
 real time-of-day, notes, a composer, and the "Close the day" ritual the module
 was designed around.
 
-**Spec:** [day/03-feature-waves.md](../../roadmap/design-adoption/day/03-feature-waves.md).
+**Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 
 **Is this epic still worth doing?** Yes, but note what it actually is:
 **everything in R15 is scaffolding for one feature** —

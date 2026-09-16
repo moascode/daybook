@@ -6,7 +6,7 @@ const API = '/api'
 test.describe.configure({ mode: 'serial' })
 
 /**
- * R4 (docs/roadmap/design-adoption/release-plan.md, docs/roadmap/design-adoption/tasks/01-data-model.md) — API-only
+ * R4 (docs/archive/design-adoption/release-plan.md, docs/archive/design-adoption/tasks-data-model.md) — API-only
  * coverage for the Tasks v2 schema: task_lists CRUD, the `view` filters and
  * derived fields on GET /tasks, bulk reschedule, and list sharing (D-15).
  *

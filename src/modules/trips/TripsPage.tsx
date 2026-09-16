@@ -16,7 +16,7 @@ function startOfYearISO(): string {
 
 /**
  * Trips — the fourth tab's landing page (R6,
- * docs/roadmap/design-adoption/trips/02-design-adoption.md). Makes the tab defensible before the
+ * docs/archive/design-adoption/trips-design-adoption.md). Makes the tab defensible before the
  * `trips` schema exists (R12): the top figure is real, computed from
  * transactions already in the ledger, and everything below it is an honest
  * "nothing yet" rather than a half-built module.

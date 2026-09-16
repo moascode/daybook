@@ -26,6 +26,7 @@ only partly built, the unbuilt remainder is tracked in
 | [phase-5b-sharing-plan.md](phase-5b-sharing-plan.md) | Groups, shared accounts, splits | v1.0.1 |
 | [phase-6-online-plan.md](phase-6-online-plan.md), [option-2-workers-d1-plan.md](option-2-workers-d1-plan.md), [option-2-spike-findings.md](option-2-spike-findings.md) | The Workers + D1 migration | v2 |
 | [pwa/](pwa/) | P1–P5: install quality, offline shell, code-splitting, push, themed splash | all five verified shipped |
+| [design-adoption/](design-adoption/) | R1–R7 and R18: the token layer, the app shell, and design adoption across Wallet, Tasks, Trips and Day | see [its index](design-adoption/README.md) |
 
 > **`shared-review-implementation-plan.md` says "not merged".** It shipped. The
 > line is a point-in-time status that was never updated — exactly the drift the

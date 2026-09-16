@@ -6,7 +6,7 @@
 (R6) with no data model behind it: schema, `trip_id` threading, the trip page
 and burn-down, itinerary, prep, bookings, packing, trip mode, and multi-currency.
 
-**Spec:** [trips/03-feature-waves.md](../../roadmap/design-adoption/trips/03-feature-waves.md).
+**Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 
 ---
 

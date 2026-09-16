@@ -6,6 +6,6 @@
 
 **Why now.** The most-requested shape of task — weekly, monthly, every-quarter — cannot be expressed at all today.
 
-**Spec.** [tasks/03-feature-waves.md](../../roadmap/design-adoption/tasks/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R10, unstarted

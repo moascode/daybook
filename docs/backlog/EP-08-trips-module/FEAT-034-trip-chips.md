@@ -6,6 +6,6 @@
 
 **Why now.** This is what makes a trip a thread through the app rather than a fifth silo.
 
-**Spec.** [trips/03-feature-waves.md](../../roadmap/design-adoption/trips/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R12. Depends on FEAT-033.

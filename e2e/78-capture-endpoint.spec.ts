@@ -1,6 +1,6 @@
 /**
  * 78 — POST /api/capture/transaction (R18 PR-3,
- * docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §5.1).
+ * docs/archive/design-adoption/feature-capture-inbox.md §5.1).
  *
  * The endpoint is the machine surface, so every test here drives it through a
  * cookie-less request context carrying only a bearer token — the same way a

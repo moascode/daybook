@@ -6,7 +6,7 @@
 secondary pages: Accounts, Budgets, Goals, Recurring, Reports and Shared. The
 pages exist and are on the new design (R3); what is missing is what they compute.
 
-**Spec:** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md).
+**Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 The design work is done — these items track *whether* to build each piece.
 
 **Is this epic still worth doing?** Yes, and it is the highest-value epic in the

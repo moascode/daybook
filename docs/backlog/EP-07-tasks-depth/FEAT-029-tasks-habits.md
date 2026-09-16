@@ -6,6 +6,6 @@
 
 **Why now.** Habits are a different thing from tasks and currently have to be faked as repeated one-offs.
 
-**Spec.** [tasks/03-feature-waves.md](../../roadmap/design-adoption/tasks/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R11. Depends on FEAT-028.

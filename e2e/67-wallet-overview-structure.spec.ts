@@ -1,7 +1,7 @@
 /**
  * R3 PR-2 — structural-seam and correctness checks for the Overview restyle
  * (docs/roadmap/design-adoption/.flow/r3-pr2-wallet-overview/flow-plan.md, step 11 / criterion 33 /
- * docs/roadmap/design-adoption/foundation/04-e2e-and-migration.md §3).
+ * docs/archive/design-adoption/04-e2e-and-migration.md §3).
  *
  * Modelled on e2e/66-wallet-visual-structure.spec.ts. Structural assertions
  * only where 05-wallet-dashboard.spec.ts already covers a figure; the hero

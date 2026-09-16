@@ -6,6 +6,6 @@
 
 **Why now.** A control that is visible and does nothing is worse than one that is absent.
 
-**Spec.** [cross-cutting/README.md](../../roadmap/design-adoption/cross-cutting/README.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — and it is the most visible unfinished thing in the app

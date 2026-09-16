@@ -6,6 +6,6 @@
 
 **Why now.** Recurring charges are invisible money. Annual cost is the number that changes behaviour.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R9, unstarted

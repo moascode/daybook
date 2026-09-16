@@ -1,6 +1,6 @@
 /**
- * 76 — Photo import (P2 in docs/roadmap/design-adoption/cross-cutting/ai-usage.md, approved
- * 2026-09-06; full spec docs/roadmap/design-adoption/wallet/feature-photo-import.md).
+ * 76 — Photo import (P2 in docs/reference/ai-usage.md, approved
+ * 2026-09-06; full spec docs/archive/design-adoption/feature-photo-import.md).
  *
  * Two layers, same convention as 59-merchant-suggestions / 64-merchant-ai-resolve:
  *  - API-level tests hit POST /transactions/import-photo directly — fast and

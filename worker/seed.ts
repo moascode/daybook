@@ -42,7 +42,7 @@ interface SeedTaskList {
   color: string
 }
 
-// docs/roadmap/design-adoption/tasks/01-data-model.md §3 — matches the proposal's sidebar. Keep in
+// docs/archive/design-adoption/tasks-data-model.md §3 — matches the proposal's sidebar. Keep in
 // sync with server/seed.ts.
 const DEFAULT_TASK_LISTS: SeedTaskList[] = [
   { name: 'Household', color: '#2F6FEB' },

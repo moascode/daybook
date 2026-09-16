@@ -6,6 +6,6 @@
 
 **Why now.** Net worth is currently a single number with no history behind it.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R8, unstarted

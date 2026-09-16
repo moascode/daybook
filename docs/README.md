@@ -8,9 +8,8 @@ instructions.
 docs/
 ├── guides/     operating the live system — deploy, release, go-live, handoff
 ├── reference/  how the app is built — schema, architecture, conventions
-├── roadmap/    what is planned and not yet built
-│   └── design-adoption/   the redesign programme (R1–R18)
-├── backlog/    features, bugs and brainstorms not yet scheduled
+├── backlog/    what is wanted and not yet built — epics own their items and
+│              the design thinking behind them
 └── archive/    shipped or superseded. Kept for the reasoning, not the plan.
 ```
 
@@ -20,7 +19,7 @@ docs/
 |---|---|
 | To deploy, cut a release, or roll back | [guides/ci-cd.md](guides/ci-cd.md) |
 | The database schema or architecture | [reference/](reference/) |
-| What's being built next | [roadmap/design-adoption/README.md](roadmap/design-adoption/README.md) — the status board |
+| What's being built next | [backlog/README.md](backlog/README.md) — epics and items |
 | To file a feature, bug or idea | [backlog/README.md](backlog/README.md) |
 | Why a past decision was made | [archive/project-history.md](archive/project-history.md) |
 | The rules Claude Code works under | [`../CLAUDE.md`](../CLAUDE.md) |
@@ -54,6 +53,44 @@ Every document opens with one:
 against the code — not the date the file was edited. A stale date is the point:
 a `Live` doc verified six months ago should be read with suspicion, and that
 suspicion should be visible without anyone having to audit it first.
+
+## The lifecycle of a document
+
+Where a thought lives depends on how far along it is, and most documents are
+meant to die.
+
+```
+brainstorm    IDEA-NNN.md          in an epic folder — options, and the why-nots
+     ↓ commit to it
+epic / item   FEAT-NNN.md          whether + what. Short.
+     ↓ the thinking outgrows a page
+design        design.md            next to the item or epic it designs
+     ↓ plan
+plan          ephemeral            acceptance criteria + locked files. Never a doc.
+     ↓ build
+behaviour     e2e/NN-*.spec.ts     ← THE specification. Enforced by CI.
+     ↓ ship
+item, design  archive/             their job is done
+rationale     reference/           only what code and tests CANNOT say
+```
+
+**Once something ships, its e2e spec is its specification.** It is executable,
+CI enforces it, and it cannot quietly disagree with the code. A design document
+can — and in this repo, repeatedly did: `ci-cd.md` described a machine that had
+been retired for six weeks, and two consistency plans listed ~45 items that had
+already shipped.
+
+So a document earns permanent residence only if it says something the code and
+the tests *cannot*:
+
+- **why** a decision went the way it did → `reference/decisions.md`, `reference/open-decisions.md`
+- **traps** that are invisible in a diff → `CLAUDE.md` §3
+- **invariants** that span files → `reference/`
+
+Everything else is scaffolding. Archive it when the work ships, and let the
+suite be the spec.
+
+---
 
 ## Rules
 

@@ -6,6 +6,6 @@
 
 **Why now.** Reuses the existing task-template machinery rather than inventing a second one.
 
-**Spec.** [trips/03-feature-waves.md](../../roadmap/design-adoption/trips/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R13, unstarted

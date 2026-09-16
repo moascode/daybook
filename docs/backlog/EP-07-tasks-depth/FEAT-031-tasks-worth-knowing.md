@@ -6,6 +6,6 @@
 
 **Why now.** Mirrors the Wallet anomaly work. Lower value than the Wallet equivalent; sequence it last.
 
-**Spec.** [tasks/03-feature-waves.md](../../roadmap/design-adoption/tasks/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep

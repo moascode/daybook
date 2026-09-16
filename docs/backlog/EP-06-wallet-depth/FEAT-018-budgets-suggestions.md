@@ -6,6 +6,6 @@
 
 **Why now.** The most-used judgement in budgeting is "this number is wrong" — the data to say so already exists.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R8. The largest single item in EP-06; consider splitting.

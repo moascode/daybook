@@ -6,6 +6,6 @@
 
 **Why now.** With three or more people, pairwise settling produces more transfers than necessary.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R9. Touches settlement maths — see the §3 CAS trap before starting.

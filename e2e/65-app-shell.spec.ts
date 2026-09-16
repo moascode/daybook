@@ -1,7 +1,7 @@
 /**
  * R2 — the v2 app shell: app bar (module tabs, search, quick-add, bell,
  * account menu), module-scoped sidebar, mobile bottom tab bar + FAB.
- * See docs/roadmap/design-adoption/foundation/03-app-shell.md.
+ * See docs/archive/design-adoption/03-app-shell.md.
  */
 
 import { test, expect } from '@playwright/test'

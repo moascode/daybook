@@ -6,6 +6,6 @@
 
 **Why now.** Approved by the owner (D-5, 2026-08-21).
 
-**Spec.** [trips/03-feature-waves.md](../../roadmap/design-adoption/trips/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes, but **a one-way door.** It touches every money surface in the app and the release plan flags it as likely to overrun. Split it before starting.

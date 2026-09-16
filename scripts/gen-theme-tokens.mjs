@@ -4,7 +4,7 @@
 // Run: npm run gen:tokens
 //
 // ─────────────────────────────────────────────────────────────────────────
-//  R1 (v2): the model is now TWO LAYERS (docs/roadmap/design-adoption/foundation/01-design-tokens.md).
+//  R1 (v2): the model is now TWO LAYERS (docs/archive/design-adoption/01-design-tokens.md).
 //
 //    PRIMITIVES   --n-*  one cool-grey ramp, theme-independent
 //                 --g-*  one continuous emerald (hue ~162, no seam)
@@ -257,7 +257,7 @@ const css = `/* Ported design-system component layer (dormant in R1, applied in 
  *  THEME TOKENS — GENERATED FILE, DO NOT EDIT BY HAND
  *  Source: scripts/gen-theme-tokens.mjs   Regenerate: npm run gen:tokens
  * ─────────────────────────────────────────────────────────────────────────
- *  Two layers (docs/roadmap/design-adoption/foundation/01-design-tokens.md):
+ *  Two layers (docs/archive/design-adoption/01-design-tokens.md):
  *
  *   PRIMITIVES  --n-* --g-* --r/a/b/v/t-*   raw ramps, theme-independent,
  *               NEVER named by a component.

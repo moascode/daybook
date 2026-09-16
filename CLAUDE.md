@@ -53,10 +53,10 @@
 12. **Never spend the Anthropic API without asking.** Any new outbound Claude
     call is a hard stop, every time, in every mode.
 13. **Roadmap work runs through its playbook.** Anything that is a numbered
-    release in [`docs/roadmap/design-adoption/release-plan.md`](docs/roadmap/design-adoption/release-plan.md)
-    — including one named only by number ("start R8") — goes through
-    [`execution-playbook.md`](docs/roadmap/design-adoption/execution-playbook.md):
-    its subagent split, and a stop at both its gates. **I don't merge to `main`.**
+    epic in [`docs/backlog/README.md`](docs/backlog/README.md)
+    — including one named only by number ("start R8", which now means an epic,
+    not a release) — goes through the [`daybook-flow`](.agents/skills/daybook-flow/SKILL.md)
+    skill: its subagent split, and a stop at both its gates. **I don't merge to `main`.**
     "merge" / "ship it" at Gate 2 means the PR is ready for the owner to merge.
     A direct instruction to merge a *specific* PR overrides that for that PR only.
 14. **Docs carry a status header** (`Live` / `Plan` / `Archived`) and a
@@ -240,8 +240,8 @@ This file is deliberately short. The long-form material is one click away.
 | Theme tokens, the two colour families | [`docs/reference/theming.md`](docs/reference/theming.md) |
 | Why a past choice was made | [`docs/reference/decisions.md`](docs/reference/decisions.md) |
 | Deploy, release, rollback | [`docs/guides/ci-cd.md`](docs/guides/ci-cd.md) |
-| What's planned | [`docs/roadmap/design-adoption/README.md`](docs/roadmap/design-adoption/README.md) |
-| Features, bugs, ideas not yet scheduled | [`docs/backlog/README.md`](docs/backlog/README.md) |
+| What's planned, and whether it's still wanted | [`docs/backlog/README.md`](docs/backlog/README.md) |
+| Undecided design questions (D-5, D-6, D-9) | [`docs/reference/open-decisions.md`](docs/reference/open-decisions.md) |
 | Everything that shipped | [`docs/archive/README.md`](docs/archive/README.md) |
 | The whole docs tree and its rules | [`docs/README.md`](docs/README.md) |
 
@@ -499,8 +499,8 @@ follow the theme. The launch *image* does, since v3 P5. See
 > with it — both sat in this list as "next" long after shipping. P1 install
 > quality, P2 offline, P3 code-splitting (1,251 kB → 390 kB entry), P4 push
 > notifications and P5 themed splash screens shipped as `v3.7.0`–`v3.11.0`;
-> `docs/roadmap/pwa/README.md`'s own board marks all five merged. P4 still **needs its
-> two secrets set** (`docs/roadmap/pwa/push-setup.md`) before it does anything.
+> `docs/archive/pwa/README.md`'s own board marks all five merged. P4 still **needs its
+> two secrets set** (`docs/guides/push-setup.md`) before it does anything.
 >
 > A "next" list is the same decaying assertion §8's release block warns about.
 > Before trusting a row here, check whether it already shipped.

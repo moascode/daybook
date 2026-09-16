@@ -1,6 +1,6 @@
 ---
 name: daybook-flow
-description: Take a Daybook change end-to-end — branch, plan, implement, verify, review, PR — with model-tiered subagents and this project's real gate set. Use when the user wants a feature built, a bug fixed, or a change shipped "end to end", "all the way", "properly", or asks to start a numbered roadmap release (R8, R12, …). Covers which model runs which phase, the gates that must pass, and the two approval points.
+description: Take a Daybook change end-to-end — branch, plan, implement, verify, review, PR — with model-tiered subagents and this project's real gate set. Use when the user wants a feature built, a bug fixed, or a change shipped "end to end", "all the way", "properly", or asks to start a backlog epic or item (EP-06, FEAT-018, …). Covers which model runs which phase, the gates that must pass, and the two approval points.
 ---
 
 # Daybook flow
@@ -13,12 +13,15 @@ run of this pipeline.
 BRANCH → EXPLORE → PLAN ▸gate 1◂ → IMPLEMENT → VERIFY → REVIEW ▸gate 2◂ → PR
 ```
 
-> **Roadmap releases have their own playbook.** If the task is a numbered
-> release in `docs/roadmap/design-adoption/release-plan.md` — including one named
-> only by number ("start R8") — read
-> [`execution-playbook.md`](../../../docs/roadmap/design-adoption/execution-playbook.md)
-> **first, every time**, even if it was used earlier in the same session. It adds
-> release-specific gates and a design-review pass this skill does not.
+> **Start from the backlog.** If the task names an epic or an item (`EP-06`,
+> `FEAT-018`), read that item and its epic's `design.md` in
+> [`docs/backlog/`](../../../docs/backlog/README.md) first — the design thinking
+> is already done, and the item records whether the work is still wanted.
+>
+> **Anything visual needs a design-review pass the Review phase below does not
+> cover.** A subagent reading a diff cannot see a rendered page, and the eight
+> double-inverted colours that once shipped into review prove neither `tsc` nor
+> a reviewer catches it. Open both themes in the Browser pane yourself.
 
 ---
 
