@@ -9,7 +9,7 @@ import type { Task } from '@/types/tasks.types'
 
 /**
  * Completed — `/tasks/completed` (R5 PR-4, final PR of R5,
- * docs/v2/.flow/R5-completed/flow-plan.md). A day-grouped list of every
+ * docs/roadmap/design-adoption/.flow/R5-completed/flow-plan.md). A day-grouped list of every
  * completed task, newest day first. Deliberately minimal per the plan and
  * the design spec's own words ("the year heatmap, by-list breakdown and
  * time-to-finish analysis are R11 — they need more history than the

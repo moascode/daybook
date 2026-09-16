@@ -142,7 +142,7 @@ export default defineConfig({
   // Under Workers none of that plumbing exists — `wrangler dev` serves the SPA
   // and the API from one origin, which is the property the whole migration is
   // built on. So the harness collapses to a single command and no proxy
-  // (spike S4, docs/option-2-spike-findings.md).
+  // (spike S4, docs/archive/option-2-spike-findings.md).
   //
   // Two consequences worth knowing:
   //   • It serves BUILT assets from dist/, not Vite — hence the `npm run build`

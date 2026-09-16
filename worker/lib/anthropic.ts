@@ -1,6 +1,6 @@
 import type { Env } from '../types.ts'
 
-// docs/ai-bulk-categorize-feature.md §4. First outbound third-party call from
+// docs/archive/ai-bulk-categorize-feature.md §4. First outbound third-party call from
 // the Worker — plain fetch rather than @anthropic-ai/sdk, which targets Node
 // and has never been proven to bundle for the Workers runtime.
 
@@ -23,7 +23,7 @@ export interface ComposerParseResult {
   date?: string // YYYY-MM-DD, only if the text implies a specific date — omit for "today"/unspecified
 }
 
-// docs/v2/wallet/feature-photo-import.md (P2, approved 2026-09-06).
+// docs/roadmap/design-adoption/wallet/feature-photo-import.md (P2, approved 2026-09-06).
 export type PhotoImportKind = 'receipt' | 'statement'
 
 export interface PhotoImportRow {

@@ -2,7 +2,7 @@
  * Budget "spent" tracks the caller's EFFECTIVE amount — the ledger amount less
  * whatever others have actually settled on it.
  *
- * ⚠️ BEHAVIOUR CHANGED 2026-07-28 (docs/split-settlement-plan.md, owner decision
+ * ⚠️ BEHAVIOUR CHANGED 2026-07-28 (docs/archive/split-settlement-plan.md, owner decision
  * §9.1). This file previously asserted that splitting an expense *immediately*
  * dropped budget spend to the caller's own share — accrual accounting. The owner
  * reversed that: "it's all in the payer's expense until it is settled; when they

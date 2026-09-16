@@ -1,5 +1,5 @@
 /**
- * 77 — Capture tokens (R18, docs/v2/wallet/feature-capture-inbox.md §4).
+ * 77 — Capture tokens (R18, docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §4).
  *
  * The two auth negatives are the POINT of this spec, not an extra:
  *   - a session cookie must NOT authenticate anything under /api/capture/*

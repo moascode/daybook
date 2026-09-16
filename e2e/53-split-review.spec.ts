@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-// Split → settlement review flow (docs/split-settlement-plan.md).
+// Split → settlement review flow (docs/archive/split-settlement-plan.md).
 // W1 covers §5.1 only: "All" genuinely means all, and the empty state names the
 // filter that is actually hiding rows. Later waves append to this file.
 
@@ -168,7 +168,7 @@ test.describe('53 — Split review (W1: visibility)', () => {
   })
 })
 
-// ── W2: money semantics (docs/split-settlement-plan.md §3) ─────────────
+// ── W2: money semantics (docs/archive/split-settlement-plan.md §3) ─────────────
 //
 // The four-number table, asserted end to end. This is the wave's whole point:
 // after a settlement the payer's expense must FALL by the settled amount, the
@@ -273,7 +273,7 @@ test.describe('53 — Split review (W2: money semantics)', () => {
   })
 })
 
-// ── W3: reject flow (docs/split-settlement-plan.md §5.2) ───────────────
+// ── W3: reject flow (docs/archive/split-settlement-plan.md §5.2) ───────────────
 //
 // Rejection is the recipient's review step: no money moves, the claim stops
 // existing, and the payer's expense goes back to the full amount.
@@ -407,7 +407,7 @@ test.describe('53 — Split review (W3: reject)', () => {
   })
 })
 
-// ── W4: two-step settlement (docs/split-settlement-plan.md §2, §5.2) ────
+// ── W4: two-step settlement (docs/archive/split-settlement-plan.md §2, §5.2) ────
 //
 // The debtor's payment is a claim; the creditor confirms it and books their own
 // leg into their own account. Neither party moves the other's books, and — the
@@ -559,7 +559,7 @@ test.describe('53 — Split review (W4: two-step settlement)', () => {
   })
 })
 
-// ── W5: the review queue (docs/split-settlement-plan.md §6, §7) ────────
+// ── W5: the review queue (docs/archive/split-settlement-plan.md §6, §7) ────────
 test.describe('53 — Split review (W5: review queue)', () => {
   // A balance is one number standing in for a pile of splits. The bug that
   // started all this was being shown that number with no route to its contents.
@@ -624,7 +624,7 @@ test.describe('53 — Split review (W5: review queue)', () => {
   })
 })
 
-// ── R1: one list, tabs, notes, deep links (docs/shared-review-implementation-plan.md §2)
+// ── R1: one list, tabs, notes, deep links (docs/archive/shared-review-implementation-plan.md §2)
 //
 // The three renderers that used to draw the same rows in three shapes are one
 // component now. These assert what that unification is *for*, not that it
@@ -733,7 +733,7 @@ test.describe('53 — Split review (R1: unified list)', () => {
   })
 })
 
-// ── R2: the approved state (docs/shared-review-implementation-plan.md §3) ──
+// ── R2: the approved state (docs/archive/shared-review-implementation-plan.md §3) ──
 //
 // Agreeing is an acknowledgement, not a gate. The whole design rests on that:
 // approving must empty the review queue without moving a single figure, or it
@@ -970,7 +970,7 @@ test.describe('53 — Split review (R2: approved)', () => {
   })
 })
 
-// ── R3: allocation preview (docs/shared-review-implementation-plan.md §4.2) ──
+// ── R3: allocation preview (docs/archive/shared-review-implementation-plan.md §4.2) ──
 test.describe('53 — Split review (R3: settle preview)', () => {
   // Settling was "type a number and hope": the FIFO spread and the over-payment
   // cap were both invisible until after the write.

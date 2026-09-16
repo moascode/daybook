@@ -46,7 +46,7 @@ type ViewMode = 'outline' | 'list'
 
 /**
  * List detail — `/tasks/lists/:listId` (R5 PR-3,
- * docs/v2/.flow/R5-list-detail/flow-plan.md). Replaces the bare
+ * docs/roadmap/design-adoption/.flow/R5-list-detail/flow-plan.md). Replaces the bare
  * `TasksOutlinerPage.tsx` wrapper with a band (list name/colour/progress), a
  * List/Outline view toggle, and a settings rail (rename/recolour).
  *

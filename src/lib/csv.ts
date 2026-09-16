@@ -38,7 +38,7 @@ export interface ImportRow {
    * see `isNarrativeColumn` below). Used to round-trip {raw, guess} pairs to
    * POST /merchants/resolve for the AI-assisted resolution ladder; never sent
    * anywhere else, and never used for `importHash` (that stays keyed on the
-   * raw text captured before canonicalisation, docs/v1/flow-plan.md G11).
+   * raw text captured before canonicalisation, docs/archive/flow-plan.md G11).
    */
   narrativeRaw?: string
   /** True when /merchants/resolve could not improve on the regex guess for this row (no key, rate limit, or AI failure) — the guess is kept as-is. */
@@ -410,7 +410,7 @@ export interface DuplicateCheckResult {
 }
 
 /**
- * Three-layer duplicate check (docs/v2/wallet/duplicate-detection.md):
+ * Three-layer duplicate check (docs/roadmap/design-adoption/wallet/duplicate-detection.md):
  * exact import_hash, exact canonical duplicate_key (closes the CSV-vs-photo
  * merchant-text gap), and — for anything neither catches — a dismissible
  * "possible duplicate" hint for same-date/same-amount rows with a different
@@ -438,7 +438,7 @@ export async function checkDuplicates(
 }
 
 // ── AI-assisted merchant name resolution ────────────
-// docs/v1/flow-plan.md. Only rows whose merchant was split out of a narrative
+// docs/archive/flow-plan.md. Only rows whose merchant was split out of a narrative
 // column (narrativeRaw set) participate — a real merchant column is left
 // untouched (spec 61's contract).
 

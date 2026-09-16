@@ -15,7 +15,7 @@ let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
   // R5 relocated the outliner to /tasks/lists/:listId — /tasks itself is now
-  // the Today page (docs/v2/.flow/R5-foundation-today/flow-plan.md item 9).
+  // the Today page (docs/roadmap/design-adoption/.flow/R5-foundation-today/flow-plan.md item 9).
   // 'unsorted' is the reserved sentinel for list_id IS NULL, which every
   // fresh user has (no tasks have been filed into a real list yet), so it's
   // the outliner's stable landing spot for this suite.

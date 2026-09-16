@@ -1,5 +1,5 @@
 /**
- * 82 — Offline behaviour (v3 P2, docs/v3/release-plan.md#p2).
+ * 82 — Offline behaviour (v3 P2, docs/roadmap/pwa/release-plan.md#p2).
  *
  * v1's service worker answered a failed navigation from a cache nothing ever
  * wrote to, so offline produced a browser error page while the code read as

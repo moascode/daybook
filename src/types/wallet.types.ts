@@ -36,7 +36,7 @@ export interface Transaction {
   createdAt: string
   updatedAt: string
   hasSplits?: boolean
-  // What this transaction actually cost the viewer (docs/split-settlement-plan.md
+  // What this transaction actually cost the viewer (docs/archive/split-settlement-plan.md
   // §3): the ledger `amount` less whatever others have settled on it, and 0 for
   // a transaction the viewer does not own. `amount` stays the ledger truth and
   // drives balances; `effectiveAmount` drives income/expense totals.

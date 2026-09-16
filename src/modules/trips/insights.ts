@@ -1,6 +1,6 @@
 /**
  * Pure aggregation for the Trips landing page (R6,
- * docs/v2/trips/02-design-adoption.md). No React, no fetching — same shape as
+ * docs/roadmap/design-adoption/trips/02-design-adoption.md). No React, no fetching — same shape as
  * `src/modules/wallet/dashboard/insights.ts` so the arithmetic is reasoned
  * about (and tested) on its own, ahead of the `trips` schema (R12) existing
  * at all.

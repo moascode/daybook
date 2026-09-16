@@ -1,5 +1,5 @@
 /**
- * 60 — AI fallback for bulk categorisation (docs/ai-bulk-categorize-feature.md).
+ * 60 — AI fallback for bulk categorisation (docs/archive/ai-bulk-categorize-feature.md).
  *
  * For the transactions the rule-based suggest-categories pass has nothing for,
  * the bulk edit dialog can ask Claude — only for that leftover, never the
@@ -340,7 +340,7 @@ test.describe('bulk edit dialog: Ask AI', () => {
     await page.context().close()
   })
 
-  // docs/ai-bulk-categorize-feature.md §6 PR3. The guard is shared with the
+  // docs/archive/ai-bulk-categorize-feature.md §6 PR3. The guard is shared with the
   // rule-based path (suggestionFitsType), but nothing pinned it for AI
   // suggestions, which are merged into suggestionGroups at a different point.
   test('an expense category suggested by AI never lands on a money-in row', async ({ browser }) => {

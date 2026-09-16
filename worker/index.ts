@@ -32,7 +32,7 @@ const app = new Hono<AppEnv>()
 
 // Request logging, mirroring server/index.ts:33-39 (C12). `Date.now()` is
 // frozen during synchronous execution on the edge (Spectre mitigation, see
-// docs/option-2-spike-findings.md S1), so this measures wall time across
+// docs/archive/option-2-spike-findings.md S1), so this measures wall time across
 // awaits only — which is exactly what it measured before.
 app.use('/api/*', async (c, next) => {
   const started = Date.now()

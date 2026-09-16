@@ -1,6 +1,6 @@
 /**
  * 80 — Capture ↔ CSV duplicate reconciliation (R18 PR-5,
- * docs/v2/wallet/feature-capture-inbox.md §5.3).
+ * docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §5.3).
  *
  * Capture can only ever OVERLAY the bank statement, never replace it — Apple
  * Pay sees only what you tap with the phone, so cash, transfers, standing

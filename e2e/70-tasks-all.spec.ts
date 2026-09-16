@@ -1,6 +1,6 @@
 /**
- * R5 PR-2 — All tasks page (docs/v2/.flow/R5-all-tasks/flow-plan.md,
- * docs/v2/tasks/02-design-adoption.md §All tasks).
+ * R5 PR-2 — All tasks page (docs/roadmap/design-adoption/.flow/R5-all-tasks/flow-plan.md,
+ * docs/roadmap/design-adoption/tasks/02-design-adoption.md §All tasks).
  *
  * Covers: stat cards render, filtering by priority and free-text narrows the
  * list with a removable chip, the "No due date" group + "Schedule these"

@@ -27,7 +27,7 @@ function ageText(iso: string | null): string {
 
 /**
  * Card → account mapping, plus the silence detector
- * (docs/v2/wallet/feature-capture-inbox.md §5.4, §8).
+ * (docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §5.4, §8).
  *
  * A capture arrives carrying an issuer card string ("Visa •••• 1234"); this is
  * what turns that into an account. An unmapped card is not an error — the row

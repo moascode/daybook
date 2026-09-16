@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Dump the server's SQLite data as SQL files that `wrangler d1 execute --file`
-// can load into D1 (Phase 2, docs/option-2-workers-d1-plan.md).
+// can load into D1 (Phase 2, docs/archive/option-2-workers-d1-plan.md).
 //
 //   node scripts/export-to-d1.mjs                     # auto-locate the DB
 //   node scripts/export-to-d1.mjs --db path/to.db --out dir/

@@ -728,7 +728,7 @@ walletRouter.delete('/transactions/:id', (req, res) => {
 })
 
 // ── Link as transfer ──────────────────────────────────
-// Item 2 of docs/csv-transfer-linking-plan.md: merge two existing rows — the
+// Item 2 of docs/archive/csv-transfer-linking-plan.md: merge two existing rows — the
 // two legs of one inter-account movement, typically imported from two bank
 // statements — into a single transfer. The money-out (expense) row survives
 // and becomes the transfer; the money-in (income) row is deleted after its

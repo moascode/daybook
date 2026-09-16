@@ -1,6 +1,6 @@
 import { api } from '@/lib/api'
 
-// docs/auto-categorisation-plan.md. Shared by the CSV import review step
+// docs/archive/auto-categorisation-plan.md. Shared by the CSV import review step
 // (src/lib/csv.ts) and the Transactions bulk-edit dialog (BulkEditDialog.tsx)
 // — both suggest a category per merchant string from POST
 // /transactions/suggest-categories.
@@ -68,7 +68,7 @@ export interface AiSuggestionResult {
 
 /**
  * Ask Claude for a category suggestion per merchant string, for the leftover
- * the rule-based pass above found nothing for (docs/ai-bulk-categorize-feature.md).
+ * the rule-based pass above found nothing for (docs/archive/ai-bulk-categorize-feature.md).
  * `matchCount: -1` on the returned rows marks them as AI-sourced.
  *
  * THROWS on failure, and reports partial failure through `failedMerchants`

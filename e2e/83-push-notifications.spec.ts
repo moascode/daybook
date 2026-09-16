@@ -1,5 +1,5 @@
 /**
- * 83 — Push notifications (v3 P4, docs/v3/release-plan.md#p4).
+ * 83 — Push notifications (v3 P4, docs/roadmap/pwa/release-plan.md#p4).
  *
  * Real push delivery is not testable here: it needs a live push service and a
  * browser Apple or Google controls. What IS testable — and where the actual

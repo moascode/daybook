@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// docs/auto-categorisation-plan.md §3.4 "Growing the map". The builtin merchant
+// docs/archive/auto-categorisation-plan.md §3.4 "Growing the map". The builtin merchant
 // map (worker/lib/merchant-map.ts) is a starting point, not a fixed asset — this
 // is the repeatable way to find what it is missing, using a CSV exported from
 // the app (Wallet → Export → the existing GET /transactions/export route).

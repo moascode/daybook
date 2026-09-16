@@ -1,6 +1,6 @@
 /**
- * R5 PR-1 — Today page (docs/v2/.flow/R5-foundation-today/flow-plan.md item
- * 10, docs/v2/tasks/02-design-adoption.md §Today).
+ * R5 PR-1 — Today page (docs/roadmap/design-adoption/.flow/R5-foundation-today/flow-plan.md item
+ * 10, docs/roadmap/design-adoption/tasks/02-design-adoption.md §Today).
  *
  * Covers: the band renders, adding a task via the composer's Enter-to-add,
  * Overdue/Today/Done-today grouping, the reschedule-all button, and the

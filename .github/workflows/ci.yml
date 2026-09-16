@@ -41,6 +41,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Markdown links resolve against `git ls-files`, so a link into an
+      # ignored or uncommitted path fails here rather than on someone's click.
+      # The 2026-09 docs reorganisation inherited 22 dead links from the
+      # previous one, nine in project-history.md alone, because nothing checked.
+      - name: Doc links resolve
+        run: npm run check:doc-links
+
       # src/index.css is generated. Regenerate and fail if it differs from what
       # is committed — the only sanctioned writer is scripts/gen-theme-tokens.mjs
       # (CLAUDE.md §18). A hand-edit to the generated file is caught here.

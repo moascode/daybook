@@ -29,7 +29,7 @@ function whenText(iso: string | null): string {
 }
 
 /**
- * "Connected devices" — capture tokens (docs/v2/wallet/feature-capture-inbox.md §4).
+ * "Connected devices" — capture tokens (docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §4).
  *
  * A capture token authenticates a non-browser client (an iOS Shortcuts
  * automation, Claude) to create a *pending* capture and nothing else. Managing

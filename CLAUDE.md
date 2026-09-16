@@ -47,8 +47,8 @@
     `suggestCategoriesAI`'s `failedMerchants`) — it does not swallow it.
     Applies to buttons above all: a click that changes nothing on screen and
     explains nothing is the single worst outcome any handler can produce.
-14. **v2 roadmap work always runs through `docs/v2/execution-playbook.md`.**
-    Any task that is one of `docs/v2/release-plan.md`'s releases (R1–R17) —
+14. **v2 roadmap work always runs through `docs/roadmap/design-adoption/execution-playbook.md`.**
+    Any task that is one of `docs/roadmap/design-adoption/release-plan.md`'s releases (R1–R17) —
     including a release named only by number, e.g. "start R4," "do R7" — is
     orchestrated through that playbook, not by invoking the generic
     `feature-flow` skill directly and not by doing the research/plan/implement
@@ -236,7 +236,7 @@ function before any public deploy.
 
 > Phase 4 replaces the in-browser PGlite store with a Node + SQLite backend the
 > browser calls over `/api`. `bcrypt` and `express-session` land in the auth
-> stage. See `docs/v1/COMPLETED/phase-4-plan.md`.
+> stage. See `docs/archive/phase-4-plan.md`.
 
 #### Backend (Phase 6 — Cloudflare Workers + D1) — ✅ **live; this is production**
 | Package | Version | Purpose |
@@ -245,7 +245,7 @@ function before any public deploy.
 | `wrangler` | ^4.114 | Cloudflare CLI — build, local dev, D1 migrations, deploy (dev) |
 | `@cloudflare/workers-types` | ^5 | Workers runtime type definitions (dev) |
 
-> Approved per `docs/v1/option-2-workers-d1-plan.md` §7. **The cutover happened**
+> Approved per `docs/archive/option-2-workers-d1-plan.md` §7. **The cutover happened**
 > — the Worker serves production and `server/` serves nothing. Both trees are
 > still in the repo, but that is deliberate and permanent, not a migration in
 > flight: `scripts/schema-diff.mjs` gates CI on D1 matching `server/migrations/`,
@@ -265,7 +265,7 @@ function before any public deploy.
 
 #### Cloud (Phase 6 only — do not install before Phase 6)
 > ⛔ **Superseded.** Phase 6 is being built on Cloudflare Workers + D1 (the table
-> above), not Supabase + Vercel. See `docs/v1/phase-6-online-plan.md` for the options
+> above), not Supabase + Vercel. See `docs/archive/phase-6-online-plan.md` for the options
 > analysis. Do not install these.
 
 | Package | Version | Purpose |
@@ -808,7 +808,7 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 
 ### CSV transfer linking additions (migration `0008_absorbed_import_hashes.sql`, PR #61)
 
-Supports "Link as transfer" (docs/v1/csv-transfer-linking-plan.md): merging two
+Supports "Link as transfer" (docs/archive/csv-transfer-linking-plan.md): merging two
 imported rows into one transfer deletes the money-in row, so its `import_hash`
 is preserved here to keep duplicate detection working across statement
 re-imports. Deleting the merged transfer cascades the hash away, letting a
@@ -831,7 +831,7 @@ CREATE INDEX IF NOT EXISTS idx_absorbed_hashes_txn ON absorbed_import_hashes(tra
   accounts; opposite directions; amounts equal within 1 cent; no splits or
   settlement links; fee/FX legs rejected in v1).
 
-### AI-assisted merchant name resolution (migration `0012_merchant_corrections.sql` / `0013_` on Workers, docs/v1/flow-plan.md)
+### AI-assisted merchant name resolution (migration `0012_merchant_corrections.sql` / `0013_` on Workers, docs/archive/flow-plan.md)
 
 Memoizes AI-derived merchant-name corrections per user, so Claude is only ever
 asked about a given bank narrative template once.
@@ -1085,8 +1085,8 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 >
 > | Feature | Function | Bucket |
 > |---|---|---|
-> | "Ask AI" fallback in the bulk edit dialog — only the merchants the rule pass missed (`docs/v1/ai-bulk-categorize-feature.md`) | `suggestCategoriesWithAI` | `ai_rate_limit_suggest_categories` |
-> | Merchant-name resolution for CSV import + bulk cleanup (`docs/v1/flow-plan.md`, §6's `merchant_corrections`) | `resolveMerchantsWithAI` | `ai_rate_limit_merchant` |
+> | "Ask AI" fallback in the bulk edit dialog — only the merchants the rule pass missed (`docs/archive/ai-bulk-categorize-feature.md`) | `suggestCategoriesWithAI` | `ai_rate_limit_suggest_categories` |
+> | Merchant-name resolution for CSV import + bulk cleanup (`docs/archive/flow-plan.md`, §6's `merchant_corrections`) | `resolveMerchantsWithAI` | `ai_rate_limit_merchant` |
 > | **Composer free-text parse** — one natural-language entry → a transaction draft (R7) | `parseComposerWithAI` | `ai_rate_limit_composer` |
 > | **Photo-statement import** (v3.3.0–v3.5.0) | `parsePhotoImportWithAI` | `ai_rate_limit_photo_import` |
 >
@@ -1400,7 +1400,7 @@ EOF
 **Update this section at the end of every Claude Code session.** Keep it to
 *current state* — what is live, what is blocked, what is next. The
 session-by-session narrative lives in
-[`docs/v1/project-history.md`](docs/v1/project-history.md); append there rather than
+[`docs/archive/project-history.md`](docs/archive/project-history.md); append there rather than
 growing this section back to the 871 lines it reached before 2026-08-08.
 
 ### Where the app runs
@@ -1414,7 +1414,7 @@ deployment target but still running: it is the rollback of last resort.
 ### Released
 
 **Latest tag: `v3.12.2`** (2026-09-13). The full table with dates and contents
-is in [`docs/v1/project-history.md`](docs/v1/project-history.md#release-record).
+is in [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
 > three times by being updated only by whichever PR happened to touch this
@@ -1509,18 +1509,18 @@ git push origin vX.Y.Z
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
 3. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
-   `docs/v1/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
+   `docs/archive/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
    already exists).
 4. **Needs owner sign-off:** each remaining §9.3 AI item (the list shrank — four
    features already ship); D-5 auto-approve as a per-group "we trust each other"
-   setting; the parked D-items/C9 in `docs/v1/phase-5c-wallet-ux.md` §D.
+   setting; the parked D-items/C9 in `docs/archive/phase-5c-wallet-ux.md` §D.
 
 > **The PWA quality track (`docs/v3/` P1–P5) is DONE**, and the day-header audit
 > with it — both sat in this list as "next" long after shipping. P1 install
 > quality, P2 offline, P3 code-splitting (1,251 kB → 390 kB entry), P4 push
 > notifications and P5 themed splash screens shipped as `v3.7.0`–`v3.11.0`;
-> `docs/v3/README.md`'s own board marks all five merged. P4 still **needs its
-> two secrets set** (`docs/v3/push-setup.md`) before it does anything.
+> `docs/roadmap/pwa/README.md`'s own board marks all five merged. P4 still **needs its
+> two secrets set** (`docs/roadmap/pwa/push-setup.md`) before it does anything.
 >
 > A "next" list is the same decaying assertion §13's release block warns about.
 > Before trusting a row here, check whether it already shipped.
@@ -1577,7 +1577,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 | 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🟢 Four features ship (§9.3); panel/briefing/insights still deferred |
 | 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
 | 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | ✅ v1.0.1 |
-| 6 | Cloud Migration | Cloud | Cloudflare Workers + D1 + PBKDF2 auth (**not** Supabase/Vercel — see `docs/v1/option-2-workers-d1-plan.md`) | ✅ v2 |
+| 6 | Cloud Migration | Cloud | Cloudflare Workers + D1 + PBKDF2 auth (**not** Supabase/Vercel — see `docs/archive/option-2-workers-d1-plan.md`) | ✅ v2 |
 | 7 | Advanced Features | v2+ | Recurring rules, budgets, goals, new modules | Planned |
 
 **Note**: Phase 5 has been split into three subtasks:
@@ -1586,7 +1586,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
   API-key infrastructure §9.3 always assumed: per-user `anthropic_api_key` in
   `settings`, a Settings UI, masked reads, per-user rate limiting, and the first
   outbound Worker call (`worker/lib/anthropic.ts`). A second slice landed in
-  R4 (docs/v1/flow-plan.md): AI-assisted merchant name resolution for CSV
+  R4 (docs/archive/flow-plan.md): AI-assisted merchant name resolution for CSV
   import and bulk cleanup, reusing that same foundation — a new
   `merchant_corrections` cache table, its own rate-limit bucket, and
   `resolveMerchantsWithAI` alongside the existing `suggestCategoriesWithAI`.
@@ -1601,7 +1601,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
   covers the key). Each remaining item still needs its own owner sign-off under
   rule 10.
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
-- **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/v1/phase-5c-implementation-plan.md
+- **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/archive/phase-5c-implementation-plan.md
 
 ### Delivery Milestones
 

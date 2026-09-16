@@ -1,6 +1,6 @@
 /**
  * 79 — The capture inbox (R18 PR-4,
- * docs/v2/wallet/feature-capture-inbox.md §4.2, §5.2, §5.4, §5.5).
+ * docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §4.2, §5.2, §5.4, §5.5).
  *
  * The load-bearing assertion in here is the NEGATIVE one: opening the inbox
  * must make ZERO Anthropic-spending requests. ai-usage.md guardrail 2 forbids a

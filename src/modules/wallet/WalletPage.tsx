@@ -582,7 +582,7 @@ export function WalletPage() {
   )
 
   // One bulk-update call per distinct suggested category (typically 2-5
-  // requests, not one per row) — docs/auto-categorisation-plan.md §4.2.
+  // requests, not one per row) — docs/archive/auto-categorisation-plan.md §4.2.
   const handleApplySuggestions = useCallback(
     async (groups: Array<{ categoryId: string; transactionIds: string[] }>) => {
       let updated = 0

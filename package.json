@@ -25,6 +25,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:parallel": "bash scripts/e2e-parallel.sh",
+    "check:doc-links": "node scripts/check-doc-links.mjs",
     "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {

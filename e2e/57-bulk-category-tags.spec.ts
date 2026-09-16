@@ -214,7 +214,7 @@ test.describe('bulk-update endpoint', () => {
   })
 })
 
-// ── Suggestions in the bulk edit dialog (docs/auto-categorisation-plan.md §4.2) ──
+// ── Suggestions in the bulk edit dialog (docs/archive/auto-categorisation-plan.md §4.2) ──
 
 test.describe('suggestions in the bulk edit dialog', () => {
   async function categoryIdByName(page: Page, name: string): Promise<string> {

@@ -1,5 +1,5 @@
 /**
- * Wallet — CSV transfer import (Item 1 of docs/csv-transfer-linking-plan.md).
+ * Wallet — CSV transfer import (Item 1 of docs/archive/csv-transfer-linking-plan.md).
  * A review-step row can be marked Transfer→another account, producing a single
  * transfer row that is excluded from income/expense totals while moving the
  * balance on both accounts. Also covers the destination validation and the

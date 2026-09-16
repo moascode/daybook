@@ -26,7 +26,7 @@ interface CsvReviewTableProps {
    * Photo import (P2, approved 2026-09-06): adds a Source photo column
    * (filename, not a thumbnail — see the cell's own comment) ahead of
    * Description, which now carries the raw statement line for a statement
-   * row (docs/v2/wallet/feature-photo-import.md §7, amended). CSV rows never
+   * row (docs/roadmap/design-adoption/wallet/feature-photo-import.md §7, amended). CSV rows never
    * set this — a review session is always all-CSV or all-photo, never mixed.
    */
   photoMode?: boolean

@@ -1,5 +1,5 @@
 /**
- * R6-trips (docs/v2/.flow/R6-trips/flow-plan.md, docs/v2/trips/02-design-adoption.md).
+ * R6-trips (docs/roadmap/design-adoption/.flow/R6-trips/flow-plan.md, docs/roadmap/design-adoption/trips/02-design-adoption.md).
  *
  * Covers: /trips is a live route (tab, sidebar, empty states), the
  * "travel as a category of your life" figures are real and reconcile against
