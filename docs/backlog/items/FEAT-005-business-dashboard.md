@@ -9,3 +9,5 @@
 **Out of scope.** — **Question this first:** substantially duplicates the Wallet dashboard, which already computes cash flow, category and account breakdowns.
 
 **Notes.** From [business-module-plan.md](../../archive/business-module-plan.md), never started. Verified unbuilt 2026-09-16.
+
+**Still needed?** ⚠️ Question first — overlaps the Wallet dashboard

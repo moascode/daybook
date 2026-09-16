@@ -8,11 +8,16 @@ description: File a feature request, report a bug, or brainstorm an idea into Da
 Daybook's backlog lives at `docs/backlog/`. This skill is how things get into
 it, and how they get reviewed once they're there.
 
-**The backlog has two halves and both are mandatory:** the item's own file, and
-its row in `docs/backlog/README.md`. An item file with no index row is
-invisible; an index row with no file is a dead link. `npm run check:backlog`
-gates both in CI, so a half-filed item fails the build rather than quietly
-rotting.
+**Three things are mandatory for every item:** its own file, its row in
+`docs/backlog/README.md`, and an **epic**. An item file with no index row is
+invisible; an index row with no file is a dead link; an item with no epic never
+gets the "is this still needed?" question asked of it. `npm run check:backlog`
+gates all three, so a half-filed item fails the build rather than quietly rotting.
+
+**There are no standalone items.** If nothing fits, create an epic first — a
+two-item epic is fine, and it gives the work somewhere to be reviewed. When you
+create one, say in its file what decision it is waiting on, or that it is
+waiting on none.
 
 ---
 
@@ -29,10 +34,11 @@ you can answer these yourself:
 3. **What triggers the need?** A real situation they hit, not a hypothetical
 4. **What's explicitly out of scope?** The single most useful line in any item file
 
-Then: allocate an ID, write `items/FEAT-NNN-slug.md`, add the index row.
+Then: **pick the epic first** (or create one), allocate an ID, write
+`items/FEAT-NNN-slug.md`, and add the index row under that epic's section.
 
-If the request is clearly bigger than one PR, say so and file it as an **epic**
-instead — `epics/EP-NN-slug.md` — with its first few items underneath it.
+If the request is clearly bigger than one PR, it *is* an epic —
+`epics/EP-NN-slug.md` — with its items underneath it.
 
 ### `bug` — something that's broken
 
@@ -82,7 +88,7 @@ reissued to something unrelated.
 ### Item template
 
 ```markdown
-> **Status:** Open · **Filed:** YYYY-MM-DD · **Epic:** EP-NN (or —)
+> **Status:** Open · **Filed:** YYYY-MM-DD · **Epic:** [EP-NN](../epics/EP-NN-slug.md)
 
 # FEAT-NNN — Short title
 
@@ -92,8 +98,11 @@ reissued to something unrelated.
 
 **Out of scope.** What this deliberately does not include.
 
-**Notes.** Anything known about where it would live, or what it would break.
+**Still needed?** The honest answer, kept current. This is the field the owner
+reads when reviewing — "Yes", "Question it — <why>", or "Consider dropping — <why>".
 ```
+
+The **Epic** field must contain a real `EP-NN` link. The check rejects `—`.
 
 Bugs swap `What` / `Why now` for **Expected** / **Actual** / **Repro**.
 
@@ -102,7 +111,7 @@ Bugs swap `What` / `Why now` for **Expected** / **Actual** / **Repro**.
 Add to the right table in `docs/backlog/README.md`:
 
 ```markdown
-| [FEAT-012](items/FEAT-012-trip-currency.md) | Feature | Per-trip currency | Open |
+| [FEAT-051](items/FEAT-051-slug.md) | Feature | Short title | Yes — one clause on why |
 ```
 
 ---

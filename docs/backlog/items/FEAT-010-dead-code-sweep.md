@@ -12,3 +12,5 @@ another change in the same files rather than as a dedicated PR.
 **Notes.** Recorded as partial in 2026-07; **verify how much is already gone
 before scheduling** — several refactors have passed through these files since,
 and this may be close to done. Consider `Dropped` if so.
+
+**Still needed?** Low value; verify it is not already done, else drop

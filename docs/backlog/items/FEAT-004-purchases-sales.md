@@ -9,3 +9,5 @@
 **Out of scope.** — **Question this first:** Wallet already records money in and out against accounts and categories. Verify what these add beyond a product dimension before building.
 
 **Notes.** From [business-module-plan.md](../../archive/business-module-plan.md), never started. Verified unbuilt 2026-09-16.
+
+**Still needed?** ⚠️ Question first — overlaps Wallet transactions

@@ -9,3 +9,5 @@
 **Out of scope.** Any UI beyond empty stubs.
 
 **Notes.** From [business-module-plan.md](../../archive/business-module-plan.md), never started. Verified unbuilt 2026-09-16.
+
+**Still needed?** Only if EP-01 proceeds

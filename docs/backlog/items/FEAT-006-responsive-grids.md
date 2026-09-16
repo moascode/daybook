@@ -13,3 +13,5 @@ so phone layout is a primary case, not an edge one.
 landed in R1–R3.
 
 **Notes.** Verified 2026-09-16: no `sm:grid-cols-*` breakpoints present.
+
+**Still needed?** Yes — it is a phone app now

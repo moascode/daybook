@@ -13,3 +13,5 @@ successful one until reload.
 
 **Notes.** Verified 2026-09-16 as partial. Start by listing every `catch` in
 `src/hooks/` and `src/modules/wallet/` that does not surface, then work the list.
+
+**Still needed?** Yes — it is rule 10

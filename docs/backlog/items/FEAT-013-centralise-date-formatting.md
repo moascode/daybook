@@ -13,3 +13,5 @@ being inconsistent between two screens, and there is nowhere to change it once.
 **Notes.** Verified 2026-09-16 as never centralised. `formatMYR` is the pattern
 to follow. Watch the timezone trap — the e2e suite runs on a pinned business
 clock (CLAUDE.md §3).
+
+**Still needed?** Yes — 15+ inline copies

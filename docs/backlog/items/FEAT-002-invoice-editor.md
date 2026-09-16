@@ -9,3 +9,5 @@
 **Out of scope.** Recurring invoices, payment reconciliation, emailing.
 
 **Notes.** From [business-module-plan.md](../../archive/business-module-plan.md), never started. Verified unbuilt 2026-09-16.
+
+**Still needed?** **The high-value piece** — the only part Wallet cannot express today

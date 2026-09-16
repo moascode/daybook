@@ -11,3 +11,5 @@ showing what kind of money it is makes the list hard to audit.
 **Out of scope.** Any other recurring-rule changes.
 
 **Notes.** Verified 2026-09-16: type and category are not surfaced on the cards.
+
+**Still needed?** Probably — small
