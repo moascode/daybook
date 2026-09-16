@@ -15,6 +15,8 @@ the skill, so nothing looked wrong.
 
 | Skill | Purpose |
 |---|---|
+| [daybook-flow](skills/daybook-flow/SKILL.md) | Take a change end-to-end: branch → plan → implement → verify → review → PR |
+| [intake](skills/intake/SKILL.md) | File a feature, bug or idea into `docs/backlog/` |
 | [caveman](skills/caveman/SKILL.md) | Compressed communication mode |
 | [caveman-commit](skills/caveman-commit/SKILL.md) | Conventional-commit message generator |
 | [caveman-compress](skills/caveman-compress/SKILL.md) | Compress memory/context files |
@@ -36,4 +38,7 @@ the skill, so nothing looked wrong.
 - **`caveman-stats`** — required `hooks/caveman-stats.js` and
   `hooks/caveman-mode-tracker.js`. No `hooks/` directory has ever existed here.
 - **`feature-flow`** — never symlinked, so never loaded; byte-identical in
-  description to the `anthropic-skills` plugin that was doing the work.
+  description to the `anthropic-skills` plugin that was doing the work. Its
+  project-specific value lived in `execution-playbook.md`, which was a doc no
+  skill ever pointed at; that content is now the `daybook-flow` skill, and the
+  `scripts/flow-checks.sh` the playbook promised in §4 finally exists.

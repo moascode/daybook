@@ -48,6 +48,11 @@ jobs:
       - name: Doc links resolve
         run: npm run check:doc-links
 
+      # A backlog item has two halves — its file and its row in the index.
+      # An item with only one half is invisible exactly when it matters.
+      - name: Backlog index is consistent
+        run: npm run check:backlog
+
       # src/index.css is generated. Regenerate and fail if it differs from what
       # is committed — the only sanctioned writer is scripts/gen-theme-tokens.mjs
       # (CLAUDE.md §18). A hand-edit to the generated file is caught here.
