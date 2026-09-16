@@ -1017,7 +1017,7 @@ export function WalletPage() {
                 aria-expanded={filtersOpen}
                 aria-label="Filters"
                 className={cn(
-                  'relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors',
+                  'relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md transition-colors md:h-8 md:w-8',
                   filtersOpen || activeFilterCount > 0
                     ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
                     : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted',
@@ -1052,7 +1052,7 @@ export function WalletPage() {
                     presets={['all-time', 'custom']}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <MultiSelect
                     label="Type"
                     testId="filter-type"
@@ -1115,7 +1115,7 @@ export function WalletPage() {
               onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
               data-testid="sort-direction-toggle"
               aria-label={sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
-              className="hide-mobile flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
+              className="hide-mobile flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted md:h-8 md:w-8"
             >
               <ArrowUpDown className={cn('h-3.5 w-3.5 transition-transform', sortDir === 'oldest' && 'rotate-180')} />
             </button>

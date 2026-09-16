@@ -57,7 +57,7 @@ function SettleIconButton({
         aria-label={label}
         onClick={onClick}
         className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors',
+          'flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors md:h-7 md:w-7',
           emphasis === 'filled'
             ? 'bg-brand-500 text-fg-on-accent hover:bg-brand-600'
             : 'text-fg-muted hover:bg-line-strong hover:text-fg',

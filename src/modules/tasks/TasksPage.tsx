@@ -497,7 +497,7 @@ export function TasksPage() {
         <div className="flex min-w-0 items-center gap-0.5 text-sm">
           <button
             onClick={() => setRootId(null)}
-            className={`flex shrink-0 items-center justify-center h-7 w-7 rounded-md transition-colors ${
+            className={`flex shrink-0 items-center justify-center h-10 w-10 md:h-7 md:w-7 rounded-md transition-colors ${
               rootId === null
                 ? 'text-fg bg-surface-hover'
                 : 'text-fg-faint hover:text-fg-muted hover:bg-surface-hover'

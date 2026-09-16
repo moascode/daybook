@@ -171,8 +171,7 @@ export function GoalsPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+                      size="icon"
                       onClick={() => openEdit(goal)}
                       aria-label={`Edit ${goal.name}`}
                     >
@@ -180,8 +179,8 @@ export function GoalsPage() {
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-fg-subtle hover:text-red-600"
+                      size="icon"
+                      className="text-fg-subtle hover:text-red-600"
                       onClick={() => crud.openDelete(goal.id)}
                       aria-label={`Delete ${goal.name}`}
                     >

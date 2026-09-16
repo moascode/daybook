@@ -5,6 +5,7 @@ import { Trash2, ArrowRightLeft, Pencil, Scissors, Users, MoreHorizontal } from 
 import { cn, formatMYR } from '@/lib/utils'
 import { countableAmount } from '@/hooks/useWallet'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import type { Transaction, Account, Category, DailyGroup } from '@/types/wallet.types'
 
 interface TransactionListProps {
@@ -282,13 +283,15 @@ function TransactionRow({
         >
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button
+              <Button
                 type="button"
-                className="icon-btn flex min-h-[40px] min-w-[40px] items-center justify-center rounded text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted md:min-h-0 md:min-w-0"
+                variant="ghost"
+                size="icon"
+                className="icon-btn rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
                 aria-label="Transaction options"
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </DropdownMenu.Trigger>
 
             <DropdownMenu.Portal>

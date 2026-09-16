@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
-type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonSize = 'sm' | 'md' | 'lg' | 'icon'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
@@ -25,6 +25,11 @@ const sizeStyles: Record<ButtonSize, string> = {
   sm: 'px-2.5 py-1 text-xs gap-1.5',
   md: 'px-3.5 py-1.5 text-sm gap-2',
   lg: 'px-5 py-2.5 text-sm gap-2',
+  // Icon-only: a fixed 40x40px tap target (matches the `--s10` token) on
+  // touch/narrow widths, shrinking to a compact 24x24px square from `md:`
+  // up where a mouse makes precision easy. Replaces the old ad-hoc
+  // `min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0` className hack.
+  icon: 'h-10 w-10 p-0 md:h-6 md:w-6',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(

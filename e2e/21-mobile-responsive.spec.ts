@@ -8,7 +8,19 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser } from '@playwright/test'
-import { waitForApp, signUpOnPage, fillAccountForm, fillTransactionForm, navTo, navItem , openBlankTransactionForm } from './helpers'
+import {
+  waitForApp,
+  signUpOnPage,
+  fillAccountForm,
+  fillTransactionForm,
+  navTo,
+  navItem,
+  openBlankTransactionForm,
+  ensureFiltersOpen,
+  accountCardFor,
+  enableAccountManageMode,
+  transactionRowFor,
+} from './helpers'
 
 const MOBILE_VIEWPORT = { width: 390, height: 844 }
 // Short viewport for modal/drawer scroll checks (Wave 2 — B3/C11)
@@ -240,5 +252,115 @@ test('sidebar drawer keeps Settings reachable on a short mobile viewport', async
   const reportsLink = navItem(page, 'reports')
   await reportsLink.scrollIntoViewIfNeeded()
   await expect(reportsLink).toBeVisible()
+  await ctx.close()
+})
+
+// ── FEAT-007: 40px touch targets ───────────────────────────────────────
+
+test('icon-only controls have at least a 40x40px tap target on mobile viewport', async ({ browser }: { browser: Browser }) => {
+  const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
+  const page = await ctx.newPage()
+  await signUpOnPage(page)
+
+  // 1. A colour swatch (AccountForm) — the swatch itself stays its original
+  // visual size, but the button wrapping it must hit 40px.
+  await page.goto('/wallet/accounts')
+  await waitForApp(page)
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  const swatchBox = await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Select color #1D9E75' })
+    .boundingBox()
+  expect(swatchBox).not.toBeNull()
+  expect(swatchBox!.width).toBeGreaterThanOrEqual(40)
+  expect(swatchBox!.height).toBeGreaterThanOrEqual(40)
+  await fillAccountForm(page, { name: 'Touch Cash' })
+
+  // 2. AccountCard's edit button (migrated onto Button size="icon").
+  await enableAccountManageMode(page)
+  const editBox = await accountCardFor(page, 'Touch Cash')
+    .getByRole('button', { name: 'Edit account' })
+    .boundingBox()
+  expect(editBox).not.toBeNull()
+  expect(editBox!.width).toBeGreaterThanOrEqual(40)
+  expect(editBox!.height).toBeGreaterThanOrEqual(40)
+
+  // 3. TransactionList's row "⋯" trigger (plain <button> migrated onto Button size="icon").
+  await page.goto('/wallet')
+  await waitForApp(page)
+  await openBlankTransactionForm(page)
+  await fillTransactionForm(page, { amount: '12', merchant: 'Touch Test' })
+  const rowMenuBox = await transactionRowFor(page, 'Touch Test')
+    .getByRole('button', { name: 'Transaction options' })
+    .boundingBox()
+  expect(rowMenuBox).not.toBeNull()
+  expect(rowMenuBox!.width).toBeGreaterThanOrEqual(40)
+  expect(rowMenuBox!.height).toBeGreaterThanOrEqual(40)
+
+  // 4. WalletPage's filter toggle (previously 32x32px).
+  const filterBox = await page.getByTestId('filter-toggle').boundingBox()
+  expect(filterBox).not.toBeNull()
+  expect(filterBox!.width).toBeGreaterThanOrEqual(40)
+  expect(filterBox!.height).toBeGreaterThanOrEqual(40)
+
+  await ctx.close()
+})
+
+// ── FEAT-006 leftovers: form-grid breakpoints ───────────────────────────
+
+test('transaction form Date/Amount grid stacks to one column without overflow at 390 px', async ({ browser }: { browser: Browser }) => {
+  const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
+  const page = await ctx.newPage()
+  await signUpOnPage(page)
+  await page.goto('/wallet/accounts')
+  await waitForApp(page)
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Grid Cash' })
+
+  await page.goto('/wallet')
+  await waitForApp(page)
+  await openBlankTransactionForm(page)
+  const dialog = page.getByRole('dialog')
+  await expect(dialog).toBeVisible()
+
+  const dateBox = await dialog.getByLabel('Date').boundingBox()
+  const amountBox = await dialog.getByLabel('Amount').boundingBox()
+  expect(dateBox).not.toBeNull()
+  expect(amountBox).not.toBeNull()
+
+  // Below `sm`, `grid-cols-1 sm:grid-cols-2` stacks Date above Amount
+  // instead of squashing them side by side, and neither overflows the
+  // 390px viewport.
+  expect(amountBox!.y).toBeGreaterThan(dateBox!.y)
+  expect(dateBox!.x + dateBox!.width).toBeLessThanOrEqual(MOBILE_VIEWPORT.width + 1)
+  expect(amountBox!.x + amountBox!.width).toBeLessThanOrEqual(MOBILE_VIEWPORT.width + 1)
+  await ctx.close()
+})
+
+test('wallet filter panel grid stacks to one column without overflow at 390 px', async ({ browser }: { browser: Browser }) => {
+  const ctx = await browser.newContext({ viewport: MOBILE_VIEWPORT })
+  const page = await ctx.newPage()
+  await signUpOnPage(page)
+  // The filter bar is hidden until there's an account to work with
+  // (WalletPage.tsx: `accounts.length > 0 || hasGroups`).
+  await page.goto('/wallet/accounts')
+  await waitForApp(page)
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Filter Cash' })
+
+  await page.goto('/wallet')
+  await waitForApp(page)
+  await ensureFiltersOpen(page)
+
+  const typeBox = await page.getByTestId('filter-type').boundingBox()
+  const accountBox = await page.getByTestId('filter-account').boundingBox()
+  expect(typeBox).not.toBeNull()
+  expect(accountBox).not.toBeNull()
+
+  // Below `sm`, `grid-cols-1 sm:grid-cols-2` stacks the Type and Account
+  // filters instead of squashing them side by side in the narrow popup.
+  expect(accountBox!.y).toBeGreaterThan(typeBox!.y)
+  expect(typeBox!.x + typeBox!.width).toBeLessThanOrEqual(MOBILE_VIEWPORT.width + 1)
+  expect(accountBox!.x + accountBox!.width).toBeLessThanOrEqual(MOBILE_VIEWPORT.width + 1)
   await ctx.close()
 })

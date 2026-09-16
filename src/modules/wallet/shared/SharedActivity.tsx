@@ -30,7 +30,7 @@ function RowActionIcon({ label, testId, onClick, children }: { label: string; te
         aria-label={label}
         data-testid={testId}
         onClick={onClick}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-line-strong hover:text-fg"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-line-strong hover:text-fg md:h-7 md:w-7"
       >
         {children}
       </button>

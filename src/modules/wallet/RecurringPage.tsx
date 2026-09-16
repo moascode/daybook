@@ -253,8 +253,7 @@ export function RecurringPage() {
                       </Button>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+                        size="icon"
                         onClick={() => openEdit(rule)}
                         aria-label={`Edit ${rule.merchant || 'recurring rule'}`}
                       >
@@ -262,8 +261,8 @@ export function RecurringPage() {
                       </Button>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0 text-fg-subtle hover:text-red-600"
+                        size="icon"
+                        className="text-fg-subtle hover:text-red-600"
                         onClick={() => crud.openDelete(rule.id)}
                         aria-label={`Delete ${rule.merchant || 'recurring rule'}`}
                       >

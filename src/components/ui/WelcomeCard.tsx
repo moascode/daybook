@@ -48,7 +48,7 @@ export function WelcomeCard({ settingKey, icon, title, children, className }: We
         type="button"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-brand-600/70 transition-colors hover:bg-brand-100 hover:text-brand-700"
+        className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-md text-brand-600/70 transition-colors hover:bg-brand-100 hover:text-brand-700 md:h-8 md:w-8"
       >
         <X className="h-4 w-4" />
       </button>
