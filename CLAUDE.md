@@ -1348,7 +1348,7 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v2.9.2`** (2026-08-11). The full table with dates and contents
+**Latest tag: `v3.12.2`** (2026-09-13). The full table with dates and contents
 is in [`docs/v1/project-history.md`](docs/v1/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
@@ -1361,25 +1361,40 @@ is in [`docs/v1/project-history.md`](docs/v1/project-history.md#release-record).
 > git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short)' refs/tags
 > ```
 
-> ⚠️ **As of 2026-08-25, `main` is NOT fully released.** It carries the v2
-> design-adoption work (R1–R3: `docs/v2/README.md`'s status board, PRs #125,
-> #130, #132–#135) plus PR #136, unreleased and untagged. **Do not assume "all
-> code on main is released" without checking** — that claim has been wrong
-> before and is wrong again right now:
+> ⚠️ **Never state whether `main` is released — measure it.** This block used
+> to assert a snapshot ("as of 2026-08-25, `main` is NOT fully released … 47+
+> commits pending"), and that assertion is exactly what rotted: it still named
+> `v2.9.2` as the tip while v3.x had been shipping for weeks, and on 2026-09-13
+> it sent a session to tell the owner a one-file fix would drag 47 unreleased
+> commits to production when `main` was in fact fully released. A sentence about
+> release state is wrong the moment anything merges, so the only safe form is
+> the command:
 >
 > ```
-> git log --oneline v2.9.2..main    # NOT empty — 47+ commits pending as of this writing
+> git fetch origin main --tags
+> git log --oneline "$(git describe --tags --abbrev=0 origin/main)..origin/main"
 > ```
 >
-> The v2 design-adoption releases continue this same `v2.x.0` tag sequence
-> (R1 → `v2.10.0`, R2 → `v2.11.0`, …) per `docs/v2/release-plan.md` — cut them
-> the normal way when the owner is ready to ship.
+> Empty → `main` is released. Non-empty → those commits ship with the next tag,
+> so read them before cutting one; a release is never only the change you just
+> made unless that output says so.
 
-The earlier **HTTP 403 on tag refs** from a container agent proxy no
-longer reproduces — tags push normally. If it returns, the symptom is that
-branch pushes succeed and only tag refs are rejected, and `release.yml` has no
-`workflow_dispatch`, so the tag must be pushed from a machine with direct git
-access.
+**Pushing a tag ref can fail with HTTP 403** from the container agent proxy.
+The symptom is specific: branch pushes succeed and only tag refs are rejected
+(`RPC failed; HTTP 403`, then `send-pack: unexpected disconnect`). It has come
+and gone — do not trust a note claiming it is fixed, including this one.
+
+When it hits, release through `release.yml`'s `workflow_dispatch` instead of
+pushing the tag (added in PR #197 for this exact case):
+
+```
+gh workflow run release.yml --ref main -f version=vX.Y.Z
+```
+
+The dispatch validates the version's shape and that it is unused, waits for the
+same green-CI-for-this-SHA gate, and its Publish step creates the tag at the
+commit it deployed — so the end state is indistinguishable from a tag push. Do
+not hand-create the tag afterwards. Used for v3.12.1 and v3.12.2.
 
 **The tag is the deploy** — `release.yml` holds the Cloudflare credentials and
 runs end to end: full suite → D1 migrations → Worker deploy → smoke test →
