@@ -1,7 +1,7 @@
 /**
  * R3 PR-1 — structural-seam checks for the wallet restyle
  * (docs/roadmap/design-adoption/.flow/r3-pr1-wallet-transactions-accounts/flow-plan.md, step 9 /
- * criterion 29 / docs/roadmap/design-adoption/foundation/04-e2e-and-migration.md §3).
+ * criterion 29 / docs/archive/design-adoption/04-e2e-and-migration.md §3).
  *
  * This spec asserts only that the new CSS class hooks exist on the right
  * elements — never copy text or computed money values. Those are already

@@ -152,10 +152,13 @@ in `src/`, a migration — not against another document.
 
 ## Rules
 
-1. **An item is not a spec.** When one grows past roughly a page, it graduates:
-   the spec goes to `docs/roadmap/`, the item shrinks to a link, status becomes
-   `Scheduled`.
-2. **Never file into `CLAUDE.md`.** It points at the backlog; it doesn't carry it.
-3. **Never delete an item.** Mark it `Dropped` and keep the reason.
-4. **Filing is not scheduling.** Adding something to the backlog is not a
+1. **An item is not a design.** When the thinking outgrows a page, put it in the
+   epic's `design.md` — or `FEAT-NNN-design.md` for a single item — and shrink
+   the item to a link. The item tracks *whether*; the design tracks *how*.
+2. **Design docs are scaffolding.** Once the work ships, `e2e/NN-*.spec.ts`
+   describes the behaviour and CI enforces it, so the design doc goes to
+   `docs/archive/`. Only rationale and traps survive into `docs/reference/`.
+3. **Never file into `CLAUDE.md`.** It points at the backlog; it doesn't carry it.
+4. **Never delete an item.** Mark it `Dropped` and keep the reason.
+5. **Filing is not scheduling.** Adding something to the backlog is not a
    commitment to build it, and shouldn't be described to the user as one.

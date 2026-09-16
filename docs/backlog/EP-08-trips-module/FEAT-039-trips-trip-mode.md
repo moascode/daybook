@@ -6,6 +6,6 @@
 
 **Why now.** Removes the need to tag every entry manually while travelling, which is exactly when nobody will.
 
-**Spec.** [trips/03-feature-waves.md](../../roadmap/design-adoption/trips/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R14, unstarted

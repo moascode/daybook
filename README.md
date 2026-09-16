@@ -120,8 +120,8 @@ docs/                see docs/README.md
 | Rules Claude Code works under | [`CLAUDE.md`](CLAUDE.md) |
 | Docs index | [`docs/README.md`](docs/README.md) |
 | Deploy, release, rollback | [`docs/guides/ci-cd.md`](docs/guides/ci-cd.md) |
-| What's planned | [`docs/roadmap/design-adoption/README.md`](docs/roadmap/design-adoption/README.md) |
-| Features, bugs, ideas | [`docs/backlog/README.md`](docs/backlog/README.md) |
+| What's planned | [`docs/backlog/README.md`](docs/backlog/README.md) |
+| Deploy, release, rollback | [`docs/guides/ci-cd.md`](docs/guides/ci-cd.md) |
 | How it got here | [`docs/archive/project-history.md`](docs/archive/project-history.md) |
 
 ---

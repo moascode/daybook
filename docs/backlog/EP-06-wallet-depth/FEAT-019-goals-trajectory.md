@@ -6,6 +6,6 @@
 
 **Why now.** A goal with a target date and no honest projection is decoration.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R9, unstarted

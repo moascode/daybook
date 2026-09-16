@@ -23,7 +23,7 @@ const LOAD_FAILED = 'Could not load your capture inbox.'
 
 /**
  * The capture inbox — every transaction a machine wrote, waiting to be
- * accepted (docs/roadmap/design-adoption/wallet/feature-capture-inbox.md §4, §5).
+ * accepted (docs/archive/design-adoption/feature-capture-inbox.md §4, §5).
  *
  * Reuses `CsvReviewTable` rather than growing a second review UI, which is the
  * whole point of decision D-F: the AI buttons, the duplicate hints, the inline

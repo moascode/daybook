@@ -4,7 +4,7 @@
 #   bash scripts/flow-checks.sh              # everything except e2e
 #   bash scripts/flow-checks.sh e2e/03-*.ts  # plus the targeted specs you name
 #
-# Why this exists: docs/roadmap/design-adoption/execution-playbook.md §4 promised
+# Why this exists: docs/archive/design-adoption/execution-playbook.md §4 promised
 # it and never delivered, so these gates were run from memory, inconsistently,
 # and usually incompletely. Every check below is already an npm script — the
 # only thing that was missing was running them as a set.
@@ -43,7 +43,11 @@ printf '── theme tokens are generated\n'
 if npm run gen:tokens >/dev/null 2>&1 && git diff --exit-code --quiet src/index.css; then
   printf '   ✓ theme tokens are generated\n'; pass=$((pass + 1))
 else
-  printf '   ✗ theme tokens are generated — src/index.css was hand-edited\n'
+  printf '   ✗ theme tokens are generated — src/index.css does not match the generator\n'
+  printf '     Run: npm run gen:tokens && git add src/index.css\n'
+  printf '     (This compares the regenerated file against what is STAGED, which is\n'
+  printf '      what CI sees. A path rewritten in the generator but not in its output\n'
+  printf '      has now caused this twice.)\n'
   fail=$((fail + 1)); failed+=("theme tokens")
 fi
 

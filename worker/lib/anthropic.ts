@@ -23,7 +23,7 @@ export interface ComposerParseResult {
   date?: string // YYYY-MM-DD, only if the text implies a specific date — omit for "today"/unspecified
 }
 
-// docs/roadmap/design-adoption/wallet/feature-photo-import.md (P2, approved 2026-09-06).
+// docs/archive/design-adoption/feature-photo-import.md (P2, approved 2026-09-06).
 export type PhotoImportKind = 'receipt' | 'statement'
 
 export interface PhotoImportRow {

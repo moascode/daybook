@@ -51,4 +51,4 @@ playwright-report-shard-*/
 # Claude Code agent worktree checkouts (ephemeral, harness-managed)
 .claude/worktrees/
 d1-export/
-docs/roadmap/design-adoption/.flow/
+docs/archive/design-adoption/.flow/

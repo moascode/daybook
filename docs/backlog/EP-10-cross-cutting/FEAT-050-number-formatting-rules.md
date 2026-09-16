@@ -6,6 +6,6 @@
 
 **Why now.** Money figures currently format inconsistently between cards and charts. D-9 is still open.
 
-**Spec.** [cross-cutting/README.md](../../roadmap/design-adoption/cross-cutting/README.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — but resolve D-9 first

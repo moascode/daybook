@@ -20,7 +20,7 @@ function isoDatePlus(days: number): string {
 
 /**
  * Today — the Tasks module's landing page (R5 PR-1,
- * docs/roadmap/design-adoption/tasks/02-design-adoption.md §Today). Band (done-today progress +
+ * docs/archive/design-adoption/tasks-design-adoption.md §Today). Band (done-today progress +
  * overdue/assigned/finished-this-week + a 7-day load strip), a minimal
  * interim composer, the Overdue/Today/Done-today grouped list, and an
  * "Up next" right rail.

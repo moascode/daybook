@@ -6,6 +6,6 @@
 
 **Why now.** A timeline without times is an ordered list. Schema change — additive.
 
-**Spec.** [day/03-feature-waves.md](../../roadmap/design-adoption/day/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R15, the foundation for EP-09

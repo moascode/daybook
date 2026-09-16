@@ -6,6 +6,6 @@
 
 **Why now.** The feature the Day module exists for; everything else in R15 is scaffolding for it.
 
-**Spec.** [day/03-feature-waves.md](../../roadmap/design-adoption/day/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R16, the payoff

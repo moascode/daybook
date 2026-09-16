@@ -126,11 +126,11 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             </div>
 
             {/* Dynamic "Show on the timeline" toggle group (R6,
-                docs/roadmap/design-adoption/day/02-design-adoption.md §Sidebar) — checkboxes, not
+                docs/archive/design-adoption/day-design-adoption.md §Sidebar) — checkboxes, not
                 links, so they can't be plain ModuleNavItems; state lives in
                 day.store.ts since ModuleSidebar and DayPage are siblings.
                 Sits between the primary destinations group and Review, per
-                docs/roadmap/design-adoption/foundation/03-app-shell.md's IA — hence injected
+                docs/archive/design-adoption/03-app-shell.md's IA — hence injected
                 right after group 0 rather than appended at the end. */}
             {isDayModule && i === 0 && (
               <div className="nav-group">
@@ -191,7 +191,7 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
           </Fragment>
         ))}
 
-        {/* Dynamic per-user "Lists" group (docs/roadmap/design-adoption/tasks/02-design-adoption.md
+        {/* Dynamic per-user "Lists" group (docs/archive/design-adoption/tasks-design-adoption.md
             §Sidebar) — one item per task_lists row plus a fixed trailing
             "Unsorted" bucket so orphaned (list_id NULL) tasks always have a
             home. Injected here, not in modules.ts, which stays static/pure. */}

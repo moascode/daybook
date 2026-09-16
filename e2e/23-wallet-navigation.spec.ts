@@ -7,7 +7,7 @@ import { newAppPage, navTo, navItem } from './helpers'
  * module-scoped sidebar: visiting /wallet* shows only Wallet's own nav, with
  * no cross-module expand/collapse control (that mechanism no longer exists —
  * the app bar's module tabs answer "which module", the sidebar only answers
- * "where inside it"). See docs/roadmap/design-adoption/foundation/03-app-shell.md §4.
+ * "where inside it"). See docs/archive/design-adoption/03-app-shell.md §4.
  */
 test.describe('wallet module sidebar navigation', () => {
   test('the Wallet module sidebar shows the grouped nav with no group label on the first set', async ({

@@ -29,7 +29,7 @@ function formatDue(dateStr: string): string {
 
 /**
  * One task row for the All tasks page (R5 PR-2,
- * docs/roadmap/design-adoption/tasks/02-design-adoption.md §All tasks). Unlike `TaskRow.tsx`
+ * docs/archive/design-adoption/tasks-design-adoption.md §All tasks). Unlike `TaskRow.tsx`
  * (Today's grouping-aware row, which assumes overdue/today/done-today
  * context and has no list chip/subtask progress), this row is due-date
  * agnostic and always shows the task's list colour chip and subtask

@@ -2,9 +2,10 @@
 
 # Backlog
 
-Everything wanted but not yet scheduled: features, bugs, and ideas still being
-thought about. Work that *is* scheduled lives in [../roadmap/](../roadmap/);
-work that shipped lives in [../archive/](../archive/).
+Everything wanted but not yet built: features, bugs, and ideas still being
+thought about — together with the design thinking behind them. Work that
+shipped lives in [../archive/](../archive/); once something ships, its e2e spec
+and its code describe it better than any document here could.
 
 **One folder per epic, and the folder owns its items.**
 
@@ -185,7 +186,7 @@ rejects a mismatch, so the two can't disagree silently.
 |---|---|
 | `Open` | Wanted, not started |
 | `Needs decision` | Blocked on an owner call — the question is stated in the item |
-| `Scheduled` | Promoted into a `roadmap/` release; the item links to it |
+| `Scheduled` | Committed to and in flight; the item links to the branch or PR |
 | `Shipped` | Done. Item links to the PR or tag |
 | `Dropped` | Deliberately not doing it. **The reason stays in the file** — a dropped item that keeps getting re-proposed is a sign the reason was never written down |
 
@@ -195,9 +196,15 @@ file, allocates the next ID, and adds the row here. Filing by hand works too —
 just do all three parts, because an item file with no index row is invisible and
 an item with no epic never gets reviewed.
 
-**An item is not a spec.** When one grows past roughly a page, it graduates: a
-spec goes in `roadmap/`, and the item shrinks to a link. The backlog tracks
-*whether* to do something; the roadmap tracks *how*.
+**An item is not a design.** When the thinking outgrows a page, it moves into
+the epic's `design.md` (or `FEAT-NNN-design.md` for one item), and the item
+shrinks to a link. The item tracks *whether*; the design tracks *how*.
+
+**Design docs die when the work ships.** Once a feature is live, its behaviour
+is described by `e2e/NN-*.spec.ts` — which CI enforces and which therefore
+cannot rot — and by the code. The design doc goes to `archive/`. Only what code
+and tests *cannot* say survives into [`../reference/`](../reference/): why a
+decision went the way it did, and traps that aren't visible in a diff.
 
 ---
 
@@ -221,11 +228,12 @@ than the conversion:
 The bugs are lifted from `CLAUDE.md` §8's open-risks list so they live somewhere
 they can be worked, rather than in a status section that gets skimmed.
 
-**EP-06 to EP-10 are the design-adoption roadmap**, converted the same way.
-`docs/roadmap/design-adoption/` keeps the specs — it is the *how* — and these
-epics track the *whether*. They are grouped by module rather than by release
-number on purpose: "do we still want Trips?" is a question worth asking, and
-"do we still want R13?" is not.
+**EP-06 to EP-10 are the old design-adoption roadmap**, converted the same way
+and grouped by module rather than release number: "do we still want Trips?" is a
+question worth asking, and "do we still want R13?" is not. Each of those epics
+carries the module's design doc in its own folder, so an epic can be judged
+without leaving it. `docs/roadmap/` no longer exists — what described shipped
+work moved to `archive/`, and what tracked forward work is this file.
 
 Two of them carry a real open question rather than an estimate.
 [EP-08 (Trips)](EP-08-trips-module/README.md) is the largest unbuilt body of work

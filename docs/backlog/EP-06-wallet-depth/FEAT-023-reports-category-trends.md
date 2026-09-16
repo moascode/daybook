@@ -6,6 +6,6 @@
 
 **Why now.** Category totals hide direction; two categories with the same total can be moving opposite ways.
 
-**Spec.** [wallet/03-feature-waves.md](../../roadmap/design-adoption/wallet/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R9, unstarted

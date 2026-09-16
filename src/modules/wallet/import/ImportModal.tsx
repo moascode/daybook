@@ -55,7 +55,7 @@ interface ImportModalProps {
 
 /**
  * Unified import entry point — CSV and photo (P2 in
- * docs/roadmap/design-adoption/cross-cutting/ai-usage.md, approved 2026-09-06). Photo extraction
+ * docs/reference/ai-usage.md, approved 2026-09-06). Photo extraction
  * (`extractPhotoBatch` in `src/lib/photo-import.ts`) calls
  * `POST /transactions/import-photo`, one photo per call — see that route
  * and `worker/lib/anthropic.ts`'s `parsePhotoImportWithAI` for the real

@@ -3,7 +3,7 @@ import { computeImportHash, checkDuplicates } from '@/lib/csv'
 import type { ImportRow } from '@/lib/csv'
 import type { Category } from '@/types/wallet.types'
 
-// docs/roadmap/design-adoption/wallet/feature-photo-import.md (P2, approved 2026-09-06). One
+// docs/archive/design-adoption/feature-photo-import.md (P2, approved 2026-09-06). One
 // photo per call, deliberately client-side fan-out (§3.1) — a batch of N
 // photos is N independent POSTs to /transactions/import-photo run with
 // Promise.allSettled, never one request carrying N images.

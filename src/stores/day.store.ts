@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 /**
  * "Show on the timeline" toggles for the Day module (R6,
- * docs/roadmap/design-adoption/day/02-design-adoption.md §Sidebar). Lives here rather than as
+ * docs/archive/design-adoption/day-design-adoption.md §Sidebar). Lives here rather than as
  * DayPage-local state because ModuleSidebar renders the checkboxes and
  * DayPage renders the filtered timeline, and the two are siblings under
  * AppShell, not parent/child. Page-session UI state only — no server

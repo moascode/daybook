@@ -6,6 +6,6 @@
 
 **Why now.** Capture at the point of attention. Reuses the R7 Wallet composer.
 
-**Spec.** [day/03-feature-waves.md](../../roadmap/design-adoption/day/03-feature-waves.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Yes — R15, unstarted

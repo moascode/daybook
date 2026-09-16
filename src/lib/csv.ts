@@ -410,7 +410,7 @@ export interface DuplicateCheckResult {
 }
 
 /**
- * Three-layer duplicate check (docs/roadmap/design-adoption/wallet/duplicate-detection.md):
+ * Three-layer duplicate check (docs/archive/design-adoption/duplicate-detection.md):
  * exact import_hash, exact canonical duplicate_key (closes the CSV-vs-photo
  * merchant-text gap), and — for anything neither catches — a dismissible
  * "possible duplicate" hint for same-date/same-amount rows with a different
