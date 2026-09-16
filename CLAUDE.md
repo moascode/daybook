@@ -473,10 +473,10 @@ File new ones with the `intake` skill.
 
 | | |
 |---|---|
-| [BUG-001](docs/backlog/items/BUG-001-no-rate-limiting.md) | No rate limiting on the public URL — the oldest open risk on a live money app |
-| [BUG-002](docs/backlog/items/BUG-002-impossible-calendar-dates.md) | ISO validation accepts Feb 30 / Apr 31 |
-| [BUG-003](docs/backlog/items/BUG-003-day-header-split-totals.md) | Day headers may double-count splits (§3 trap) |
-| [BUG-004](docs/backlog/items/BUG-004-e2e-account-residue.md) | `e2e_*` account residue on the retired Mac |
+| [BUG-001](docs/backlog/EP-05-production-hardening/BUG-001-no-rate-limiting.md) | No rate limiting on the public URL — the oldest open risk on a live money app |
+| [BUG-002](docs/backlog/EP-04-money-figure-correctness/BUG-002-impossible-calendar-dates.md) | ISO validation accepts Feb 30 / Apr 31 |
+| [BUG-003](docs/backlog/EP-04-money-figure-correctness/BUG-003-day-header-split-totals.md) | Day headers may double-count splits (§3 trap) |
+| [BUG-004](docs/backlog/EP-05-production-hardening/BUG-004-e2e-account-residue.md) | `e2e_*` account residue on the retired Mac |
 
 Not a bug, and not to be "fixed": `manifest.json`'s `background_color` cannot
 follow the theme. The launch *image* does, since v3 P5. See
@@ -484,12 +484,12 @@ follow the theme. The launch *image* does, since v3 P5. See
 
 ### Next, in rough order of value
 
-1. **Rate limiting** for the public URL ([BUG-001](docs/backlog/items/BUG-001-no-rate-limiting.md)).
+1. **Rate limiting** for the public URL ([BUG-001](docs/backlog/EP-05-production-hardening/BUG-001-no-rate-limiting.md)).
 2. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
 3. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
-   [EP-03](docs/backlog/epics/EP-03-consistency-remainder.md) — but read its table first: most of that plan already shipped. §4.4 the per-claim timeline (every timestamp
+   [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) — but read its table first: most of that plan already shipped. §4.4 the per-claim timeline (every timestamp
    already exists).
 4. **Needs owner sign-off:** each remaining [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) AI item (the list shrank — four
    features already ship); D-5 auto-approve as a per-group "we trust each other"

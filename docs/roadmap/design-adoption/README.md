@@ -73,16 +73,16 @@ fully released since `v3.12.2` (2026-09-13).
 | R6 | **v3.0.0** | Trips + Day — routes, nav, designed first-run states | ✅ merged [PR 147](https://github.com/moascode/daybook/pull/147)–[148](https://github.com/moascode/daybook/pull/148) (2 PRs) — deployed in `v3.0.0` |
 | R7 | v3.1.0 | Wallet W1 — composer, Overview insight cards | ✅ merged [PR 150](https://github.com/moascode/daybook/pull/150)–[151](https://github.com/moascode/daybook/pull/151), plus design-parity follow-ups [152](https://github.com/moascode/daybook/pull/152), [154](https://github.com/moascode/daybook/pull/154) (4 PRs) — deployed |
 | R18 | **v3.6.0** | Machine capture — token auth, capture endpoint, pending inbox | ✅ deployed in `v3.6.0` — [spec](wallet/feature-capture-inbox.md); PRs [181](https://github.com/moascode/daybook/pull/181)→[182](https://github.com/moascode/daybook/pull/182)→[183](https://github.com/moascode/daybook/pull/183)→[184](https://github.com/moascode/daybook/pull/184) (stacked). Live-client follow-ups since: `v3.6.1` idempotency key as a body field, `v3.12.2` currency-formatted amounts ([PR 198](https://github.com/moascode/daybook/pull/198)) — both found by running the real iOS Shortcut |
-| R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — · tracked as [EP-06](../../backlog/epics/EP-06-wallet-depth.md)
-| R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — · tracked as [EP-06](../../backlog/epics/EP-06-wallet-depth.md)
-| R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — · tracked as [EP-07](../../backlog/epics/EP-07-tasks-depth.md)
-| R11 | v3.5.0 | Tasks T2 — Habits, Completed analytics, Worth knowing | — · tracked as [EP-07](../../backlog/epics/EP-07-tasks-depth.md)
-| R12 | v3.6.0 | Trips P1 — trips, trip page, burn-down, `trip_id` thread | — · tracked as [EP-08](../../backlog/epics/EP-08-trips-module.md)
-| R13 | v3.7.0 | Trips P2 — itinerary, prep, bookings, wishlist, packing | — · tracked as [EP-08](../../backlog/epics/EP-08-trips-module.md)
-| R14 | v3.8.0 | Trips P3 — trip mode, multi-currency | — · tracked as [EP-08](../../backlog/epics/EP-08-trips-module.md)
-| R15 | v3.9.0 | Day D1 — timeline, hour ribbon, day figures | — · tracked as [EP-09](../../backlog/epics/EP-09-day-module.md)
-| R16 | v3.10.0 | Day D2 — Close the day, usual, on-this-day, month grid | — · tracked as [EP-09](../../backlog/epics/EP-09-day-module.md)
-| R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states · remainder tracked as [EP-10](../../backlog/epics/EP-10-cross-cutting.md) | 🔨 partial — §1 search, §2 quick add, §3 notifications shipped in `v3.12.0` ([PR 194](https://github.com/moascode/daybook/pull/194)), outside the playbook at the owner's direct request. ⌘K, states, density, D-9 and §7's two risks remain |
+| R8 | v3.2.0 | Wallet W2 — Accounts depth, Budgets suggestions | — · tracked as [EP-06](../../backlog/EP-06-wallet-depth/README.md)
+| R9 | v3.3.0 | Wallet W3 — Goals, Recurring, Reports, Shared depth | — · tracked as [EP-06](../../backlog/EP-06-wallet-depth/README.md)
+| R10 | v3.4.0 | Tasks T1 — Upcoming board, Assigned to me, recurrence | — · tracked as [EP-07](../../backlog/EP-07-tasks-depth/README.md)
+| R11 | v3.5.0 | Tasks T2 — Habits, Completed analytics, Worth knowing | — · tracked as [EP-07](../../backlog/EP-07-tasks-depth/README.md)
+| R12 | v3.6.0 | Trips P1 — trips, trip page, burn-down, `trip_id` thread | — · tracked as [EP-08](../../backlog/EP-08-trips-module/README.md)
+| R13 | v3.7.0 | Trips P2 — itinerary, prep, bookings, wishlist, packing | — · tracked as [EP-08](../../backlog/EP-08-trips-module/README.md)
+| R14 | v3.8.0 | Trips P3 — trip mode, multi-currency | — · tracked as [EP-08](../../backlog/EP-08-trips-module/README.md)
+| R15 | v3.9.0 | Day D1 — timeline, hour ribbon, day figures | — · tracked as [EP-09](../../backlog/EP-09-day-module/README.md)
+| R16 | v3.10.0 | Day D2 — Close the day, usual, on-this-day, month grid | — · tracked as [EP-09](../../backlog/EP-09-day-module/README.md)
+| R17 | **v4.0.0** | Cross-cutting — search results, ⌘K, notifications, states · remainder tracked as [EP-10](../../backlog/EP-10-cross-cutting/README.md) | 🔨 partial — §1 search, §2 quick add, §3 notifications shipped in `v3.12.0` ([PR 194](https://github.com/moascode/daybook/pull/194)), outside the playbook at the owner's direct request. ⌘K, states, density, D-9 and §7's two risks remain |
 
 > ⚠️ **The Tag column below R7 is stale.** `v3.2.0`–`v3.5.0` are already real
 > tags cut against other work (latest: `v3.5.0`, 2026-09-07), so R8's "v3.2.0"
