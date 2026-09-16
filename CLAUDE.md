@@ -488,14 +488,22 @@ follow the theme. The launch *image* does, since v3 P5. See
 2. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-3. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
-   [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) — but read its table first: most of that plan already shipped. §4.4 the per-claim timeline (every timestamp
-   already exists).
-4. **Needs owner sign-off:** each remaining [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) AI item (the list shrank — four
+3. **Ready to build, no sign-off needed:** [EP-02](docs/backlog/EP-02-wallet-ux-remainder/README.md)
+   (mobile/a11y leftovers — more relevant now the app is an installed PWA),
+   [EP-04](docs/backlog/EP-04-money-figure-correctness/README.md) (two money-figure bugs),
+   and [EP-06](docs/backlog/EP-06-wallet-depth/README.md) (Wallet depth — all reads
+   over existing rows, no schema). The old deferred F1–F3 waves **already shipped**;
+   [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) carries the evidence.
+4. **Needs a product decision, not an estimate:**
+   [EP-01](docs/backlog/EP-01-business-module/README.md) (business module — build,
+   shrink to invoicing, or drop), [EP-08](docs/backlog/EP-08-trips-module/README.md)
+   (Trips — try trips-as-a-tag first), [EP-09](docs/backlog/EP-09-day-module/README.md)
+   (Day — would you actually close your day in the app?).
+5. **Needs owner sign-off:** each remaining [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) AI item (the list shrank — four
    features already ship); D-5 auto-approve as a per-group "we trust each other"
    setting; the parked D-items/C9 in `docs/archive/phase-5c-wallet-ux.md` §D.
 
-> **The PWA quality track (`docs/v3/` P1–P5) is DONE**, and the day-header audit
+> **The PWA quality track (P1–P5, now `docs/archive/pwa/`) is DONE**, and the day-header audit
 > with it — both sat in this list as "next" long after shipping. P1 install
 > quality, P2 offline, P3 code-splitting (1,251 kB → 390 kB entry), P4 push
 > notifications and P5 themed splash screens shipped as `v3.7.0`–`v3.11.0`;
@@ -524,6 +532,12 @@ follow the theme. The launch *image* does, since v3 P5. See
 - D1 migrations are additive-only; rename via `ALTER TABLE … RENAME TO` is
   lossless and allowed with owner sign-off. Applied in lexicographic order.
 - e2e uses a fresh DB per context; CI shards across 8 jobs.
-- Pre-existing lint: 38 warnings (react-hooks, test-only shims).
+- Pre-existing lint: 35 warnings (react-hooks, test-only shims).
+- **Docs were restructured 2026-09-16** (PRs #201–#206): `docs/{guides,reference,backlog,archive}`,
+  no `roadmap/`. Every doc has a `Status` header; links and backlog consistency
+  are CI-gated. One gate for everything: `bash scripts/flow-checks.sh`.
+- **Never `gh pr merge --delete-branch` on a stacked PR.** Deleting the base
+  branch closes every PR targeting it (it closed #202). Retarget children to
+  `main` first; delete branches only after the whole stack is merged.
 
 ---
