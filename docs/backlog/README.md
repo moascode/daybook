@@ -68,11 +68,11 @@ this backlog exists to answer.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-006](EP-02-wallet-ux-remainder/FEAT-006-responsive-grids.md) | Feature | Responsive grid breakpoints (B7) | Yes — it is a phone app now |
-| [FEAT-007](EP-02-wallet-ux-remainder/FEAT-007-touch-targets.md) | Feature | 40px minimum touch targets (B11) | Yes — same reason |
-| [FEAT-008](EP-02-wallet-ux-remainder/FEAT-008-recurring-card-badges.md) | Feature | Type and category badges on recurring cards (B10) | Probably — small |
-| [FEAT-009](EP-02-wallet-ux-remainder/FEAT-009-error-toast-coverage.md) | Feature | Finish error-toast coverage (C3) | Yes — it is rule 10 |
-| [FEAT-010](EP-02-wallet-ux-remainder/FEAT-010-dead-code-sweep.md) | Feature | Finish the dead-code sweep (C6) | Low value; verify it is not already done, else drop |
+| [FEAT-006](EP-02-wallet-ux-remainder/FEAT-006-responsive-grids.md) | Feature | Responsive grid breakpoints (B7) | **Dropped** — superseded by `layout.css`'s grid system |
+| [FEAT-007](EP-02-wallet-ux-remainder/FEAT-007-touch-targets.md) | Feature | 40px minimum touch targets (B11) | Yes — scoped, effort M ([plan](EP-02-wallet-ux-remainder/design.md)) |
+| [FEAT-008](EP-02-wallet-ux-remainder/FEAT-008-recurring-card-badges.md) | Feature | Type and category badges on recurring cards (B10) | **Shipped** — already done |
+| [FEAT-009](EP-02-wallet-ux-remainder/FEAT-009-error-toast-coverage.md) | Feature | Finish error-toast coverage (C3) | Yes — scoped, effort M ([plan](EP-02-wallet-ux-remainder/design.md)) |
+| [FEAT-010](EP-02-wallet-ux-remainder/FEAT-010-dead-code-sweep.md) | Feature | Finish the dead-code sweep (C6) | Yes — scoped, effort S ([plan](EP-02-wallet-ux-remainder/design.md)) |
 
 ### [EP-03](EP-03-consistency-remainder/README.md) — Consistency remainder
 
