@@ -69,9 +69,36 @@
 
 ## 3. Architecture Overview
 
-> **CURRENT (as shipped, v1.0+).** Phase 4 landed as a **local Node + SQLite
-> backend on home hardware**, not Supabase (Supabase/Vercel remain the *Phase 6*
-> cloud plan). The browser no longer stores data; it calls the server over `/api`.
+> **CURRENT — Cloudflare Workers + D1.** This is what serves
+> <https://daybook.moascode.workers.dev> and has since Phase 6 (v2). Anything
+> below describing Express, `better-sqlite3` or the Mac is history, not
+> architecture: `server/` still exists in the repo but is a **schema reference
+> only** (`scripts/schema-diff.mjs` gates CI against it) and receives no feature
+> work.
+
+```
+Browser (React 18 + Vite)                    Cloudflare Worker (Hono)
+├── React Router (client routes)      ──►    ├── /api/* routes (worker/routes/*.ts)
+├── Zustand stores (in-memory UI state)      ├── PBKDF2 + D1-backed sessions
+└── src/lib/api.ts (fetch, cookie)    ◄──    ├── outbound Claude calls (worker/lib/anthropic.ts)
+                                             └── D1 (SQLite at the edge)
+                                                 (worker/migrations/, per-user rows)
+```
+
+- **Persistence:** Cloudflare D1. Migrations live in `worker/migrations/`, applied
+  by `release.yml` **before** each deploy.
+- **Auth:** PBKDF2-HMAC-SHA256 via Web Crypto + D1-backed sessions behind an
+  HMAC-signed cookie — **not JWTs**, so logout is instant (§15).
+- **Static assets** are served by Cloudflare's asset pipeline without invoking
+  the Worker; `run_worker_first = ["/api/*"]` means only API paths run code.
+- **AI: live, and the Worker makes real Anthropic calls.** Four features ship
+  today (`worker/lib/anthropic.ts`): AI bulk categorisation, merchant-name
+  resolution, the composer's free-text parse, and photo-statement import. Each
+  has its own per-user hourly `ai_rate_limit_*` bucket. The key is per user in
+  `settings`, read server-side only and masked on read. See §9.3 — and do not
+  rebuild this plumbing, it exists.
+
+<details><summary>Phase 4 home-network server (historical — retired as a deployment target 2026-07-29)</summary>
 
 ```
 Browser (React 18 + Vite)                    Home-network server (Node + Express)
@@ -81,9 +108,9 @@ Browser (React 18 + Vite)                    Home-network server (Node + Express
                                                  (file-based migrations, per-user rows)
 ```
 
-- **Persistence:** one SQLite file owned by the server (`DAYBOOK_HOME/shared/data/daybook.db`).
-- **Auth:** session cookie + bcrypt; every query scoped by `user_id`.
-- **AI:** not wired up yet — see §9.3 (Phase 5a, deferred). No Anthropic calls happen today.
+Phase 4 landed as a local Node + SQLite backend on home hardware, not Supabase.
+The Mac still runs as the rollback of last resort, but nothing deploys to it.
+</details>
 
 <details><summary>Original Phase 0–3 plan (historical — superseded)</summary>
 
@@ -211,21 +238,26 @@ function before any public deploy.
 > browser calls over `/api`. `bcrypt` and `express-session` land in the auth
 > stage. See `docs/v1/COMPLETED/phase-4-plan.md`.
 
-#### Backend (Phase 6 — Cloudflare Workers + D1) — **in progress**
+#### Backend (Phase 6 — Cloudflare Workers + D1) — ✅ **live; this is production**
 | Package | Version | Purpose |
 |---|---|---|
 | `hono` | ^4.12 | Workers-native router; replaces `express` in the Worker |
 | `wrangler` | ^4.114 | Cloudflare CLI — build, local dev, D1 migrations, deploy (dev) |
 | `@cloudflare/workers-types` | ^5 | Workers runtime type definitions (dev) |
 
-> Approved per `docs/v1/option-2-workers-d1-plan.md` §7 and installed in Phase 1.
-> **Both backends coexist during the migration** — `server/` (Express + SQLite)
-> keeps serving production untouched until Phase 7's cutover, and `worker/` is
-> built alongside it. Nothing is removed before Phase 7.
+> Approved per `docs/v1/option-2-workers-d1-plan.md` §7. **The cutover happened**
+> — the Worker serves production and `server/` serves nothing. Both trees are
+> still in the repo, but that is deliberate and permanent, not a migration in
+> flight: `scripts/schema-diff.mjs` gates CI on D1 matching `server/migrations/`,
+> so `server/` is the schema reference. It gets no feature work.
 >
 > No new dependency for password hashing: PBKDF2 comes from the Workers runtime's
-> Web Crypto. Phase 7 removes `express`, `express-session`, `better-sqlite3`,
-> `bcrypt`, `tsx` and their `@types/*`.
+> Web Crypto.
+>
+> **`express`, `express-session`, `better-sqlite3`, `bcrypt` and `tsx` are NOT
+> being removed.** An earlier note here promised Phase 7 would delete them; that
+> is not happening while `server/` is the schema reference CI depends on. Do not
+> "finish the cutover" by uninstalling them — you would break `schema-diff`.
 >
 > **`compatibility_date` in `wrangler.toml` must not exceed the bundled
 > `workerd` version's date** (check `node_modules/workerd/package.json`) — a
@@ -377,7 +409,7 @@ server/
 > `DAYBOOK_HOME` env var). Dev fallback: `server/data/daybook.db`. e2e tests:
 > `DAYBOOK_DB_PATH=server/data/e2e.db`.
 
-### Phase 6 Worker (`worker/`) — in progress, coexists with `server/`
+### Worker (`worker/`) — **this is production**; `server/` is the schema reference
 ```
 wrangler.toml                        ← Worker entry, D1 binding, [assets] SPA config
 worker/
@@ -385,22 +417,39 @@ worker/
 ├── types.ts                         ← Env bindings (DB: D1Database, ASSETS: Fetcher) + AppEnv
 ├── tsconfig.json                    ← Worker typecheck config (@cloudflare/workers-types)
 ├── lib.ts                           ← async port of server/lib.ts (+ ownedIdSet, newId)
-├── lib/sharing.ts                   ← async port of server/lib/sharing.ts (+ writableAccountIds)
 ├── seed.ts                          ← async port of server/seed.ts (db.transaction → batch)
 ├── crypto.ts                        ← PBKDF2 via Web Crypto; self-describing hash format
 ├── session.ts                       ← D1-backed sessions + HMAC-signed cookie (not JWTs)
 ├── migrations/                      ← D1 migrations, ported from server/migrations/ (see its README)
+├── lib/
+│   ├── anthropic.ts                 ← ALL four Claude calls + the DAYBOOK_TEST mock branch (§9.3)
+│   ├── sharing.ts                   ← async port of server/lib/sharing.ts (+ writableAccountIds)
+│   ├── capture-token.ts             ← capture-token hashing, scopes, rate-limit constants
+│   ├── insert-transaction.ts        ← shared transaction-insert path
+│   ├── merchant.ts                  ← canonicalisation + buildDuplicateKey
+│   ├── merchant-map.ts              ← builtin cold-start merchant→category map
+│   ├── notifications.ts             ← the six digests, shared by the bell and push
+│   ├── rate-limit.ts                ← overRateLimit(), used by every metered route
+│   └── webpush.ts                   ← VAPID signing + push delivery (v3 P4)
 └── routes/
-    ├── health.ts                    ← GET /api/health (Phase 1 proof of life)
-    ├── auth.ts                      ← signup/login/logout/me + requireAuth middleware
+    ├── health.ts                    ← GET /api/health (public)
+    ├── auth.ts                      ← signup/login/logout/me/change-password + requireAuth
     ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
     ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
     ├── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
-    └── wallet.ts                    ← COMPLETE: /accounts, /accounts/:id/shares,
-                                        /categories, /tags, /transactions (list,
-                                        export, import, CRUD, link-transfer,
-                                        splits), /budgets, /recurring-*, /goals
+    ├── search.ts                    ← GET /api/search — transactions, tasks, accounts (R17 §1)
+    ├── notifications.ts             ← /api/notifications/* + push subscriptions (R17 §3, P4)
+    ├── capture.ts                   ← /api/capture/* — BEARER TOKEN ONLY, never the cookie (R18)
+    ├── capture-tokens.ts            ← /api/capture-tokens — mint/revoke, cookie-auth (R18)
+    ├── captures.ts                  ← /api/captures — the pending inbox, cookie-auth (R18)
+    ├── test.ts                      ← /api/test/* — only when DAYBOOK_TEST=1
+    └── wallet.ts                    ← /accounts, /accounts/:id/shares, /categories,
+                                        /tags, /transactions (list, export, import,
+                                        CRUD, link-transfer, splits), /budgets,
+                                        /recurring-*, /goals, /merchants/*, and the
+                                        AI routes (suggest-categories-ai, composer
+                                        parse, photo import)
 
 scripts/
 ├── schema-diff.mjs                  ← D1 schema vs server/migrations; CI-gated, exits non-zero on drift
@@ -441,9 +490,10 @@ scripts/
 > with `VACUUM INTO`** before reading, so they cannot disturb a running server or
 > produce a torn read from an active WAL. Never point them at the live file any
 > other way.
-> Route modules are ported from `server/routes/` one phase at a time — auth in
-> Phase 3, the rest in Phase 4. `server/` stays authoritative and untouched until
-> the Phase 7 cutover, so both trees are live in the repo meanwhile.
+> The port is finished — every route above is live on the Worker, and several
+> (`search`, `notifications`, `capture*`) have no `server/` counterpart at all
+> because they were built after the cutover. `server/` is the schema reference
+> only; never add a route there.
 >
 > Static assets are served by Cloudflare's asset pipeline without invoking the
 > Worker; `run_worker_first = ["/api/*"]` means only API paths run code. Single
@@ -982,8 +1032,9 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 > cash-flow chart, pie, account chart and merchant list used raw `t.amount`, so a
 > split RM100 expense read RM50 in a tile and RM100 in the chart directly beneath
 > it (fixed across the dashboard in PR #106, which routed everything through one
-> pure module). `TransactionList.tsx` day headers are **still unaudited** for
-> this — see §13.
+> pure module). `TransactionList.tsx` day headers were audited afterwards and now
+> use `countableAmount` too, matching the summary row above the list; the
+> per-row figure still shows the ledger amount deliberately.
 
 #### Transactions
 - Add transaction: date (default today), merchant, description, amount, type (income/expense/transfer), category, tags (multiple, free-text)
@@ -1024,23 +1075,37 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 
 ### 9.3 Claude AI Layer
 
-> 🟡 **STATUS: MOSTLY NOT IMPLEMENTED — two slices shipped (PR #112, R4).**
-> **What exists:** the API-key infrastructure below, plus two Claude features —
-> the "Ask AI" fallback in the bulk edit dialog, which categorises only the
-> merchants the rule-based pass missed
-> (`docs/v1/ai-bulk-categorize-feature.md`, `worker/lib/anthropic.ts`,
-> `POST /api/transactions/suggest-categories-ai`); and AI-assisted merchant
-> name resolution for CSV import and bulk cleanup (docs/v1/flow-plan.md, §6's
-> `merchant_corrections` table, `resolveMerchantsWithAI`,
-> `POST /api/merchants/resolve`).
-> **What does not exist:** everything else here — no Claude panel, daily
-> briefing, natural-language task/transaction entry, CSV auto-categorisation
-> beyond the two slices above, or model routing beyond the Haiku calls both
-> slices already make. `src/components/claude/*`, `src/hooks/useClaude.ts`,
-> `src/lib/claude.ts` and `src/lib/claude-prompts.ts` still do **not exist**;
-> neither shipped feature needed them. Treat the rest of this subsection as
-> design intent, not current behaviour, and get owner sign-off per rule 10
+> 🟢 **STATUS: FOUR FEATURES SHIP.** Do not read this subsection as "AI is
+> deferred" — that was true until 2026-08-08 and has been wrong since. The
+> authoritative list is the exported functions in `worker/lib/anthropic.ts`;
+> check it before believing any prose here, including this block.
+>
+> **What exists**, each with its own per-user hourly rate-limit bucket so one
+> feature exhausting its budget never starves another:
+>
+> | Feature | Function | Bucket |
+> |---|---|---|
+> | "Ask AI" fallback in the bulk edit dialog — only the merchants the rule pass missed (`docs/v1/ai-bulk-categorize-feature.md`) | `suggestCategoriesWithAI` | `ai_rate_limit_suggest_categories` |
+> | Merchant-name resolution for CSV import + bulk cleanup (`docs/v1/flow-plan.md`, §6's `merchant_corrections`) | `resolveMerchantsWithAI` | `ai_rate_limit_merchant` |
+> | **Composer free-text parse** — one natural-language entry → a transaction draft (R7) | `parseComposerWithAI` | `ai_rate_limit_composer` |
+> | **Photo-statement import** (v3.3.0–v3.5.0) | `parsePhotoImportWithAI` | `ai_rate_limit_photo_import` |
+>
+> Plus the API-key infrastructure below. **Any new AI work reuses all of this —
+> do not rebuild it.**
+>
+> **What does not exist:** the Claude panel, the daily briefing, natural-language
+> *task* creation, "ask about tasks/finances", financial insights, prompt
+> caching, and Sonnet-tier model routing (every shipped call is Haiku).
+> `src/components/claude/*`, `src/hooks/useClaude.ts`, `src/lib/claude.ts` and
+> `src/lib/claude-prompts.ts` still do **not exist** — no shipped feature needed
+> them; each Worker route owns its own prompt. Treat the rest of this subsection
+> as design intent, not current behaviour, and get owner sign-off per rule 10
 > before building any more of it.
+>
+> **Natural-language *transaction* entry is NOT on the missing list** — it
+> shipped as the composer parse above. This block claimed otherwise until
+> 2026-09-16 while the code was live, which is exactly the trap this header now
+> warns about.
 
 #### API setup
 > **Shipped in PR #112, with one deviation.** There is no `ApiKeySetup`
@@ -1396,9 +1461,9 @@ git push origin vX.Y.Z
 | Phase | State |
 |---|---|
 | 0–4 (scaffold → home network) | ✅ shipped, v1.0 |
-| 5a (AI) | 🟡 partially started — two slices shipped (PR #112; R4 merchant resolution). See §9.3 and §14. |
+| 5a (AI) | 🟢 four features ship — bulk categorisation, merchant resolution, composer parse, photo import. See §9.3 for the authoritative list and what is still missing. |
 | 5b (sharing), 5c (wallet UX) | ✅ shipped, v1.0.1 |
-| 6 (Workers + D1) | ✅ COMPLETE — 455/455 specs green against the Worker |
+| 6 (Workers + D1) | ✅ COMPLETE — production has run on the Worker since v2; the full suite is green in CI, sharded across 8 jobs |
 | 7 (advanced) | ongoing; recurring rules, budgets, goals already shipped |
 
 ### Blockers
@@ -1415,35 +1480,35 @@ git push origin vX.Y.Z
    `transactionInputError` and `isoDateError` pass them; only an out-of-range
    *month* is caught. Present in **both** backends. Pre-existing, not introduced
    by the Workers port.
-3. **`TransactionList.tsx` day-header totals are unaudited.** PR #106 fixed the
-   same class of bug (splits counted at gross instead of the effective figure)
-   across the whole dashboard but did not touch the transaction list. Check
-   whether the day headers double-count splits.
-4. **PWA splash is white for dark-theme users** — `manifest.json`
-   `background_color` cannot follow the theme (see §18).
-5. **273 `e2e_*` accounts** still pollute the retired Mac's production DB. Not
+3. **PWA splash is white for dark-theme users** — `manifest.json`
+   `background_color` cannot follow the theme (see §18). Narrowed by v3 P5: the
+   *launch image* now follows the theme via `apple-touch-startup-image`; only
+   the manifest colour cannot.
+4. **273 `e2e_*` accounts** still pollute the retired Mac's production DB. Not
    migrated to D1 (only kakon/tumpa were), so this is Mac-local cleanup.
 
 ### Next, in rough order of value
 
 1. **Rate limiting** for the public URL (risk 1).
-2. **Audit the day-header totals** (risk 3) — small, and the bug class is known
-   to be real.
-3. **Watch the netting paths with real use.** Every new column defaults to 0 and
+2. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-4. **PWA quality track — `docs/v3/`.** P1–P5: install quality, a service
-   worker whose offline fallback actually works (it currently cannot — see
-   `docs/v3/audit.md` §2), code-splitting the 1.25 MB single bundle, push
-   notifications, and themed splash screens. P5 alone needs sign-off; the rest
-   are ready to build. This is the cheaper alternative to a native iOS app,
-   which was deferred 2026-09-07 pending real capture-failure numbers.
-5. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
+3. **Ready-to-build backlog, no sign-off needed:** waves F1–F3 in
    `docs/v1/deferred-items-plan.md`; §4.4 the per-claim timeline (every timestamp
    already exists).
-6. **Needs owner sign-off:** each remaining §9.3 AI item; D-5 auto-approve as a
-   per-group "we trust each other" setting; the parked D-items/C9 in
-   `docs/v1/phase-5c-wallet-ux.md` §D.
+4. **Needs owner sign-off:** each remaining §9.3 AI item (the list shrank — four
+   features already ship); D-5 auto-approve as a per-group "we trust each other"
+   setting; the parked D-items/C9 in `docs/v1/phase-5c-wallet-ux.md` §D.
+
+> **The PWA quality track (`docs/v3/` P1–P5) is DONE**, and the day-header audit
+> with it — both sat in this list as "next" long after shipping. P1 install
+> quality, P2 offline, P3 code-splitting (1,251 kB → 390 kB entry), P4 push
+> notifications and P5 themed splash screens shipped as `v3.7.0`–`v3.11.0`;
+> `docs/v3/README.md`'s own board marks all five merged. P4 still **needs its
+> two secrets set** (`docs/v3/push-setup.md`) before it does anything.
+>
+> A "next" list is the same decaying assertion §13's release block warns about.
+> Before trusting a row here, check whether it already shipped.
 
 ### Standing notes
 
@@ -1494,7 +1559,7 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
 | 2 | Tasks Module | Dev | Full Workflowy-style bullet tree | ✅ v1.0 |
 | 3 | Wallet Module | Dev | Accounts + transactions + CSV + dashboard | ✅ v1.0 |
 | 4 | Home Network + Multi-User | Architecture | Node backend, SQLite file, auth, per-user data | ✅ v1.0 |
-| 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🟡 Partially started |
+| 5a | AI Features | AI | Claude integration, NL input, briefing, insights | 🟢 Four features ship (§9.3); panel/briefing/insights still deferred |
 | 5b | Household Sharing | Feature | Groups, shared accounts, transaction splits, settlement | ✅ v1.0.1 |
 | 5c | Wallet UX Improvements | UX/Features | Free-text search, accessibility, mobile fixes, polish | ✅ v1.0.1 |
 | 6 | Cloud Migration | Cloud | Cloudflare Workers + D1 + PBKDF2 auth (**not** Supabase/Vercel — see `docs/v1/option-2-workers-d1-plan.md`) | ✅ v2 |
@@ -1510,12 +1575,16 @@ Phase 7  →  ★ v3+   Advanced features, ongoing
   import and bulk cleanup, reusing that same foundation — a new
   `merchant_corrections` cache table, its own rate-limit bucket, and
   `resolveMerchantsWithAI` alongside the existing `suggestCategoriesWithAI`.
+  Two more followed on the same foundation: the **composer's free-text parse**
+  (`parseComposerWithAI`, R7 — this *is* natural-language transaction entry) and
+  **photo-statement import** (`parsePhotoImportWithAI`, v3.3.0–v3.5.0). Four in
+  total; §9.3's table is the authoritative list.
   **Any later 5a item reuses that foundation — do not rebuild it.** What is
-  still deferred is everything else in §9.3: the Claude panel, daily briefing,
-  natural-language task/transaction entry, CSV auto-categorisation beyond the
-  two shipped slices, prompt caching, and the `ApiKeySetup` first-run screen
-  (Settings now covers the key). Each remaining item still needs its own owner
-  sign-off under rule 10.
+  still deferred: the Claude panel, daily briefing, natural-language *task*
+  creation, ask-about-tasks/finances, financial insights, prompt caching,
+  Sonnet-tier routing, and the `ApiKeySetup` first-run screen (Settings now
+  covers the key). Each remaining item still needs its own owner sign-off under
+  rule 10.
 - **Phase 5b (Sharing)** shipped v1.0.1 — household groups, shared accounts, splits, settlements
 - **Phase 5c (Wallet UX)** shipped v1.0.1 — all 5 wave PRs (#29–#33) merged, see docs/v1/phase-5c-implementation-plan.md
 
