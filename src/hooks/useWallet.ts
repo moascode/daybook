@@ -527,22 +527,10 @@ export function useWallet() {
     useWalletStore.getState().removeBudget(id)
   }, [])
 
-  /** Returns spending per category for the given month (YYYY-MM), computed from in-memory transactions. */
-  const getMonthlySpending = useCallback((monthYear: string): Map<string, number> => {
-    const { transactions } = useWalletStore.getState()
-    const map = new Map<string, number>()
-    for (const t of transactions) {
-      if (t.type !== 'expense' || !t.categoryId) continue
-      if (!t.date.startsWith(monthYear)) continue
-      map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + countableAmount(t))
-    }
-    return map
-  }, [])
-
   // B-15 residual: server-computed spending per category for the given month
   // (YYYY-MM), using each transaction's EFFECTIVE amount (the caller's own
-  // share_amount when split, else the full amount) instead of the raw amount
-  // `getMonthlySpending` above would double-count for a split expense.
+  // share_amount when split, else the full amount) instead of the raw amount,
+  // which would double-count for a split expense.
   const getBudgetSpending = useCallback(async (month: string): Promise<Map<string, number>> => {
     const rows = await api.get<{ categoryId: string; spent: number }[]>(
       `/budgets/spending?month=${encodeURIComponent(month)}`,
@@ -736,7 +724,6 @@ export function useWallet() {
     addBudget,
     updateBudget,
     deleteBudget,
-    getMonthlySpending,
     getBudgetSpending,
 
     // Recurring CRUD
