@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** — · **Severity:** high
+> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-05](../epics/EP-05-production-hardening.md) · **Severity:** high
 
 # BUG-001 — No rate limiting on the public URL
 
@@ -23,3 +23,5 @@ rules, or the Workers Rate Limiting binding) — likely a `wrangler.toml` change
 plus a middleware in `worker/index.ts`, not application logic.
 
 **Out of scope.** Per-user quotas for normal use. This is abuse protection.
+
+**Still needed?** **Yes** — highest severity in the backlog

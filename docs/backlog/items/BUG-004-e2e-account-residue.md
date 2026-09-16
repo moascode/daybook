@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** — · **Severity:** low
+> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-05](../epics/EP-05-production-hardening.md) · **Severity:** low
 
 # BUG-004 — 273 `e2e_*` accounts pollute the retired Mac's database
 
@@ -19,3 +19,5 @@ resort.
 **Consider `Dropped`.** If the Mac is never going to be used as a rollback in
 practice, this is cleanup on a machine nobody reads, and closing it is more
 honest than carrying it.
+
+**Still needed?** Consider dropping — the live D1 database is clean

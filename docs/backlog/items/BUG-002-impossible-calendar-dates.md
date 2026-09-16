@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** — · **Severity:** medium
+> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-04](../epics/EP-04-money-figure-correctness.md) · **Severity:** medium
 
 # BUG-002 — ISO date validation accepts impossible calendar dates
 
@@ -21,3 +21,5 @@ round-trip: parse, then re-format, and reject if the result differs from the
 input.
 
 **Out of scope.** Any other validation rework.
+
+**Still needed?** **Yes** — silently relocates a transaction

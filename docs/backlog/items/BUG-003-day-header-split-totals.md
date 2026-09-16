@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** — · **Severity:** medium
+> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-04](../epics/EP-04-money-figure-correctness.md) · **Severity:** medium
 
 # BUG-003 — Transaction-list day headers may double-count splits
 
@@ -26,3 +26,5 @@ aggregation. The fix, if confirmed, is to route through `countableAmount` like
 the dashboard now does.
 
 **Out of scope.** Re-auditing the dashboard — PR #106 covered it.
+
+**Still needed?** **Yes** — first step is confirming it is real

@@ -13,3 +13,5 @@ partial delete the user did not ask for.
 `ConfirmDeleteModal` rather than an undo toast (CLAUDE.md coding conventions).
 
 **Notes.** Verified 2026-09-16: only `DELETE /transactions/:id` exists.
+
+**Still needed?** Yes

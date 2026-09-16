@@ -15,3 +15,5 @@ explicitly not installed and needs approval.
 **Notes.** Verified 2026-09-16 as unbuilt. Also remove `getFilteredSummary`
 (`src/hooks/useWallet.ts`), which the same wave marked dead and which is still
 exported.
+
+**Still needed?** Yes

@@ -12,3 +12,5 @@ a money app mean mis-taps on destructive controls.
 
 **Notes.** Verified 2026-09-16: no minimum enforced anywhere. Check against the
 design system's own spacing scale rather than hardcoding 40px in components.
+
+**Still needed?** Yes — same reason

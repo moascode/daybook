@@ -15,3 +15,5 @@ but `SplitDialog` also gained the ability to load and edit existing splits,
 which may be a genuinely different job from splitting a fresh selection. Confirm
 the single-transaction case is fully covered before deleting anything — this is
 a refactor with a money-shaped blast radius and no user-visible upside.
+
+**Still needed?** Question it — it may be earning its place

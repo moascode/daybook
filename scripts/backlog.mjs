@@ -69,6 +69,16 @@ function check() {
 
   for (const [id, file] of filed) {
     if (!indexed.has(id)) problems.push(`${id} has a file (${file}) but no row in ${INDEX}`)
+    // Every item belongs to an epic. An item with no epic has nowhere its
+    // continued relevance gets reviewed, which is the question the backlog
+    // exists to answer — so "no epic" is a tracking gap, not a shortcut.
+    if (id.startsWith('EP-')) continue
+    const head = readFileSync(file, 'utf8').split('\n').slice(0, 3).join('\n')
+    const epic = head.match(/\*\*Epic:\*\*\s*(.+?)\s*(?:·|$)/m)
+    if (!epic) problems.push(`${id} (${file}) has no "**Epic:**" field in its status header`)
+    else if (!/EP-\d{2}/.test(epic[1])) {
+      problems.push(`${id} (${file}) has no epic — every item must belong to one. Create an epic or file it under an existing EP-NN.`)
+    }
   }
   for (const id of indexed) {
     if (!filed.has(id) && !/\barchive\b/.test(index)) continue
