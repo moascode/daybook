@@ -14,10 +14,21 @@ invisible; an index row with no file is a dead link; an item with no epic never
 gets the "is this still needed?" question asked of it. `npm run check:backlog`
 gates all three, so a half-filed item fails the build rather than quietly rotting.
 
-**There are no standalone items.** If nothing fits, create an epic first — a
-two-item epic is fine, and it gives the work somewhere to be reviewed. When you
-create one, say in its file what decision it is waiting on, or that it is
-waiting on none.
+**There are no standalone items** — there is nowhere to put one. The layout is
+one folder per epic:
+
+```
+docs/backlog/EP-NN-slug/
+├── README.md                 the epic
+├── FEAT-NNN-slug.md          its items
+└── BUG-NNN-slug.md
+```
+
+The folder is the membership, and the item's `**Epic:**` header must agree with
+the folder it sits in — `check:backlog` rejects a mismatch. If nothing fits,
+create the epic folder first; a two-item epic is fine, and it gives the work
+somewhere to be reviewed. Say in its `README.md` what decision it waits on, or
+that it waits on none.
 
 ---
 
@@ -34,11 +45,11 @@ you can answer these yourself:
 3. **What triggers the need?** A real situation they hit, not a hypothetical
 4. **What's explicitly out of scope?** The single most useful line in any item file
 
-Then: **pick the epic first** (or create one), allocate an ID, write
-`items/FEAT-NNN-slug.md`, and add the index row under that epic's section.
+Then: **pick the epic folder first** (or create one), allocate an ID, write
+`EP-NN-slug/FEAT-NNN-slug.md`, and add the index row under that epic's section.
 
-If the request is clearly bigger than one PR, it *is* an epic —
-`epics/EP-NN-slug.md` — with its items underneath it.
+If the request is clearly bigger than one PR, it *is* an epic — a new
+`EP-NN-slug/` folder whose `README.md` is the epic — with its items inside it.
 
 ### `bug` — something that's broken
 
@@ -88,7 +99,7 @@ reissued to something unrelated.
 ### Item template
 
 ```markdown
-> **Status:** Open · **Filed:** YYYY-MM-DD · **Epic:** [EP-NN](../epics/EP-NN-slug.md)
+> **Status:** Open · **Filed:** YYYY-MM-DD · **Epic:** [EP-NN](README.md)
 
 # FEAT-NNN — Short title
 
@@ -102,7 +113,9 @@ reissued to something unrelated.
 reads when reviewing — "Yes", "Question it — <why>", or "Consider dropping — <why>".
 ```
 
-The **Epic** field must contain a real `EP-NN` link. The check rejects `—`.
+The **Epic** field must name the folder the file sits in. `README.md` resolves
+to that epic from inside its own folder. The check rejects a missing epic and a
+mismatched one.
 
 Bugs swap `What` / `Why now` for **Expected** / **Actual** / **Repro**.
 
@@ -111,7 +124,7 @@ Bugs swap `What` / `Why now` for **Expected** / **Actual** / **Repro**.
 Add to the right table in `docs/backlog/README.md`:
 
 ```markdown
-| [FEAT-051](items/FEAT-051-slug.md) | Feature | Short title | Yes — one clause on why |
+| [FEAT-051](EP-NN-slug/FEAT-051-slug.md) | Feature | Short title | Yes — one clause on why |
 ```
 
 ---
