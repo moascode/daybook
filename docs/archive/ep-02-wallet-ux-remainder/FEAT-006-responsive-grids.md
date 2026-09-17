@@ -1,4 +1,6 @@
-> **Status:** Dropped · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18
+
+Dropped 2026-09-16, archived 2026-09-18 with the rest of [EP-02](README.md).
 
 # FEAT-006 — Responsive grid breakpoints (B7)
 

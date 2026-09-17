@@ -1,4 +1,8 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18
+
+**Shipped** in [PR #209](https://github.com/moascode/daybook/pull/209) — a
+`size="icon"` Button variant plus ~20 migrated call sites and
+`e2e/21-mobile-responsive.spec.ts`. Full trail in [design.md](design.md).
 
 # FEAT-007 — 40px minimum touch targets (B11)
 
