@@ -488,12 +488,13 @@ follow the theme. The launch *image* does, since v3 P5. See
 2. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-3. **Ready to build, no sign-off needed:** [EP-02](docs/backlog/EP-02-wallet-ux-remainder/README.md)
-   (mobile/a11y leftovers — more relevant now the app is an installed PWA),
+3. **Ready to build, no sign-off needed:**
    [EP-04](docs/backlog/EP-04-money-figure-correctness/README.md) (two money-figure bugs),
    and [EP-06](docs/backlog/EP-06-wallet-depth/README.md) (Wallet depth — all reads
    over existing rows, no schema). The old deferred F1–F3 waves **already shipped**;
    [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) carries the evidence.
+   EP-02 (Wallet UX remainder) **shipped 2026-09-18** — PRs #209–#211, see
+   [`docs/archive/ep-02-wallet-ux-remainder/`](docs/archive/ep-02-wallet-ux-remainder/README.md).
 4. **Needs a product decision, not an estimate:**
    [EP-01](docs/backlog/EP-01-business-module/README.md) (business module — build,
    shrink to invoicing, or drop), [EP-08](docs/backlog/EP-08-trips-module/README.md)

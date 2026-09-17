@@ -38,7 +38,6 @@ every item under it still needed?* Both are answered in the epic's own file.
 | ID | Epic | Items | Status |
 |---|---|---|---|
 | [EP-01](EP-01-business-module/README.md) | Business module | 5 | **Needs decision** |
-| [EP-02](EP-02-wallet-ux-remainder/README.md) | Wallet UX remainder | 5 | Open |
 | [EP-03](EP-03-consistency-remainder/README.md) | Consistency remainder | 4 | Open |
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
@@ -63,16 +62,6 @@ this backlog exists to answer.
 | [FEAT-003](EP-01-business-module/FEAT-003-customers-products.md) | Feature | Customers and products CRUD | Only if EP-01 proceeds |
 | [FEAT-004](EP-01-business-module/FEAT-004-purchases-sales.md) | Feature | Purchases and sales ledgers | ⚠️ Question first — overlaps Wallet transactions |
 | [FEAT-005](EP-01-business-module/FEAT-005-business-dashboard.md) | Feature | Business summary dashboard | ⚠️ Question first — overlaps the Wallet dashboard |
-
-### [EP-02](EP-02-wallet-ux-remainder/README.md) — Wallet UX remainder
-
-| ID | Type | Title | Still needed? |
-|---|---|---|---|
-| [FEAT-006](EP-02-wallet-ux-remainder/FEAT-006-responsive-grids.md) | Feature | Responsive grid breakpoints (B7) | **Dropped** — superseded by `layout.css`'s grid system |
-| [FEAT-007](EP-02-wallet-ux-remainder/FEAT-007-touch-targets.md) | Feature | 40px minimum touch targets (B11) | Yes — scoped, effort M ([plan](EP-02-wallet-ux-remainder/design.md)) |
-| [FEAT-008](EP-02-wallet-ux-remainder/FEAT-008-recurring-card-badges.md) | Feature | Type and category badges on recurring cards (B10) | **Shipped** — already done |
-| [FEAT-009](EP-02-wallet-ux-remainder/FEAT-009-error-toast-coverage.md) | Feature | Finish error-toast coverage (C3) | Yes — scoped, effort M ([plan](EP-02-wallet-ux-remainder/design.md)) |
-| [FEAT-010](EP-02-wallet-ux-remainder/FEAT-010-dead-code-sweep.md) | Feature | Finish the dead-code sweep (C6) | Yes — scoped, effort S ([plan](EP-02-wallet-ux-remainder/design.md)) |
 
 ### [EP-03](EP-03-consistency-remainder/README.md) — Consistency remainder
 
@@ -221,9 +210,9 @@ than the conversion:
   nobody re-derives it.
 - **`business-module-plan.md` (604 lines) was never started** and is the one
   genuine open question — it needs a product decision, not an estimate.
-- **`phase-5c-wallet-ux.md`'s five leftovers are more relevant now than when
-  they were deferred**, because three of them are mobile and accessibility work
-  on an app that has since become an installed PWA.
+- **`phase-5c-wallet-ux.md`'s five leftovers became EP-02**, and shipped or were
+  dropped the same week (2026-09-18) — see
+  [`docs/archive/ep-02-wallet-ux-remainder/`](../archive/ep-02-wallet-ux-remainder/README.md).
 
 The bugs are lifted from `CLAUDE.md` §8's open-risks list so they live somewhere
 they can be worked, rather than in a status section that gets skimmed.

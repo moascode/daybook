@@ -27,6 +27,7 @@ only partly built, the unbuilt remainder is tracked in
 | [phase-6-online-plan.md](phase-6-online-plan.md), [option-2-workers-d1-plan.md](option-2-workers-d1-plan.md), [option-2-spike-findings.md](option-2-spike-findings.md) | The Workers + D1 migration | v2 |
 | [pwa/](pwa/) | P1–P5: install quality, offline shell, code-splitting, push, themed splash | all five verified shipped |
 | [design-adoption/](design-adoption/) | R1–R7 and R18: the token layer, the app shell, and design adoption across Wallet, Tasks, Trips and Day | see [its index](design-adoption/README.md) |
+| [phase-5c-wallet-ux.md](phase-5c-wallet-ux.md), [phase-5c-implementation-plan.md](phase-5c-implementation-plan.md) | The full Phase 5c list — B1–B12, C1–C13 | the last five (B7, B10, B11, C3, C6) shipped as EP-02, see [ep-02-wallet-ux-remainder/](ep-02-wallet-ux-remainder/README.md) |
 
 > **`shared-review-implementation-plan.md` says "not merged".** It shipped. The
 > line is a point-in-time status that was never updated — exactly the drift the
@@ -40,8 +41,6 @@ only partly built, the unbuilt remainder is tracked in
 
 | Doc | Built | Not built |
 |---|---|---|
-| [phase-5c-wallet-ux.md](phase-5c-wallet-ux.md) | B1–B6, B8, B9, B12, C1, C2, C4, C5, C10, C13 | B7 responsive grids · B10 recurring-card badges · B11 ≥40px touch targets · C3 error toasts (partial) · C6 dead-code cleanup (partial) |
-| [phase-5c-implementation-plan.md](phase-5c-implementation-plan.md) | Waves 1, 3, 4, 5 | Wave 2 remainder (B7, B11) |
 | [deferred-items-plan.md](deferred-items-plan.md) | CD-05⁺, U-16, CD-20 | Waves F1–F3, §4.4 per-claim timeline |
 | [feature-consistency-plan.md](feature-consistency-plan.md) | — | 8 waves, never started |
 

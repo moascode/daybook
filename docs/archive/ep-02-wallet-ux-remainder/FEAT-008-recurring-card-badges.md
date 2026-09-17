@@ -1,4 +1,4 @@
-> **Status:** Shipped · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18
 
 # FEAT-008 — Type and category badges on recurring cards (B10)
 

@@ -1,6 +1,14 @@
-> **Status:** Plan · **Last verified:** 2026-09-16
+> **Status:** Archived · **Last verified:** 2026-09-18
 
-# EP-02 — implementation plan
+# EP-02 — implementation plan (archive)
+
+**All five items shipped or were dropped as of 2026-09-18** — FEAT-007 in
+[PR #209](https://github.com/moascode/daybook/pull/209), FEAT-009 in
+[PR #210](https://github.com/moascode/daybook/pull/210), FEAT-010 in
+[PR #211](https://github.com/moascode/daybook/pull/211); FEAT-006 was dropped
+and FEAT-008 was already done before this epic was filed (see
+[README.md](README.md)). The plan below is kept as the record of what was
+verified, decided, and estimated — not as an active plan.
 
 Every item below was re-verified against current code on 2026-09-16 (the
 2026-07 source notes had drifted — see each item file's own header). Two of

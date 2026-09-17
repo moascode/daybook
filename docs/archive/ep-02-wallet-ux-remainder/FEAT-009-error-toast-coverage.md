@@ -1,4 +1,10 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18
+
+**Shipped** in [PR #210](https://github.com/moascode/daybook/pull/210) —
+`addToast` on 8 previously-silent catches plus `e2e/32-wallet-error-toasts.spec.ts`.
+Independent review caught a real money-correctness bug in `BulkSplitDialog`
+before it went up (stale transaction data could stay Save-able after a failed
+reload) — fixed in the same PR. Full trail in [design.md](design.md).
 
 # FEAT-009 — Finish error-toast coverage (C3)
 

@@ -1,4 +1,9 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-02](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18
+
+**Shipped** in [PR #211](https://github.com/moascode/daybook/pull/211) — removed
+`getMonthlySpending`, the `useSplits` hook, and `claimsInState` (the last one a
+bonus finding, same file, not in the original scope). Full trail in
+[design.md](design.md).
 
 # FEAT-010 — Finish the dead-code sweep (C6)
 
