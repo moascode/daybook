@@ -138,8 +138,7 @@ export function AccountCard({
             {!account.isShared && onShare && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+                size="icon"
                 onClick={() => onShare(account)}
                 aria-label="Manage sharing"
                 title="Manage sharing"
@@ -149,8 +148,7 @@ export function AccountCard({
             )}
             <Button
               variant="ghost"
-              size="sm"
-              className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+              size="icon"
               onClick={() => onEdit(account)}
               aria-label="Edit account"
             >
@@ -160,8 +158,7 @@ export function AccountCard({
             {!account.isShared && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="min-h-[40px] min-w-[40px] md:min-h-0 md:min-w-0"
+                size="icon"
                 onClick={() => onDelete(account)}
                 aria-label="Delete account"
               >

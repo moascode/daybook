@@ -154,19 +154,24 @@ export function CategoryManager({
           />
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-fg-muted">Color</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {COLOR_SWATCHES.map((color) => (
                 <button
                   key={color}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, color }))}
-                  className={cn(
-                    'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
-                    form.color === color ? 'border-fg scale-110' : 'border-transparent',
-                  )}
-                  style={{ backgroundColor: color }}
+                  className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-6 md:w-6"
                   aria-label={color}
-                />
+                >
+                  <span
+                    className={cn(
+                      'h-6 w-6 rounded-full border-2 transition-transform group-hover:scale-110',
+                      form.color === color ? 'border-fg scale-110' : 'border-transparent',
+                    )}
+                    style={{ backgroundColor: color }}
+                    aria-hidden="true"
+                  />
+                </button>
               ))}
             </div>
           </div>

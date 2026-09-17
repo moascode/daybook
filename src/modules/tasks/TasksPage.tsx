@@ -495,17 +495,22 @@ export function TasksPage() {
       <div className="mb-3 flex items-center justify-between gap-3">
         {/* Breadcrumb */}
         <div className="flex min-w-0 items-center gap-0.5 text-sm">
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setRootId(null)}
-            className={`flex shrink-0 items-center justify-center h-7 w-7 rounded-md transition-colors ${
+            className={cn(
+              'rounded-md md:h-7 md:w-7',
               rootId === null
                 ? 'text-fg bg-surface-hover'
-                : 'text-fg-faint hover:text-fg-muted hover:bg-surface-hover'
-            }`}
+                : 'text-fg-faint hover:text-fg-muted hover:bg-surface-hover',
+            )}
             title="All tasks"
+            aria-label="All tasks"
           >
             <Home className="h-3.5 w-3.5" />
-          </button>
+          </Button>
 
           {breadcrumb.map((task) => (
             <span key={task.id} className="flex min-w-0 items-center gap-0.5">

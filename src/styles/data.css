@@ -40,7 +40,11 @@
 .card:has(> .tlist) { overflow: visible; }
 .trow {
   display: grid; align-items: center; gap: var(--s3);
-  grid-template-columns: 1fr 132px 128px 112px 32px;
+  /* Last track fits .trow-actions' button, which is 34px here (>=768px,
+     where the button's own md: override kicks in) — 36px for a hair of
+     breathing room, since a track narrower than its grid item's content
+     doesn't grow the track, it just lets the item overflow it. */
+  grid-template-columns: 1fr 132px 128px 112px 36px;
   padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
   border-radius: var(--r-md); border-top: 1px solid rgb(var(--line-subtle));
   transition: background .1s var(--ease);
@@ -161,7 +165,9 @@ td:last-child, th:last-child { padding-right: 0; }
 .pamt { margin-left: auto; font-size: var(--t-base); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 860px) {
-  .trow { grid-template-columns: 1fr 112px 104px 32px; }
+  /* 40px here, not 36px like the base rule — below 768px .trow-actions'
+     button is 40px (its mobile size, before the md: override shrinks it). */
+  .trow { grid-template-columns: 1fr 112px 104px 40px; }
   .trow .col-hide-md { display: none; }
 }
 
@@ -261,7 +267,9 @@ td:last-child, th:last-child { padding-right: 0; }
 }
 
 .tgroup-head {
-  display: grid; grid-template-columns: 1fr 132px 128px 112px 32px;
+  /* Tracks mirror .trow's exactly so the total column lines up above the
+     rows' amount column — keep both in sync. */
+  display: grid; grid-template-columns: 1fr 132px 128px 112px 36px;
   gap: var(--s3); align-items: baseline;
   padding: var(--s5) var(--s2) var(--s2); margin: 0 calc(var(--s2) * -1);
   font-size: var(--t-xs); color: rgb(var(--fg-subtle)); font-weight: 550;
@@ -273,7 +281,7 @@ td:last-child, th:last-child { padding-right: 0; }
 .tgroup-head .tg-total { grid-column: 4; text-align: right; font-variant-numeric: tabular-nums; }
 .tgroup-head .tg-total b { display: block; color: rgb(var(--fg-muted)); font-weight: 600; font-size: var(--t-sm); }
 @media (max-width: 860px) {
-  .tgroup-head { grid-template-columns: 1fr 112px 104px 32px; }
+  .tgroup-head { grid-template-columns: 1fr 112px 104px 40px; }
   .tgroup-head .tg-total { grid-column: 3; }
 }
 

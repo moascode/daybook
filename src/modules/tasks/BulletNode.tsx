@@ -239,11 +239,14 @@ export function BulletNode({
           )}
         >
           {/* Note indicator or toggle */}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
             className={cn(
-              'flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded transition-colors',
+              'rounded',
               showNote || task.note.length > 0
-                ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50'
+                ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50 active:bg-amber-100'
                 : 'text-fg-faint hover:text-fg-subtle hover:bg-surface-hover',
             )}
             onClick={handleToggleNote}
@@ -252,18 +255,21 @@ export function BulletNode({
             tabIndex={-1}
           >
             <StickyNote className="h-3.5 w-3.5" />
-          </button>
+          </Button>
 
           {/* Options dropdown */}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button
-                className="flex h-10 w-10 md:h-6 md:w-6 items-center justify-center rounded text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted"
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
                 aria-label="Task options"
                 tabIndex={-1}
               >
                 <MoreHorizontal className="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </DropdownMenu.Trigger>
 
             <DropdownMenu.Portal>
