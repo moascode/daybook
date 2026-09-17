@@ -322,14 +322,14 @@ export function TasksListDetailPage() {
                       <button
                         key={color}
                         type="button"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
+                        className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
                         onClick={() => setColorDraft(color)}
                         aria-label={`Select colour ${color}`}
                         data-testid="list-detail-color-swatch"
                       >
                         <span
                           className={`h-7 w-7 rounded-full border-2 transition-transform ${
-                            colorDraft === color ? 'scale-110 border-fg' : 'border-transparent hover:scale-105'
+                            colorDraft === color ? 'scale-110 border-fg' : 'border-transparent group-hover:scale-105'
                           }`}
                           style={{ backgroundColor: color }}
                           aria-hidden="true"

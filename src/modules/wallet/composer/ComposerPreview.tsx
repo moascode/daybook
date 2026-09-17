@@ -110,15 +110,17 @@ export function ComposerPreview({
         <Button size="sm" variant="secondary" disabled={confirming} onClick={onEdit}>
           Edit
         </Button>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={onCancel}
           disabled={confirming}
           aria-label="Cancel"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-fg-faint hover:bg-surface-hover hover:text-fg-muted disabled:pointer-events-none disabled:opacity-50 md:h-7 md:w-7"
+          className="rounded-full text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:h-7 md:w-7"
         >
           <X className="h-4 w-4" aria-hidden="true" />
-        </button>
+        </Button>
       </div>
     </div>
   )

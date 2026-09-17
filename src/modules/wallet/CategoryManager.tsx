@@ -160,12 +160,12 @@ export function CategoryManager({
                   key={color}
                   type="button"
                   onClick={() => setForm((f) => ({ ...f, color }))}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-6 md:w-6"
+                  className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-6 md:w-6"
                   aria-label={color}
                 >
                   <span
                     className={cn(
-                      'h-6 w-6 rounded-full border-2 transition-transform hover:scale-110',
+                      'h-6 w-6 rounded-full border-2 transition-transform group-hover:scale-110',
                       form.color === color ? 'border-fg scale-110' : 'border-transparent',
                     )}
                     style={{ backgroundColor: color }}

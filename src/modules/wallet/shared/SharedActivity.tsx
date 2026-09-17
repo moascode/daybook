@@ -25,15 +25,17 @@ import type { Account, Category } from '@/types/wallet.types'
 function RowActionIcon({ label, testId, onClick, children }: { label: string; testId?: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <Tooltip label={label}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         aria-label={label}
         data-testid={testId}
         onClick={onClick}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-line-strong hover:text-fg md:h-7 md:w-7"
+        className="rounded-md text-fg-muted hover:bg-line-strong hover:text-fg md:h-7 md:w-7"
       >
         {children}
-      </button>
+      </Button>
     </Tooltip>
   )
 }

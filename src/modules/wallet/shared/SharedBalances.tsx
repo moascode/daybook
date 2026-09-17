@@ -52,19 +52,21 @@ function SettleIconButton({
 }) {
   return (
     <Tooltip label={label}>
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         aria-label={label}
         onClick={onClick}
         className={cn(
-          'flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors md:h-7 md:w-7',
+          'rounded-md md:h-7 md:w-7',
           emphasis === 'filled'
             ? 'bg-brand-500 text-fg-on-accent hover:bg-brand-600'
             : 'text-fg-muted hover:bg-line-strong hover:text-fg',
         )}
       >
         <ArrowRightLeft className="h-3.5 w-3.5" />
-      </button>
+      </Button>
     </Tooltip>
   )
 }

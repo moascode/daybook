@@ -1009,15 +1009,17 @@ export function WalletPage() {
               there's no separate Apply step. */}
           <div className="relative" ref={filterPanelRef}>
             <Tooltip label="Filters">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setFiltersOpen((o) => !o)}
                 onKeyDown={(e) => { if (e.key === 'Escape') setFiltersOpen(false) }}
                 data-testid="filter-toggle"
                 aria-expanded={filtersOpen}
                 aria-label="Filters"
                 className={cn(
-                  'relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md transition-colors md:h-8 md:w-8',
+                  'relative rounded-md md:h-8 md:w-8',
                   filtersOpen || activeFilterCount > 0
                     ? 'bg-brand-50 text-brand-700 hover:bg-brand-100'
                     : 'text-fg-faint hover:bg-surface-hover hover:text-fg-muted',
@@ -1032,7 +1034,7 @@ export function WalletPage() {
                     {activeFilterCount}
                   </span>
                 )}
-              </button>
+              </Button>
             </Tooltip>
             {filtersOpen && (
               // z-20 — comfortably below Modal.tsx's overlay (z-40): if a
@@ -1110,15 +1112,17 @@ export function WalletPage() {
               cue — title covers the rest, matching the other icon-only
               controls in this row. */}
           <Tooltip label={`Sort by date: ${sortDir === 'newest' ? 'Newest first' : 'Oldest first'}`}>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setSortDir((d) => (d === 'newest' ? 'oldest' : 'newest'))}
               data-testid="sort-direction-toggle"
               aria-label={sortDir === 'newest' ? 'Newest first' : 'Oldest first'}
-              className="hide-mobile flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md text-fg-faint transition-colors hover:bg-surface-hover hover:text-fg-muted md:h-8 md:w-8"
+              className="hide-mobile rounded-md text-fg-faint hover:bg-surface-hover hover:text-fg-muted md:h-8 md:w-8"
             >
               <ArrowUpDown className={cn('h-3.5 w-3.5 transition-transform', sortDir === 'oldest' && 'rotate-180')} />
-            </button>
+            </Button>
           </Tooltip>
           </div>
         </div>

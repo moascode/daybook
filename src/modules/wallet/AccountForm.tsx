@@ -229,7 +229,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
               <button
                 key={color}
                 type="button"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
+                className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-full md:h-7 md:w-7"
                 onClick={() => setForm((f) => ({ ...f, color }))}
                 aria-label={`Select color ${color}`}
               >
@@ -237,7 +237,7 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
                   className={`h-7 w-7 rounded-full border-2 transition-transform ${
                     form.color === color
                       ? 'scale-110 border-fg'
-                      : 'border-transparent hover:scale-105'
+                      : 'border-transparent group-hover:scale-105'
                   }`}
                   style={{ backgroundColor: color }}
                   aria-hidden="true"

@@ -246,7 +246,7 @@ export function BulletNode({
             className={cn(
               'rounded',
               showNote || task.note.length > 0
-                ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50'
+                ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-50 active:bg-amber-100'
                 : 'text-fg-faint hover:text-fg-subtle hover:bg-surface-hover',
             )}
             onClick={handleToggleNote}

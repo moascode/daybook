@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/stores/app.store'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/Button'
 
 interface WelcomeCardProps {
   /**
@@ -44,14 +45,16 @@ export function WelcomeCard({ settingKey, icon, title, children, className }: We
         className,
       )}
     >
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onClick={handleDismiss}
         aria-label="Dismiss"
-        className="absolute right-2 top-2 flex h-10 w-10 items-center justify-center rounded-md text-brand-600/70 transition-colors hover:bg-brand-100 hover:text-brand-700 md:h-8 md:w-8"
+        className="absolute right-2 top-2 rounded-md text-brand-600/70 hover:bg-brand-100 hover:text-brand-700 active:bg-brand-200 md:h-8 md:w-8"
       >
         <X className="h-4 w-4" />
-      </button>
+      </Button>
       <div className="flex gap-3">
         <div className="mt-0.5 shrink-0 text-brand-600">{icon}</div>
         <div className="min-w-0">
