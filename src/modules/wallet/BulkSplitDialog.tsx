@@ -95,7 +95,12 @@ export function BulkSplitDialog({
   const [error, setError] = useState<string | null>(null)
   const { addToast } = useToastStore()
 
-  const loadData = useCallback(async () => {
+  // `isCancelled` lets the caller (the open-effect below) invalidate an
+  // in-flight load when the dialog reopens for a different selection before
+  // the previous request settles — without it, a stale response landing
+  // after a newer, successful load would overwrite it with old data or an
+  // out-of-context error toast.
+  const loadData = useCallback(async (isCancelled: () => boolean) => {
     if (selectedTransactionIds.length === 0) return
     setLoadingMembers(true)
     setLoadError(false)
@@ -111,6 +116,7 @@ export function BulkSplitDialog({
               .get<Record<string, unknown>[]>(`/transactions/${t.id}/splits`)
               .then((rows) => rows.map(mapTransactionShare))
               .catch((err: unknown) => {
+                if (isCancelled()) return [] as TransactionShare[]
                 addToast({
                   message: errorMessage(err, `Couldn't load the existing split for "${t.merchant || 'a transaction'}" — it may show as unsplit.`),
                 })
@@ -119,6 +125,7 @@ export function BulkSplitDialog({
           ),
         ),
       ])
+      if (isCancelled()) return
       setGroupMembers(memberRows.filter((m) => m.userId !== currentUserId))
       setCards(
         txns.map((transaction, i) => ({
@@ -131,6 +138,7 @@ export function BulkSplitDialog({
         })),
       )
     } catch (err: unknown) {
+      if (isCancelled()) return
       // Unlike the per-transaction splits fetch above, a failure here (e.g. the
       // /groups/members call) leaves no usable data to fall back to — there's no
       // one to split with. `loadError` keeps the dialog from rendering the
@@ -139,7 +147,7 @@ export function BulkSplitDialog({
       setLoadError(true)
       addToast({ message: errorMessage(err, 'Could not load group members for splitting — try again.') })
     } finally {
-      setLoadingMembers(false)
+      if (!isCancelled()) setLoadingMembers(false)
     }
   }, [selectedTransactionIds, transactions, currentUserId, addToast])
 
@@ -153,7 +161,14 @@ export function BulkSplitDialog({
       setError(null)
       setBulkMode('perTransaction')
       setUniform(emptyUniform)
-      loadData()
+      // A failed reload's loadError branch hides these from view, but Save
+      // isn't gated on loadError — without clearing them, a stale `cards`
+      // from a previous, different selection stays valid and savable.
+      setCards([])
+      setGroupMembers([])
+      let cancelled = false
+      loadData(() => cancelled)
+      return () => { cancelled = true }
     }
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [open, loadData])
@@ -763,6 +778,7 @@ export function BulkSplitDialog({
             disabled={
               saving ||
               loadingMembers ||
+              loadError ||
               cards.length === 0 ||
               groupMembers.length === 0 ||
               (bulkMode === 'perTransaction'

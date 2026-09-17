@@ -85,14 +85,21 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
 
   useEffect(() => {
     if (!open || !account) return
+    let cancelled = false
     Promise.all([
       api.get<AccountShare[]>(`/accounts/${account.id}/shares`),
       api.get<Group[]>('/groups'),
     ])
-      .then(([s, g]) => { setShares(s); setGroups(g) })
+      .then(([s, g]) => {
+        if (cancelled) return
+        setShares(s)
+        setGroups(g)
+      })
       .catch((err: unknown) => {
+        if (cancelled) return
         addToast({ message: errorMessage(err, "Couldn't load sharing groups — try again.") })
       })
+    return () => { cancelled = true }
   }, [open, account, addToast])
 
   // Reset the form to the (re)opened account's values — adjust state during
@@ -103,6 +110,10 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
     if (open) {
       setForm(getInitialState(account))
       setError('')
+      // Stale sharing data from a previous account shouldn't render under
+      // this one while the fresh fetch above is still in flight (or fails).
+      setShares([])
+      setGroups([])
     }
   }
 

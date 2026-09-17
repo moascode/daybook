@@ -48,7 +48,12 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const pctAmounts = splitByPercents(amount, pctValues)
   const pctSharesPositive = pctAmounts.every((a) => a > 0)
 
-  const loadData = useCallback(async () => {
+  // `isCancelled` lets the caller (the open-effect below) invalidate an
+  // in-flight load when the dialog reopens for a different transaction
+  // before the previous request settles — without it, a stale response
+  // landing after a newer, successful load would overwrite it with old data
+  // or an out-of-context error toast.
+  const loadData = useCallback(async (isCancelled: () => boolean) => {
     if (!transaction) return
     setLoadingMembers(true)
     setLoadError(false)
@@ -61,15 +66,18 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
           .get<Record<string, unknown>[]>(`/transactions/${transaction.id}/splits`)
           .then((rows) => rows.map(mapTransactionShare))
           .catch((err: unknown) => {
+            if (isCancelled()) return [] as TransactionShare[]
             addToast({
               message: errorMessage(err, "Couldn't load this transaction's existing split — it may show as unsplit."),
             })
             return [] as TransactionShare[]
           }),
       ])
+      if (isCancelled()) return
       setGroupMembers(memberRows.filter((m) => m.userId !== currentUserId))
       setExistingShares(shareRows)
     } catch (err: unknown) {
+      if (isCancelled()) return
       // Same reasoning as BulkSplitDialog's outer catch: the /groups/members call
       // above previously had no catch of its own, so a failure here was an
       // unhandled promise rejection rather than just a silent one. Without a
@@ -80,7 +88,7 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
       setLoadError(true)
       addToast({ message: errorMessage(err, 'Could not load group members for splitting — try again.') })
     } finally {
-      setLoadingMembers(false)
+      if (!isCancelled()) setLoadingMembers(false)
     }
   }, [transaction, currentUserId, addToast])
 
@@ -100,7 +108,14 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
       setSplitMode('none')
       setCustomAmounts(['', ''])
       setPercents(['', ''])
-      loadData()
+      // Stale members/shares from a previous transaction shouldn't survive
+      // into this one — selectedRecipient resetting above already guards
+      // Save, but this removes the staleness at its source too.
+      setGroupMembers([])
+      setExistingShares([])
+      let cancelled = false
+      loadData(() => cancelled)
+      return () => { cancelled = true }
      }
     /* eslint-enable react-hooks/set-state-in-effect */
    }, [open, loadData])
