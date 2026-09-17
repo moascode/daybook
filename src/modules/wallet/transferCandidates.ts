@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
 
 // Candidate window (plan §Open decisions: start at ±5 days, tune after use).
 // Shared by LinkTransferDialog's manual picker and TransferLinkHint's proactive
@@ -69,6 +71,12 @@ export function useTransferLinkCandidates(input: {
   wantType: 'income' | 'expense'
 } | null): TransferCandidateRow[] {
   const [candidates, setCandidates] = useState<TransferCandidateRow[]>([])
+  const { addToast } = useToastStore()
+  // Toasts once per continuous outage, not once per debounced keystroke —
+  // a user editing amount/date several times while the search is down would
+  // otherwise get a stacked toast per edit. Resets on the next success so a
+  // later, separate outage still gets its own toast.
+  const hasToastedRef = useRef(false)
 
   const id = input?.id ?? null
   const accountId = input?.accountId ?? null
@@ -90,11 +98,27 @@ export function useTransferLinkCandidates(input: {
     let cancelled = false
     const timer = setTimeout(() => {
       fetchTransferCandidates({ id, accountId, amount, date, wantType })
-        .then((matches) => { if (!cancelled) setCandidates(matches) })
-        .catch(() => { if (!cancelled) setCandidates([]) })
+        .then((matches) => {
+          if (cancelled) return
+          hasToastedRef.current = false
+          setCandidates(matches)
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return
+          setCandidates([])
+          if (hasToastedRef.current) return
+          hasToastedRef.current = true
+          // Deliberately toasted, unlike SettleUpDialog.tsx's identical
+          // fetch-and-degrade-to-[] pattern (which stays silent because its
+          // preview is "an aid, not a gate" to a save the user can still make).
+          // Here, a failed search silently hides a real proactive suggestion —
+          // the "link this instead of creating a duplicate" hint — with no
+          // other path back to it, so it needs to say something.
+          addToast({ message: errorMessage(err, "Couldn't search for a matching transfer — try again.") })
+        })
     }, DEBOUNCE_MS)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [searchKey, id, accountId, wantType, amount, date])
+  }, [searchKey, id, accountId, wantType, amount, date, addToast])
 
   return candidates
 }

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { format, parseISO, addDays, differenceInCalendarDays } from 'date-fns'
 import { ArrowRightLeft } from 'lucide-react'
 import { api } from '@/lib/api'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, errorMessage } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
 import type { Account } from '@/types/wallet.types'
 
 // Same window as LinkTransferDialog — keep the two searches consistent.
@@ -48,6 +49,10 @@ export function TransferMatchHint({
 }: TransferMatchHintProps) {
   const [candidates, setCandidates] = useState<TransferMatchCandidate[]>([])
   const [linkingId, setLinkingId] = useState<string | null>(null)
+  const { addToast } = useToastStore()
+  // Toasts once per continuous outage, not once per debounced keystroke —
+  // resets on the next success so a later, separate outage still toasts.
+  const hasToastedRef = useRef(false)
 
   // Search key — null while the form hasn't given us enough to search on yet.
   // Rebuilt every render; when it changes, reset any stale candidates from the
@@ -92,12 +97,25 @@ export function TransferMatchHint({
                 Math.abs(differenceInCalendarDays(parseISO(a.date), base)) -
                 Math.abs(differenceInCalendarDays(parseISO(b.date), base)),
             )
+          hasToastedRef.current = false
           setCandidates(matches)
         })
-        .catch(() => { if (!cancelled) setCandidates([]) })
+        .catch((err: unknown) => {
+          if (cancelled) return
+          setCandidates([])
+          if (hasToastedRef.current) return
+          hasToastedRef.current = true
+          // Deliberately toasted, unlike SettleUpDialog.tsx's identical
+          // fetch-and-degrade-to-[] pattern (which stays silent because its
+          // preview is "an aid, not a gate" to a save the user can still make).
+          // Here, a failed search silently hides a real proactive suggestion —
+          // the "link this instead of creating a duplicate" hint — with no
+          // other path back to it, so it needs to say something.
+          addToast({ message: errorMessage(err, "Couldn't search for a matching transfer — try again.") })
+        })
     }, DEBOUNCE_MS)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [searchKey, sourceAccountId, destinationAccountId, amount, date])
+  }, [searchKey, sourceAccountId, destinationAccountId, amount, date, addToast])
 
   if (candidates.length === 0) return null
 

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { ArrowRightLeft } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
-import { formatMYR } from '@/lib/utils'
+import { formatMYR, errorMessage } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
 import {
   fetchTransferCandidates,
   CANDIDATE_WINDOW_DAYS,
@@ -32,6 +33,7 @@ export function LinkTransferDialog({
   // TransactionForm, which also keeps the linter's no-setState-in-effect rule.
   const [candidates, setCandidates] = useState<TransferCandidateRow[] | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
+  const { addToast } = useToastStore()
 
   const wantType = transaction?.type === 'expense' ? 'income' : 'expense'
 
@@ -53,9 +55,19 @@ export function LinkTransferDialog({
       wantType,
     })
       .then((matches) => { if (!cancelled) setCandidates(matches) })
-      .catch(() => { if (!cancelled) setCandidates([]) })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setCandidates([])
+        // Deliberately toasted, unlike SettleUpDialog.tsx's identical
+        // fetch-and-degrade-to-[] pattern (which stays silent because its
+        // preview is "an aid, not a gate" to a save the user can still make).
+        // Here a failed search renders as "No matching transaction found",
+        // indistinguishable from a genuine no-match, so the user needs the
+        // toast to know it's worth retrying rather than giving up on linking.
+        addToast({ message: errorMessage(err, "Couldn't search for a matching transaction — try again.") })
+      })
     return () => { cancelled = true }
-  }, [open, transaction, wantType])
+  }, [open, transaction, wantType, addToast])
 
   async function handlePick(twinId: string) {
     if (linkingId) return

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { cn, formatMYR } from '@/lib/utils'
+import { cn, formatMYR, errorMessage } from '@/lib/utils'
 import { useAppStore } from '@/stores/app.store'
 import { useHouseholdStore } from '@/stores/household.store'
+import { useToastStore } from '@/stores/toast.store'
 import { mapGroup } from '@/lib/household.mappers'
 import { DashboardCard } from './DashboardCard'
 import type { GroupBalance } from '@/types/household.types'
@@ -34,6 +35,7 @@ const MIN_BALANCE = 0.005
 export function SharedSummary({ className }: { className?: string }) {
   const userId = useAppStore((s) => s.user?.id ?? '')
   const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
+  const { addToast } = useToastStore()
   const [pairings, setPairings] = useState<Pairing[] | null>(null)
   const [subtitle, setSubtitle] = useState<string | null>(null)
 
@@ -56,7 +58,11 @@ export function SharedSummary({ className }: { className?: string }) {
           .then((members) => {
             if (!cancelled) setSubtitle(`${groups[0].name} · ${members.length} members`)
           })
-          .catch(() => {})
+          .catch((err: unknown) => {
+            // Cosmetic subtitle only — the card itself still renders off the
+            // balances fetched below, so this stays low-key rather than alarming.
+            if (!cancelled) addToast({ message: errorMessage(err, "Couldn't load the member count for Shared."), duration: 3000 })
+          })
         const balancesByGroup = await Promise.all(
           groups.map((g) => api.get<GroupBalance[]>(`/groups/${g.id}/balances`).then((rows) => ({ g, rows }))),
         )
@@ -82,7 +88,7 @@ export function SharedSummary({ className }: { className?: string }) {
     return () => {
       cancelled = true
     }
-  }, [userId])
+  }, [userId, addToast])
 
   // Still loading, or nothing to show: no group membership, no outstanding
   // balances and nothing waiting for review.

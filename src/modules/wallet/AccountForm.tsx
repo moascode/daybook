@@ -6,6 +6,8 @@ import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
+import { useToastStore } from '@/stores/toast.store'
 import type { Account } from '@/types/wallet.types'
 import type { AccountShare, Group } from '@/types/household.types'
 
@@ -70,6 +72,7 @@ function getInitialState(account?: Account | null): AccountFormData {
 }
 
 export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFormProps) {
+  const { addToast } = useToastStore()
   const [form, setForm] = useState<AccountFormData>(getInitialState(account))
   const [error, setError] = useState('')
   const [prevOpen, setPrevOpen] = useState(open)
@@ -82,11 +85,22 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
 
   useEffect(() => {
     if (!open || !account) return
+    let cancelled = false
     Promise.all([
       api.get<AccountShare[]>(`/accounts/${account.id}/shares`),
       api.get<Group[]>('/groups'),
-    ]).then(([s, g]) => { setShares(s); setGroups(g) }).catch(() => {})
-  }, [open, account])
+    ])
+      .then(([s, g]) => {
+        if (cancelled) return
+        setShares(s)
+        setGroups(g)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        addToast({ message: errorMessage(err, "Couldn't load sharing groups — try again.") })
+      })
+    return () => { cancelled = true }
+  }, [open, account, addToast])
 
   // Reset the form to the (re)opened account's values — adjust state during
   // render when open/account changes, rather than in an effect.
@@ -96,6 +110,10 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
     if (open) {
       setForm(getInitialState(account))
       setError('')
+      // Stale sharing data from a previous account shouldn't render under
+      // this one while the fresh fetch above is still in flight (or fails).
+      setShares([])
+      setGroups([])
     }
   }
 

@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { api } from '@/lib/api'
-import { formatMYR, formatPercent, splitEqually, splitByPercents } from '@/lib/utils'
+import { formatMYR, formatPercent, splitEqually, splitByPercents, errorMessage } from '@/lib/utils'
 import { mapMember, mapTransactionShare } from '@/lib/household.mappers'
+import { useToastStore } from '@/stores/toast.store'
 import type { Transaction } from '@/types/wallet.types'
 import type { GroupMember, TransactionShare } from '@/types/household.types'
 
@@ -32,8 +33,10 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   // to tell an agreed cost from a mistake.
   const [note, setNote] = useState('')
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { addToast } = useToastStore()
 
   const amount = transaction?.amount ?? 0
 
@@ -45,9 +48,15 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
   const pctAmounts = splitByPercents(amount, pctValues)
   const pctSharesPositive = pctAmounts.every((a) => a > 0)
 
-  const loadData = useCallback(async () => {
+  // `isCancelled` lets the caller (the open-effect below) invalidate an
+  // in-flight load when the dialog reopens for a different transaction
+  // before the previous request settles — without it, a stale response
+  // landing after a newer, successful load would overwrite it with old data
+  // or an out-of-context error toast.
+  const loadData = useCallback(async (isCancelled: () => boolean) => {
     if (!transaction) return
     setLoadingMembers(true)
+    setLoadError(false)
     try {
       // §2.2: also load existing share rows so re-opening an already-shared
       // transaction shows who owes what instead of a blank form.
@@ -56,14 +65,32 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
         api
           .get<Record<string, unknown>[]>(`/transactions/${transaction.id}/splits`)
           .then((rows) => rows.map(mapTransactionShare))
-          .catch(() => [] as TransactionShare[]),
+          .catch((err: unknown) => {
+            if (isCancelled()) return [] as TransactionShare[]
+            addToast({
+              message: errorMessage(err, "Couldn't load this transaction's existing split — it may show as unsplit."),
+            })
+            return [] as TransactionShare[]
+          }),
       ])
+      if (isCancelled()) return
       setGroupMembers(memberRows.filter((m) => m.userId !== currentUserId))
       setExistingShares(shareRows)
-     } finally {
-      setLoadingMembers(false)
-     }
-   }, [transaction, currentUserId])
+    } catch (err: unknown) {
+      if (isCancelled()) return
+      // Same reasoning as BulkSplitDialog's outer catch: the /groups/members call
+      // above previously had no catch of its own, so a failure here was an
+      // unhandled promise rejection rather than just a silent one. Without a
+      // member list there's no one to split with, so this is surfaced rather
+      // than swallowed. `loadError` keeps the dialog from rendering the
+      // ordinary empty state ("No group members yet") in its place, which
+      // would misattribute a failed fetch as "you have nobody to split with".
+      setLoadError(true)
+      addToast({ message: errorMessage(err, 'Could not load group members for splitting — try again.') })
+    } finally {
+      if (!isCancelled()) setLoadingMembers(false)
+    }
+  }, [transaction, currentUserId, addToast])
 
   useEffect(() => {
     // Clear the whole form on open. The note belongs to one claim, and carrying
@@ -81,7 +108,14 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
       setSplitMode('none')
       setCustomAmounts(['', ''])
       setPercents(['', ''])
-      loadData()
+      // Stale members/shares from a previous transaction shouldn't survive
+      // into this one — selectedRecipient resetting above already guards
+      // Save, but this removes the staleness at its source too.
+      setGroupMembers([])
+      setExistingShares([])
+      let cancelled = false
+      loadData(() => cancelled)
+      return () => { cancelled = true }
      }
     /* eslint-enable react-hooks/set-state-in-effect */
    }, [open, loadData])
@@ -171,10 +205,14 @@ export function SplitDialog({ open, onOpenChange, transaction, currentUserId, on
          {/* Recipient selector */}
          {loadingMembers ? (
            <p className="text-sm text-fg-faint text-center py-2">Loading members…</p>
+         ) : loadError ? (
+           <p className="text-sm text-red-600 text-center py-2">
+             Couldn't load members — close and reopen to try again.
+           </p>
          ) : groupMembers.length === 0 ? (
            <p className="text-sm text-fg-subtle text-center py-2">
              <Users className="h-4 w-4 inline mr-1" />
-            No group members yet. Invite people in Settings → Sharing first.
+             No group members yet. Invite people in Settings → Sharing first.
            </p>
          ) : (
            <Select
