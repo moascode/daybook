@@ -56,7 +56,7 @@ test('an account card renders its sparkline SVG', async () => {
   // SPARKLINE_WIDTH x SPARKLINE_HEIGHT (insights.ts) — distinguishes the
   // sparkline from the card's own type-icon SVG, which shares the `svg` tag.
   await expect(card.locator('svg[viewBox="0 0 220 34"]')).toBeVisible()
-});
+})
 
 // ── Credit-card utilisation ─────────────────────────────────────────────
 
@@ -97,8 +97,12 @@ test('the net-worth chart renders 12 monthly bars', async () => {
   await expect(chart.getByTestId('net-worth-bar')).toHaveCount(12)
 })
 
-test('hovering a bar shows its exact amount', async () => {
+test('hovering a bar shows its exact amount in a tooltip', async () => {
   const bars = page.getByTestId('net-worth-history').getByTestId('net-worth-bar')
   await bars.last().hover()
-  await expect(page.getByTestId('net-worth-history').getByText(/RM/).first()).toBeVisible()
+  // `.tip` (charts.css) — the hover tooltip, distinct from the always-visible
+  // y-axis tick labels which also contain "RM" text.
+  const tip = page.getByTestId('net-worth-history').locator('.tip')
+  await expect(tip).toBeVisible()
+  await expect(tip.locator('.big')).toContainText('RM')
 })

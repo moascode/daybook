@@ -1,4 +1,4 @@
-> **Status:** Archived · **Filed:** 2026-09-16 · **Shipped:** 2026-09-06 · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
+> **Status:** Archived · **Last verified:** 2026-09-18 · **Filed:** 2026-09-16 · **Shipped:** 2026-09-06 · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-015 — Accounts: composition breakdown and sparklines
 
