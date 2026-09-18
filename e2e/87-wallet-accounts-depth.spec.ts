@@ -53,7 +53,9 @@ test('composition bar and legend appear once an account has a balance', async ()
 
 test('an account card renders its sparkline SVG', async () => {
   const card = page.getByTestId('account-card').filter({ hasText: 'Main Cash' })
-  await expect(card.locator('svg')).toBeVisible()
+  // SPARKLINE_WIDTH x SPARKLINE_HEIGHT (insights.ts) — distinguishes the
+  // sparkline from the card's own type-icon SVG, which shares the `svg` tag.
+  await expect(card.locator('svg[viewBox="0 0 220 34"]')).toBeVisible()
 });
 
 // ── Credit-card utilisation ─────────────────────────────────────────────
