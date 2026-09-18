@@ -85,8 +85,8 @@ test('a card account with a credit limit shows a utilisation bar instead of a sp
   const card = page.getByTestId('account-card').filter({ hasText: 'Visa Card' })
   // 1000 spent of a 5000 limit → 20% utilisation.
   await expect(card.getByText(/of\s+RM\s*5,000\.00\s+limit/)).toBeVisible()
-  // No sparkline path on a utilisation card.
-  await expect(card.locator('svg path')).toHaveCount(0)
+  // No sparkline on a utilisation card — the type-icon SVG is still there.
+  await expect(card.locator('svg[viewBox="0 0 220 34"]')).toHaveCount(0)
 })
 
 // ── Net-worth history chart ──────────────────────────────────────────────
