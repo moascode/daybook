@@ -109,7 +109,7 @@ test('summary band shows a pace instruction when spend and budget rates diverge'
   // divergence unless run on the very last day of the month.
   const instruction = page.getByTestId('budget-pace-instruction')
   await expect(instruction).toBeVisible()
-  await expect(instruction).toHaveText(/^RM[\d,.]+ a day instead of RM[\d,.]+ brings it in exactly on budget\.$/)
+  await expect(instruction).toHaveText(/^RM\s*[\d,.]+ a day instead of RM\s*[\d,.]+ brings it in exactly on budget\.$/)
 })
 
 // ── Over-budget alert ──────────────────────────────────────────────────
