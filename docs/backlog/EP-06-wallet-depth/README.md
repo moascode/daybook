@@ -25,7 +25,7 @@ displaying it. If only part of this epic gets built, build those.
 |---|---|---|
 | [FEAT-015](FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | Yes |
 | [FEAT-016](FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | Yes |
-| [FEAT-017](FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | Yes |
+| [FEAT-017](FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | Scheduled — [PR #213](https://github.com/moascode/daybook/pull/213) |
 | [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | **Yes — build early.** Largest item; consider splitting |
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
