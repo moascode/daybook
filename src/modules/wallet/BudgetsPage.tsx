@@ -10,8 +10,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useToastStore } from '@/stores/toast.store'
-import { cn, formatMYR, errorMessage, monthRange } from '@/lib/utils'
+import { cn, formatMYR, errorMessage, monthRange, todayISO } from '@/lib/utils'
+import { dayOfMonth, daysInMonth, monthKey } from '@/modules/wallet/dashboard/insights'
 import type { Budget } from '@/types/wallet.types'
+
+/** A row counts as "ahead of pace" once it clears the notch by this much — a rounding error past it is normal noise. Matches `BudgetPace`'s own threshold (dashboard/BudgetPace.tsx). */
+const AHEAD_OF_PACE_THRESHOLD = 0.08
 
 interface BudgetFormData {
   categoryId: string
@@ -87,6 +91,28 @@ export function BudgetsPage() {
   const totalSpent = budgets.reduce((sum, b) => sum + (spending.get(b.categoryId) ?? 0), 0)
   const monthPct = totalBudgeted > 0 ? Math.min((totalSpent / totalBudgeted) * 100, 100) : 0
   const overBudgetCount = budgets.filter((b) => (spending.get(b.categoryId) ?? 0) > b.limitAmount).length
+
+  // Pace: where you SHOULD be today, same day-of-month elapsed fraction
+  // `BudgetPace` (dashboard/BudgetPace.tsx) uses for its notch — this page is
+  // always the current month (no date-range picker), so it's always in
+  // progress and never needs that component's multi-month scaling.
+  const today = todayISO()
+  const day = dayOfMonth(today)
+  const monthLength = daysInMonth(monthKey(today))
+  const elapsed = day / monthLength
+  const daysRemaining = monthLength - day
+
+  // "RM34 a day instead of RM46 brings it in exactly on budget" — an
+  // instruction, not a projection (design.md, R8 Budgets). Needs an actual
+  // remaining day to spread the remaining budget over, and a real gap to
+  // report; skipped once already over (the per-row "Over budget" badges
+  // already say that) or once nothing distinguishes the two rates.
+  const actualDailyRate = day > 0 ? totalSpent / day : 0
+  const neededDailyRate = daysRemaining > 0 ? (totalBudgeted - totalSpent) / daysRemaining : null
+  const paceInstruction =
+    neededDailyRate !== null && neededDailyRate >= 0 && Math.abs(neededDailyRate - actualDailyRate) >= 0.5
+      ? `${formatMYR(neededDailyRate)} a day instead of ${formatMYR(actualDailyRate)} brings it in exactly on budget.`
+      : null
 
   const expenseCategories = categories.filter((c) => c.type === 'expense' || c.type === 'both')
   const usedCategoryIds = new Set(budgets.map((b) => b.categoryId))
@@ -166,14 +192,22 @@ export function BudgetsPage() {
                 </div>
               </div>
             </div>
+            {paceInstruction && (
+              <>
+                <div className="divider" />
+                <p className="text-sm text-fg-subtle" data-testid="budget-pace-instruction">{paceInstruction}</p>
+              </>
+            )}
           </div>
 
           <div className="flex flex-col gap-3">
           {budgets.map((budget) => {
             const category = categories.find((c) => c.id === budget.categoryId)
             const spent = spending.get(budget.categoryId) ?? 0
-            const pct = Math.min((spent / budget.limitAmount) * 100, 100)
+            const ratio = budget.limitAmount > 0 ? spent / budget.limitAmount : 0
+            const pct = Math.min(ratio * 100, 100)
             const isOver = spent > budget.limitAmount
+            const isAheadOfPace = !isOver && ratio > elapsed + AHEAD_OF_PACE_THRESHOLD
 
             return (
               <div
@@ -203,17 +237,32 @@ export function BudgetsPage() {
                         {Math.round(pct)}%
                       </span>
                     </div>
-                    {/* Progress bar */}
+                    {/* Progress bar with a pace notch — the line marks where spend
+                        SHOULD be today (day/daysInMonth), same math as the
+                        Dashboard's `BudgetPace`. Colour follows position against
+                        that notch, not a flat 80% threshold: red once over the
+                        limit, amber once ahead of pace, green otherwise. */}
                     <div
                       data-testid="budget-progress"
-                      className="h-2 w-full overflow-hidden rounded-full bg-surface-hover"
+                      role="img"
+                      aria-label={
+                        `${category?.name ?? 'This category'}: ${Math.round(pct)}% of budget used, ` +
+                        `${Math.round(elapsed * 100)}% of the month elapsed` +
+                        (isOver ? ' — over limit.' : isAheadOfPace ? ' — ahead of pace.' : ' — on track.')
+                      }
+                      className="relative h-2 w-full overflow-hidden rounded-full bg-surface-hover"
                     >
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',
-                          isOver ? 'bg-red-500' : pct > 80 ? 'bg-orange-400' : 'bg-brand-500',
+                          isOver ? 'bg-red-500' : isAheadOfPace ? 'bg-orange-400' : 'bg-brand-500',
                         )}
                         style={{ width: `${pct}%` }}
+                      />
+                      <div
+                        data-testid="budget-pace-notch"
+                        className="absolute top-0 h-full w-px bg-fg/40"
+                        style={{ left: `${Math.min(100, elapsed * 100)}%` }}
                       />
                     </div>
                   </div>

@@ -1,8 +1,8 @@
 /**
  * Wallet: budget tracking — Tier 2 feature.
- * Set monthly spend limits per category; view progress bars; get over-budget alerts.
- *
- * ALL TESTS IN THIS FILE ARE EXPECTED TO FAIL until the feature is implemented.
+ * Set monthly spend limits per category; view progress bars; get over-budget
+ * alerts; a day-of-month pace notch (FEAT-017, EP-06) on each row and a
+ * summary-band pace instruction.
  */
 
 import { test, expect } from '@playwright/test'
@@ -94,6 +94,22 @@ test('budget progress updates after adding a Food & Drink expense', async () => 
   const row = page.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
   // Spent amount should appear (120 out of 500)
   await expect(row.getByText(/120|RM 120/)).toBeVisible()
+})
+
+// ── Pace marker (FEAT-017) ──────────────────────────────────────────────
+
+test('budget row shows a pace notch reflecting day-of-month elapsed', async () => {
+  const row = page.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
+  await expect(row.getByTestId('budget-pace-notch')).toBeVisible()
+  await expect(row.getByTestId('budget-progress')).toHaveAttribute('aria-label', /of the month elapsed/)
+})
+
+test('summary band shows a pace instruction when spend and budget rates diverge', async () => {
+  // RM120 spent of a RM500 limit, versus the day-of-month elapsed — a real
+  // divergence unless run on the very last day of the month.
+  const instruction = page.getByTestId('budget-pace-instruction')
+  await expect(instruction).toBeVisible()
+  await expect(instruction).toHaveText(/^RM[\d,.]+ a day instead of RM[\d,.]+ brings it in exactly on budget\.$/)
 })
 
 // ── Over-budget alert ──────────────────────────────────────────────────
