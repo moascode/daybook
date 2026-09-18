@@ -41,7 +41,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-03](EP-03-consistency-remainder/README.md) | Consistency remainder | 4 | Open |
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
-| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 11 | Open |
+| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 9 | Open |
 | [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 7 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
@@ -88,10 +88,12 @@ this backlog exists to answer.
 
 ### [EP-06](EP-06-wallet-depth/README.md) — Wallet depth
 
+FEAT-015 and FEAT-016 shipped before this backlog was even filed — see the
+epic's own [Shipped table](EP-06-wallet-depth/README.md#shipped) and their
+archived item files.
+
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-015](EP-06-wallet-depth/FEAT-015-accounts-composition.md) | Feature | Accounts: composition breakdown and sparklines | Yes — R8, unstarted |
-| [FEAT-016](EP-06-wallet-depth/FEAT-016-accounts-networth-chart.md) | Feature | Accounts: credit utilisation and 12-month net-worth chart | Yes — R8, unstarted |
 | [FEAT-017](EP-06-wallet-depth/FEAT-017-budgets-summary-band.md) | Feature | Budgets: summary band and pace marker | Yes — R8, unstarted |
 | [FEAT-018](EP-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Feature | Budgets: suggestions engine | Yes — R8. The largest single item in EP-06; consider splitting. |
 | [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | Yes — R9, unstarted |
