@@ -104,12 +104,31 @@ test('budget row shows a pace notch reflecting day-of-month elapsed', async () =
   await expect(row.getByTestId('budget-progress')).toHaveAttribute('aria-label', /of the month elapsed/)
 })
 
-test('summary band shows a pace instruction when spend and budget rates diverge', async () => {
-  // RM120 spent of a RM500 limit, versus the day-of-month elapsed — a real
-  // divergence unless run on the very last day of the month.
+test('summary band pace instruction matches the corrective-pace formula', async () => {
+  // Whether RM120 spent of a RM500 limit reads as "overspending vs. pace"
+  // depends on today's day-of-month — not fixed like the other assertions
+  // here (the "one clock" trap, CLAUDE.md §3) — so this independently
+  // re-derives the same formula BudgetsPage.tsx uses (day/daysInMonth
+  // elapsed, corrective-only instruction) from the real wall-clock date,
+  // rather than asserting a fixed direction that would flip and flake
+  // depending on which day of the month this runs.
+  const totalSpent = 120
+  const totalBudgeted = 500
+  const now = new Date()
+  const day = now.getDate()
+  const monthLength = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysRemaining = monthLength - day
+  const actualDailyRate = day > 0 ? totalSpent / day : 0
+  const neededDailyRate = daysRemaining > 0 ? (totalBudgeted - totalSpent) / daysRemaining : null
+  const shouldShow = neededDailyRate !== null && neededDailyRate >= 0 && actualDailyRate - neededDailyRate >= 0.5
+
   const instruction = page.getByTestId('budget-pace-instruction')
-  await expect(instruction).toBeVisible()
-  await expect(instruction).toHaveText(/^RM\s*[\d,.]+ a day instead of RM\s*[\d,.]+ brings it in exactly on budget\.$/)
+  if (shouldShow) {
+    await expect(instruction).toBeVisible()
+    await expect(instruction).toHaveText(/^RM\s*[\d,.]+ a day instead of RM\s*[\d,.]+ brings it in exactly on budget\.$/)
+  } else {
+    await expect(instruction).not.toBeVisible()
+  }
 })
 
 // ── Over-budget alert ──────────────────────────────────────────────────

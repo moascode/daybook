@@ -25,8 +25,13 @@ interface BudgetPaceProps {
   className?: string
 }
 
-/** A budget must be at least this far ahead of pace before it counts as "over pace" — a rounding error past the notch is normal noise. */
-const AHEAD_OF_PACE_THRESHOLD = 0.08
+/**
+ * A budget must be at least this far ahead of pace before it counts as "over
+ * pace" — a rounding error past the notch is normal noise. Exported: the
+ * Budgets page (BudgetsPage.tsx) reuses the same threshold for its own,
+ * differently-laid-out pace notch, so the two never drift apart.
+ */
+export const AHEAD_OF_PACE_THRESHOLD = 0.08
 
 /**
  * Budget meters with a pace notch — the mockup's literal `.budget` rows: a

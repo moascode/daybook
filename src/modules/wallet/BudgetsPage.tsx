@@ -12,10 +12,8 @@ import { useCrudModal } from '@/hooks/useCrudModal'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, formatMYR, errorMessage, monthRange, todayISO } from '@/lib/utils'
 import { dayOfMonth, daysInMonth, monthKey } from '@/modules/wallet/dashboard/insights'
+import { AHEAD_OF_PACE_THRESHOLD } from '@/modules/wallet/dashboard/BudgetPace'
 import type { Budget } from '@/types/wallet.types'
-
-/** A row counts as "ahead of pace" once it clears the notch by this much — a rounding error past it is normal noise. Matches `BudgetPace`'s own threshold (dashboard/BudgetPace.tsx). */
-const AHEAD_OF_PACE_THRESHOLD = 0.08
 
 interface BudgetFormData {
   categoryId: string
@@ -102,15 +100,16 @@ export function BudgetsPage() {
   const elapsed = day / monthLength
   const daysRemaining = monthLength - day
 
-  // "RM34 a day instead of RM46 brings it in exactly on budget" — an
-  // instruction, not a projection (design.md, R8 Budgets). Needs an actual
-  // remaining day to spread the remaining budget over, and a real gap to
-  // report; skipped once already over (the per-row "Over budget" badges
-  // already say that) or once nothing distinguishes the two rates.
+  // "RM34 a day instead of RM46 brings it in exactly on budget" — a
+  // CORRECTIVE instruction, not a projection (design.md, R8 Budgets): only
+  // shown when the current pace overshoots what's needed to land on budget,
+  // never the reverse (a household under budget doesn't need telling to
+  // spend MORE). Needs an actual remaining day to spread the rest over, and
+  // skipped once already over — the per-row "Over budget" badges say that.
   const actualDailyRate = day > 0 ? totalSpent / day : 0
   const neededDailyRate = daysRemaining > 0 ? (totalBudgeted - totalSpent) / daysRemaining : null
   const paceInstruction =
-    neededDailyRate !== null && neededDailyRate >= 0 && Math.abs(neededDailyRate - actualDailyRate) >= 0.5
+    neededDailyRate !== null && neededDailyRate >= 0 && actualDailyRate - neededDailyRate >= 0.5
       ? `${formatMYR(neededDailyRate)} a day instead of ${formatMYR(actualDailyRate)} brings it in exactly on budget.`
       : null
 
@@ -246,7 +245,7 @@ export function BudgetsPage() {
                       data-testid="budget-progress"
                       role="img"
                       aria-label={
-                        `${category?.name ?? 'This category'}: ${Math.round(pct)}% of budget used, ` +
+                        `${category?.name ?? 'This category'}: ${Math.round(ratio * 100)}% of budget used, ` +
                         `${Math.round(elapsed * 100)}% of the month elapsed` +
                         (isOver ? ' — over limit.' : isAheadOfPace ? ' — ahead of pace.' : ' — on track.')
                       }
@@ -262,7 +261,10 @@ export function BudgetsPage() {
                       <div
                         data-testid="budget-pace-notch"
                         className="absolute top-0 h-full w-px bg-fg/40"
-                        style={{ left: `${Math.min(100, elapsed * 100)}%` }}
+                        // Capped short of 100% — at the exact right edge, `overflow-hidden`
+                        // on the track clips this 1px line to zero width and it disappears
+                        // (only visible on the month's last day, but real every month).
+                        style={{ left: `${Math.min(99.5, elapsed * 100)}%` }}
                       />
                     </div>
                   </div>
