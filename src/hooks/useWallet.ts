@@ -538,6 +538,23 @@ export function useWallet() {
     return new Map(rows.map((r) => [r.categoryId, r.spent]))
   }, [])
 
+  // FEAT-018: per-category spend for each of the last `months` — the input
+  // the suggestions engine (modules/wallet/budgets/insights.ts) and the
+  // budget-vs-actual chart both need. Nested by category first, then month,
+  // since every consumer asks "this category, across months" rather than
+  // "this month, across categories" (that's what getBudgetSpending is for).
+  const getBudgetSpendingHistory = useCallback(async (months = 6): Promise<Map<string, Map<string, number>>> => {
+    const rows = await api.get<{ month: string; categoryId: string; spent: number }[]>(
+      `/budgets/spending-history?months=${months}`,
+    )
+    const byCategory = new Map<string, Map<string, number>>()
+    for (const r of rows) {
+      if (!byCategory.has(r.categoryId)) byCategory.set(r.categoryId, new Map())
+      byCategory.get(r.categoryId)!.set(r.month, r.spent)
+    }
+    return byCategory
+  }, [])
+
   // ── Recurring CRUD ───────────────────────────────
 
   const loadRecurringTransactions = useCallback(async () => {
@@ -725,6 +742,7 @@ export function useWallet() {
     updateBudget,
     deleteBudget,
     getBudgetSpending,
+    getBudgetSpendingHistory,
 
     // Recurring CRUD
     addRecurringTransaction,

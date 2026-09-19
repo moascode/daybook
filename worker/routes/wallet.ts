@@ -2789,6 +2789,49 @@ wallet.get('/budgets/spending', async (c) => {
   return c.json(results)
 })
 
+/** Shift a 'YYYY-MM' key by whole months. Mirrors the client's `shiftMonth` (dashboard/insights.ts) — day-1 local-Date arithmetic, so month-end overflow (2026-12 - 5 → 2026-07) normalises without a timezone-sensitive conversion. */
+function shiftMonthStr(month: string, offset: number): string {
+  const [y, m] = month.split('-').map(Number)
+  const d = new Date(y, m - 1 + offset, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+// FEAT-018: per-category spend for each of the last N months — the shared
+// input for the suggestions engine (src/modules/wallet/budgets/insights.ts)
+// and the 6-month budget-vs-actual chart. Same effective-amount accounting as
+// /budgets/spending above, just grouped by month too instead of pinned to one.
+wallet.get('/budgets/spending-history', async (c) => {
+  const userId = c.get('userId')
+  const monthsParam = Number(c.req.query('months') ?? '6')
+  const months = Number.isInteger(monthsParam) && monthsParam >= 1 && monthsParam <= 24 ? monthsParam : 6
+  const currentMonth = todayStr().slice(0, 7)
+  const startMonth = shiftMonthStr(currentMonth, -(months - 1))
+  // Upper-bounded too, not just >= startMonth — a future-dated transaction
+  // (nothing in this route rejects one) would otherwise produce a month key
+  // past the current one, and the suggestions engine's "last 3 months"
+  // window (insights.ts) would silently shift into the future.
+  const endExclusive = shiftMonthStr(currentMonth, 1)
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT strftime('%Y-%m', t.date) AS month,
+            t.category_id AS categoryId,
+            SUM(${EFFECTIVE_AMOUNT_SQL('t')}) AS spent
+     FROM transactions t
+     WHERE t.user_id = ?
+       AND t.type = 'expense'
+       AND t.is_balance_only = 0
+       AND t.category_id IS NOT NULL
+       AND t.date >= ? AND t.date < ?
+     GROUP BY month, t.category_id
+     ORDER BY month ASC`,
+  )
+    // EFFECTIVE_AMOUNT_SQL's bind leads — its placeholder is in the projection.
+    .bind(userId, userId, `${startMonth}-01`, `${endExclusive}-01`)
+    .all()
+
+  return c.json(results)
+})
+
 // C2: shared minimal check for budget limits and goal targets.
 function positiveAmountError(v: unknown, field: string): string | null {
   const amt = typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN
