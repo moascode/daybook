@@ -17,8 +17,10 @@ test.describe.configure({ mode: 'serial' })
  * exact boundary values):
  *   Transport — limit 100, spends RM20 in each of the last 3 months →
  *     averages 20% usage → donor, RM80 slack.
- *   Dining — limit 50, spends RM90 in the CURRENT month only → RM40 over
- *     this month → receiver. Reallocate moves min(80, 40) = RM40.
+ *   Dining — limit 50, spends RM40 in the prior 2 months (80% usage, so it
+ *     doesn't ALSO look like a donor on average) and RM90 in the CURRENT
+ *     month → RM40 over this month → receiver. Reallocate moves
+ *     min(80, 40) = RM40.
  *   Groceries — limit 100, spends RM150 in each of the last 3 months →
  *     over-limit every month → right-size to RM150.
  *   Entertainment — no budget, spends RM40 this month only → create-missing.
@@ -64,6 +66,8 @@ test.describe('89 — Budgets suggestions', () => {
       await spend(page, account.id, transport.id, monthKeyOffset(offset), 20)
       await spend(page, account.id, groceries.id, monthKeyOffset(offset), 150)
     }
+    await spend(page, account.id, dining.id, monthKeyOffset(-2), 40)
+    await spend(page, account.id, dining.id, monthKeyOffset(-1), 40)
     await spend(page, account.id, dining.id, monthKeyOffset(0), 90)
     await spend(page, account.id, entertainment.id, monthKeyOffset(0), 40)
 
