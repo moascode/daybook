@@ -28,6 +28,7 @@ only partly built, the unbuilt remainder is tracked in
 | [pwa/](pwa/) | P1–P5: install quality, offline shell, code-splitting, push, themed splash | all five verified shipped |
 | [design-adoption/](design-adoption/) | R1–R7 and R18: the token layer, the app shell, and design adoption across Wallet, Tasks, Trips and Day | see [its index](design-adoption/README.md) |
 | [phase-5c-wallet-ux.md](phase-5c-wallet-ux.md), [phase-5c-implementation-plan.md](phase-5c-implementation-plan.md) | The full Phase 5c list — B1–B12, C1–C13 | the last five (B7, B10, B11, C3, C6) shipped as EP-02, see [ep-02-wallet-ux-remainder/](ep-02-wallet-ux-remainder/README.md) |
+| [ep-06-wallet-depth/](ep-06-wallet-depth/README.md) | FEAT-015/016 — accounts composition, sparklines, credit utilisation, 12-month net-worth chart | shipped before [EP-06](../backlog/EP-06-wallet-depth/README.md) (still open, 9 items remain) was even filed |
 
 > **`shared-review-implementation-plan.md` says "not merged".** It shipped. The
 > line is a point-in-time status that was never updated — exactly the drift the

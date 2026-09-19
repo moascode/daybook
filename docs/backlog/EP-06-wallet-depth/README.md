@@ -19,12 +19,24 @@ one-way doors.
 (budget suggestions) are the two that change behaviour rather than just
 displaying it. If only part of this epic gets built, build those.
 
+## Shipped
+
+Filed 2026-09-16 as "unstarted"; both had already landed 2026-09-06 in
+[PR #166/#168](https://github.com/moascode/daybook/pull/168), before this
+backlog conversion happened — the exact stale-conversion trap the top-level
+[`docs/backlog/README.md`](../README.md) warns about. Verified against the
+code and archived 2026-09-18, with the one e2e gap (no spec covered the
+rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
+
+| ID | Title | How it shipped |
+|---|---|---|
+| [FEAT-015](../../archive/ep-06-wallet-depth/FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | `BalanceSummary.tsx`, `AccountCard.tsx`, `insights.ts` |
+| [FEAT-016](../../archive/ep-06-wallet-depth/FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | `AccountCard.tsx`, `NetWorthHistoryChart.tsx` |
+
 ## Items
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-015](FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | Yes |
-| [FEAT-016](FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | Yes |
 | [FEAT-017](FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | Scheduled — [PR #213](https://github.com/moascode/daybook/pull/213) |
 | [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | **Yes — build early.** Largest item; consider splitting |
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
