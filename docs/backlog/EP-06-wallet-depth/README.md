@@ -38,7 +38,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | Scheduled — split into 3 PRs, [PR #214](https://github.com/moascode/daybook/pull/214) is 1/3 |
+| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | Scheduled — split into 3 PRs, 1/3 merged, [PR #215](https://github.com/moascode/daybook/pull/215) is 2/3 |
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
 | [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | **Yes — build early.** Pays for the module |

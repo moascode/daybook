@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, PieChart, Pencil, Trash2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -13,6 +13,8 @@ import { useToastStore } from '@/stores/toast.store'
 import { cn, formatMYR, errorMessage, monthRange, todayISO } from '@/lib/utils'
 import { dayOfMonth, daysInMonth, monthKey } from '@/modules/wallet/dashboard/insights'
 import { AHEAD_OF_PACE_THRESHOLD } from '@/modules/wallet/dashboard/BudgetPace'
+import { generateBudgetSuggestions, type CategorySpendHistory, type BudgetSuggestion } from '@/modules/wallet/budgets/insights'
+import { BudgetSuggestions } from '@/modules/wallet/budgets/BudgetSuggestions'
 import type { Budget } from '@/types/wallet.types'
 
 interface BudgetFormData {
@@ -21,7 +23,10 @@ interface BudgetFormData {
 }
 
 export function BudgetsPage() {
-  const { budgets, categories, loadBudgets, loadCategories, addBudget, updateBudget, deleteBudget, getBudgetSpending } = useWallet()
+  const {
+    budgets, categories, loadBudgets, loadCategories, addBudget, updateBudget, deleteBudget, getBudgetSpending,
+    getBudgetSpendingHistory,
+  } = useWallet()
   const { addToast } = useToastStore()
 
   const crud = useCrudModal<Budget>()
@@ -29,6 +34,7 @@ export function BudgetsPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [spending, setSpending] = useState<Map<string, number>>(new Map())
+  const [spendingHistory, setSpendingHistory] = useState<CategorySpendHistory>(new Map())
 
   useEffect(() => {
     loadCategories()
@@ -39,7 +45,87 @@ export function BudgetsPage() {
     // one aggregate query, scoped to the caller's own transactions and
     // bounded to the current month.
     getBudgetSpending(monthRange(0).dateFrom.slice(0, 7)).then(setSpending)
-  }, [loadBudgets, loadCategories, getBudgetSpending])
+    // FEAT-018: 6 months of per-category spend — the suggestions engine's
+    // only input besides the budgets/categories already loaded above. A
+    // failed fetch must not render identically to "no suggestions" — say so.
+    getBudgetSpendingHistory(6)
+      .then(setSpendingHistory)
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 }))
+  }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingHistory, addToast])
+
+  const suggestions = useMemo(
+    () => generateBudgetSuggestions(budgets, categories, spendingHistory, todayISO()),
+    [budgets, categories, spendingHistory],
+  )
+
+  const handleReallocate = useCallback(async (s: Extract<BudgetSuggestion, { type: 'reallocate' }>) => {
+    const fromBudget = budgets.find((b) => b.categoryId === s.fromCategoryId)
+    const toBudget = budgets.find((b) => b.categoryId === s.toCategoryId)
+    // Stale suggestion — its budget was edited/deleted elsewhere since this
+    // row was computed. Refresh rather than silently doing nothing.
+    if (!fromBudget || !toBudget) {
+      addToast({ message: 'That budget has changed — refreshing suggestions.', duration: 4000 })
+      loadBudgets()
+      return
+    }
+    try {
+      await updateBudget(fromBudget.id, { limitAmount: fromBudget.limitAmount - s.amount })
+    } catch (err) {
+      // A thrown error here (network/4xx) means the write did NOT apply —
+      // safe to tell the user to just retry.
+      addToast({ message: errorMessage(err, `Could not reduce ${s.fromCategoryName}'s limit — please try again.`), duration: 4000 })
+      return
+    }
+    try {
+      await updateBudget(toBudget.id, { limitAmount: toBudget.limitAmount + s.amount })
+    } catch (err) {
+      // Unlike the donor write above, we can't assume this one didn't apply
+      // (a lost response after the server committed it looks identical to a
+      // real failure) — reload from the server rather than trust local state,
+      // and tell the user to verify rather than "raise it manually", which
+      // would double-apply if the write actually went through.
+      await loadBudgets()
+      addToast({
+        message: errorMessage(
+          err,
+          `Moved ${formatMYR(s.amount)} out of ${s.fromCategoryName} — check ${s.toCategoryName}'s limit before changing it, the update may not have reached it.`,
+        ),
+        duration: 6000,
+      })
+      return
+    }
+    addToast({ message: `Moved ${formatMYR(s.amount)} from ${s.fromCategoryName} to ${s.toCategoryName}.`, duration: 4000 })
+  }, [budgets, updateBudget, addToast, loadBudgets])
+
+  const handleRightSize = useCallback(async (s: Extract<BudgetSuggestion, { type: 'right-size' }>) => {
+    const budget = budgets.find((b) => b.categoryId === s.categoryId)
+    if (!budget) {
+      addToast({ message: 'That budget has changed — refreshing suggestions.', duration: 4000 })
+      loadBudgets()
+      return
+    }
+    try {
+      await updateBudget(budget.id, { limitAmount: s.suggestedLimit })
+      addToast({ message: `${s.categoryName}'s limit is now ${formatMYR(s.suggestedLimit)}.`, duration: 4000 })
+    } catch (err) {
+      // Reload rather than trust local state — an error here can still mean
+      // a lost response after the server actually committed the write.
+      await loadBudgets()
+      addToast({ message: errorMessage(err, `Could not confirm ${s.categoryName}'s new limit — please check it before changing it again.`), duration: 4000 })
+    }
+  }, [budgets, updateBudget, addToast, loadBudgets])
+
+  const handleCreateMissing = useCallback(async (s: Extract<BudgetSuggestion, { type: 'create-missing' }>) => {
+    try {
+      await addBudget({ categoryId: s.categoryId, limitAmount: s.avgMonthlySpend })
+      addToast({ message: `Created a ${formatMYR(s.avgMonthlySpend)} budget for ${s.categoryName}.`, duration: 4000 })
+    } catch (err) {
+      // Reload first — a lost response after the server actually created the
+      // budget would otherwise let a retry create a second one for the same category.
+      await loadBudgets()
+      addToast({ message: errorMessage(err, `Could not confirm the ${s.categoryName} budget was created — check before creating it again.`), duration: 4000 })
+    }
+  }, [addBudget, addToast, loadBudgets])
 
   const openCreate = useCallback(() => {
     setForm({ categoryId: '', limitAmount: '' })
@@ -137,6 +223,13 @@ export function BudgetsPage() {
           Add Budget
         </Button>
       </div>
+
+      <BudgetSuggestions
+        suggestions={suggestions}
+        onReallocate={handleReallocate}
+        onRightSize={handleRightSize}
+        onCreateMissing={handleCreateMissing}
+      />
 
       {/* Budget list */}
       {budgets.length === 0 ? (
