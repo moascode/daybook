@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md)
+> **Status:** Scheduled · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md) · **PR:** [#213](https://github.com/moascode/daybook/pull/213)
 
 # FEAT-017 — Budgets: summary band and pace marker
 
