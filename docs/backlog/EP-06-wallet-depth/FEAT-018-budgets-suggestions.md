@@ -12,5 +12,5 @@
 
 **Split, in flight:**
 1. Engine + `GET /budgets/spending-history` (data layer only, no UI) — [PR #214](https://github.com/moascode/daybook/pull/214)
-2. Suggestion rows + one-click actions on the Budgets page — not started
+2. Suggestion rows + one-click actions on the Budgets page — [PR #215](https://github.com/moascode/daybook/pull/215) (stacked on #214)
 3. 6-month budget-vs-actual chart — not started
