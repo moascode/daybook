@@ -70,6 +70,40 @@ function spendIn(history: CategorySpendHistory, categoryId: string, month: strin
   return history.get(categoryId)?.get(month) ?? 0
 }
 
+export interface BudgetVsActualPoint {
+  month: string
+  label: string
+  /** Sum of every current budget's limitAmount — held constant across all months, since limits aren't tracked historically (only today's snapshot exists). */
+  budgeted: number
+  /** Sum of actual spend, that month, across only the categories that currently have a budget. */
+  actual: number
+}
+
+/**
+ * "Beside them, six months of budget-vs-actual" (design.md, R8 Budgets).
+ * Budgeted is deliberately the SAME total for every month — there's no
+ * historical limit to look up, only today's — so this reads as "here's
+ * today's plan, and here's what each of the last 6 months actually cost
+ * against it", not a claim that the limit itself changed over time.
+ */
+export function computeBudgetVsActual(
+  budgets: Budget[],
+  history: CategorySpendHistory,
+  todayIso: string,
+  months = 6,
+): BudgetVsActualPoint[] {
+  const currentMonth = monthKey(todayIso)
+  const totalBudgeted = budgets.reduce((sum, b) => sum + b.limitAmount, 0)
+  const budgetedCategoryIds = [...new Set(budgets.map((b) => b.categoryId))]
+
+  return Array.from({ length: months }, (_, i) => shiftMonth(currentMonth, i - (months - 1))).map((month) => {
+    const actual = budgetedCategoryIds.reduce((sum, id) => sum + spendIn(history, id, month), 0)
+    const label = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1)
+      .toLocaleDateString('en-US', { month: 'short' })
+    return { month, label, budgeted: totalBudgeted, actual }
+  })
+}
+
 /**
  * Reallocate: a budget that has run consistently under-used for
  * `CONSISTENCY_WINDOW` months is real slack, moved to whichever OTHER budget
