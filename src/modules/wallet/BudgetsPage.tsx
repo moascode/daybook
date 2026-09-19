@@ -46,9 +46,12 @@ export function BudgetsPage() {
     // bounded to the current month.
     getBudgetSpending(monthRange(0).dateFrom.slice(0, 7)).then(setSpending)
     // FEAT-018: 6 months of per-category spend — the suggestions engine's
-    // only input besides the budgets/categories already loaded above.
-    getBudgetSpendingHistory(6).then(setSpendingHistory)
-  }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingHistory])
+    // only input besides the budgets/categories already loaded above. A
+    // failed fetch must not render identically to "no suggestions" — say so.
+    getBudgetSpendingHistory(6)
+      .then(setSpendingHistory)
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 }))
+  }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingHistory, addToast])
 
   const suggestions = useMemo(
     () => generateBudgetSuggestions(budgets, categories, spendingHistory, todayISO()),
@@ -58,49 +61,71 @@ export function BudgetsPage() {
   const handleReallocate = useCallback(async (s: Extract<BudgetSuggestion, { type: 'reallocate' }>) => {
     const fromBudget = budgets.find((b) => b.categoryId === s.fromCategoryId)
     const toBudget = budgets.find((b) => b.categoryId === s.toCategoryId)
-    if (!fromBudget || !toBudget) return
+    // Stale suggestion — its budget was edited/deleted elsewhere since this
+    // row was computed. Refresh rather than silently doing nothing.
+    if (!fromBudget || !toBudget) {
+      addToast({ message: 'That budget has changed — refreshing suggestions.', duration: 4000 })
+      loadBudgets()
+      return
+    }
     try {
       await updateBudget(fromBudget.id, { limitAmount: fromBudget.limitAmount - s.amount })
     } catch (err) {
+      // A thrown error here (network/4xx) means the write did NOT apply —
+      // safe to tell the user to just retry.
       addToast({ message: errorMessage(err, `Could not reduce ${s.fromCategoryName}'s limit — please try again.`), duration: 4000 })
       return
     }
     try {
       await updateBudget(toBudget.id, { limitAmount: toBudget.limitAmount + s.amount })
     } catch (err) {
-      // The first write already went through — say exactly what happened
-      // rather than leaving a half-applied reallocation unexplained.
+      // Unlike the donor write above, we can't assume this one didn't apply
+      // (a lost response after the server committed it looks identical to a
+      // real failure) — reload from the server rather than trust local state,
+      // and tell the user to verify rather than "raise it manually", which
+      // would double-apply if the write actually went through.
+      await loadBudgets()
       addToast({
         message: errorMessage(
           err,
-          `Moved ${formatMYR(s.amount)} out of ${s.fromCategoryName}, but could not add it to ${s.toCategoryName} — please raise it manually.`,
+          `Moved ${formatMYR(s.amount)} out of ${s.fromCategoryName} — check ${s.toCategoryName}'s limit before changing it, the update may not have reached it.`,
         ),
         duration: 6000,
       })
       return
     }
     addToast({ message: `Moved ${formatMYR(s.amount)} from ${s.fromCategoryName} to ${s.toCategoryName}.`, duration: 4000 })
-  }, [budgets, updateBudget, addToast])
+  }, [budgets, updateBudget, addToast, loadBudgets])
 
   const handleRightSize = useCallback(async (s: Extract<BudgetSuggestion, { type: 'right-size' }>) => {
     const budget = budgets.find((b) => b.categoryId === s.categoryId)
-    if (!budget) return
+    if (!budget) {
+      addToast({ message: 'That budget has changed — refreshing suggestions.', duration: 4000 })
+      loadBudgets()
+      return
+    }
     try {
       await updateBudget(budget.id, { limitAmount: s.suggestedLimit })
       addToast({ message: `${s.categoryName}'s limit is now ${formatMYR(s.suggestedLimit)}.`, duration: 4000 })
     } catch (err) {
-      addToast({ message: errorMessage(err, `Could not raise ${s.categoryName}'s limit — please try again.`), duration: 4000 })
+      // Reload rather than trust local state — an error here can still mean
+      // a lost response after the server actually committed the write.
+      await loadBudgets()
+      addToast({ message: errorMessage(err, `Could not confirm ${s.categoryName}'s new limit — please check it before changing it again.`), duration: 4000 })
     }
-  }, [budgets, updateBudget, addToast])
+  }, [budgets, updateBudget, addToast, loadBudgets])
 
   const handleCreateMissing = useCallback(async (s: Extract<BudgetSuggestion, { type: 'create-missing' }>) => {
     try {
       await addBudget({ categoryId: s.categoryId, limitAmount: s.avgMonthlySpend })
       addToast({ message: `Created a ${formatMYR(s.avgMonthlySpend)} budget for ${s.categoryName}.`, duration: 4000 })
     } catch (err) {
-      addToast({ message: errorMessage(err, `Could not create a budget for ${s.categoryName} — please try again.`), duration: 4000 })
+      // Reload first — a lost response after the server actually created the
+      // budget would otherwise let a retry create a second one for the same category.
+      await loadBudgets()
+      addToast({ message: errorMessage(err, `Could not confirm the ${s.categoryName} budget was created — check before creating it again.`), duration: 4000 })
     }
-  }, [addBudget, addToast])
+  }, [addBudget, addToast, loadBudgets])
 
   const openCreate = useCallback(() => {
     setForm({ categoryId: '', limitAmount: '' })

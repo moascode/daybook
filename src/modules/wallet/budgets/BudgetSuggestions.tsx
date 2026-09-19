@@ -26,16 +26,22 @@ function suggestionKey(s: BudgetSuggestion): string {
  * "create missing" is exactly the row someone starting out needs to see.
  */
 export function BudgetSuggestions({ suggestions, onReallocate, onRightSize, onCreateMissing }: BudgetSuggestionsProps) {
-  const [pending, setPending] = useState<string | null>(null)
+  // A Set, not a single key — one in-flight row finishing must not clear the
+  // pending (and re-enable the button) of a DIFFERENT row still in flight.
+  const [pending, setPending] = useState<Set<string>>(new Set())
 
   if (suggestions.length === 0) return null
 
   async function run(key: string, action: () => Promise<void>) {
-    setPending(key)
+    setPending((p) => new Set(p).add(key))
     try {
       await action()
     } finally {
-      setPending(null)
+      setPending((p) => {
+        const next = new Set(p)
+        next.delete(key)
+        return next
+      })
     }
   }
 
@@ -45,7 +51,7 @@ export function BudgetSuggestions({ suggestions, onReallocate, onRightSize, onCr
       <div className="flex flex-col gap-2">
         {suggestions.map((s) => {
           const key = suggestionKey(s)
-          const isPending = pending === key
+          const isPending = pending.has(key)
           if (s.type === 'reallocate') {
             return (
               <div key={key} data-testid="suggestion-row" className="flex items-center justify-between gap-3 text-sm">
