@@ -91,14 +91,14 @@ export function BudgetVsActualChart({ points, className }: BudgetVsActualChartPr
                   <div
                     key={tick}
                     className="chart-grid"
-                    style={{ position: 'absolute', left: 0, right: 0, bottom: `${(tick / axisTop) * BAR_AREA_HEIGHT}px`, borderTop: '1px dashed rgb(var(--grid))' }}
+                    style={{ position: 'absolute', left: 0, right: 0, bottom: `${(tick / max) * BAR_AREA_HEIGHT}px`, borderTop: '1px dashed rgb(var(--grid))' }}
                   />
                 ))}
 
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 'var(--s3)' }}>
                   {points.map((p, i) => {
-                    const budgetedHeight = grown ? Math.max(2, (p.budgeted / axisTop) * BAR_AREA_HEIGHT) : 0
-                    const actualHeight = grown ? Math.max(2, (p.actual / axisTop) * BAR_AREA_HEIGHT) : 0
+                    const budgetedHeight = grown ? Math.max(2, (p.budgeted / max) * BAR_AREA_HEIGHT) : 0
+                    const actualHeight = grown ? Math.max(2, (p.actual / max) * BAR_AREA_HEIGHT) : 0
                     const isLatest = i === points.length - 1
                     const over = p.actual > p.budgeted
                     const gap = p.budgeted - p.actual
@@ -183,6 +183,10 @@ export function BudgetVsActualChart({ points, className }: BudgetVsActualChartPr
           <span className="flex items-center gap-1.5">
             <i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'rgb(var(--accent))' }} />
             Actual
+          </span>
+          <span className="flex items-center gap-1.5">
+            <i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'rgb(var(--neg))' }} />
+            Over budget
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { newAppPage } from './helpers'
+import { newAppPage, businessToday } from './helpers'
 
 const API = '/api'
 
@@ -15,9 +15,13 @@ test.describe.configure({ mode: 'serial' })
  * under cases.
  */
 test.describe('90 — Budget vs. actual chart', () => {
+  // The "one clock" trap (CLAUDE.md §3): the Worker derives its 6-month
+  // window from the business timezone (Asia/Kuala_Lumpur), not the CI
+  // runner's UTC clock — `new Date()` here would drift by a month right at
+  // a month boundary, inside the documented 8-hour divergence window.
   function monthKeyOffset(offset: number): string {
-    const now = new Date()
-    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+    const [y, m] = businessToday().split('-').map(Number)
+    const d = new Date(y, m - 1 + offset, 1)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   }
 
