@@ -95,7 +95,7 @@ files.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-018](EP-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Feature | Budgets: suggestions engine | Scheduled — split into 3 PRs, 1/3 and 2/3 merged, 3/3 (chart) in progress |
+| [FEAT-018](EP-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Feature | Budgets: suggestions engine | Scheduled — split into 3 PRs, 1/3 and 2/3 merged, [PR #216](https://github.com/moascode/daybook/pull/216) is 3/3 |
 | [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | Yes — R9, unstarted |
 | [FEAT-020](EP-06-wallet-depth/FEAT-020-recurring-calendar.md) | Feature | Recurring: month calendar and annual cost | Yes — R9, unstarted |
 | [FEAT-021](EP-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Feature | Recurring: "Worth a look" anomalies | Yes — R9, unstarted |
