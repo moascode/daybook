@@ -13,8 +13,11 @@ import { useToastStore } from '@/stores/toast.store'
 import { cn, formatMYR, errorMessage, monthRange, todayISO } from '@/lib/utils'
 import { dayOfMonth, daysInMonth, monthKey } from '@/modules/wallet/dashboard/insights'
 import { AHEAD_OF_PACE_THRESHOLD } from '@/modules/wallet/dashboard/BudgetPace'
-import { generateBudgetSuggestions, type CategorySpendHistory, type BudgetSuggestion } from '@/modules/wallet/budgets/insights'
+import {
+  generateBudgetSuggestions, computeBudgetVsActual, type CategorySpendHistory, type BudgetSuggestion,
+} from '@/modules/wallet/budgets/insights'
 import { BudgetSuggestions } from '@/modules/wallet/budgets/BudgetSuggestions'
+import { BudgetVsActualChart } from '@/modules/wallet/budgets/BudgetVsActualChart'
 import type { Budget } from '@/types/wallet.types'
 
 interface BudgetFormData {
@@ -56,6 +59,11 @@ export function BudgetsPage() {
   const suggestions = useMemo(
     () => generateBudgetSuggestions(budgets, categories, spendingHistory, todayISO()),
     [budgets, categories, spendingHistory],
+  )
+
+  const budgetVsActual = useMemo(
+    () => computeBudgetVsActual(budgets, spendingHistory, todayISO()),
+    [budgets, spendingHistory],
   )
 
   const handleReallocate = useCallback(async (s: Extract<BudgetSuggestion, { type: 'reallocate' }>) => {
@@ -386,6 +394,8 @@ export function BudgetsPage() {
             )
           })}
           </div>
+
+          <BudgetVsActualChart points={budgetVsActual} className="mt-4" />
         </>
       )}
 
