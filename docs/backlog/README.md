@@ -95,7 +95,7 @@ archived item files.
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
 | [FEAT-017](EP-06-wallet-depth/FEAT-017-budgets-summary-band.md) | Feature | Budgets: summary band and pace marker | Yes — R8, unstarted |
-| [FEAT-018](EP-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Feature | Budgets: suggestions engine | Yes — R8. The largest single item in EP-06; consider splitting. |
+| [FEAT-018](EP-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Feature | Budgets: suggestions engine | Scheduled — split into 3 PRs, [PR #214](https://github.com/moascode/daybook/pull/214) is 1/3 |
 | [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | Yes — R9, unstarted |
 | [FEAT-020](EP-06-wallet-depth/FEAT-020-recurring-calendar.md) | Feature | Recurring: month calendar and annual cost | Yes — R9, unstarted |
 | [FEAT-021](EP-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Feature | Recurring: "Worth a look" anomalies | Yes — R9, unstarted |
