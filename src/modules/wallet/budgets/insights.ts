@@ -1,3 +1,4 @@
+import { monthKey, shiftMonth } from '@/modules/wallet/dashboard/insights'
 import type { Budget, Category } from '@/types/wallet.types'
 
 /**
@@ -65,11 +66,6 @@ function allMonths(history: CategorySpendHistory): string[] {
   return [...all].sort()
 }
 
-/** The most recent `count` months present in a history, oldest first. */
-function recentMonths(history: CategorySpendHistory, count: number): string[] {
-  return allMonths(history).slice(-count)
-}
-
 function spendIn(history: CategorySpendHistory, categoryId: string, month: string): number {
   return history.get(categoryId)?.get(month) ?? 0
 }
@@ -86,13 +82,11 @@ function reallocateSuggestions(
   categoryName: Map<string, string>,
   history: CategorySpendHistory,
   window: string[],
+  currentMonth: string,
   excludeAsReceiver: Set<string>,
 ): ReallocateSuggestion[] {
-  if (window.length < CONSISTENCY_WINDOW) return []
-  const currentMonth = window[window.length - 1]
-
-  const donors = budgets
-    .filter((b) => b.limitAmount > 0)
+  let donors = budgets
+    .filter((b) => b.limitAmount > 0 && history.has(b.categoryId)) // needs SOME real usage — a never-touched budget isn't "consistently under-used", it's just unused
     .map((b) => {
       const ratios = window.map((m) => spendIn(history, b.categoryId, m) / b.limitAmount)
       const avgRatio = ratios.reduce((s, r) => s + r, 0) / ratios.length
@@ -101,11 +95,23 @@ function reallocateSuggestions(
     .filter((d) => d.avgRatio <= UNDERUSE_THRESHOLD && d.slack > 0)
     .sort((a, b) => b.slack - a.slack)
 
-  const receivers = budgets
+  let receivers = budgets
     .filter((b) => b.limitAmount > 0 && !excludeAsReceiver.has(b.categoryId))
     .map((b) => ({ budget: b, overage: Math.round(spendIn(history, b.categoryId, currentMonth) - b.limitAmount) }))
     .filter((r) => r.overage > 0)
     .sort((a, b) => b.overage - a.overage)
+
+  // A budget that's BOTH under-used on average and over its limit this month
+  // is contradictory data (a spike right after a quiet stretch), not a clean
+  // donor or receiver — drop it from both roles rather than guess which one
+  // it "really" is.
+  const donorIds = new Set(donors.map((d) => d.budget.categoryId))
+  const receiverIds = new Set(receivers.map((r) => r.budget.categoryId))
+  const contested = new Set([...donorIds].filter((id) => receiverIds.has(id)))
+  if (contested.size > 0) {
+    donors = donors.filter((d) => !contested.has(d.budget.categoryId))
+    receivers = receivers.filter((r) => !contested.has(r.budget.categoryId))
+  }
 
   const usedReceivers = new Set<string>()
   const suggestions: ReallocateSuggestion[] = []
@@ -140,7 +146,6 @@ function rightSizeSuggestions(
   history: CategorySpendHistory,
   window: string[],
 ): RightSizeSuggestion[] {
-  if (window.length < CONSISTENCY_WINDOW) return []
   const suggestions: RightSizeSuggestion[] = []
   for (const b of budgets) {
     if (b.limitAmount <= 0) continue
@@ -148,13 +153,17 @@ function rightSizeSuggestions(
     const overMonths = spends.filter((s) => s > b.limitAmount).length
     if (overMonths < RIGHT_SIZE_MIN_OVER_MONTHS) continue
     const avgSpend = spends.reduce((s, v) => s + v, 0) / spends.length
-    if (avgSpend <= b.limitAmount) continue
+    // Math.ceil, not Math.round — this rule only ever raises the limit, and
+    // rounding a near-integer average DOWN could otherwise land exactly on
+    // (or even under) the current limit despite the guard just above.
+    const suggestedLimit = Math.ceil(avgSpend)
+    if (suggestedLimit <= b.limitAmount) continue
     suggestions.push({
       type: 'right-size',
       categoryId: b.categoryId,
       categoryName: categoryName.get(b.categoryId) ?? 'Unknown',
       currentLimit: b.limitAmount,
-      suggestedLimit: Math.round(avgSpend),
+      suggestedLimit,
       lookbackMonths: CONSISTENCY_WINDOW,
     })
   }
@@ -186,23 +195,35 @@ function createMissingSuggestions(
       categoryId: cat.id,
       categoryName: cat.name,
       avgMonthlySpend: Math.round(avgSpend),
-      lookbackMonths: window.length,
+      // The number of months the average actually came from, not the size of
+      // the window offered — a single RM200 month out of 6 requested isn't
+      // "RM200/month over 6 months".
+      lookbackMonths: spends.length,
     })
   }
   return suggestions
 }
 
-/** Every suggestion Budgets can currently generate, in the order design.md lists them: reallocate, right-size, create-missing. */
+/**
+ * Every suggestion Budgets can currently generate, in the order design.md
+ * lists them: reallocate, right-size, create-missing. `todayIso` anchors the
+ * consistency window to real CALENDAR months ending today — not merely
+ * "whichever months have a data row", which would silently collapse a
+ * genuinely quiet (zero-spend) month out of the window instead of counting
+ * it as real evidence of under-use.
+ */
 export function generateBudgetSuggestions(
   budgets: Budget[],
   categories: Category[],
   history: CategorySpendHistory,
+  todayIso: string,
 ): BudgetSuggestion[] {
   const categoryName = new Map(categories.map((c) => [c.id, c.name]))
-  const window = recentMonths(history, CONSISTENCY_WINDOW)
+  const currentMonth = monthKey(todayIso)
+  const window = Array.from({ length: CONSISTENCY_WINDOW }, (_, i) => shiftMonth(currentMonth, i - (CONSISTENCY_WINDOW - 1)))
   const rightSize = rightSizeSuggestions(budgets, categoryName, history, window)
   const excludeAsReceiver = new Set(rightSize.map((r) => r.categoryId))
-  const reallocate = reallocateSuggestions(budgets, categoryName, history, window, excludeAsReceiver)
+  const reallocate = reallocateSuggestions(budgets, categoryName, history, window, currentMonth, excludeAsReceiver)
   const budgetedCategoryIds = new Set(budgets.map((b) => b.categoryId))
   // Uses the FULL fetched history, not the 3-month consistency window above —
   // more months of data means a steadier average for a brand-new suggestion.

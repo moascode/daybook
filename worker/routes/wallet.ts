@@ -2806,6 +2806,11 @@ wallet.get('/budgets/spending-history', async (c) => {
   const months = Number.isInteger(monthsParam) && monthsParam >= 1 && monthsParam <= 24 ? monthsParam : 6
   const currentMonth = todayStr().slice(0, 7)
   const startMonth = shiftMonthStr(currentMonth, -(months - 1))
+  // Upper-bounded too, not just >= startMonth — a future-dated transaction
+  // (nothing in this route rejects one) would otherwise produce a month key
+  // past the current one, and the suggestions engine's "last 3 months"
+  // window (insights.ts) would silently shift into the future.
+  const endExclusive = shiftMonthStr(currentMonth, 1)
 
   const { results } = await c.env.DB.prepare(
     `SELECT strftime('%Y-%m', t.date) AS month,
@@ -2816,11 +2821,12 @@ wallet.get('/budgets/spending-history', async (c) => {
        AND t.type = 'expense'
        AND t.is_balance_only = 0
        AND t.category_id IS NOT NULL
-       AND t.date >= ?
-     GROUP BY month, t.category_id`,
+       AND t.date >= ? AND t.date < ?
+     GROUP BY month, t.category_id
+     ORDER BY month ASC`,
   )
     // EFFECTIVE_AMOUNT_SQL's bind leads — its placeholder is in the projection.
-    .bind(userId, userId, `${startMonth}-01`)
+    .bind(userId, userId, `${startMonth}-01`, `${endExclusive}-01`)
     .all()
 
   return c.json(results)
