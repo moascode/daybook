@@ -1,8 +1,8 @@
 /**
  * Wallet: budget tracking — Tier 2 feature.
- * Set monthly spend limits per category; view progress bars; get over-budget alerts.
- *
- * ALL TESTS IN THIS FILE ARE EXPECTED TO FAIL until the feature is implemented.
+ * Set monthly spend limits per category; view progress bars; get over-budget
+ * alerts; a day-of-month pace notch (FEAT-017, EP-06) on each row and a
+ * summary-band pace instruction.
  */
 
 import { test, expect } from '@playwright/test'
@@ -94,6 +94,41 @@ test('budget progress updates after adding a Food & Drink expense', async () => 
   const row = page.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
   // Spent amount should appear (120 out of 500)
   await expect(row.getByText(/120|RM 120/)).toBeVisible()
+})
+
+// ── Pace marker (FEAT-017) ──────────────────────────────────────────────
+
+test('budget row shows a pace notch reflecting day-of-month elapsed', async () => {
+  const row = page.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
+  await expect(row.getByTestId('budget-pace-notch')).toBeVisible()
+  await expect(row.getByTestId('budget-progress')).toHaveAttribute('aria-label', /of the month elapsed/)
+})
+
+test('summary band pace instruction matches the corrective-pace formula', async () => {
+  // Whether RM120 spent of a RM500 limit reads as "overspending vs. pace"
+  // depends on today's day-of-month — not fixed like the other assertions
+  // here (the "one clock" trap, CLAUDE.md §3) — so this independently
+  // re-derives the same formula BudgetsPage.tsx uses (day/daysInMonth
+  // elapsed, corrective-only instruction) from the real wall-clock date,
+  // rather than asserting a fixed direction that would flip and flake
+  // depending on which day of the month this runs.
+  const totalSpent = 120
+  const totalBudgeted = 500
+  const now = new Date()
+  const day = now.getDate()
+  const monthLength = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysRemaining = monthLength - day
+  const actualDailyRate = day > 0 ? totalSpent / day : 0
+  const neededDailyRate = daysRemaining > 0 ? (totalBudgeted - totalSpent) / daysRemaining : null
+  const shouldShow = neededDailyRate !== null && neededDailyRate >= 0 && actualDailyRate - neededDailyRate >= 0.5
+
+  const instruction = page.getByTestId('budget-pace-instruction')
+  if (shouldShow) {
+    await expect(instruction).toBeVisible()
+    await expect(instruction).toHaveText(/^RM\s*[\d,.]+ a day instead of RM\s*[\d,.]+ brings it in exactly on budget\.$/)
+  } else {
+    await expect(instruction).not.toBeVisible()
+  }
 })
 
 // ── Over-budget alert ──────────────────────────────────────────────────
