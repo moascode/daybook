@@ -32,13 +32,13 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 |---|---|---|
 | [FEAT-015](../../archive/ep-06-wallet-depth/FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | `BalanceSummary.tsx`, `AccountCard.tsx`, `insights.ts` |
 | [FEAT-016](../../archive/ep-06-wallet-depth/FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | `AccountCard.tsx`, `NetWorthHistoryChart.tsx` |
+| [FEAT-017](../../archive/ep-06-wallet-depth/FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | [PR #213](https://github.com/moascode/daybook/pull/213), 2026-09-19 |
 
 ## Items
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-017](FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | Scheduled — [PR #213](https://github.com/moascode/daybook/pull/213) |
-| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | Scheduled — split into 3 PRs, [PR #214](https://github.com/moascode/daybook/pull/214) is 1/3 |
+| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | Scheduled — split into 3 PRs, 1/3 and 2/3 merged, 3/3 (chart) in progress |
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
 | [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | **Yes — build early.** Pays for the module |
