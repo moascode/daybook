@@ -63,7 +63,18 @@ export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
     { key: 'expense', label: 'Expense', icon: TrendingDown, go: () => goWallet({ quickAddType: 'expense' }) },
     { key: 'income', label: 'Income', icon: TrendingUp, go: () => goWallet({ quickAddType: 'income' }) },
     { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, go: () => goWallet({ quickAddType: 'transfer' }) },
-    { key: 'task', label: 'Task', icon: CheckSquare, go: () => { navigate('/tasks'); close() } },
+    {
+      key: 'task',
+      label: 'Task',
+      icon: CheckSquare,
+      // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
+      // a bare navigate('/tasks') was a no-op when already on /tasks, and
+      // even from elsewhere it landed on the page with nothing focused.
+      // `focusComposer` (read by TasksTodayPage.tsx) puts the cursor in the
+      // composer either way, matching how Expense/Income/Transfer actually
+      // open their form rather than just changing the route.
+      go: () => { navigate('/tasks', { state: { focusComposer: true } }); close() },
+    },
     { key: 'import', label: 'Import transactions', icon: Upload, go: () => goWallet({ openImport: true }) },
   ]
 

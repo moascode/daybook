@@ -44,17 +44,31 @@ test.describe('quick add', () => {
     }
   })
 
-  test('routes to Tasks and to the import modal', async ({ browser }) => {
+  test('routes to Tasks with the composer focused, and to the import modal', async ({ browser }) => {
     const page = await newAppPage(browser)
     await seedAccount(page)
 
     await page.getByTestId('quick-add').click()
     await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
     await expect(page).toHaveURL(/\/tasks/)
+    // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
+    // a bare route change did nothing visible — the fix puts the cursor in
+    // the composer, matching how Expense/Income/Transfer open their form.
+    await expect(page.getByTestId('today-composer-input')).toBeFocused()
 
     await page.getByTestId('quick-add').click()
     await page.locator('[data-testid="quick-add-item"][data-action="import"]').click()
     await expect(page.getByRole('dialog')).toBeVisible()
+  })
+
+  test('"Task" focuses the composer even when already on /tasks (BUG-005’s reported no-op)', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+
+    await page.getByTestId('today-composer-input').blur()
+    await page.getByTestId('quick-add').click()
+    await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
+
+    await expect(page.getByTestId('today-composer-input')).toBeFocused()
   })
 
   test('closes on Escape and on an outside click', async ({ browser }) => {

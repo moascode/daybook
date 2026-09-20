@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
 
 # BUG-005 — Quick-add "Task" does nothing
 
@@ -31,4 +31,8 @@ needs a small addition there too (e.g. a `focusNewTask` nav state that
 **Money, data loss, or cosmetic?** Cosmetic/functional gap — no data at risk,
 but it's a dead affordance in a shipped, advertised control.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — `QuickAddMenu.tsx`'s "Task" action now navigates with
+`{ focusComposer: true }`, and `TasksTodayPage.tsx` focuses its composer on
+that flag (one-shot nav-state + `location.key` guard, mirroring how
+`WalletPage.tsx` handles its own `quickAddType` flag), so it does something
+visible whether or not the user was already on `/tasks`.
