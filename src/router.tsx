@@ -30,6 +30,7 @@ const TasksAllPage = page(() => import('@/modules/tasks/TasksAllPage'), 'TasksAl
 const TasksListDetailPage = page(() => import('@/modules/tasks/TasksListDetailPage'), 'TasksListDetailPage')
 const TasksCompletedPage = page(() => import('@/modules/tasks/TasksCompletedPage'), 'TasksCompletedPage')
 const TasksAssignedPage = page(() => import('@/modules/tasks/TasksAssignedPage'), 'TasksAssignedPage')
+const TasksUpcomingPage = page(() => import('@/modules/tasks/TasksUpcomingPage'), 'TasksUpcomingPage')
 const TripsPage = page(() => import('@/modules/trips/TripsPage'), 'TripsPage')
 const WalletPage = page(() => import('@/modules/wallet/WalletPage'), 'WalletPage')
 const AccountsPage = page(() => import('@/modules/wallet/AccountsPage'), 'AccountsPage')
@@ -69,6 +70,7 @@ export const router = createBrowserRouter([
       { path: 'tasks/lists/:listId', element: lazyRoute(TasksListDetailPage) },
       { path: 'tasks/completed', element: lazyRoute(TasksCompletedPage) },
       { path: 'tasks/assigned', element: lazyRoute(TasksAssignedPage) },
+      { path: 'tasks/upcoming', element: lazyRoute(TasksUpcomingPage) },
       { path: 'trips', element: lazyRoute(TripsPage) },
       {
         path: 'wallet',

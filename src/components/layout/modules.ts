@@ -162,8 +162,6 @@ export const modules: ModuleDescriptor[] = [
             icon: CalendarClock,
             end: false,
             testid: 'nav-tasks-upcoming',
-            disabled: true,
-            disabledReason: 'Coming in R10',
           },
           {
             to: '/tasks/assigned',
