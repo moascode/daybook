@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useTasksStore } from '@/stores/tasks.store'
 import { BulletNode } from './BulletNode'
-import type { Task } from '@/types/tasks.types'
+import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
 
 function dueDateSorter(a: Task, b: Task): number {
   if (!a.dueDate && !b.dueDate) return a.sortOrder - b.sortOrder
@@ -30,6 +30,7 @@ interface BulletTreeProps {
   onDelete: (id: string) => void
   onZoomIn: (id: string) => void
   onSetDueDate: (id: string, date: string | null) => void
+  onSetRecurrence: (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) => void
   onSaveAsTemplate: (task: Task) => void
 }
 
@@ -52,6 +53,7 @@ export function BulletTree({
   onDelete,
   onZoomIn,
   onSetDueDate,
+  onSetRecurrence,
   onSaveAsTemplate,
 }: BulletTreeProps) {
   const tasks = useTasksStore((s) => s.tasks)
@@ -118,6 +120,7 @@ export function BulletTree({
               onDelete={onDelete}
               onZoomIn={onZoomIn}
               onSetDueDate={onSetDueDate}
+              onSetRecurrence={onSetRecurrence}
               onSaveAsTemplate={onSaveAsTemplate}
               autoFocus={focusId === task.id}
             />
@@ -142,6 +145,7 @@ export function BulletTree({
                 onDelete={onDelete}
                 onZoomIn={onZoomIn}
                 onSetDueDate={onSetDueDate}
+                onSetRecurrence={onSetRecurrence}
                 onSaveAsTemplate={onSaveAsTemplate}
               />
             )}

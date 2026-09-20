@@ -91,6 +91,24 @@ export default function App() {
           .catch((err: unknown) => {
             console.error('Failed to process recurring transactions:', err)
           })
+        // FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md):
+        // materialize the next occurrence of any completed recurring task.
+        // Fire-and-forget, same shape as the recurring-transactions call
+        // above. Unlike Wallet, Tasks has no store `invalidate()` — every
+        // Tasks page fetches fresh on mount, so the toast alone is enough.
+        api
+          .post<{ created: number }>('/tasks/recurring/process')
+          .then(({ created }) => {
+            if (created > 0) {
+              useToastStore.getState().addToast({
+                message: `Created ${created} new recurring task${created === 1 ? '' : 's'}`,
+                duration: 5000,
+              })
+            }
+          })
+          .catch((err: unknown) => {
+            console.error('Failed to process recurring tasks:', err)
+          })
         // Surface pending sharing invitations once per login so they aren't
         // missed now that invites live under Settings → Sharing.
         api

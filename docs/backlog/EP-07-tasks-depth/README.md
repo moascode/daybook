@@ -22,9 +22,9 @@ proven itself with real use.
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-026](FEAT-026-tasks-upcoming-board.md) | Upcoming week board | Yes |
-| [FEAT-027](FEAT-027-tasks-assigned-to-me.md) | Assigned to me, delegation ledger | **Yes** — the schema is already there |
-| [FEAT-028](FEAT-028-task-recurrence.md) | Task recurrence | **Yes** — cannot be expressed at all today |
+| [FEAT-026](FEAT-026-tasks-upcoming-board.md) | Upcoming week board | Shipped — PR #219 |
+| [FEAT-027](FEAT-027-tasks-assigned-to-me.md) | Assigned to me, delegation ledger | Shipped — PR #221 |
+| [FEAT-028](FEAT-028-task-recurrence.md) | Task recurrence | Shipped |
 | [FEAT-029](FEAT-029-tasks-habits.md) | Habits | Yes — depends on FEAT-028 |
 | [FEAT-030](FEAT-030-tasks-completed-analytics.md) | Completed analytics | Yes |
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Question it — sequence after FEAT-021 |

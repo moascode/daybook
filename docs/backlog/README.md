@@ -108,9 +108,9 @@ files.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-026](EP-07-tasks-depth/FEAT-026-tasks-upcoming-board.md) | Feature | Tasks: Upcoming week board | Yes — R10, unstarted |
-| [FEAT-027](EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md) | Feature | Tasks: Assigned to me and the delegation ledger | Yes — R10. The schema is already there. |
-| [FEAT-028](EP-07-tasks-depth/FEAT-028-task-recurrence.md) | Feature | Tasks: recurrence | Yes — R10, unstarted |
+| [FEAT-026](EP-07-tasks-depth/FEAT-026-tasks-upcoming-board.md) | Feature | Tasks: Upcoming week board | Shipped — PR #219 |
+| [FEAT-027](EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md) | Feature | Tasks: Assigned to me and the delegation ledger | Shipped — PR #221 |
+| [FEAT-028](EP-07-tasks-depth/FEAT-028-task-recurrence.md) | Feature | Tasks: recurrence | Shipped |
 | [FEAT-029](EP-07-tasks-depth/FEAT-029-tasks-habits.md) | Feature | Tasks: Habits | Yes — R11. Depends on FEAT-028. |
 | [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Yes — R11, unstarted |
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
