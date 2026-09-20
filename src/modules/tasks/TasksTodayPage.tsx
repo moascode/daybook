@@ -1,4 +1,5 @@
-import { useEffect, useState, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { Plus } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
@@ -41,6 +42,32 @@ export function TasksTodayPage() {
   const [doneCollapsed, setDoneCollapsed] = useState(false)
   const [composerText, setComposerText] = useState('')
   const [composerBusy, setComposerBusy] = useState(false)
+  const composerInputRef = useRef<HTMLInputElement>(null)
+
+  // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
+  // the global quick-add's "Task" action navigates here with
+  // `{ focusComposer: true }` so the cursor lands straight in the composer
+  // instead of just changing the route. Same one-shot nav-state +
+  // `location.key` guard WalletPage.tsx uses for its own quick-add flag — a
+  // navigation to the route we're already on updates `location` without
+  // remounting, so a lazy `useState` initializer would miss it.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const shouldFocusComposer = (location.state as { focusComposer?: boolean } | null)?.focusComposer
+  const [handledFocusKey, setHandledFocusKey] = useState<string | null>(null)
+  if (shouldFocusComposer && location.key !== handledFocusKey) {
+    setHandledFocusKey(location.key)
+  }
+  useEffect(() => {
+    // Gated on `!loading` too: the composer only exists once the initial
+    // fetch resolves (below, inside the `loading ? ... : ...` branch), so
+    // running this before then would find `composerInputRef.current` still
+    // null and never get another chance once the nav state is cleared.
+    if (shouldFocusComposer && handledFocusKey === location.key && !loading) {
+      composerInputRef.current?.focus()
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [shouldFocusComposer, handledFocusKey, location, navigate, loading])
 
   useEffect(() => {
     let cancelled = false
@@ -197,6 +224,7 @@ export function TasksTodayPage() {
             <div className="qadd">
               <Plus className="plus" size={18} aria-hidden="true" />
               <input
+                ref={composerInputRef}
                 type="text"
                 placeholder='Add a task — press Enter to save'
                 value={composerText}

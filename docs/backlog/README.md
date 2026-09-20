@@ -116,7 +116,7 @@ files.
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
 | [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Shipped (outliner only) |
 | [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Yes — no schema change, UI-only gap |
-| [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Yes |
+| [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Fixed |
 | [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Yes |
 | [FEAT-052](EP-07-tasks-depth/FEAT-052-edit-task-from-row.md) | Feature | Edit a task's text from any list-style view | Yes — every non-outliner Tasks view is affected |
 | [FEAT-053](EP-07-tasks-depth/FEAT-053-create-task-list.md) | Feature | A way to create a task list | Yes — the other half of FEAT-051's gap |
