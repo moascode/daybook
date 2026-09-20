@@ -50,7 +50,7 @@ Both are live as designed first-run states; their depth is the current roadmap.
 | Auth | PBKDF2-HMAC-SHA256 via Web Crypto + D1-backed sessions behind an HMAC-signed cookie |
 | Charts | Recharts |
 | Drag & drop | @dnd-kit |
-| Tests | Playwright, sharded 8× in CI |
+| Tests | Playwright, sharded 10× in CI |
 
 > `server/` is an **Express + SQLite backend that is no longer deployed.** It
 > remains in the repo because `scripts/schema-diff.mjs` gates CI on D1 matching

@@ -104,13 +104,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 8 shards, not 6: the suite grew past ~740 tests, which put 6 shards
+        # 10 shards, not 8: the suite grew past ~880 tests, which put 8 shards
         # over 100 tests apiece — the same "wrangler dev dies partway through
-        # a long shard" risk that took shards from 3 to 6 in the first place
-        # (workerd peaks around 1.1 GB on a 7 GB runner; more, shorter shards
-        # cap what accumulates in any one of them). Bump this again if the
-        # suite grows past ~800 tests and shards start creeping past 100.
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        # a long shard" risk that took shards from 3 to 6 to 8 in the first
+        # place (workerd peaks around 1.1 GB on a 7 GB runner; more, shorter
+        # shards cap what accumulates in any one of them). Bump this again if
+        # the suite grows past ~1000 tests and shards start creeping past 100.
+        #
+        # The run command below derives the shard total from `strategy.job-total`
+        # rather than a second hardcoded number, so a future bump only ever
+        # touches this one array — a hardcoded `/8` here previously could
+        # silently drift from the array length above and mis-shard the suite.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - uses: actions/checkout@v4
 
@@ -122,8 +127,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Playwright tests (shard ${{ matrix.shard }}/8)
-        run: npx playwright test --shard=${{ matrix.shard }}/8
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}

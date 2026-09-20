@@ -55,7 +55,7 @@ requirement (below) makes it fragile there, a subagent misreported a
 targeted 16-spec count as if it were the ~450-680-test full suite, and a
 full local run partially crashed mid-way and returned inflated, garbled
 numbers — none of which added signal beyond CI, all of which burned real
-time. **GitHub Actions already shards the whole suite** (8 jobs — pass `8` to
+time. **GitHub Actions already shards the whole suite** (10 jobs — pass `10` to
 `test:e2e:parallel` to match exactly; its own default stays a lower,
 core-capped number for local resource safety) — after pushing, poll the PR's
 check runs (or read the `check_suite.completed` webhook event on a subscribed

@@ -9,7 +9,7 @@
 # and usually incompletely. Every check below is already an npm script — the
 # only thing that was missing was running them as a set.
 #
-# NOT included, deliberately: the full Playwright suite. CI shards it 8×.
+# NOT included, deliberately: the full Playwright suite. CI shards it 10×.
 # Reproducing it locally has repeatedly returned inflated, garbled numbers in
 # this sandbox and cost real time without adding signal CI doesn't already give.
 set -uo pipefail
