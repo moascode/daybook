@@ -108,25 +108,21 @@ test.describe('69 — Tasks Today page', () => {
     await expect(page.locator('[data-testid^="nav-tasks-list-"]')).toHaveCount(5) // 4 lists + Unsorted
   })
 
-  test('Upcoming is disabled with a stated reason', async ({ browser }) => {
+  // Both nav items were "Coming in R10" disabled placeholders; FEAT-026
+  // (docs/backlog/EP-07-tasks-depth/FEAT-026-tasks-upcoming-board.md) and
+  // FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md)
+  // enabled Upcoming and Assigned to me respectively — see
+  // e2e/91-tasks-upcoming.spec.ts and e2e/92-tasks-assigned.spec.ts for each
+  // page's own behaviour.
+  test('Upcoming navigates to its page', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
     const upcoming = page.getByTestId('nav-tasks-upcoming')
-    await expect(upcoming).toHaveAttribute('aria-disabled', 'true')
-    await expect(upcoming).toHaveAttribute('aria-label', 'Upcoming — Coming in R10')
-
-    // Clicking does nothing — still on Today, not a 404. force:true because
-    // Playwright's actionability treats aria-disabled="true" on a button role
-    // as genuinely disabled and refuses a plain click (AppBar's disabled-tab
-    // tests use the same pattern, see e2e/65-app-shell.spec.ts).
-    await upcoming.click({ force: true })
-    await expect(page).toHaveURL(/\/tasks$/)
+    await expect(upcoming).not.toHaveAttribute('aria-disabled', 'true')
+    await upcoming.click()
+    await expect(page).toHaveURL(/\/tasks\/upcoming$/)
   })
 
-  // FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md)
-  // enabled this nav item — it was covered by the disabled-with-a-reason
-  // assertion above until then; see e2e/92-tasks-assigned.spec.ts for the
-  // page's own behaviour.
   test('Assigned to me navigates to its page', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
