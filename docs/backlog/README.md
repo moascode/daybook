@@ -42,7 +42,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
 | [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
-| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 10 | Open |
+| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 12 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
 | [EP-10](EP-10-cross-cutting/README.md) | Cross-cutting | 4 | Open |
@@ -118,6 +118,8 @@ files.
 | [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Yes — no schema change, UI-only gap |
 | [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Yes |
 | [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Yes |
+| [FEAT-052](EP-07-tasks-depth/FEAT-052-edit-task-from-row.md) | Feature | Edit a task's text from any list-style view | Yes — every non-outliner Tasks view is affected |
+| [FEAT-053](EP-07-tasks-depth/FEAT-053-create-task-list.md) | Feature | A way to create a task list | Yes — the other half of FEAT-051's gap |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 
