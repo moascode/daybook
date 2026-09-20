@@ -341,6 +341,51 @@ export function useTasks() {
     return updated
   }, [])
 
+  /**
+   * Update a task's content via a direct PATCH — deliberately NOT
+   * `updateTask`, whose store-existence guard silently no-ops for a task
+   * loaded via a store-bypassing `loadTasks(view)` call. `TaskListRow.tsx`'s
+   * click-to-edit (FEAT-052) is exactly such a caller — it's shared by
+   * TasksAllPage/TasksListDetailPage/TasksCompletedPage/TasksAssignedPage,
+   * none of which keep tasks in the outliner's store. Mirrors `assignTask`.
+   */
+  const updateTaskContent = useCallback(async (id: string, content: string): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { content })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /**
+   * Set or clear a single task's due date via a direct PATCH — same
+   * guard-free story as `updateTaskContent` above (BUG-006's row-level date
+   * control has the same store-bypassing callers). Unlike `rescheduleTasks`
+   * (bulk, via POST /tasks/reschedule, which rejects an empty date), this
+   * also supports clearing.
+   */
+  const updateTaskDueDate = useCallback(async (id: string, dueDate: string | null): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { dueDate })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
   /** Bulk-move due dates via POST /tasks/reschedule (the Overdue group's "Reschedule all"). */
   const rescheduleTasks = useCallback(async (ids: string[], dueDate: string): Promise<Task[]> => {
     let rows: TaskRow[]
@@ -701,6 +746,8 @@ export function useTasks() {
     updateTask,
     completeTask,
     assignTask,
+    updateTaskContent,
+    updateTaskDueDate,
     rescheduleTasks,
     deleteTask,
     restoreDeleted,

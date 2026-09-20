@@ -206,6 +206,18 @@ export function TasksAllPage() {
     }
   }
 
+  // FEAT-052 / BUG-006: TaskListRow persists the edit itself (guard-free
+  // hook functions — see its own doc comments); these only keep this page's
+  // local `openTasks` array in sync so the row moves between due-date
+  // groups (dateGroups is derived from openTasks) instead of showing a
+  // stale bucket until the next reload.
+  const handleContentChange = (id: string, content: string) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)))
+  }
+  const handleDueDateChange = (id: string, dueDate: string | null) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
+  }
+
   const handleScheduleUndated = async () => {
     const ids = dateGroups.undated.map((t) => t.id)
     if (ids.length === 0) return
@@ -409,6 +421,8 @@ export function TasksAllPage() {
                         task={t}
                         list={t.listId ? listById.get(t.listId) : undefined}
                         onToggleComplete={handleToggleComplete}
+                        onContentChange={handleContentChange}
+                        onDueDateChange={handleDueDateChange}
                       />
                     ))}
                   </div>
@@ -436,6 +450,8 @@ export function TasksAllPage() {
                       task={t}
                       list={t.listId ? listById.get(t.listId) : undefined}
                       onToggleComplete={handleToggleComplete}
+                      onContentChange={handleContentChange}
+                      onDueDateChange={handleDueDateChange}
                     />
                   ))}
                 </div>

@@ -78,6 +78,19 @@ export function TasksAssignedPage() {
     setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, assigneeId } : t)))
   }
 
+  // FEAT-052 / BUG-006: same staleness story as `handleAssigneeChange` above
+  // — TaskListRow persists the edit itself, but its display renders straight
+  // from THIS page's own arrays, and a task can appear in either
+  // `waitingOnYou` (Section 1) or `allOpen` (Section 2's `handedOut`).
+  const handleContentChange = (taskId: string, content: string) => {
+    setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, content } : t)))
+    setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, content } : t)))
+  }
+  const handleDueDateChange = (taskId: string, dueDate: string | null) => {
+    setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
+    setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
+  }
+
   const handleToggleComplete = () => {
     // Both sections this page renders (Waiting on you / the handed-out rail)
     // are read-mostly ledgers, not an outliner — completion here would need
@@ -182,7 +195,14 @@ export function TasksAssignedPage() {
                     <span className="line" />
                   </div>
                   {group.tasks.map((t) => (
-                    <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} />
+                    <TaskListRow
+                      key={t.id}
+                      task={t}
+                      list={undefined}
+                      onToggleComplete={handleToggleComplete}
+                      onContentChange={handleContentChange}
+                      onDueDateChange={handleDueDateChange}
+                    />
                   ))}
                 </div>
               ))
@@ -223,6 +243,8 @@ export function TasksAssignedPage() {
                         onToggleComplete={handleToggleComplete}
                         coMembers={coMembers}
                         onAssigneeChange={handleAssigneeChange}
+                        onContentChange={handleContentChange}
+                        onDueDateChange={handleDueDateChange}
                       />
                     </div>
                   </div>
