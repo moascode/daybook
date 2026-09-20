@@ -8,7 +8,7 @@ Production is a **Cloudflare Worker + D1**, served at
 ```
   push / PR ──► CI (.github/workflows/ci.yml)
                  checks job   typecheck ×3 · lint · doc links · tokens · contrast · build · schema parity
-                 e2e job      full Playwright suite, sharded 8×
+                 e2e job      full Playwright suite, sharded 10×
 
   push tag  ──► Release (.github/workflows/release.yml)
                  1. require a green CI run FOR THAT COMMIT
@@ -70,7 +70,7 @@ gh run rerun <release-run-id>          # 3. then re-run the release
 ```
 
 Re-tagging is not needed. Confirm it's the flake and not a real break by running
-just the failing shard locally — `npx playwright test --shard=N/8` — before
+just the failing shard locally — `npx playwright test --shard=N/10` — before
 re-running anything.
 
 ---
@@ -106,7 +106,7 @@ Worker version runs fine against the newer schema.
 | `npm run check:contrast` | WCAG AA regressions below 4.5:1 |
 | `npm run build` + `wrangler deploy --dry-run` | a bundle that won't build or won't deploy |
 | `npm run d1:schema-diff` | D1 drifting from `server/migrations` |
-| Playwright, 8 shards | behaviour |
+| Playwright, 10 shards | behaviour |
 
 ---
 

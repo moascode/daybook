@@ -59,9 +59,9 @@
 #   scripts/e2e-parallel.sh [N]
 #
 #   N   Number of shards. Defaults to min(nproc, 6) — capped well below CI's
-#       own shard count (8, see .github/workflows/ci.yml) since this all runs
+#       own shard count (10, see .github/workflows/ci.yml) since this all runs
 #       on one machine (workerd + Chromium per shard is real CPU/memory,
-#       unlike CI's one-shard-per-runner). Pass `scripts/e2e-parallel.sh 8` to
+#       unlike CI's one-shard-per-runner). Pass `scripts/e2e-parallel.sh 10` to
 #       match CI exactly on a machine with the cores to spare, or a smaller N
 #       if you see the crash in (1) above even at the default.
 #

@@ -146,7 +146,7 @@ open once you already knew to look.
   `reuseExistingServer` and will silently adopt yours — without `VITE_E2E=1`,
   every spec relying on `window.__test*` then fails with no hint why.
   `npm run dev:worker` uses **:8788** for exactly this reason.
-- **Never run the full suite locally.** CI already shards it 8×. Attempts to
+- **Never run the full suite locally.** CI already shards it 10×. Attempts to
   reproduce it here have returned inflated, garbled numbers and burned real time
   without adding signal.
 - **Playwright cannot intercept a Worker→third-party fetch.** Branch on
@@ -458,7 +458,7 @@ git push origin vX.Y.Z
 | 0–4 (scaffold → home network) | ✅ shipped, v1.0 |
 | 5a (AI) | 🟢 four features ship — bulk categorisation, merchant resolution, composer parse, photo import. See [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) for the authoritative list and what is still missing. |
 | 5b (sharing), 5c (wallet UX) | ✅ shipped, v1.0.1 |
-| 6 (Workers + D1) | ✅ COMPLETE — production has run on the Worker since v2; the full suite is green in CI, sharded across 8 jobs |
+| 6 (Workers + D1) | ✅ COMPLETE — production has run on the Worker since v2; the full suite is green in CI, sharded across 10 jobs |
 | 7 (advanced) | ongoing; recurring rules, budgets, goals already shipped |
 
 ### Blockers
@@ -527,12 +527,12 @@ follow the theme. The launch *image* does, since v3 P5. See
   `gh run rerun <ci-run-id> --failed`, wait for green, **then**
   `gh run rerun <release-run-id>`. Re-tagging is not needed. Confirm it is the
   flake and not a real break by running the failing shard locally
-  (`npx playwright test --shard=N/8`) before re-running anything.
+  (`npx playwright test --shard=N/10`) before re-running anything.
 - A local `wrangler … --remote` still fails from the owner's Mac (account not
   authorised). Only CI holds a token — verify remote D1 from the release log.
 - D1 migrations are additive-only; rename via `ALTER TABLE … RENAME TO` is
   lossless and allowed with owner sign-off. Applied in lexicographic order.
-- e2e uses a fresh DB per context; CI shards across 8 jobs.
+- e2e uses a fresh DB per context; CI shards across 10 jobs.
 - Pre-existing lint: 35 warnings (react-hooks, test-only shims).
 - **Docs were restructured 2026-09-16** (PRs #201–#206): `docs/{guides,reference,backlog,archive}`,
   no `roadmap/`. Every doc has a `Status` header; links and backlog consistency

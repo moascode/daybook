@@ -54,7 +54,7 @@ contrast gate, the generated-tokens check, and D1 schema parity.
 
 **Never run the full Playwright suite locally.** Not `test:e2e:parallel`, not a
 bare `npx playwright test`, and not from inside a verification subagent. CI
-shards it 8×; reproducing it in this sandbox has returned inflated, garbled
+shards it 10×; reproducing it in this sandbox has returned inflated, garbled
 numbers and burned real time without adding signal. After pushing, read the PR's
 check runs for the authoritative result.
 
