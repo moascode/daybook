@@ -16,6 +16,7 @@ import {
   BookCopy,
   Repeat,
   Wallet,
+  ListTodo,
 } from 'lucide-react'
 import { format, parseISO, isBefore, startOfDay } from 'date-fns'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { BulletEditor } from './BulletEditor'
 import { BulletNote } from './BulletNote'
 import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
+import type { TaskList } from '@/hooks/useTaskLists'
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -49,6 +51,8 @@ interface BulletNodeProps {
   onSetDueDate: (id: string, date: string | null) => void
   onSetRecurrence: (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) => void
   onSetWalletRef: (id: string, walletRef: string | null) => void
+  onSetList: (id: string, listId: string | null) => void
+  taskLists: TaskList[]
   onSaveAsTemplate: (task: Task) => void
   autoFocus?: boolean
 }
@@ -73,6 +77,8 @@ export function BulletNode({
   onSetDueDate,
   onSetRecurrence,
   onSetWalletRef,
+  onSetList,
+  taskLists,
   onSaveAsTemplate,
   autoFocus,
 }: BulletNodeProps) {
@@ -92,6 +98,8 @@ export function BulletNode({
   )
   const [showWalletDialog, setShowWalletDialog] = useState(false)
   const [pendingWalletRef, setPendingWalletRef] = useState(task.walletRef ?? '')
+  const [showListDialog, setShowListDialog] = useState(false)
+  const [pendingListId, setPendingListId] = useState(task.listId ?? '')
 
   const today = startOfDay(new Date())
   const isOverdue =
@@ -134,7 +142,13 @@ export function BulletNode({
     setShowWalletDialog(false)
   }, [task.id, pendingWalletRef, onSetWalletRef])
 
+  const handleSaveList = useCallback(() => {
+    onSetList(task.id, pendingListId || null)
+    setShowListDialog(false)
+  }, [task.id, pendingListId, onSetList])
+
   const walletChip = resolveChip(task.walletRef)
+  const currentList = taskLists.find((l) => l.id === task.listId)
 
   const {
     attributes,
@@ -426,6 +440,18 @@ export function BulletNode({
 
                 <DropdownMenu.Item
                   className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                  data-testid="bullet-menu-move-list"
+                  onSelect={() => {
+                    setPendingListId(task.listId ?? '')
+                    setShowListDialog(true)
+                  }}
+                >
+                  <ListTodo className="h-3.5 w-3.5 text-fg-faint" />
+                  {currentList ? `List: ${currentList.name}` : 'Move to list…'}
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
                   onSelect={() => onSaveAsTemplate(task)}
                 >
                   <BookCopy className="h-3.5 w-3.5 text-fg-faint" />
@@ -660,6 +686,44 @@ export function BulletNode({
               Cancel
             </Button>
             <Button size="sm" data-testid="wallet-ref-save-btn" onClick={handleSaveWalletRef}>
+              Save
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Move to list dialog (FEAT-051) ──────────────────── */}
+      <Modal
+        open={showListDialog}
+        onOpenChange={(open) => { if (!open) setShowListDialog(false) }}
+        title="Move to list"
+        className="max-w-sm"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="task-list-select" className="text-sm font-medium text-fg-muted">
+              List
+            </label>
+            <select
+              id="task-list-select"
+              data-testid="task-list-select"
+              value={pendingListId}
+              onChange={(e) => setPendingListId(e.target.value)}
+              className="rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            >
+              <option value="">Unsorted</option>
+              {taskLists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowListDialog(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" data-testid="task-list-save-btn" onClick={handleSaveList}>
               Save
             </Button>
           </div>

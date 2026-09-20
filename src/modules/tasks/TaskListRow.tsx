@@ -47,6 +47,21 @@ export interface TaskListRowProps {
    * TasksAssignedPage.tsx's assignee-derived sections.
    */
   onDueDateChange?: (taskId: string, dueDate: string | null) => void
+  /**
+   * FEAT-051 (docs/backlog/EP-07-tasks-depth/FEAT-051-task-list-picker.md):
+   * every list the caller can file a task into, for the "Move to…" picker.
+   * Resolved ONCE by the parent page, same "not a per-row fetch" story as
+   * `coMembers`. Optional and hide-when-absent, same convention.
+   */
+  availableLists?: TaskList[]
+  /**
+   * FEAT-051: called after a successful list change. Every current consumer
+   * derives `list` (above) from its own local `tasks` array via a
+   * `listId → TaskList` lookup, so without this the dot/name shown here
+   * would stay on the old list until the next reload — the same staleness
+   * `onAssigneeChange`/`onDueDateChange` exist to prevent.
+   */
+  onListChange?: (taskId: string, listId: string | null) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -95,9 +110,11 @@ export function TaskListRow({
   onAssigneeChange,
   onContentChange,
   onDueDateChange,
+  availableLists,
+  onListChange,
 }: TaskListRowProps) {
   const state = dueState(task)
-  const { assignTask, updateTaskContent, updateTaskDueDate } = useTasks()
+  const { assignTask, updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
 
   // Controlled locally rather than reading `task.assigneeId` straight through:
   // every page rendering this row keeps its own local `tasks` state (not the
@@ -177,7 +194,7 @@ export function TaskListRow({
       {/* Per-list colour is user data (D-10), not a semantic token — an
           inline style is the correct, documented exception (same as
           ModuleSidebar's list dots). */}
-      {list && (
+      {!availableLists && list && (
         <span
           className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
           style={{ background: list.color }}
@@ -185,6 +202,47 @@ export function TaskListRow({
           title={list.name}
           data-testid="all-tasks-row-list-chip"
         />
+      )}
+
+      {/* FEAT-051 — only rendered where a parent page resolved the list of
+          options (see the prop's own doc comment); every other page passes
+          nothing and gets the plain read-only dot above, unchanged. */}
+      {availableLists && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1"
+          data-testid="all-tasks-row-list-chip"
+          title={list?.name ?? 'Unsorted'}
+        >
+          <span
+            className="h-2 w-2 flex-shrink-0 rounded-full"
+            style={{ background: list?.color ?? '#6b7280' }}
+            aria-hidden="true"
+          />
+          <select
+            aria-label={`Move ${task.content || 'task'} to a list`}
+            data-testid={`task-row-list-${task.id}`}
+            value={task.listId ?? ''}
+            onChange={(e) => {
+              const value = e.target.value || null
+              updateTaskList(task.id, value)
+                .then(() => onListChange?.(task.id, value))
+                .catch(() => {
+                  // updateTaskList already surfaced the error (reportAndReconcile).
+                })
+            }}
+            className={cn(
+              'shrink-0 rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+              'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
+            )}
+          >
+            <option value="">Unsorted</option>
+            {availableLists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </span>
       )}
 
       <div className="min-w-0 flex-1">

@@ -263,6 +263,7 @@ export function useTasks() {
           | 'recurrence'
           | 'recurrenceData'
           | 'walletRef'
+          | 'listId'
         >
       >,
     ) => {
@@ -375,6 +376,27 @@ export function useTasks() {
     let row: TaskRow
     try {
       row = await api.patch<TaskRow>(`/tasks/${id}`, { dueDate })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /**
+   * Move a task into a list (or back to Unsorted, via `null`) via a direct
+   * PATCH — same guard-free story as `updateTaskContent`/`updateTaskDueDate`
+   * above. FEAT-051's row-level picker (TaskListRow.tsx, BulletNode.tsx) has
+   * the same store-bypassing callers.
+   */
+  const updateTaskList = useCallback(async (id: string, listId: string | null): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { listId })
     } catch (err) {
       await reportAndReconcile(err)
       throw err
@@ -748,6 +770,7 @@ export function useTasks() {
     assignTask,
     updateTaskContent,
     updateTaskDueDate,
+    updateTaskList,
     rescheduleTasks,
     deleteTask,
     restoreDeleted,

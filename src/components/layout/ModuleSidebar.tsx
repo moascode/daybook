@@ -1,6 +1,6 @@
-import { Fragment, useEffect } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
-import { FlaskConical, Settings, X, Inbox, StickyNote } from 'lucide-react'
+import { Fragment, useEffect, useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { FlaskConical, Settings, X, Inbox, StickyNote, Plus } from 'lucide-react'
 import { cn, TEST_HOOKS_ENABLED, errorMessage } from '@/lib/utils'
 import { modules } from './modules'
 import { ModuleSwitcher } from './ModuleSwitcher'
@@ -10,6 +10,7 @@ import { CaptureInboxBadge } from '@/modules/wallet/CaptureInboxBadge'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
 import { useDayStore } from '@/stores/day.store'
+import { NewListModal } from '@/modules/tasks/NewListModal'
 
 interface ModuleSidebarProps {
   open: boolean
@@ -40,10 +41,12 @@ const navItemClass = ({ isActive }: { isActive: boolean }) => cn('nav-item', isA
  */
 export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
   const location = useLocation()
+  const navigate = useNavigate()
   const activeModule = modules.find((m) => !m.disabled && location.pathname.startsWith(m.path))
   const addToast = useToastStore((s) => s.addToast)
-  const { taskLists, loadTaskLists } = useTaskLists()
+  const { taskLists, loadTaskLists, createTaskList } = useTaskLists()
   const { showTasks, showMoney, toggle } = useDayStore()
+  const [showNewList, setShowNewList] = useState(false)
 
   const isTasksModule = activeModule?.id === 'tasks'
   const isDayModule = activeModule?.id === 'day'
@@ -197,7 +200,18 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             home. Injected here, not in modules.ts, which stays static/pure. */}
         {isTasksModule && (
           <div className="nav-group">
-            <span className="u-label">Lists</span>
+            <div className="flex items-center justify-between">
+              <span className="u-label">Lists</span>
+              <button
+                type="button"
+                aria-label="New list"
+                data-testid="new-list-btn"
+                onClick={() => setShowNewList(true)}
+                className="rounded p-0.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
             {taskLists.map((list) => (
               <NavLink
                 key={list.id}
@@ -252,6 +266,21 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             it drifts the moment a release ships and nobody remembers. */}
         <p className="mt-2 px-2 text-xs text-fg-faint">Daybook · {import.meta.env.VITE_APP_VERSION ?? 'dev'}</p>
       </aside>
+
+      <NewListModal
+        open={showNewList}
+        onOpenChange={setShowNewList}
+        onCreate={async (input) => {
+          try {
+            const list = await createTaskList(input)
+            onClose()
+            navigate(`/tasks/lists/${list.id}`)
+          } catch (err) {
+            addToast({ message: errorMessage(err, 'Could not create that list — please try again.') })
+            throw err
+          }
+        }}
+      />
     </>
   )
 }

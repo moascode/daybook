@@ -3,6 +3,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useTasksStore } from '@/stores/tasks.store'
 import { BulletNode } from './BulletNode'
 import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
+import type { TaskList } from '@/hooks/useTaskLists'
 
 function dueDateSorter(a: Task, b: Task): number {
   if (!a.dueDate && !b.dueDate) return a.sortOrder - b.sortOrder
@@ -32,6 +33,8 @@ interface BulletTreeProps {
   onSetDueDate: (id: string, date: string | null) => void
   onSetRecurrence: (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) => void
   onSetWalletRef: (id: string, walletRef: string | null) => void
+  onSetList: (id: string, listId: string | null) => void
+  taskLists: TaskList[]
   onSaveAsTemplate: (task: Task) => void
 }
 
@@ -56,6 +59,8 @@ export function BulletTree({
   onSetDueDate,
   onSetRecurrence,
   onSetWalletRef,
+  onSetList,
+  taskLists,
   onSaveAsTemplate,
 }: BulletTreeProps) {
   const tasks = useTasksStore((s) => s.tasks)
@@ -124,6 +129,8 @@ export function BulletTree({
               onSetDueDate={onSetDueDate}
               onSetRecurrence={onSetRecurrence}
               onSetWalletRef={onSetWalletRef}
+              onSetList={onSetList}
+              taskLists={taskLists}
               onSaveAsTemplate={onSaveAsTemplate}
               autoFocus={focusId === task.id}
             />
@@ -150,6 +157,8 @@ export function BulletTree({
                 onSetDueDate={onSetDueDate}
                 onSetRecurrence={onSetRecurrence}
                 onSetWalletRef={onSetWalletRef}
+                onSetList={onSetList}
+                taskLists={taskLists}
                 onSaveAsTemplate={onSaveAsTemplate}
               />
             )}

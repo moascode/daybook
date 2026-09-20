@@ -217,6 +217,12 @@ export function TasksAllPage() {
   const handleDueDateChange = (id: string, dueDate: string | null) => {
     setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
   }
+  // FEAT-051: same staleness story — filteredTasks/dateGroups derive from
+  // openTasks, and a `listId` filter is active on this page, so a task
+  // moved out of the filtered list must actually disappear from view.
+  const handleListChange = (id: string, listId: string | null) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, listId } : t)))
+  }
 
   const handleScheduleUndated = async () => {
     const ids = dateGroups.undated.map((t) => t.id)
@@ -423,6 +429,8 @@ export function TasksAllPage() {
                         onToggleComplete={handleToggleComplete}
                         onContentChange={handleContentChange}
                         onDueDateChange={handleDueDateChange}
+                        availableLists={taskLists}
+                        onListChange={handleListChange}
                       />
                     ))}
                   </div>
@@ -452,6 +460,8 @@ export function TasksAllPage() {
                       onToggleComplete={handleToggleComplete}
                       onContentChange={handleContentChange}
                       onDueDateChange={handleDueDateChange}
+                      availableLists={taskLists}
+                      onListChange={handleListChange}
                     />
                   ))}
                 </div>
