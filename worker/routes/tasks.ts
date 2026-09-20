@@ -31,6 +31,13 @@ const TASK_COLS: Record<string, string> = {
   dueTime: 'due_time',
   assigneeId: 'assignee_id',
   completedAt: 'completed_at',
+  // FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md):
+  // when the assignee was last set. Derived server-side in the PATCH handler
+  // below — a client-supplied value is always discarded there. POST /tasks
+  // does accept it verbatim (for the undo/restore path only, see its own
+  // comment); that path is self-scoped (`user_id = caller`), so the only
+  // thing a client could skew by lying here is their own turnaround stats.
+  assignedAt: 'assigned_at',
 }
 
 // ── Tasks ────────────────────────────────────────────
@@ -106,7 +113,10 @@ tasks.get('/tasks', async (c) => {
       conditions.push('t.is_completed = 1')
       break
     case 'assigned':
-      conditions.push('t.assignee_id = ?')
+      // is_completed = 0 like every other open-work view (today/upcoming/
+      // all/list) — a finished task shouldn't stay listed under "waiting on
+      // you" forever (FEAT-027, docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md).
+      conditions.push('t.is_completed = 0', 't.assignee_id = ?')
       whereParams.push(userId)
       break
     default:
@@ -178,18 +188,18 @@ tasks.post('/tasks', async (c) => {
   const row = await c.env.DB.prepare(
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
-        list_id, priority, due_time, assignee_id, created_at, updated_at)
+        list_id, priority, due_time, assignee_id, assigned_at, created_at, updated_at)
      VALUES
        (COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, COALESCE(?, 'none'), ?, ?,
+        ?, COALESCE(?, 'none'), ?, ?, ?,
         COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
   )
     // id, userId, parentId, content, note,
     // isCompleted, isCollapsed, sortOrder, dueDate,
-    // listId, priority, dueTime, assigneeId, createdAt, updatedAt
+    // listId, priority, dueTime, assigneeId, assignedAt, createdAt, updatedAt
     .bind(
       b.id ?? null,
       userId,
@@ -204,6 +214,11 @@ tasks.post('/tasks', async (c) => {
       b.priority ?? null,
       b.dueTime ?? null,
       b.assigneeId ?? null,
+      // Only a restore (undo of a delete) ever sends this — a fresh POST
+      // from addTask() never sets an assignee at creation time, so this is
+      // null for every normal create. See FEAT-027
+      // (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md).
+      b.assignedAt ?? null,
       b.createdAt ?? null,
       b.updatedAt ?? null,
     )
@@ -225,6 +240,21 @@ tasks.patch('/tasks/:id', async (c) => {
   if ('listId' in body && body.listId) {
     const writable = await writableListIds(c.env.DB, userId)
     if (!writable.has(String(body.listId))) return c.json({ error: 'list not found' }, 404)
+  }
+
+  // Deriving assigned_at here, not accepting it from the client, mirrors how
+  // completed_at is only ever derived server-side (POST /tasks/:id/complete,
+  // D-3) — a value other people's turnaround stats depend on shouldn't be
+  // client-suppliable. `assignedAt` is in TASK_COLS so this derivation can
+  // reach the column via updateRow below, which would otherwise let a caller
+  // PATCH `{ assignedAt: '<anything>' }` directly — so any client-supplied
+  // value is discarded first, and only ever replaced by the derivation
+  // below. Setting a new assignee (including re-assigning to the same
+  // person again) stamps "now"; clearing the assignee (assigneeId falsy)
+  // clears the stamp too; PATCHing anything else leaves it untouched.
+  delete body.assignedAt
+  if ('assigneeId' in body) {
+    body.assignedAt = body.assigneeId ? nowStr() : null
   }
 
   const row = await updateRow(c.env.DB, 'tasks', c.req.param('id'), userId, TASK_COLS, body)

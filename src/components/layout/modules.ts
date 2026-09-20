@@ -171,8 +171,6 @@ export const modules: ModuleDescriptor[] = [
             icon: UserCheck,
             end: false,
             testid: 'nav-tasks-assigned',
-            disabled: true,
-            disabledReason: 'Coming in R10',
           },
         ],
       },
