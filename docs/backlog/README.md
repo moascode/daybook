@@ -114,7 +114,7 @@ files.
 | [FEAT-029](EP-07-tasks-depth/FEAT-029-tasks-habits.md) | Feature | Tasks: Habits | Shipped |
 | [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Shipped |
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
-| [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Yes — R11, small |
+| [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Shipped (outliner only) |
 | [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Yes — no schema change, UI-only gap |
 | [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Yes |
 | [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Yes |

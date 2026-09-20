@@ -46,4 +46,7 @@ export interface Task {
   recurrence: TaskRecurrenceFrequency | null
   recurrenceData: TaskRecurrenceData | null
   recurrenceParentId: string | null
+  // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md):
+  // `<kind>:<id>` linking this task to a Wallet object, e.g. 'goal:<id>'.
+  walletRef: string | null
 }

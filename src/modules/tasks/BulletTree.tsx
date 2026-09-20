@@ -31,6 +31,7 @@ interface BulletTreeProps {
   onZoomIn: (id: string) => void
   onSetDueDate: (id: string, date: string | null) => void
   onSetRecurrence: (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) => void
+  onSetWalletRef: (id: string, walletRef: string | null) => void
   onSaveAsTemplate: (task: Task) => void
 }
 
@@ -54,6 +55,7 @@ export function BulletTree({
   onZoomIn,
   onSetDueDate,
   onSetRecurrence,
+  onSetWalletRef,
   onSaveAsTemplate,
 }: BulletTreeProps) {
   const tasks = useTasksStore((s) => s.tasks)
@@ -121,6 +123,7 @@ export function BulletTree({
               onZoomIn={onZoomIn}
               onSetDueDate={onSetDueDate}
               onSetRecurrence={onSetRecurrence}
+              onSetWalletRef={onSetWalletRef}
               onSaveAsTemplate={onSaveAsTemplate}
               autoFocus={focusId === task.id}
             />
@@ -146,6 +149,7 @@ export function BulletTree({
                 onZoomIn={onZoomIn}
                 onSetDueDate={onSetDueDate}
                 onSetRecurrence={onSetRecurrence}
+                onSetWalletRef={onSetWalletRef}
                 onSaveAsTemplate={onSaveAsTemplate}
               />
             )}

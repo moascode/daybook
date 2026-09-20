@@ -15,12 +15,14 @@ import {
   CalendarClock,
   BookCopy,
   Repeat,
+  Wallet,
 } from 'lucide-react'
 import { format, parseISO, isBefore, startOfDay } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { BulletEditor } from './BulletEditor'
 import { BulletNote } from './BulletNote'
 import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
@@ -46,6 +48,7 @@ interface BulletNodeProps {
   onZoomIn: (id: string) => void
   onSetDueDate: (id: string, date: string | null) => void
   onSetRecurrence: (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) => void
+  onSetWalletRef: (id: string, walletRef: string | null) => void
   onSaveAsTemplate: (task: Task) => void
   autoFocus?: boolean
 }
@@ -69,9 +72,11 @@ export function BulletNode({
   onZoomIn,
   onSetDueDate,
   onSetRecurrence,
+  onSetWalletRef,
   onSaveAsTemplate,
   autoFocus,
 }: BulletNodeProps) {
+  const { ensureLoaded: ensureWalletLoaded, resolveChip, options: walletOptions } = useWalletRefChips()
   const [showNote, setShowNote] = useState(task.note.length > 0)
   const [showDueDateDialog, setShowDueDateDialog] = useState(false)
   const [pendingDueDate, setPendingDueDate] = useState(task.dueDate ?? '')
@@ -85,6 +90,8 @@ export function BulletNode({
   const [pendingEndValue, setPendingEndValue] = useState(
     task.recurrenceData?.end ? String(task.recurrenceData.end.value) : '',
   )
+  const [showWalletDialog, setShowWalletDialog] = useState(false)
+  const [pendingWalletRef, setPendingWalletRef] = useState(task.walletRef ?? '')
 
   const today = startOfDay(new Date())
   const isOverdue =
@@ -121,6 +128,13 @@ export function BulletNode({
     onSetRecurrence(task.id, null, null)
     setShowRecurrenceDialog(false)
   }, [task.id, onSetRecurrence])
+
+  const handleSaveWalletRef = useCallback(() => {
+    onSetWalletRef(task.id, pendingWalletRef || null)
+    setShowWalletDialog(false)
+  }, [task.id, pendingWalletRef, onSetWalletRef])
+
+  const walletChip = resolveChip(task.walletRef)
 
   const {
     attributes,
@@ -284,6 +298,19 @@ export function BulletNode({
           </div>
         )}
 
+        {/* ── Wallet chip (FEAT-032) ────────────────────────── */}
+        {walletChip && (
+          <div className="flex shrink-0 items-center self-center mr-1">
+            <span
+              data-testid="wallet-chip"
+              className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+            >
+              <Wallet className="h-2.5 w-2.5" />
+              {walletChip}
+            </span>
+          </div>
+        )}
+
         {/* ── Hover actions ────────────────────────────────── */}
         <div
           className={cn(
@@ -382,6 +409,19 @@ export function BulletNode({
                 >
                   <Repeat className="h-3.5 w-3.5 text-fg-faint" />
                   {task.recurrence ? 'Repeats…' : 'Make it repeat…'}
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                  data-testid="bullet-menu-link-wallet"
+                  onSelect={() => {
+                    setPendingWalletRef(task.walletRef ?? '')
+                    ensureWalletLoaded()
+                    setShowWalletDialog(true)
+                  }}
+                >
+                  <Wallet className="h-3.5 w-3.5 text-fg-faint" />
+                  {task.walletRef ? 'Linked to Wallet…' : 'Link to Wallet…'}
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
@@ -581,6 +621,48 @@ export function BulletNode({
             </div>
           </div>
         )}
+        </div>
+      </Modal>
+
+      {/* ── Link to Wallet dialog (FEAT-032) ────────────────── */}
+      <Modal
+        open={showWalletDialog}
+        onOpenChange={(open) => { if (!open) setShowWalletDialog(false) }}
+        title="Link to Wallet"
+        className="max-w-sm"
+      >
+        <div className="flex flex-col gap-4">
+          {walletOptions.length === 0 ? (
+            <p className="text-sm text-fg-muted">No bills or goals to link yet — add one in Wallet first.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="wallet-ref-select" className="text-sm font-medium text-fg-muted">
+                Bill or goal
+              </label>
+              <select
+                id="wallet-ref-select"
+                data-testid="wallet-ref-select"
+                value={pendingWalletRef}
+                onChange={(e) => setPendingWalletRef(e.target.value)}
+                className="rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+              >
+                <option value="">Not linked</option>
+                {walletOptions.map((opt) => (
+                  <option key={opt.ref} value={opt.ref}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowWalletDialog(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" data-testid="wallet-ref-save-btn" onClick={handleSaveWalletRef}>
+              Save
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

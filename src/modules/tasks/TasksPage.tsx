@@ -261,6 +261,11 @@ export function TasksPage() {
     [updateTask],
   )
 
+  const handleSetWalletRef = useCallback(
+    (id: string, walletRef: string | null) => updateTask(id, { walletRef }),
+    [updateTask],
+  )
+
   const handleAddRootTask = useCallback(async () => {
     try {
       const newTask = await addTask('', rootId)
@@ -731,6 +736,7 @@ export function TasksPage() {
               onZoomIn={handleZoomIn}
               onSetDueDate={handleSetDueDate}
               onSetRecurrence={handleSetRecurrence}
+              onSetWalletRef={handleSetWalletRef}
               onSaveAsTemplate={handleSaveAsTemplate}
             />
           </DndContext>
