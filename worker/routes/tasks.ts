@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr, nowStr } from '../lib.ts'
+import { updateRow, todayStr, nowStr, businessDateOf, daysBetween } from '../lib.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
 // Port of server/routes/tasks.ts. Mounted behind requireAuth.
@@ -375,6 +375,75 @@ tasks.post('/tasks/reschedule', async (c) => {
     .all()
   return c.json(results)
 })
+
+// ── Completed analytics (FEAT-030) ───────────────────
+
+// A year heatmap, a by-list time-to-finish breakdown, and the overall
+// average — everything comes from columns that already existed (completedAt,
+// createdAt, listId), so this is read-only aggregation, no new schema.
+//
+// The day-to-day arithmetic happens in JS, not SQL, and deliberately treats
+// completed_at and created_at asymmetrically: completed_at is already a
+// business-timezone value (nowStr(), POST /tasks/:id/complete above) so its
+// date is a plain `.slice(0, 10)`, while created_at's column default is raw
+// SQL `datetime('now')` (UTC) and must go through businessDateOf() first.
+// Running both through businessDateOf() — or worse, both through a bare
+// slice — would silently reintroduce the up-to-8-hour skew CLAUDE.md §3
+// documents for exactly this UTC-vs-business-timezone pairing, this time as
+// a wrong "0 days" or "1 day" in a real user's numbers rather than a test
+// failure. TasksCompletedPage.tsx's day-grouping comment made the same
+// completed_at call already; this mirrors it for created_at.
+tasks.get('/tasks/completed/analytics', async (c) => {
+  const userId = c.get('userId')
+  const since = dateMinusDays(todayStr(), 364)
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT list_id, created_at, completed_at FROM tasks
+     WHERE user_id = ? AND is_completed = 1 AND completed_at IS NOT NULL`,
+  )
+    .bind(userId)
+    .all<{ list_id: string | null; created_at: string; completed_at: string }>()
+
+  const heatmapCounts = new Map<string, number>()
+  const byListAgg = new Map<string | null, { count: number; totalDays: number }>()
+  let totalDaysAll = 0
+
+  for (const row of results) {
+    const completedDate = row.completed_at.slice(0, 10)
+    const createdDate = businessDateOf(row.created_at)
+    const days = Math.max(0, daysBetween(createdDate, completedDate))
+
+    if (completedDate >= since) {
+      heatmapCounts.set(completedDate, (heatmapCounts.get(completedDate) ?? 0) + 1)
+    }
+
+    const agg = byListAgg.get(row.list_id) ?? { count: 0, totalDays: 0 }
+    agg.count++
+    agg.totalDays += days
+    byListAgg.set(row.list_id, agg)
+    totalDaysAll += days
+  }
+
+  const totalCompleted = results.length
+
+  return c.json({
+    heatmap: [...heatmapCounts.entries()].map(([date, count]) => ({ date, count })),
+    byList: [...byListAgg.entries()].map(([listId, agg]) => ({
+      listId,
+      count: agg.count,
+      avgDays: agg.totalDays / agg.count,
+    })),
+    overallAvgDays: totalCompleted > 0 ? totalDaysAll / totalCompleted : 0,
+    totalCompleted,
+  })
+})
+
+function dateMinusDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() - days)
+  return dt.toISOString().slice(0, 10)
+}
 
 // ── Recurrence (FEAT-028) ────────────────────────────
 

@@ -2,25 +2,29 @@ import { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
+import { useCompletedAnalytics } from '@/hooks/useCompletedAnalytics'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
+import { CompletedAnalytics } from '@/modules/tasks/CompletedAnalytics'
 import type { Task } from '@/types/tasks.types'
 
 /**
  * Completed — `/tasks/completed` (R5 PR-4, final PR of R5,
- * docs/roadmap/design-adoption/.flow/R5-completed/flow-plan.md). A day-grouped list of every
- * completed task, newest day first. Deliberately minimal per the plan and
- * the design spec's own words ("the year heatmap, by-list breakdown and
- * time-to-finish analysis are R11 — they need more history than the
- * backfill provides to be worth reading") — no chart, no breakdown, just
- * the list. Un-completing a row via `TaskListRow`'s checkbox removes it
- * from the page immediately, same optimistic pattern as
+ * docs/roadmap/design-adoption/.flow/R5-completed/flow-plan.md), plus the
+ * analytics panel FEAT-030
+ * (docs/backlog/EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md)
+ * added on top: a year heatmap, by-list time-to-finish, and the overall
+ * average, all aggregated server-side (`GET /tasks/completed/analytics`).
+ * Below that, the day-grouped list of every completed task, newest day
+ * first, unchanged since R5. Un-completing a row via `TaskListRow`'s
+ * checkbox removes it from the page immediately, same optimistic pattern as
  * TasksAllPage/TasksListDetailPage's `handleToggleComplete`.
  */
 export function TasksCompletedPage() {
   const { loadTasks, completeTask } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
+  const { analytics, loadAnalytics } = useCompletedAnalytics()
   const addToast = useToastStore((s) => s.addToast)
 
   const [completedTasks, setCompletedTasks] = useState<Task[]>([])
@@ -28,7 +32,7 @@ export function TasksCompletedPage() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([loadTasks('completed'), loadTaskLists()])
+    Promise.all([loadTasks('completed'), loadTaskLists(), loadAnalytics()])
       .then(([done]) => {
         if (cancelled) return
         setCompletedTasks(done)
@@ -43,7 +47,7 @@ export function TasksCompletedPage() {
     return () => {
       cancelled = true
     }
-  }, [loadTasks, loadTaskLists, addToast])
+  }, [loadTasks, loadTaskLists, loadAnalytics, addToast])
 
   const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
 
@@ -85,6 +89,8 @@ export function TasksCompletedPage() {
           <p className="page-sub">Everything you've finished, grouped by the day you finished it.</p>
         </div>
       </div>
+
+      {!loading && <CompletedAnalytics data={analytics} listById={listById} />}
 
       {loading ? (
         <p className="text-sm text-fg-subtle">Loading your completed tasks…</p>
