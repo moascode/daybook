@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Repeat } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
@@ -46,6 +46,18 @@ function dueState(task: Task): 'late' | 'soon' | 'ok' | 'none' {
 // and parseISO chokes on the space-separated SQLite form.
 function formatDue(dateStr: string): string {
   return format(parseISO(dateStr.slice(0, 10)), 'dd MMM')
+}
+
+// FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md):
+// short read-only label for the recurrence chip. Editing recurrence is
+// outliner-only (BulletNode.tsx's "Repeats…" dialog) — see FEAT-052 for the
+// tracked gap of editing it from a row like this one.
+function recurrenceLabel(task: Task): string | null {
+  if (!task.recurrence) return null
+  const interval = task.recurrenceData?.interval ?? 1
+  if (task.recurrence === 'custom') return 'Repeats weekly'
+  const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[task.recurrence]
+  return interval > 1 ? `Repeats every ${interval} ${unit}s` : `Repeats ${task.recurrence}`
 }
 
 /**
@@ -148,6 +160,16 @@ export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigne
             </option>
           ))}
         </select>
+      )}
+
+      {task.recurrence && (
+        <span
+          className="chip chip-mute inline-flex items-center gap-1"
+          data-testid="all-tasks-row-recurrence"
+          title={recurrenceLabel(task) ?? undefined}
+        >
+          <Repeat className="h-3 w-3" aria-hidden="true" />
+        </span>
       )}
 
       {task.dueDate && (

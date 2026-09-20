@@ -22,7 +22,7 @@ import { useTasksStore } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { BulletTree } from './BulletTree'
 import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
-import type { Task } from '@/types/tasks.types'
+import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
 
 declare global {
   interface Window {
@@ -252,6 +252,12 @@ export function TasksPage() {
 
   const handleSetDueDate = useCallback(
     (id: string, date: string | null) => updateTask(id, { dueDate: date }),
+    [updateTask],
+  )
+
+  const handleSetRecurrence = useCallback(
+    (id: string, recurrence: TaskRecurrenceFrequency | null, data: TaskRecurrenceData | null) =>
+      updateTask(id, { recurrence, recurrenceData: data }),
     [updateTask],
   )
 
@@ -724,6 +730,7 @@ export function TasksPage() {
               onDelete={handleDelete}
               onZoomIn={handleZoomIn}
               onSetDueDate={handleSetDueDate}
+              onSetRecurrence={handleSetRecurrence}
               onSaveAsTemplate={handleSaveAsTemplate}
             />
           </DndContext>

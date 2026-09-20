@@ -4,7 +4,7 @@ import { useTasksStore } from '@/stores/tasks.store'
 import type { DeletedSnapshot } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
-import type { Task, TaskPriority } from '@/types/tasks.types'
+import type { Task, TaskPriority, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
 
 /**
  * The Tasks store updates optimistically, so a failed server write would
@@ -62,6 +62,10 @@ interface TaskRow {
   // them, so default to 0 rather than leaving them undefined.
   subtask_total?: number
   subtask_done?: number
+  // FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md).
+  recurrence?: TaskRecurrenceFrequency | null
+  recurrence_data?: string | null
+  recurrence_parent_id?: string | null
 }
 
 /** Convert a DB row to the in-memory Task interface. */
@@ -86,6 +90,9 @@ function rowToTask(row: TaskRow): Task {
     assignedAt: row.assigned_at ?? null,
     subtaskTotal: row.subtask_total ?? 0,
     subtaskDone: row.subtask_done ?? 0,
+    recurrence: row.recurrence ?? null,
+    recurrenceData: row.recurrence_data ? (JSON.parse(row.recurrence_data) as TaskRecurrenceData) : null,
+    recurrenceParentId: row.recurrence_parent_id ?? null,
   }
 }
 
@@ -250,6 +257,8 @@ export function useTasks() {
           | 'parentId'
           | 'sortOrder'
           | 'dueDate'
+          | 'recurrence'
+          | 'recurrenceData'
         >
       >,
     ) => {
@@ -410,6 +419,9 @@ export function useTasks() {
         sortOrder: t.sortOrder,
         dueDate: t.dueDate ?? null,
         assignedAt: t.assignedAt ?? null,
+        recurrence: t.recurrence ?? null,
+        recurrenceData: t.recurrenceData ?? null,
+        recurrenceParentId: t.recurrenceParentId ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
@@ -493,6 +505,9 @@ export function useTasks() {
           sortOrder: t.sortOrder,
           dueDate: t.dueDate ?? null,
           assignedAt: t.assignedAt ?? null,
+          recurrence: t.recurrence ?? null,
+          recurrenceData: t.recurrenceData ?? null,
+          recurrenceParentId: t.recurrenceParentId ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })

@@ -38,7 +38,14 @@ const TASK_COLS: Record<string, string> = {
   // comment); that path is self-scoped (`user_id = caller`), so the only
   // thing a client could skew by lying here is their own turnaround stats.
   assignedAt: 'assigned_at',
+  // FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md).
+  // recurrenceParentId is deliberately NOT here — it is only ever set by
+  // POST /tasks/recurring/process below, never client-writable.
+  recurrence: 'recurrence',
+  recurrenceData: 'recurrence_data',
 }
+
+const RECURRENCE_FREQS = new Set(['daily', 'weekly', 'monthly', 'yearly', 'custom'])
 
 // ── Tasks ────────────────────────────────────────────
 
@@ -188,18 +195,21 @@ tasks.post('/tasks', async (c) => {
   const row = await c.env.DB.prepare(
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
-        list_id, priority, due_time, assignee_id, assigned_at, created_at, updated_at)
+        list_id, priority, due_time, assignee_id, assigned_at, recurrence, recurrence_data,
+        recurrence_parent_id, created_at, updated_at)
      VALUES
        (COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, COALESCE(?, 'none'), ?, ?, ?,
+        ?, ?, ?,
         COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
   )
     // id, userId, parentId, content, note,
     // isCompleted, isCollapsed, sortOrder, dueDate,
-    // listId, priority, dueTime, assigneeId, assignedAt, createdAt, updatedAt
+    // listId, priority, dueTime, assigneeId, assignedAt,
+    // recurrence, recurrenceData, recurrenceParentId, createdAt, updatedAt
     .bind(
       b.id ?? null,
       userId,
@@ -219,6 +229,13 @@ tasks.post('/tasks', async (c) => {
       // null for every normal create. See FEAT-027
       // (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md).
       b.assignedAt ?? null,
+      // Same restore-only story as assignedAt above, for FEAT-028's
+      // recurrence fields — a fresh addTask() never sets these.
+      b.recurrence ?? null,
+      b.recurrenceData != null && typeof b.recurrenceData === 'object'
+        ? JSON.stringify(b.recurrenceData)
+        : b.recurrenceData ?? null,
+      b.recurrenceParentId ?? null,
       b.createdAt ?? null,
       b.updatedAt ?? null,
     )
@@ -255,6 +272,32 @@ tasks.patch('/tasks/:id', async (c) => {
   delete body.assignedAt
   if ('assigneeId' in body) {
     body.assignedAt = body.assigneeId ? nowStr() : null
+  }
+
+  // FEAT-028: a recurrence needs a due date to advance from — reject setting
+  // one on a task that has none and isn't gaining one in this same request,
+  // rather than letting POST /tasks/recurring/process silently skip it later.
+  if ('recurrence' in body && body.recurrence != null) {
+    if (!RECURRENCE_FREQS.has(String(body.recurrence))) {
+      return c.json({ error: 'recurrence must be daily, weekly, monthly, yearly, or custom' }, 400)
+    }
+    const dueDate = 'dueDate' in body
+      ? body.dueDate
+      : (
+          await c.env.DB.prepare('SELECT due_date FROM tasks WHERE id = ? AND user_id = ?')
+            .bind(c.req.param('id'), userId)
+            .first<{ due_date: string | null }>()
+        )?.due_date
+    if (!dueDate) return c.json({ error: 'a task must have a due date to repeat' }, 400)
+  }
+  // Clearing recurrence without an explicit recurrenceData clears it too, so
+  // stale interval/weekday/end data can't linger and reappear if the task is
+  // ever set to repeat again with only `{ recurrence: '<freq>' }`.
+  if ('recurrence' in body && body.recurrence == null && !('recurrenceData' in body)) {
+    body.recurrenceData = null
+  }
+  if ('recurrenceData' in body && body.recurrenceData !== null && typeof body.recurrenceData === 'object') {
+    body.recurrenceData = JSON.stringify(body.recurrenceData)
   }
 
   const row = await updateRow(c.env.DB, 'tasks', c.req.param('id'), userId, TASK_COLS, body)
@@ -331,6 +374,157 @@ tasks.post('/tasks/reschedule', async (c) => {
     .bind(dueDate, userId, ...ids)
     .all()
   return c.json(results)
+})
+
+// ── Recurrence (FEAT-028) ────────────────────────────
+
+interface TaskRecurrenceData {
+  interval?: number
+  weekdays?: number[] // 0=Sun..6=Sat; 'custom' only
+  end?: { type: 'date'; value: string } | { type: 'count'; value: number }
+  occurrences?: number
+}
+
+function parseRecurrenceData(raw: string | null | undefined): TaskRecurrenceData {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) as TaskRecurrenceData
+  } catch {
+    return {}
+  }
+}
+
+// Advance an ISO date (YYYY-MM-DD) to the next occurrence. Mirrors
+// wallet.ts's advanceDate (pure UTC arithmetic, month-end clamping) but
+// generalized to daily/yearly/custom-weekday, since a task's recurrence
+// covers a wider set of frequencies than Wallet's monthly/weekly rules.
+function advanceTaskDate(dateStr: string, recurrence: string, data: TaskRecurrenceData): string {
+  const interval = data.interval && data.interval > 0 ? data.interval : 1
+  const [y, m, d] = dateStr.split('-').map(Number)
+
+  if (recurrence === 'daily') {
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() + interval)
+    return dt.toISOString().slice(0, 10)
+  }
+  if (recurrence === 'weekly') {
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() + interval * 7)
+    return dt.toISOString().slice(0, 10)
+  }
+  if (recurrence === 'custom') {
+    // Rolls forward day by day to the next date whose weekday is selected.
+    // Guarded at 400 iterations (just over a year) so an empty weekday list
+    // can never spin forever.
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    const weekdays = data.weekdays && data.weekdays.length > 0 ? data.weekdays : [dt.getUTCDay()]
+    for (let i = 0; i < 400; i++) {
+      dt.setUTCDate(dt.getUTCDate() + 1)
+      if (weekdays.includes(dt.getUTCDay())) return dt.toISOString().slice(0, 10)
+    }
+    return dt.toISOString().slice(0, 10)
+  }
+  if (recurrence === 'yearly') {
+    const ny = y + interval
+    const lastDayTarget = new Date(Date.UTC(ny, m, 0)).getUTCDate()
+    const nd = Math.min(d, lastDayTarget) // Feb 29 → Feb 28 on a non-leap target year
+    return `${ny}-${String(m).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+  }
+  // monthly
+  let ny = y
+  let nm = m + interval
+  while (nm > 12) {
+    nm -= 12
+    ny += 1
+  }
+  const lastDayThis = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  const lastDayNext = new Date(Date.UTC(ny, nm, 0)).getUTCDate()
+  const nd = d >= lastDayThis ? lastDayNext : Math.min(d, lastDayNext)
+  return `${ny}-${String(nm).padStart(2, '0')}-${String(nd).padStart(2, '0')}`
+}
+
+interface RecurringTaskRow {
+  id: string
+  content: string
+  note: string | null
+  due_date: string | null
+  sort_order: number
+  list_id: string | null
+  priority: string | null
+  due_time: string | null
+  recurrence: string
+  recurrence_data: string | null
+  recurrence_parent_id: string | null
+  completed_at: string | null
+}
+
+// Materializes the next occurrence of every completed recurring task
+// (recurrence IS NOT NULL AND is_completed = 1), fire-and-forget on app boot
+// (src/App.tsx) — mirrors Wallet's POST /recurring-transactions/process.
+// Unlike money, a task series only ever has ONE next occurrence pending: no
+// catch-up burst, since skipping a month of a weekly task should not spawn
+// several overdue copies. After spawning (or ending the series), the
+// completed row's own recurrence/recurrence_data are cleared so it is never
+// reprocessed — "only one task per series is ever active" (design.md).
+tasks.post('/tasks/recurring/process', async (c) => {
+  const userId = c.get('userId')
+
+  const { results: due } = await c.env.DB.prepare(
+    'SELECT * FROM tasks WHERE user_id = ? AND is_completed = 1 AND recurrence IS NOT NULL',
+  )
+    .bind(userId)
+    .all<RecurringTaskRow>()
+
+  const writes: D1PreparedStatement[] = []
+  let created = 0
+
+  for (const row of due) {
+    const data = parseRecurrenceData(row.recurrence_data)
+    const occurrences = (data.occurrences ?? 1) + 1
+    const baseDate = row.due_date ?? (row.completed_at ?? todayStr()).slice(0, 10)
+    const nextDue = advanceTaskDate(baseDate, row.recurrence, data)
+
+    const endedByCount = data.end?.type === 'count' && occurrences > data.end.value
+    const endedByDate = data.end?.type === 'date' && nextDue > data.end.value
+
+    if (!endedByCount && !endedByDate) {
+      const nextData: TaskRecurrenceData = { ...data, occurrences }
+      writes.push(
+        c.env.DB.prepare(
+          `INSERT INTO tasks
+             (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
+              list_id, priority, due_time, recurrence, recurrence_data, recurrence_parent_id,
+              created_at, updated_at)
+           VALUES
+             (lower(hex(randomblob(16))), ?, NULL, ?, ?, 0, 0, ?, ?,
+              ?, COALESCE(?, 'none'), ?, ?, ?, ?,
+              datetime('now'), datetime('now'))`,
+        ).bind(
+          userId,
+          row.content,
+          row.note ?? '',
+          row.sort_order,
+          nextDue,
+          row.list_id,
+          row.priority,
+          row.due_time,
+          row.recurrence,
+          JSON.stringify(nextData),
+          row.recurrence_parent_id ?? row.id,
+        ),
+      )
+      created++
+    }
+
+    writes.push(
+      c.env.DB.prepare(
+        `UPDATE tasks SET recurrence = NULL, recurrence_data = NULL, updated_at = datetime('now') WHERE id = ?`,
+      ).bind(row.id),
+    )
+  }
+
+  if (writes.length > 0) await c.env.DB.batch(writes)
+  return c.json({ created })
 })
 
 tasks.delete('/tasks/:id', async (c) => {
