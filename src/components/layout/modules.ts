@@ -186,8 +186,6 @@ export const modules: ModuleDescriptor[] = [
             icon: Repeat,
             end: false,
             testid: 'nav-tasks-habits',
-            disabled: true,
-            disabledReason: 'Coming in R11',
           },
         ],
       },

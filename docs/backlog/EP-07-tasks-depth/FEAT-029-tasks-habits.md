@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-07](README.md)
+> **Status:** Shipped · **Filed:** 2026-09-16 · **Epic:** [EP-07](README.md)
 
 # FEAT-029 — Tasks: Habits
 
@@ -8,4 +8,8 @@
 
 **Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** Yes — R11. Depends on FEAT-028.
+**Still needed?** Shipped — `/tasks/habits`: current/best streak, a 28-day grid
+(kept/missed/not-due), a per-weekday rate chart with a "weakest day" callout,
+and the Wallet-linked "no spend day" habit (`linked_kind`), which derives
+`done` from the day having no expense transaction rather than an explicit
+entry.

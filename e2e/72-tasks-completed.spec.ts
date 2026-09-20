@@ -3,8 +3,9 @@
  * docs/roadmap/design-adoption/.flow/R5-completed/flow-plan.md).
  *
  * Covers: completions render grouped by day, un-completing a row removes it
- * from the page, the sidebar's Completed nav item navigates correctly, and
- * Habits renders disabled with its stated reason.
+ * from the page, and the sidebar's Completed nav item navigates correctly.
+ * Habits (FEAT-029, docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md)
+ * enabled that nav item — see e2e/94-tasks-habits.spec.ts for its own page.
  */
 
 import { test, expect } from '@playwright/test'
@@ -24,13 +25,14 @@ test.describe('72 — Tasks completed page', () => {
     await expect(page.getByTestId('completed-empty')).toBeVisible()
   })
 
-  test('Habits nav item renders disabled with its stated reason', async ({ browser }) => {
+  test('Habits nav item navigates to its page', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
     const habits = page.getByTestId('nav-tasks-habits')
     await expect(habits).toBeVisible()
-    await expect(habits).toHaveAttribute('aria-disabled', 'true')
-    await expect(habits).toHaveAttribute('aria-label', /Coming in R11/)
+    await expect(habits).not.toHaveAttribute('aria-disabled', 'true')
+    await habits.click()
+    await expect(page).toHaveURL(/\/tasks\/habits$/)
   })
 
   test('completed tasks render grouped by day', async ({ browser }) => {
