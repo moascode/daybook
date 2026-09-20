@@ -32,3 +32,5 @@ proven itself with real use.
 | [FEAT-051](FEAT-051-task-list-picker.md) | Assign a task's list (category) from the row | Yes — no schema change, UI-only gap |
 | [BUG-005](BUG-005-quick-add-task-noop.md) | Quick-add "Task" does nothing | Yes |
 | [BUG-006](BUG-006-no-due-date-change-in-list-view.md) | No due-date change from a list view | Yes |
+| [FEAT-052](FEAT-052-edit-task-from-row.md) | Edit a task's text from any list-style view | Yes — every non-outliner view is affected |
+| [FEAT-053](FEAT-053-create-task-list.md) | A way to create a task list | Yes — the other half of FEAT-051's gap |
