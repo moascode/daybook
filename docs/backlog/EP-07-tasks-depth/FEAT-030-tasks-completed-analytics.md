@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-07](README.md)
+> **Status:** Shipped · **Filed:** 2026-09-16 · **Epic:** [EP-07](README.md)
 
 # FEAT-030 — Tasks: Completed analytics
 
@@ -8,4 +8,8 @@
 
 **Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** Yes — R11, unstarted
+**Still needed?** Shipped — a year heatmap, by-list breakdown with average
+time-to-finish, and a "graveyard, not a backlog" callout when a list's
+average is 3x+ the overall average, on `GET /tasks/completed/analytics`
+(worker/routes/tasks.ts) and rendered above the existing day-grouped list on
+`/tasks/completed`.

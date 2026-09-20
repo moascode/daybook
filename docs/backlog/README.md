@@ -112,7 +112,7 @@ files.
 | [FEAT-027](EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md) | Feature | Tasks: Assigned to me and the delegation ledger | Shipped — PR #221 |
 | [FEAT-028](EP-07-tasks-depth/FEAT-028-task-recurrence.md) | Feature | Tasks: recurrence | Shipped |
 | [FEAT-029](EP-07-tasks-depth/FEAT-029-tasks-habits.md) | Feature | Tasks: Habits | Shipped |
-| [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Yes — R11, unstarted |
+| [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Shipped |
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
 | [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Yes — R11, small |
 | [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Yes — no schema change, UI-only gap |
