@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Repeat } from 'lucide-react'
+import { Check, Repeat, CalendarClock, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
@@ -29,6 +29,24 @@ export interface TaskListRowProps {
    * successful change until the next full reload.
    */
   onAssigneeChange?: (taskId: string, assigneeId: string | null) => void
+  /**
+   * FEAT-052 (docs/backlog/EP-07-tasks-depth/FEAT-052-edit-task-from-row.md):
+   * called after a successful content edit. Optional, same notify-only role
+   * as `onAssigneeChange` — most pages don't derive anything from a task's
+   * content, so most consumers pass nothing and the row's own local draft
+   * (below) is enough. TasksAllPage.tsx doesn't need it either: it doesn't
+   * group by content.
+   */
+  onContentChange?: (taskId: string, content: string) => void
+  /**
+   * BUG-006 (docs/backlog/EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md):
+   * called after a successful due-date change. TasksAllPage.tsx passes this
+   * — it buckets `openTasks` into Overdue/This week/date groups, so a stale
+   * bucket after a change would show the row in the wrong section until the
+   * next reload, the same staleness `onAssigneeChange` exists to prevent for
+   * TasksAssignedPage.tsx's assignee-derived sections.
+   */
+  onDueDateChange?: (taskId: string, dueDate: string | null) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -69,9 +87,17 @@ function recurrenceLabel(task: Task): string | null {
  * progress — a different concern, hence a separate component (CLAUDE.md
  * rule 7) rather than forcing new props onto `TaskRow`.
  */
-export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigneeChange }: TaskListRowProps) {
+export function TaskListRow({
+  task,
+  list,
+  onToggleComplete,
+  coMembers,
+  onAssigneeChange,
+  onContentChange,
+  onDueDateChange,
+}: TaskListRowProps) {
   const state = dueState(task)
-  const { assignTask } = useTasks()
+  const { assignTask, updateTaskContent, updateTaskDueDate } = useTasks()
 
   // Controlled locally rather than reading `task.assigneeId` straight through:
   // every page rendering this row keeps its own local `tasks` state (not the
@@ -85,6 +111,51 @@ export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigne
   if (task.assigneeId !== syncedAssigneeId) {
     setSyncedAssigneeId(task.assigneeId)
     setAssigneeDraft(task.assigneeId ?? '')
+  }
+
+  // FEAT-052: click-to-edit content. Same render-time re-sync pattern as
+  // assigneeDraft above — this row's own local `tasks` array isn't the
+  // Zustand store either, so an edit made elsewhere (or a reload) needs to
+  // win over a stale draft.
+  const [isEditingContent, setIsEditingContent] = useState(false)
+  const [contentDraft, setContentDraft] = useState(task.content)
+  const [syncedContent, setSyncedContent] = useState(task.content)
+  if (task.content !== syncedContent) {
+    setSyncedContent(task.content)
+    if (!isEditingContent) setContentDraft(task.content)
+  }
+
+  const saveContent = () => {
+    setIsEditingContent(false)
+    const trimmed = contentDraft.trim()
+    if (trimmed === task.content) return
+    updateTaskContent(task.id, trimmed)
+      .then((updated) => onContentChange?.(task.id, updated.content))
+      .catch(() => {
+        // updateTaskContent already surfaced the error (reportAndReconcile);
+        // revert the draft so the row doesn't keep showing an unsaved edit.
+        setContentDraft(task.content)
+      })
+  }
+
+  // BUG-006: an inline due-date control, toggled by the calendar icon below.
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [dueDateDraft, setDueDateDraft] = useState(task.dueDate ?? '')
+  const [syncedDueDate, setSyncedDueDate] = useState(task.dueDate)
+  if (task.dueDate !== syncedDueDate) {
+    setSyncedDueDate(task.dueDate)
+    setDueDateDraft(task.dueDate ?? '')
+  }
+
+  const saveDueDate = (value: string | null) => {
+    const previous = dueDateDraft
+    setDueDateDraft(value ?? '')
+    setShowDatePicker(false)
+    updateTaskDueDate(task.id, value)
+      .then((updated) => onDueDateChange?.(task.id, updated.dueDate))
+      .catch(() => {
+        setDueDateDraft(previous)
+      })
   }
 
   return (
@@ -117,7 +188,33 @@ export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigne
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="task-title">{task.content || 'Untitled task'}</p>
+        {isEditingContent ? (
+          <input
+            type="text"
+            autoFocus
+            value={contentDraft}
+            onChange={(e) => setContentDraft(e.target.value)}
+            onBlur={saveContent}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+              if (e.key === 'Escape') {
+                setContentDraft(task.content)
+                setIsEditingContent(false)
+              }
+            }}
+            aria-label={`Edit ${task.content || 'task'}`}
+            data-testid="all-tasks-row-content-input"
+            className="w-full rounded border border-brand-500 bg-surface px-1 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        ) : (
+          <p
+            className="task-title cursor-text"
+            onClick={() => setIsEditingContent(true)}
+            data-testid="all-tasks-row-title"
+          >
+            {task.content || 'Untitled task'}
+          </p>
+        )}
         {task.note && <p className="task-sub truncate">{task.note}</p>}
       </div>
 
@@ -172,8 +269,47 @@ export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigne
         </span>
       )}
 
-      {task.dueDate && (
-        <span className={cn('task-when', state === 'late' && 'late', state === 'soon' && 'soon')}>
+      {/* BUG-006: due date is now editable from this row, not just displayed.
+          The badge itself (when present) opens the picker; otherwise a bare
+          calendar icon does, matching BulletNode.tsx's due-date affordance. */}
+      {showDatePicker ? (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          <input
+            type="date"
+            autoFocus
+            aria-label={`Due date for ${task.content || 'task'}`}
+            data-testid={`all-tasks-row-due-input-${task.id}`}
+            value={dueDateDraft}
+            onChange={(e) => setDueDateDraft(e.target.value)}
+            onBlur={() => saveDueDate(dueDateDraft || null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
+              if (e.key === 'Escape') {
+                setDueDateDraft(task.dueDate ?? '')
+                setShowDatePicker(false)
+              }
+            }}
+            className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          {dueDateDraft && (
+            <button
+              type="button"
+              aria-label="Clear due date"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => saveDueDate(null)}
+              className="text-fg-faint hover:text-fg-muted"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </span>
+      ) : task.dueDate ? (
+        <button
+          type="button"
+          onClick={() => setShowDatePicker(true)}
+          data-testid={`all-tasks-row-due-${task.id}`}
+          className={cn('task-when', state === 'late' && 'late', state === 'soon' && 'soon')}
+        >
           {task.isCompleted && task.completedAt
             ? `Done ${formatDue(task.completedAt)}`
             : state === 'late'
@@ -181,7 +317,19 @@ export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigne
               : state === 'soon'
                 ? 'Today'
                 : formatDue(task.dueDate)}
-        </span>
+        </button>
+      ) : (
+        !task.isCompleted && (
+          <button
+            type="button"
+            onClick={() => setShowDatePicker(true)}
+            aria-label={`Set due date for ${task.content || 'task'}`}
+            data-testid={`all-tasks-row-set-due-${task.id}`}
+            className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
+          </button>
+        )
       )}
     </div>
   )

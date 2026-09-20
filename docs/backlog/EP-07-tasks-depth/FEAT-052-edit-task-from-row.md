@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Shipped · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
 
 # FEAT-052 — Edit a task's text from any list-style view
 
@@ -24,6 +24,11 @@ FEAT-027's new picker). Text itself is stuck.
 debounced-save pattern) is enough; this item is not asking for subtask
 creation or note-editing from these views.
 
-**Still needed?** Yes — every non-outliner Tasks view (List detail, All
-tasks, Completed, Upcoming, Assigned to me) is affected identically, since
-they all share `TaskListRow`.
+**Still needed?** Shipped — click-to-edit on `TaskListRow.tsx`'s title (an
+`<input>` on click, saved on blur/Enter via a new guard-free
+`updateTaskContent`, mirroring `assignTask`; Escape reverts). Every page
+using this row (TasksAllPage, TasksListDetailPage, TasksAssignedPage,
+TasksCompletedPage) also syncs its own local array on a successful edit —
+without that, the row's displayed text reverts to the stale prop the moment
+it leaves edit mode, a real bug caught during this item's own manual
+verification, not a hypothetical.

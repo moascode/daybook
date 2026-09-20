@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
 
 # BUG-006 — No way to change a task's due date from a list view
 
@@ -28,4 +28,10 @@ neither imports `DatePicker` or calls `updateTask` with `dueDate`.
 **Money, data loss, or cosmetic?** Cosmetic/functional gap — no data at risk,
 but a real workflow hole (has to leave the list to reschedule a task in it).
 
-**Still needed?** Yes.
+**Still needed?** Fixed — `TaskListRow.tsx` now has an inline due-date
+control (a calendar icon when unset, the existing badge when set, both
+opening a native date input; a "×" clears it), persisted via a new
+guard-free `updateTaskDueDate` (`useTasks.ts`, mirroring `assignTask`).
+`TasksAllPage.tsx` (the one consumer that buckets rows by due date) syncs
+its own local array on change so the row moves between date groups instead
+of showing a stale bucket.

@@ -81,6 +81,16 @@ export function TasksCompletedPage() {
     }
   }
 
+  // FEAT-052: TaskListRow persists the edit itself; this keeps the display
+  // in step, same story as handleToggleComplete's own `setCompletedTasks`
+  // above — the row renders `task.content` from this array, not a draft.
+  const handleContentChange = (id: string, content: string) => {
+    setCompletedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)))
+  }
+  const handleDueDateChange = (id: string, dueDate: string | null) => {
+    setCompletedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
+  }
+
   return (
     <div className="content">
       <div className="page-head">
@@ -115,6 +125,8 @@ export function TasksCompletedPage() {
                     task={t}
                     list={t.listId ? listById.get(t.listId) : undefined}
                     onToggleComplete={handleToggleComplete}
+                    onContentChange={handleContentChange}
+                    onDueDateChange={handleDueDateChange}
                   />
                 ))}
               </div>

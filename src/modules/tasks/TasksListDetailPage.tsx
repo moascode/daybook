@@ -180,6 +180,19 @@ export function TasksListDetailPage() {
     }
   }
 
+  // FEAT-052 / BUG-006: TaskListRow persists the edit itself (guard-free
+  // hook functions), but its display always renders `task.content`/
+  // `task.dueDate` from THIS page's own arrays — without updating them here
+  // too, a saved edit would revert to the stale prop the moment the row
+  // leaves edit mode.
+  const handleContentChange = (id: string, content: string) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)))
+    setCompletedInList((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)))
+  }
+  const handleDueDateChange = (id: string, dueDate: string | null) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
+  }
+
   const handleSaveSettings = async () => {
     if (isUnsorted) return
     const trimmed = nameDraft.trim()
@@ -274,7 +287,7 @@ export function TasksListDetailPage() {
                   </p>
                 ) : (
                   openTasks.map((t) => (
-                    <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} />
+                    <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} onContentChange={handleContentChange} onDueDateChange={handleDueDateChange} />
                   ))
                 )}
               </div>
@@ -294,7 +307,7 @@ export function TasksListDetailPage() {
                   </button>
                   {!doneCollapsed &&
                     doneThisWeek.map((t) => (
-                      <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} />
+                      <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} onContentChange={handleContentChange} onDueDateChange={handleDueDateChange} />
                     ))}
                 </div>
               )}
