@@ -28,7 +28,7 @@ proven itself with real use.
 | [FEAT-029](FEAT-029-tasks-habits.md) | Habits | Shipped |
 | [FEAT-030](FEAT-030-tasks-completed-analytics.md) | Completed analytics | Shipped |
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Question it — sequence after FEAT-021 |
-| [FEAT-032](FEAT-032-tasks-wallet-chips.md) | Wallet chips on task rows | Yes, small |
+| [FEAT-032](FEAT-032-tasks-wallet-chips.md) | Wallet chips on task rows | Shipped (outliner only) |
 | [FEAT-051](FEAT-051-task-list-picker.md) | Assign a task's list (category) from the row | Yes — no schema change, UI-only gap |
 | [BUG-005](BUG-005-quick-add-task-noop.md) | Quick-add "Task" does nothing | Yes |
 | [BUG-006](BUG-006-no-due-date-change-in-list-view.md) | No due-date change from a list view | Yes |

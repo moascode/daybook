@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr, nowStr, businessDateOf, daysBetween } from '../lib.ts'
+import { updateRow, todayStr, nowStr, businessDateOf, daysBetween, ownsAllRefs } from '../lib.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
 // Port of server/routes/tasks.ts. Mounted behind requireAuth.
@@ -43,9 +43,22 @@ const TASK_COLS: Record<string, string> = {
   // POST /tasks/recurring/process below, never client-writable.
   recurrence: 'recurrence',
   recurrenceData: 'recurrence_data',
+  // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md).
+  walletRef: 'wallet_ref',
 }
 
 const RECURRENCE_FREQS = new Set(['daily', 'weekly', 'monthly', 'yearly', 'custom'])
+
+const WALLET_REF_TABLES: Record<string, string> = {
+  recurring: 'recurring_transactions',
+  goal: 'goals',
+}
+
+/** `'recurring:<id>'` / `'goal:<id>'` → the table that id must belong to, or null if malformed. */
+function walletRefTable(ref: string): string | null {
+  const [kind] = ref.split(':', 1)
+  return WALLET_REF_TABLES[kind] ?? null
+}
 
 // ── Tasks ────────────────────────────────────────────
 
@@ -196,12 +209,12 @@ tasks.post('/tasks', async (c) => {
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
         list_id, priority, due_time, assignee_id, assigned_at, recurrence, recurrence_data,
-        recurrence_parent_id, created_at, updated_at)
+        recurrence_parent_id, wallet_ref, created_at, updated_at)
      VALUES
        (COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, COALESCE(?, 'none'), ?, ?, ?,
-        ?, ?, ?,
+        ?, ?, ?, ?,
         COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
@@ -209,7 +222,7 @@ tasks.post('/tasks', async (c) => {
     // id, userId, parentId, content, note,
     // isCompleted, isCollapsed, sortOrder, dueDate,
     // listId, priority, dueTime, assigneeId, assignedAt,
-    // recurrence, recurrenceData, recurrenceParentId, createdAt, updatedAt
+    // recurrence, recurrenceData, recurrenceParentId, walletRef, createdAt, updatedAt
     .bind(
       b.id ?? null,
       userId,
@@ -230,12 +243,14 @@ tasks.post('/tasks', async (c) => {
       // (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md).
       b.assignedAt ?? null,
       // Same restore-only story as assignedAt above, for FEAT-028's
-      // recurrence fields — a fresh addTask() never sets these.
+      // recurrence fields and FEAT-032's walletRef — a fresh addTask() never
+      // sets these.
       b.recurrence ?? null,
       b.recurrenceData != null && typeof b.recurrenceData === 'object'
         ? JSON.stringify(b.recurrenceData)
         : b.recurrenceData ?? null,
       b.recurrenceParentId ?? null,
+      b.walletRef ?? null,
       b.createdAt ?? null,
       b.updatedAt ?? null,
     )
@@ -272,6 +287,18 @@ tasks.patch('/tasks/:id', async (c) => {
   delete body.assignedAt
   if ('assigneeId' in body) {
     body.assignedAt = body.assigneeId ? nowStr() : null
+  }
+
+  // FEAT-032: a walletRef must be `<kind>:<id>` for a kind this app knows,
+  // and that id must belong to the caller — otherwise a task could show
+  // another user's bill or goal on its chip.
+  if ('walletRef' in body && body.walletRef != null) {
+    const ref = String(body.walletRef)
+    const table = walletRefTable(ref)
+    const refId = ref.split(':').slice(1).join(':')
+    if (!table || !refId || !(await ownsAllRefs(c.env.DB, userId, [[table, refId]]))) {
+      return c.json({ error: 'invalid walletRef' }, 400)
+    }
   }
 
   // FEAT-028: a recurrence needs a due date to advance from — reject setting

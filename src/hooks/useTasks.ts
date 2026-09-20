@@ -66,6 +66,8 @@ interface TaskRow {
   recurrence?: TaskRecurrenceFrequency | null
   recurrence_data?: string | null
   recurrence_parent_id?: string | null
+  // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md).
+  wallet_ref?: string | null
 }
 
 /** Convert a DB row to the in-memory Task interface. */
@@ -93,6 +95,7 @@ function rowToTask(row: TaskRow): Task {
     recurrence: row.recurrence ?? null,
     recurrenceData: row.recurrence_data ? (JSON.parse(row.recurrence_data) as TaskRecurrenceData) : null,
     recurrenceParentId: row.recurrence_parent_id ?? null,
+    walletRef: row.wallet_ref ?? null,
   }
 }
 
@@ -259,6 +262,7 @@ export function useTasks() {
           | 'dueDate'
           | 'recurrence'
           | 'recurrenceData'
+          | 'walletRef'
         >
       >,
     ) => {
@@ -422,6 +426,7 @@ export function useTasks() {
         recurrence: t.recurrence ?? null,
         recurrenceData: t.recurrenceData ?? null,
         recurrenceParentId: t.recurrenceParentId ?? null,
+        walletRef: t.walletRef ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
@@ -508,6 +513,7 @@ export function useTasks() {
           recurrence: t.recurrence ?? null,
           recurrenceData: t.recurrenceData ?? null,
           recurrenceParentId: t.recurrenceParentId ?? null,
+          walletRef: t.walletRef ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })
