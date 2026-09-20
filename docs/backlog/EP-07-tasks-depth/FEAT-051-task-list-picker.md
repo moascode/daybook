@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Shipped · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
 
 # FEAT-051 — Assign a task's list (category) from the task row
 
@@ -28,8 +28,11 @@ item, not a rework of this one. Also out of scope: building the "Lists"
 creation UI itself (already exists at `/tasks/lists/:listId`) — this item is
 only the picker that sets `list_id` on a task from wherever a task renders.
 
-**Still needed?** Yes — confirmed against the code, not assumed. No schema
-change required (`list_id` already exists and is nullable); this is UI +
-`updateTask(id, { listId })`-shaped work (note: `updateTask`'s current
-`Pick<Task, ...>` allowlist in `src/hooks/useTasks.ts` does not include
-`listId` yet — small addition needed there too).
+**Still needed?** Shipped — a picker everywhere a task renders: `TaskListRow.tsx`
+(a `<select>` next to the list dot, on TasksAllPage/TasksListDetailPage/
+TasksCompletedPage/TasksAssignedPage) and the outliner's own "Move to list…"
+dialog (`BulletNode.tsx`). `TaskListRow`'s picker uses a new guard-free
+`updateTaskList` (`useTasks.ts`, mirroring `assignTask`/`updateTaskContent`/
+`updateTaskDueDate`) since its callers bypass the outliner's Zustand store;
+the outliner's own dialog uses the guarded `updateTask` (now with `listId`
+added to its allowlist) since outliner tasks are always store-resident.

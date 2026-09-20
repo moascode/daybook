@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { differenceInHours, parseISO } from 'date-fns'
 import { useTasks } from '@/hooks/useTasks'
+import { useTaskLists } from '@/hooks/useTaskLists'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
@@ -27,6 +28,7 @@ import type { GroupMember } from '@/types/household.types'
  */
 export function TasksAssignedPage() {
   const { loadTasks } = useTasks()
+  const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
 
@@ -43,6 +45,7 @@ export function TasksAssignedPage() {
       loadTasks('all'),
       loadTasks('completed'),
       api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
+      loadTaskLists(),
     ])
       .then(([assigned, all, done, memberRows]) => {
         if (cancelled) return
@@ -66,6 +69,7 @@ export function TasksAssignedPage() {
 
   const usernameById = useMemo(() => new Map(members.map((m) => [m.userId, m.username])), [members])
   const coMembers = useMemo(() => members.map((m) => ({ userId: m.userId, username: m.username })), [members])
+  const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
 
   const resolveName = (userId: string): string => usernameById.get(userId) ?? 'Someone'
 
@@ -89,6 +93,10 @@ export function TasksAssignedPage() {
   const handleDueDateChange = (taskId: string, dueDate: string | null) => {
     setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
     setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
+  }
+  const handleListChange = (taskId: string, listId: string | null) => {
+    setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, listId } : t)))
+    setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, listId } : t)))
   }
 
   const handleToggleComplete = () => {
@@ -198,10 +206,12 @@ export function TasksAssignedPage() {
                     <TaskListRow
                       key={t.id}
                       task={t}
-                      list={undefined}
+                      list={t.listId ? listById.get(t.listId) : undefined}
                       onToggleComplete={handleToggleComplete}
                       onContentChange={handleContentChange}
                       onDueDateChange={handleDueDateChange}
+                      availableLists={taskLists}
+                      onListChange={handleListChange}
                     />
                   ))}
                 </div>
@@ -239,12 +249,14 @@ export function TasksAssignedPage() {
                     <div className="mt-2">
                       <TaskListRow
                         task={task}
-                        list={undefined}
+                        list={task.listId ? listById.get(task.listId) : undefined}
                         onToggleComplete={handleToggleComplete}
                         coMembers={coMembers}
                         onAssigneeChange={handleAssigneeChange}
                         onContentChange={handleContentChange}
                         onDueDateChange={handleDueDateChange}
+                        availableLists={taskLists}
+                        onListChange={handleListChange}
                       />
                     </div>
                   </div>

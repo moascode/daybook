@@ -103,6 +103,11 @@ export function TasksListDetailPage() {
     ? UNSORTED_PSEUDO_LIST
     : (realList ?? { id: listId, name: 'List', color: '#6b7280' })
 
+  // FEAT-051: every row here belongs to `list` above — until a picker moves
+  // it elsewhere, at which point its dot needs to reflect the NEW list
+  // rather than staying stuck on this page's.
+  const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
+
   // Rail form state — reset whenever the list being edited changes. Adjusted
   // during render (React's documented pattern for "reset state when a prop
   // changes") rather than in an effect, for the same set-state-in-effect
@@ -191,6 +196,15 @@ export function TasksListDetailPage() {
   }
   const handleDueDateChange = (id: string, dueDate: string | null) => {
     setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
+  }
+  // FEAT-051: a task moved to a different list via the row's picker no
+  // longer belongs on this page — filtered out on the next reload, but kept
+  // visible (now showing its new list's dot) until then rather than
+  // silently vanishing, matching how a due-date change doesn't re-fetch
+  // either.
+  const handleListChange = (id: string, newListId: string | null) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, listId: newListId } : t)))
+    setCompletedInList((prev) => prev.map((t) => (t.id === id ? { ...t, listId: newListId } : t)))
   }
 
   const handleSaveSettings = async () => {
@@ -287,7 +301,16 @@ export function TasksListDetailPage() {
                   </p>
                 ) : (
                   openTasks.map((t) => (
-                    <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} onContentChange={handleContentChange} onDueDateChange={handleDueDateChange} />
+                    <TaskListRow
+                      key={t.id}
+                      task={t}
+                      list={t.listId ? listById.get(t.listId) : undefined}
+                      onToggleComplete={handleToggleComplete}
+                      onContentChange={handleContentChange}
+                      onDueDateChange={handleDueDateChange}
+                      availableLists={taskLists}
+                      onListChange={handleListChange}
+                    />
                   ))
                 )}
               </div>
@@ -307,7 +330,16 @@ export function TasksListDetailPage() {
                   </button>
                   {!doneCollapsed &&
                     doneThisWeek.map((t) => (
-                      <TaskListRow key={t.id} task={t} list={undefined} onToggleComplete={handleToggleComplete} onContentChange={handleContentChange} onDueDateChange={handleDueDateChange} />
+                      <TaskListRow
+                        key={t.id}
+                        task={t}
+                        list={t.listId ? listById.get(t.listId) : undefined}
+                        onToggleComplete={handleToggleComplete}
+                        onContentChange={handleContentChange}
+                        onDueDateChange={handleDueDateChange}
+                        availableLists={taskLists}
+                        onListChange={handleListChange}
+                      />
                     ))}
                 </div>
               )}

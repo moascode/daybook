@@ -21,7 +21,10 @@ interface TaskListRow {
   sort_order: number
   archived: number
   created_at: string
-  open_count: number
+  // Only present on GET /task-lists (a correlated subquery) — POST /task-lists'
+  // plain `RETURNING *` doesn't compute it, since a list a caller just
+  // created can't have any open tasks in it yet anyway.
+  open_count?: number
 }
 
 function rowToTaskList(row: TaskListRow): TaskList {
@@ -31,7 +34,7 @@ function rowToTaskList(row: TaskListRow): TaskList {
     color: row.color,
     icon: row.icon,
     sortOrder: row.sort_order,
-    openCount: row.open_count,
+    openCount: row.open_count ?? 0,
   }
 }
 
@@ -51,5 +54,15 @@ export function useTaskLists() {
     return lists
   }, [])
 
-  return { taskLists, loaded, loadTaskLists }
+  // FEAT-053 (docs/backlog/EP-07-tasks-depth/FEAT-053-create-task-list.md):
+  // POST /task-lists already existed and worked — nothing in the client ever
+  // called it.
+  const createTaskList = useCallback(async (input: { name: string; color?: string }): Promise<TaskList> => {
+    const row = await api.post<TaskListRow>('/task-lists', input)
+    const list = rowToTaskList(row)
+    setTaskLists((prev) => [...prev, list])
+    return list
+  }, [])
+
+  return { taskLists, loaded, loadTaskLists, createTaskList }
 }

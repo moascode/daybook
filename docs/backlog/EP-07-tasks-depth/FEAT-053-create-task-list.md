@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Shipped · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
 
 # FEAT-053 — A way to create a task list
 
@@ -20,8 +20,9 @@ the schema per `worker/routes/tasks.ts`'s `GET /task-lists`, but whether
 there's a UI for it is a separate question, not investigated here — file
 separately if also missing).
 
-**Still needed?** Yes — without this, [FEAT-051](FEAT-051-task-list-picker.md)
-(assign a task's list from the row, filed 2026-09-20, not yet built) and this
-item are two halves of the same gap: FEAT-051 lets you assign a task to an
-existing list, this lets you create one to assign into. A household with only
-"Unsorted" cannot exercise FEAT-051 meaningfully once it ships.
+**Still needed?** Shipped — a "+" next to the sidebar's "Lists" label
+(`ModuleSidebar.tsx`) opens `NewListModal.tsx` (name + colour, the same
+preset palette `TasksListDetailPage.tsx`'s rail already uses), calls the
+existing `POST /task-lists`, and navigates straight to the new list.
+Shipped together with [FEAT-051](FEAT-051-task-list-picker.md) in the same
+PR, per this item's own note that they're two halves of one gap.

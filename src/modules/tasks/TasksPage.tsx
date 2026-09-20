@@ -18,10 +18,11 @@ import { WelcomeCard } from '@/components/ui/WelcomeCard'
 import { Modal } from '@/components/ui/Modal'
 import { Input } from '@/components/ui/Input'
 import { useTasks } from '@/hooks/useTasks'
+import { useTaskLists } from '@/hooks/useTaskLists'
 import { useTasksStore } from '@/stores/tasks.store'
 import { useToastStore } from '@/stores/toast.store'
 import { BulletTree } from './BulletTree'
-import { cn, TEST_HOOKS_ENABLED } from '@/lib/utils'
+import { cn, TEST_HOOKS_ENABLED, errorMessage } from '@/lib/utils'
 import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
 
 declare global {
@@ -104,6 +105,10 @@ export function TasksPage() {
     deleteTemplate,
     applyTemplate,
   } = useTasks()
+  // FEAT-051 (docs/backlog/EP-07-tasks-depth/FEAT-051-task-list-picker.md):
+  // resolved once here and threaded down through BulletTree to BulletNode's
+  // "Move to list…" picker, rather than each bullet fetching its own copy.
+  const { taskLists, loadTaskLists } = useTaskLists()
 
   const { addToast, removeToast } = useToastStore()
 
@@ -266,6 +271,11 @@ export function TasksPage() {
     [updateTask],
   )
 
+  const handleSetList = useCallback(
+    (id: string, listId: string | null) => updateTask(id, { listId }),
+    [updateTask],
+  )
+
   const handleAddRootTask = useCallback(async () => {
     try {
       const newTask = await addTask('', rootId)
@@ -389,6 +399,12 @@ export function TasksPage() {
   useEffect(() => {
     loadTasks().then(() => setLoaded(true))
   }, [loadTasks])
+
+  useEffect(() => {
+    loadTaskLists().catch((err) => {
+      addToast({ message: errorMessage(err, 'Could not load your task lists.') })
+    })
+  }, [loadTaskLists, addToast])
 
   // Expose task operations for E2E testing
   useEffect(() => {
@@ -737,6 +753,8 @@ export function TasksPage() {
               onSetDueDate={handleSetDueDate}
               onSetRecurrence={handleSetRecurrence}
               onSetWalletRef={handleSetWalletRef}
+              onSetList={handleSetList}
+              taskLists={taskLists}
               onSaveAsTemplate={handleSaveAsTemplate}
             />
           </DndContext>

@@ -90,6 +90,9 @@ export function TasksCompletedPage() {
   const handleDueDateChange = (id: string, dueDate: string | null) => {
     setCompletedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
   }
+  const handleListChange = (id: string, listId: string | null) => {
+    setCompletedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, listId } : t)))
+  }
 
   return (
     <div className="content">
@@ -127,6 +130,8 @@ export function TasksCompletedPage() {
                     onToggleComplete={handleToggleComplete}
                     onContentChange={handleContentChange}
                     onDueDateChange={handleDueDateChange}
+                    availableLists={taskLists}
+                    onListChange={handleListChange}
                   />
                 ))}
               </div>
