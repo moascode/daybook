@@ -4,6 +4,7 @@ import type { AppEnv, Env } from './types.ts'
 import { health } from './routes/health.ts'
 import { auth, requireAuth } from './routes/auth.ts'
 import { tasks } from './routes/tasks.ts'
+import { habits } from './routes/habits.ts'
 import { settings } from './routes/settings.ts'
 import { groups } from './routes/groups.ts'
 import { settlements } from './routes/settlements.ts'
@@ -102,6 +103,7 @@ app.route('/api/capture', capture)
 const protectedApi = new Hono<AppEnv>()
 protectedApi.use('*', requireAuth)
 protectedApi.route('/', tasks)
+protectedApi.route('/', habits)
 protectedApi.route('/', settings)
 protectedApi.route('/', groups)
 protectedApi.route('/', settlements)
