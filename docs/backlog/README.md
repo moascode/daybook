@@ -42,7 +42,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
 | [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
-| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 7 | Open |
+| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 10 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
 | [EP-10](EP-10-cross-cutting/README.md) | Cross-cutting | 4 | Open |
@@ -115,6 +115,9 @@ files.
 | [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Yes — R11, unstarted |
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
 | [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Yes — R11, small |
+| [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Yes — no schema change, UI-only gap |
+| [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Yes |
+| [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Yes |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 
