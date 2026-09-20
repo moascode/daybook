@@ -38,6 +38,7 @@ const pendingDeletes = new Set<string>()
 /** DB row shape — column names match the SQL schema. */
 interface TaskRow {
   id: string
+  user_id: string
   parent_id: string | null
   content: string
   note: string
@@ -54,6 +55,8 @@ interface TaskRow {
   due_time?: string | null
   assignee_id?: string | null
   completed_at?: string | null
+  // FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md).
+  assigned_at?: string | null
   // Only present on `view=`-filtered rows (worker/routes/tasks.ts derives
   // them via correlated subqueries); the unfiltered outliner fetch omits
   // them, so default to 0 rather than leaving them undefined.
@@ -65,6 +68,7 @@ interface TaskRow {
 function rowToTask(row: TaskRow): Task {
   return {
     id: row.id,
+    ownerId: row.user_id,
     parentId: row.parent_id,
     content: row.content,
     note: row.note ?? '',
@@ -79,6 +83,7 @@ function rowToTask(row: TaskRow): Task {
     dueTime: row.due_time ?? null,
     assigneeId: row.assignee_id ?? null,
     completedAt: row.completed_at ?? null,
+    assignedAt: row.assigned_at ?? null,
     subtaskTotal: row.subtask_total ?? 0,
     subtaskDone: row.subtask_done ?? 0,
   }
@@ -236,12 +241,27 @@ export function useTasks() {
     async (
       id: string,
       updates: Partial<
-        Pick<Task, 'content' | 'note' | 'isCompleted' | 'isCollapsed' | 'parentId' | 'sortOrder' | 'dueDate'>
+        Pick<
+          Task,
+          | 'content'
+          | 'note'
+          | 'isCompleted'
+          | 'isCollapsed'
+          | 'parentId'
+          | 'sortOrder'
+          | 'dueDate'
+        >
       >,
     ) => {
       // Nothing to persist for a task that's already gone locally or has a
       // delete in flight — see the `pendingDeletes` comment above.
       if (pendingDeletes.has(id)) return
+      // assigneeId is deliberately NOT in the Pick above — a task loaded via
+      // a store-bypassing `loadTasks(view)` call (FEAT-027's assignee picker
+      // is exactly such a caller) would silently no-op against this guard, so
+      // assignment goes through `assignTask` instead, which has no such
+      // guard. See its doc comment for the FEAT-026 review history this
+      // repeats.
       if (!useTasksStore.getState().tasks.some((t) => t.id === id)) return
 
       let row: TaskRow
@@ -278,6 +298,30 @@ export function useTasks() {
     // Only touch the outliner's store if this task is actually in it — a
     // Today-page-only task (fetched via a `view` and never loaded into the
     // store) has nothing there to update.
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /**
+   * Set or clear a task's assignee via a direct PATCH — deliberately NOT
+   * `updateTask`, whose `useTasksStore.getState().tasks.some(...)` guard
+   * silently no-ops for any task loaded via a store-bypassing `loadTasks(view)`
+   * call (FEAT-027's assignee picker, on TasksAssignedPage.tsx, is exactly
+   * such a caller — see the FEAT-026 review history for the same bug class).
+   * Mirrors `completeTask` above: no guard, and the store is only updated
+   * opportunistically afterwards if the task happens to be in it.
+   */
+  const assignTask = useCallback(async (id: string, assigneeId: string | null): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { assigneeId })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
     if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
       useTasksStore.getState().updateTask(id, updated)
     }
@@ -365,6 +409,7 @@ export function useTasks() {
         isCollapsed: t.isCollapsed,
         sortOrder: t.sortOrder,
         dueDate: t.dueDate ?? null,
+        assignedAt: t.assignedAt ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
@@ -447,6 +492,7 @@ export function useTasks() {
           isCollapsed: t.isCollapsed,
           sortOrder: t.sortOrder,
           dueDate: t.dueDate ?? null,
+          assignedAt: t.assignedAt ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })
@@ -633,6 +679,7 @@ export function useTasks() {
     addTask,
     updateTask,
     completeTask,
+    assignTask,
     rescheduleTasks,
     deleteTask,
     restoreDeleted,

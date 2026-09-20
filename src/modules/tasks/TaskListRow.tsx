@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
+import { useTasks } from '@/hooks/useTasks'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -8,6 +10,25 @@ export interface TaskListRowProps {
   task: Task
   list: TaskList | undefined
   onToggleComplete: (id: string) => void
+  /**
+   * FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md):
+   * household co-members, for the inline "Assign to…" picker. Resolved ONCE by
+   * the parent page (a `GET /groups/members` call), never per-row — mirrors how
+   * `list` is a per-row lookup into a parent-resolved map rather than its own
+   * fetch. Optional and omitted by every page except TasksAssignedPage.tsx for
+   * now, so the picker simply doesn't render there (same optional-prop,
+   * hide-when-absent pattern this component already uses for `list`).
+   */
+  coMembers?: { userId: string; username: string }[]
+  /**
+   * FEAT-027: called after a successful assignee change, so a parent page
+   * keeping its own local `tasks` state (every current consumer does — see
+   * `coMembers`'s doc comment) can update its own copy. Without this, a page
+   * deriving a section from `task.assigneeId` (e.g. TasksAssignedPage.tsx's
+   * "handed out" filter) would show a stale, self-contradicting state after a
+   * successful change until the next full reload.
+   */
+  onAssigneeChange?: (taskId: string, assigneeId: string | null) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -36,8 +57,23 @@ function formatDue(dateStr: string): string {
  * progress — a different concern, hence a separate component (CLAUDE.md
  * rule 7) rather than forcing new props onto `TaskRow`.
  */
-export function TaskListRow({ task, list, onToggleComplete }: TaskListRowProps) {
+export function TaskListRow({ task, list, onToggleComplete, coMembers, onAssigneeChange }: TaskListRowProps) {
   const state = dueState(task)
+  const { assignTask } = useTasks()
+
+  // Controlled locally rather than reading `task.assigneeId` straight through:
+  // every page rendering this row keeps its own local `tasks` state (not the
+  // Zustand store — see TasksAssignedPage.tsx), so a successful PATCH here
+  // wouldn't otherwise cause a re-render that shows the new value. Re-synced
+  // from the prop during render (React's documented pattern for "adjusting
+  // state when a prop changes" without an effect's extra render) rather than
+  // in a `useEffect`, so an assignment made elsewhere or a reload still wins.
+  const [assigneeDraft, setAssigneeDraft] = useState(task.assigneeId ?? '')
+  const [syncedAssigneeId, setSyncedAssigneeId] = useState(task.assigneeId)
+  if (task.assigneeId !== syncedAssigneeId) {
+    setSyncedAssigneeId(task.assigneeId)
+    setAssigneeDraft(task.assigneeId ?? '')
+  }
 
   return (
     <div className={cn('task', task.isCompleted && 'done')} data-testid="all-tasks-row" data-task-id={task.id}>
@@ -77,6 +113,41 @@ export function TaskListRow({ task, list, onToggleComplete }: TaskListRowProps) 
         <span className="chip chip-mute" data-testid="all-tasks-row-subtasks">
           {task.subtaskDone}/{task.subtaskTotal}
         </span>
+      )}
+
+      {/* FEAT-027 — only rendered where a parent page resolved co-members
+          (currently just TasksAssignedPage.tsx); every other page passes no
+          `coMembers` and gets the row's existing layout, unchanged. */}
+      {coMembers && (
+        <select
+          aria-label={`Assign ${task.content || 'task'} to`}
+          data-testid={`task-row-assignee-${task.id}`}
+          value={assigneeDraft}
+          onChange={(e) => {
+            const value = e.target.value
+            const previous = assigneeDraft
+            setAssigneeDraft(value)
+            assignTask(task.id, value || null)
+              .then(() => onAssigneeChange?.(task.id, value || null))
+              .catch(() => {
+                // assignTask already surfaced the error (reportAndReconcile);
+                // revert the optimistic draft so the control doesn't keep
+                // showing a change that never persisted.
+                setAssigneeDraft(previous)
+              })
+          }}
+          className={cn(
+            'shrink-0 rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+            'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
+          )}
+        >
+          <option value="">Unassigned</option>
+          {coMembers.map((m) => (
+            <option key={m.userId} value={m.userId}>
+              {m.username}
+            </option>
+          ))}
+        </select>
       )}
 
       {task.dueDate && (
