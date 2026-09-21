@@ -3,10 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import { Plus } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
+import { useTaskLists } from '@/hooks/useTaskLists'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage, todayISO } from '@/lib/utils'
 import { TaskRow } from '@/modules/tasks/TaskRow'
+import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import type { Task } from '@/types/tasks.types'
 
 /** `days` from today, using local date parts — never toISOString() (CLAUDE.md §16 trap 1). */
@@ -33,6 +35,7 @@ function isoDatePlus(days: number): string {
  */
 export function TasksTodayPage() {
   const { loadTasks, addTask, updateTask, completeTask, rescheduleTasks } = useTasks()
+  const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
 
@@ -41,8 +44,12 @@ export function TasksTodayPage() {
   const [loading, setLoading] = useState(true)
   const [doneCollapsed, setDoneCollapsed] = useState(false)
   const [composerText, setComposerText] = useState('')
+  const [composerListId, setComposerListId] = useState('')
+  const [composerDueDate, setComposerDueDate] = useState(todayISO())
   const [composerBusy, setComposerBusy] = useState(false)
   const composerInputRef = useRef<HTMLInputElement>(null)
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
   // the global quick-add's "Task" action navigates here with
@@ -71,7 +78,7 @@ export function TasksTodayPage() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([loadTasks('all'), loadTasks('completed')])
+    Promise.all([loadTasks('all'), loadTasks('completed'), loadTaskLists()])
       .then(([open, done]) => {
         if (cancelled) return
         setOpenTasks(open)
@@ -87,7 +94,7 @@ export function TasksTodayPage() {
     return () => {
       cancelled = true
     }
-  }, [loadTasks, addToast])
+  }, [loadTasks, loadTaskLists, addToast])
 
   const today = todayISO()
 
@@ -122,18 +129,27 @@ export function TasksTodayPage() {
     if (!content || composerBusy) return
     setComposerBusy(true)
     try {
-      // A task added from the Today page is, by definition, a today task —
-      // default its due date to today so it lands in the Today group instead
-      // of vanishing into the undated pile this page doesn't show.
-      const newTask = await addTask(content, null)
-      await updateTask(newTask.id, { dueDate: today })
-      setOpenTasks((prev) => [...prev, { ...newTask, dueDate: today }])
+      // Defaults to today's list ("Unsorted") / today's date so it still
+      // lands in the Today group, but BUG-009 lets the user pick a different
+      // list or date before submitting.
+      const chosenListId = composerListId || null
+      const chosenDueDate = composerDueDate || null
+      const newTask = await addTask(content, chosenListId)
+      await updateTask(newTask.id, { dueDate: chosenDueDate })
+      setOpenTasks((prev) => [...prev, { ...newTask, listId: chosenListId, dueDate: chosenDueDate }])
       setComposerText('')
+      setComposerListId('')
+      setComposerDueDate(today)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not add that task — please try again.') })
     } finally {
       setComposerBusy(false)
     }
+  }
+
+  const openDetail = (task: Task) => {
+    setDetailTask(task)
+    setDetailOpen(true)
   }
 
   const handleToggleComplete = async (id: string) => {
@@ -234,6 +250,28 @@ export function TasksTodayPage() {
                 aria-label="New task"
                 data-testid="today-composer-input"
               />
+              <select
+                value={composerListId}
+                onChange={(e) => setComposerListId(e.target.value)}
+                disabled={composerBusy}
+                aria-label="New task list"
+                data-testid="today-composer-list"
+              >
+                <option value="">Unsorted</option>
+                {taskLists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={composerDueDate}
+                onChange={(e) => setComposerDueDate(e.target.value)}
+                disabled={composerBusy}
+                aria-label="New task due date"
+                data-testid="today-composer-date"
+              />
               <span className="hint">Enter</span>
             </div>
 
@@ -253,7 +291,7 @@ export function TasksTodayPage() {
                   </button>
                 </div>
                 {overdueTasks.map((t) => (
-                  <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} />
+                  <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} onOpenDetail={openDetail} />
                 ))}
               </div>
             )}
@@ -267,7 +305,7 @@ export function TasksTodayPage() {
               {todayTasks.length === 0 ? (
                 <p className="py-3 text-sm text-fg-subtle">Nothing due today.</p>
               ) : (
-                todayTasks.map((t) => <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} />)
+                todayTasks.map((t) => <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} onOpenDetail={openDetail} />)
               )}
             </div>
 
@@ -286,7 +324,7 @@ export function TasksTodayPage() {
                 </button>
                 {!doneCollapsed &&
                   doneTodayTasks.map((t) => (
-                    <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} />
+                    <TaskRow key={t.id} task={t} onToggleComplete={handleToggleComplete} onOpenDetail={openDetail} />
                   ))}
               </div>
             )}
@@ -313,6 +351,17 @@ export function TasksTodayPage() {
           </aside>
         </div>
       )}
+
+      <TaskDetailModal
+        task={detailTask}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        availableLists={taskLists}
+        onSaved={(updated) => {
+          setOpenTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+          setCompletedTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+        }}
+      />
     </div>
   )
 }

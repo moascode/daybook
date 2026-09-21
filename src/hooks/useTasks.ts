@@ -388,6 +388,25 @@ export function useTasks() {
   }, [])
 
   /**
+   * Set a task's priority via a direct PATCH — same guard-free story as
+   * `updateTaskDueDate` above.
+   */
+  const updateTaskPriority = useCallback(async (id: string, priority: TaskPriority): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { priority })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /**
    * Move a task into a list (or back to Unsorted, via `null`) via a direct
    * PATCH — same guard-free story as `updateTaskContent`/`updateTaskDueDate`
    * above. FEAT-051's row-level picker (TaskListRow.tsx, BulletNode.tsx) has
@@ -778,6 +797,7 @@ export function useTasks() {
     assignTask,
     updateTaskContent,
     updateTaskDueDate,
+    updateTaskPriority,
     updateTaskList,
     rescheduleTasks,
     deleteTask,
