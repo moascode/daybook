@@ -393,7 +393,7 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.12.2`** (2026-09-13). The full table with dates and contents
+**Latest tag: `v3.13.0`** (2026-09-21). The full table with dates and contents
 is in [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted

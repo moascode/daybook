@@ -22,7 +22,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-09-13. Regenerate with:
+Reconciled against `git tag` on 2026-09-21. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -30,6 +30,7 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.13.0 | 2026-09-21 | EP-07 Tasks depth: recurrence, habits, completed analytics, wallet chips, inline row editing, list management (#223–#230) |
 | v3.12.2 | 2026-09-13 | Capture endpoint accepts currency-formatted amounts (#198) |
 | v3.12.1 | 2026-09-08 | Three R17 phone regressions + `release.yml` manual-dispatch path (#196, #197) |
 | v3.12.0 | 2026-09-08 | R17 §1–§3: quick add, notifications panel, global search (#194, #195) |
@@ -966,3 +967,35 @@ splitting rules from reference. Three non-functional skills removed (`cavecrew`,
 design doc. ~45 "todo" items in two consistency plans turned out to have shipped.
 Recovered `apple-wallet-capture-plan.md` from an unmerged branch. New CI gates:
 `check:doc-links`, `check:backlog`.
+
+---
+
+## 2026-09-21 — EP-07 Tasks depth, shipped as v3.13.0 (PRs #223–#230)
+
+Ran the whole EP-07 backlog in one autonomous stretch: FEAT-028 (recurrence),
+FEAT-029 (Habits), FEAT-030 (Completed analytics), FEAT-032 (Wallet chips),
+then five owner-reported gap items — BUG-005 (quick-add "Task" no-op),
+BUG-006 + FEAT-052 (inline due-date/content editing on every non-outliner
+task row), FEAT-051 + FEAT-053 (list picker + list creation) — merging each
+PR to `main` before starting the next to avoid cross-branch drift. Manual
+browser verification, required before every PR, caught two real bugs before
+they shipped: FEAT-030's `completedAt`/`createdAt` timezone-skew day-math
+(one stamped business-timezone, the other raw UTC — compared naively they
+produced a fictitious sub-day average), and FEAT-052's stale-prop revert,
+where a saved edit visually reverted the instant a row left edit mode because
+one of `TaskListRow`'s four consumer pages hadn't been wired to sync its own
+copy of the task back from the save.
+
+Before tagging the release, a first full-diff review against `v3.12.2..main`
+(the first review of this stretch's *cumulative* diff — each PR up to then
+had gone straight from implement/verify to PR) caught two more,
+neither visible from any single PR: Wallet chips never rendered on an
+ordinary page visit, because the data they resolve from only loaded inside
+the "Link to Wallet…" dialog's `onSelect`; and `POST /tasks/recurring/process`
+silently dropped `wallet_ref` and `assignee_id` when materializing a
+completed recurring task's next occurrence, so a recurring bill's Wallet
+link — or a recurring chore's assignment — vanished every cycle. Both fixed
+in PR #230, along with three lower-severity findings from the same pass
+(a habit's current streak reading 0 all day until ticked; `POST /tasks`
+skipping validation `PATCH /tasks/:id` already had; undo-restore dropping a
+deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
