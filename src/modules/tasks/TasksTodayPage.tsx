@@ -134,8 +134,8 @@ export function TasksTodayPage() {
       // list or date before submitting.
       const chosenListId = composerListId || null
       const chosenDueDate = composerDueDate || null
-      const newTask = await addTask(content, chosenListId)
-      await updateTask(newTask.id, { dueDate: chosenDueDate })
+      const newTask = await addTask(content, null)
+      await updateTask(newTask.id, { listId: chosenListId, dueDate: chosenDueDate })
       setOpenTasks((prev) => [...prev, { ...newTask, listId: chosenListId, dueDate: chosenDueDate }])
       setComposerText('')
       setComposerListId('')
