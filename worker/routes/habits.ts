@@ -154,7 +154,18 @@ async function computeStats(db: D1Database, habit: HabitRow, today: string): Pro
   let currentStreak = 0
   for (let i = window.length - 1; i >= 0; i--) {
     const day = window[i]
-    if (day.due && !day.done) break
+    // Today is a special case for a MANUALLY-tracked habit only: due-but-
+    // not-yet-checked-off doesn't break the streak, since the day isn't over
+    // and the user may still tick it — it just doesn't extend the streak
+    // either. Without this, every manual streak reads 0 from midnight until
+    // the user ticks today. A linked habit (e.g. wallet:no-spend) derives
+    // `done` from something that already happened today (a transaction was
+    // or wasn't posted) — there is nothing left to "still do," so its today
+    // is judged the same as any other day.
+    if (day.due && !day.done) {
+      if (day.date === today && !habit.linked_kind) continue
+      break
+    }
     if (day.due && day.done) currentStreak++
   }
 

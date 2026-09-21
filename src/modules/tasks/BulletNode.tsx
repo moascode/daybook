@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -19,11 +19,12 @@ import {
   ListTodo,
 } from 'lucide-react'
 import { format, parseISO, isBefore, startOfDay } from 'date-fns'
-import { cn } from '@/lib/utils'
+import { cn, errorMessage } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
+import { useToastStore } from '@/stores/toast.store'
 import { BulletEditor } from './BulletEditor'
 import { BulletNote } from './BulletNote'
 import type { Task, TaskRecurrenceFrequency, TaskRecurrenceData } from '@/types/tasks.types'
@@ -83,6 +84,7 @@ export function BulletNode({
   autoFocus,
 }: BulletNodeProps) {
   const { ensureLoaded: ensureWalletLoaded, resolveChip, options: walletOptions } = useWalletRefChips()
+  const addToast = useToastStore((s) => s.addToast)
   const [showNote, setShowNote] = useState(task.note.length > 0)
   const [showDueDateDialog, setShowDueDateDialog] = useState(false)
   const [pendingDueDate, setPendingDueDate] = useState(task.dueDate ?? '')
@@ -146,6 +148,16 @@ export function BulletNode({
     onSetList(task.id, pendingListId || null)
     setShowListDialog(false)
   }, [task.id, pendingListId, onSetList])
+
+  // A row with a walletRef needs the chip data even if this node's own
+  // "Link to Wallet…" dialog is never opened — FEAT-032 chips render on
+  // every visit, not just after the picker has been used once.
+  useEffect(() => {
+    if (!task.walletRef) return
+    ensureWalletLoaded().catch((err) => {
+      addToast({ message: errorMessage(err, 'Could not load the linked Wallet item.') })
+    })
+  }, [task.walletRef, ensureWalletLoaded, addToast])
 
   const walletChip = resolveChip(task.walletRef)
   const currentList = taskLists.find((l) => l.id === task.listId)
@@ -430,7 +442,9 @@ export function BulletNode({
                   data-testid="bullet-menu-link-wallet"
                   onSelect={() => {
                     setPendingWalletRef(task.walletRef ?? '')
-                    ensureWalletLoaded()
+                    ensureWalletLoaded().catch((err) => {
+                      addToast({ message: errorMessage(err, 'Could not load your Wallet bills and goals.') })
+                    })
                     setShowWalletDialog(true)
                   }}
                 >

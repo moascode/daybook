@@ -205,6 +205,24 @@ tasks.post('/tasks', async (c) => {
     if (!writable.has(String(b.listId))) return c.json({ error: 'list not found' }, 404)
   }
 
+  // Same two checks PATCH /tasks/:id already applies — POST only ever
+  // receives these fields on a restore (see the comment at the bind call
+  // below), but a restore is still a client-supplied request, so it gets no
+  // less scrutiny than an edit: an unowned walletRef would leak another
+  // user's bill/goal onto this task's chip, and a bogus recurrence value
+  // would silently sit unprocessed by POST /tasks/recurring/process forever.
+  if (b.walletRef != null) {
+    const ref = String(b.walletRef)
+    const table = walletRefTable(ref)
+    const refId = ref.split(':').slice(1).join(':')
+    if (!table || !refId || !(await ownsAllRefs(c.env.DB, userId, [[table, refId]]))) {
+      return c.json({ error: 'invalid walletRef' }, 400)
+    }
+  }
+  if (b.recurrence != null && !RECURRENCE_FREQS.has(String(b.recurrence))) {
+    return c.json({ error: 'recurrence must be daily, weekly, monthly, yearly, or custom' }, 400)
+  }
+
   const row = await c.env.DB.prepare(
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
@@ -552,6 +570,9 @@ interface RecurringTaskRow {
   recurrence_data: string | null
   recurrence_parent_id: string | null
   completed_at: string | null
+  assignee_id: string | null
+  assigned_at: string | null
+  wallet_ref: string | null
 }
 
 // Materializes the next occurrence of every completed recurring task
@@ -590,10 +611,12 @@ tasks.post('/tasks/recurring/process', async (c) => {
           `INSERT INTO tasks
              (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
               list_id, priority, due_time, recurrence, recurrence_data, recurrence_parent_id,
+              assignee_id, assigned_at, wallet_ref,
               created_at, updated_at)
            VALUES
              (lower(hex(randomblob(16))), ?, NULL, ?, ?, 0, 0, ?, ?,
               ?, COALESCE(?, 'none'), ?, ?, ?, ?,
+              ?, ?, ?,
               datetime('now'), datetime('now'))`,
         ).bind(
           userId,
@@ -607,6 +630,9 @@ tasks.post('/tasks/recurring/process', async (c) => {
           row.recurrence,
           JSON.stringify(nextData),
           row.recurrence_parent_id ?? row.id,
+          row.assignee_id,
+          row.assigned_at,
+          row.wallet_ref,
         ),
       )
       created++
