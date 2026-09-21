@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Repeat, CalendarClock, X } from 'lucide-react'
+import { Check, Repeat, CalendarClock, X, Pencil } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
@@ -62,6 +62,16 @@ export interface TaskListRowProps {
    * `onAssigneeChange`/`onDueDateChange` exist to prevent.
    */
   onListChange?: (taskId: string, listId: string | null) => void
+  /**
+   * BUG-011 (docs/backlog/EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md):
+   * opens `TaskDetailModal.tsx` for this task. This row's own inline editors
+   * (content, list, due date, assignee) don't cover priority or note, so the
+   * modal is the row's only route to editing those — same optional,
+   * hide-when-absent convention as `coMembers`/`onAssigneeChange`/etc above.
+   * TasksListDetailPage.tsx and TasksAssignedPage.tsx don't pass this yet, so
+   * they're unaffected.
+   */
+  onOpenDetail?: (task: Task) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -112,6 +122,7 @@ export function TaskListRow({
   onDueDateChange,
   availableLists,
   onListChange,
+  onOpenDetail,
 }: TaskListRowProps) {
   const state = dueState(task)
   const { assignTask, updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
@@ -231,7 +242,12 @@ export function TaskListRow({
                 })
             }}
             className={cn(
-              'shrink-0 rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+              'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+              // BUG-010 (docs/backlog/EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md):
+              // capped so a long list name can't claim space budgeted for the
+              // `.task` grid's 1fr name column — it truncates inside its own
+              // control instead.
+              'max-w-[92px]',
               'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
             )}
           >
@@ -304,7 +320,10 @@ export function TaskListRow({
               })
           }}
           className={cn(
-            'shrink-0 rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+            'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+            // BUG-010: same cap as the list picker above — a long co-member
+            // username can't squeeze the name column.
+            'max-w-[92px]',
             'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
           )}
         >
@@ -388,6 +407,21 @@ export function TaskListRow({
             <CalendarClock className="h-3.5 w-3.5" />
           </button>
         )
+      )}
+
+      {/* BUG-011: this row's inline editors don't cover priority or note —
+          the modal does. Hide-when-absent, same as every other optional
+          affordance in this row. */}
+      {onOpenDetail && (
+        <button
+          type="button"
+          onClick={() => onOpenDetail(task)}
+          aria-label={`Edit details for ${task.content || 'task'}`}
+          data-testid={`task-row-detail-${task.id}`}
+          className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
       )}
     </div>
   )
