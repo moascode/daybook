@@ -103,4 +103,39 @@ test.describe('93 — Tasks recurrence', () => {
     const secondRun = await page.request.post(`${API}/tasks/recurring/process`)
     expect((await secondRun.json()).created).toBe(0)
   })
+
+  test('processing carries the walletRef and assignee forward to the next occurrence', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    const dueDate = businessToday()
+
+    const meRes = await page.request.get(`${API}/auth/me`)
+    const { user } = await meRes.json()
+
+    const accountRes = await page.request.post(`${API}/accounts`, {
+      data: { name: 'Main', type: 'bank', openingBalance: 0 },
+    })
+    const account = await accountRes.json()
+    const billRes = await page.request.post(`${API}/recurring-transactions`, {
+      data: { accountId: account.id, amount: 45, merchant: 'Electricity', frequency: 'monthly', nextDueDate: dueDate },
+    })
+    const bill = await billRes.json()
+
+    const createRes = await page.request.post(`${API}/tasks`, {
+      data: { content: 'Pay electricity', dueDate, isCompleted: true, recurrence: 'monthly', recurrenceData: { interval: 1 } },
+    })
+    const original = await createRes.json()
+    await page.request.patch(`${API}/tasks/${original.id}`, {
+      data: { walletRef: `recurring:${bill.id}`, assigneeId: user.id },
+    })
+
+    await page.request.post(`${API}/tasks/recurring/process`)
+
+    const allRes = await page.request.get(`${API}/tasks?view=all`)
+    const openTasks: { content: string; wallet_ref: string | null; assignee_id: string | null }[] =
+      await allRes.json()
+    const next = openTasks.find((t) => t.content === 'Pay electricity')
+    expect(next).toBeTruthy()
+    expect(next!.wallet_ref).toBe(`recurring:${bill.id}`)
+    expect(next!.assignee_id).toBe(user.id)
+  })
 })

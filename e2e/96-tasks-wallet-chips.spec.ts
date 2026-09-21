@@ -86,6 +86,50 @@ test.describe('96 — Tasks wallet chips', () => {
     await expect(node.getByTestId('wallet-chip')).toContainText('Wallet goal · 50% funded')
   })
 
+  test('a chip renders on a fresh page load without ever opening the "Link to Wallet…" dialog', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks/lists/unsorted')
+    const tomorrow = businessDatePlus(1)
+
+    const accountRes = await page.request.post(`${API}/accounts`, {
+      data: { name: 'Main', type: 'bank', openingBalance: 0 },
+    })
+    const account = await accountRes.json()
+    const billRes = await page.request.post(`${API}/recurring-transactions`, {
+      data: { accountId: account.id, amount: 89.9, merchant: 'Internet', frequency: 'monthly', nextDueDate: tomorrow },
+    })
+    const bill = await billRes.json()
+    const taskRes = await page.request.post(`${API}/tasks`, { data: { content: 'Pay the internet bill' } })
+    const task = await taskRes.json()
+    await page.request.patch(`${API}/tasks/${task.id}`, { data: { walletRef: `recurring:${bill.id}` } })
+
+    // A fresh navigation, never touching the "Link to Wallet…" menu item —
+    // the chip's data must load on its own, not only when that dialog opens.
+    await page.reload()
+
+    const node = bulletNodeFor(page, 'Pay the internet bill')
+    await expect(node.getByTestId('wallet-chip')).toBeVisible()
+    await expect(node.getByTestId('wallet-chip')).toContainText('Wallet ·')
+  })
+
+  test('the server rejects a walletRef pointing at another user’s goal, on create too', async ({ browser }) => {
+    const alice = await newAppPage(browser, '/tasks')
+    const bob = await newAppPage(browser, '/tasks')
+
+    const bobAccountRes = await bob.request.post(`${API}/accounts`, {
+      data: { name: 'Bob account', type: 'bank', openingBalance: 0 },
+    })
+    const bobAccount = await bobAccountRes.json()
+    const bobGoalRes = await bob.request.post(`${API}/goals`, {
+      data: { name: "Bob's goal", targetAmount: 100, accountId: bobAccount.id },
+    })
+    const bobGoal = await bobGoalRes.json()
+
+    const createRes = await alice.request.post(`${API}/tasks`, {
+      data: { content: 'Alice task', walletRef: `goal:${bobGoal.id}` },
+    })
+    expect(createRes.status()).toBe(400)
+  })
+
   test('the server rejects a walletRef pointing at another user’s goal', async ({ browser }) => {
     const alice = await newAppPage(browser, '/tasks')
     const bob = await newAppPage(browser, '/tasks')

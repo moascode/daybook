@@ -9,7 +9,7 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { newAppPage, businessToday } from './helpers'
+import { newAppPage, businessToday, businessDatePlus } from './helpers'
 
 const API = '/api'
 
@@ -42,6 +42,25 @@ test.describe('94 — Tasks habits', () => {
 
     await card.getByTestId(`habit-grid-day-${today}`).click()
     await expect(card.getByTestId('habit-current-streak')).toContainText('0 days')
+  })
+
+  test('a streak built through yesterday still reads correctly before today is toggled', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks/habits')
+    const yesterday = businessDatePlus(-1)
+
+    const createRes = await page.request.post(`${API}/habits`, { data: { name: 'Journal' } })
+    const habit = await createRes.json()
+    await page.request.post(`${API}/habits/${habit.id}/toggle`, { data: { date: yesterday } })
+
+    // Reload rather than relying on the create/toggle response — this is
+    // GET /habits' own computeStats(), the code path a normal page visit
+    // exercises, not just the write endpoints.
+    await page.reload()
+    const card = page.getByTestId('habit-card').filter({ hasText: 'Journal' })
+    // Not yet 0: today is due and not yet done, but the day isn't over, so it
+    // must not zero out yesterday's kept day.
+    await expect(card.getByTestId('habit-current-streak')).toContainText('1 day')
+    await expect(card.getByTestId('habit-best-streak')).toContainText('Best: 1')
   })
 
   test('archiving a habit removes it from the default (non-archived) list', async ({ browser }) => {
