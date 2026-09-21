@@ -411,8 +411,12 @@ export function TaskListRow({
 
       {/* BUG-011: this row's inline editors don't cover priority or note —
           the modal does. Hide-when-absent, same as every other optional
-          affordance in this row. */}
-      {onOpenDetail && (
+          affordance in this row. Also hidden while the inline due-date
+          editor is expanded: its native date input overflows the row's
+          fixed-width `.task` grid track and visually overlaps whatever
+          renders in the next track, which used to intercept clicks meant
+          for the date editor's own "Clear due date" button. */}
+      {onOpenDetail && !showDatePicker && (
         <button
           type="button"
           onClick={() => onOpenDetail(task)}

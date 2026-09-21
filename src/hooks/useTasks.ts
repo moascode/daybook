@@ -366,6 +366,30 @@ export function useTasks() {
   }, [])
 
   /**
+   * Set a task's note via a direct PATCH — same guard-free story as
+   * `updateTaskContent` above. `TaskDetailModal.tsx` is its caller; it
+   * deliberately returns the full server row (`rowToTask`), not a
+   * `{ ...staleProp, note }` merge — the modal's `task` prop only reflects
+   * the task's state when the modal opened, not any other field a sibling
+   * control already saved in this same session, so merging onto it would
+   * silently revert those.
+   */
+  const updateTaskNote = useCallback(async (id: string, note: string): Promise<Task> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${id}`, { note })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().updateTask(id, updated)
+    }
+    return updated
+  }, [])
+
+  /**
    * Set or clear a single task's due date via a direct PATCH — same
    * guard-free story as `updateTaskContent` above (BUG-006's row-level date
    * control has the same store-bypassing callers). Unlike `rescheduleTasks`
@@ -796,6 +820,7 @@ export function useTasks() {
     completeTask,
     assignTask,
     updateTaskContent,
+    updateTaskNote,
     updateTaskDueDate,
     updateTaskPriority,
     updateTaskList,

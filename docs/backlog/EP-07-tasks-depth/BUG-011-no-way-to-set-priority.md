@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-011 — No UI anywhere to set or change a task's priority
 
@@ -29,4 +29,9 @@ priority) plus whatever composer/edit surface BUG-007/BUG-009 add.
 **Money, data loss, or cosmetic?** Functional gap — a filter with nothing
 that can set the value it filters on.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — `useTasks.ts` gained `updateTaskPriority(id,
+priority)` (same guard-free direct-PATCH pattern as `updateTaskDueDate`/
+`assignTask`), and `TaskDetailModal.tsx` exposes a priority `<select>`
+wired to it. Reachable from Today (row click) and All tasks (new
+`Pencil` icon button on `TaskListRow`, additive — existing inline editors
+untouched).

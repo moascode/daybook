@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-010 — All tasks row layout squeezes/hides the task name
 
@@ -36,4 +36,9 @@ wasn't measured pixel-for-pixel.
 readability problem — the task name is the one thing every row exists to
 show.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — capped the list-picker and assignee-picker
+`<select>` widths in `TaskListRow.tsx` (`truncate max-w-[92px]`) so a long
+list/assignee name truncates inside its own control instead of stretching
+it and squeezing the `1fr` name column beside it. `tasks.css`'s grid itself
+was untouched — the name column already had `min-w-0`; the squeeze was
+purely the unconstrained siblings.

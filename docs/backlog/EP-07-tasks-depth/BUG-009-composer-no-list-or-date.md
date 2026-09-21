@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-009 — No way to pick a list or date while creating a task
 
@@ -28,4 +28,8 @@ due date is force-overwritten right after.
 Today needs a second, separate edit step (blocked today by BUG-007) just to
 sort it into a list or move it off today's date.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — the Today composer gained a list `<select>` and a
+date input next to the text field, both changeable before Enter and reset
+to their defaults ("Unsorted" / today) after a successful add. Upcoming's
+per-day "+ Add" composer gained the same list picker (its date was already
+implied by the day column it's added into).

@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-007 — Today page rows can't be edited at all
 
@@ -28,4 +28,7 @@ affordances at all) and `src/modules/tasks/TasksTodayPage.tsx` (chooses
 **Money, data loss, or cosmetic?** Functional gap — Today is the module's
 landing page and currently the least editable view in it.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — `TaskRow.tsx`'s title is now clickable
+(keyboard-accessible too) and opens the new shared `TaskDetailModal.tsx`,
+which edits name, list, due date, priority, note and (where applicable)
+assignee, auto-saving each field on change/blur.

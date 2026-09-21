@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-008 — Today rows truncate long task names with no way to read the rest
 
@@ -26,4 +26,6 @@ there is no way to see the rest of it on this page.
 your own task list — compounds with BUG-007 since clicking to edit (which
 would also reveal the full text) does nothing on this page.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — the title now carries a `title` attribute (native
+tooltip on hover) and, via BUG-007's fix, opens `TaskDetailModal` on click,
+which shows the full untruncated name in an editable input.

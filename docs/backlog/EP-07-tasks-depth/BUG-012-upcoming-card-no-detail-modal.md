@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
 
 # BUG-012 — Upcoming board cards don't open a detail/edit view on click
 
@@ -28,4 +28,7 @@ the checkbox's `onClick`.
 **Money, data loss, or cosmetic?** Functional gap — the board is
 effectively read-only/drag-only once a task is on it.
 
-**Still needed?** Yes.
+**Still needed?** Fixed — `UpcomingCard`'s name span (and `WaitingRow`'s,
+for the "Waiting for a date" section) now opens `TaskDetailModal` on click;
+confirmed `@dnd-kit/core`'s `PointerSensor` listeners never register
+`onClick`, so this coexists safely with drag.

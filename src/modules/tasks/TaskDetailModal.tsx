@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { cn, errorMessage } from '@/lib/utils'
-import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
-import { useToastStore } from '@/stores/toast.store'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task, TaskPriority } from '@/types/tasks.types'
 
@@ -45,66 +43,80 @@ export function TaskDetailModal({
   coMembers,
   onSaved,
 }: TaskDetailModalProps) {
-  // Render-time re-sync from the prop (React's documented pattern), same as
-  // TaskListRow.tsx's drafts — this modal's caller keeps its own local
-  // `tasks` state, so an edit made elsewhere needs to win over a stale draft.
+  // `current` is this modal's own up-to-date copy of the task, re-synced
+  // from the `task` prop only when a DIFFERENT task opens. Every field reads
+  // from and saves onto `current`, not `task` directly: the caller's
+  // `onSaved` updates its own local list (Today/All/Upcoming each keep one,
+  // never the Zustand store), but none of them also refresh the `task` prop
+  // this modal was opened with — so five fields auto-saving independently in
+  // one sitting would otherwise each read a `task` snapshot from BEFORE any
+  // of the others' edits, and the field that resolves last would silently
+  // revert every field saved before it back to that stale snapshot.
+  const [current, setCurrent] = useState<Task | null>(task)
   const [nameDraft, setNameDraft] = useState(task?.content ?? '')
   const [noteDraft, setNoteDraft] = useState(task?.note ?? '')
   const [syncedTaskId, setSyncedTaskId] = useState(task?.id ?? null)
   if (task && task.id !== syncedTaskId) {
     setSyncedTaskId(task.id)
+    setCurrent(task)
     setNameDraft(task.content)
     setNoteDraft(task.note)
   }
 
-  const { updateTaskContent, updateTaskList, updateTaskDueDate, updateTaskPriority, assignTask } = useTasks()
+  const { updateTaskContent, updateTaskNote, updateTaskList, updateTaskDueDate, updateTaskPriority, assignTask } =
+    useTasks()
 
-  if (!task) {
+  if (!task || !current) {
     return <Modal open={false} onOpenChange={onOpenChange} title="Task" children={null} />
+  }
+
+  const commit = (updated: Task) => {
+    setCurrent(updated)
+    onSaved?.(updated)
   }
 
   const saveName = () => {
     const trimmed = nameDraft.trim()
-    if (trimmed === task.content) return
-    updateTaskContent(task.id, trimmed)
+    if (trimmed === current.content) return
+    updateTaskContent(current.id, trimmed)
       .then((updated) => {
         setNameDraft(updated.content)
-        onSaved?.(updated)
+        commit(updated)
       })
       .catch(() => {
         // updateTaskContent already surfaced the error (toast); revert the
         // draft so the field doesn't keep showing an unsaved edit.
-        setNameDraft(task.content)
+        setNameDraft(current.content)
       })
   }
 
   const saveList = (value: string) => {
-    updateTaskList(task.id, value || null)
-      .then((updated) => onSaved?.(updated))
+    updateTaskList(current.id, value || null)
+      .then(commit)
       .catch(() => {
         // updateTaskList already surfaced the error (toast).
       })
   }
 
   const saveDueDate = (value: string) => {
-    updateTaskDueDate(task.id, value || null)
-      .then((updated) => onSaved?.(updated))
+    updateTaskDueDate(current.id, value || null)
+      .then(commit)
       .catch(() => {
         // updateTaskDueDate already surfaced the error (toast).
       })
   }
 
   const savePriority = (value: TaskPriority) => {
-    updateTaskPriority(task.id, value)
-      .then((updated) => onSaved?.(updated))
+    updateTaskPriority(current.id, value)
+      .then(commit)
       .catch(() => {
         // updateTaskPriority already surfaced the error (toast).
       })
   }
 
   const saveAssignee = (value: string) => {
-    assignTask(task.id, value || null)
-      .then((updated) => onSaved?.(updated))
+    assignTask(current.id, value || null)
+      .then(commit)
       .catch(() => {
         // assignTask already surfaced the error (toast).
       })
@@ -112,20 +124,13 @@ export function TaskDetailModal({
 
   const saveNote = () => {
     const trimmed = noteDraft
-    if (trimmed === task.note) return
-    // Deliberately NOT the general `updateTask` — it no-ops silently for a
-    // task loaded via a store-bypassing fetch (this modal's callers are
-    // exactly such callers: Today/All/Upcoming keep their own local `tasks`
-    // state, not the Zustand store), the same bug class `updateTaskContent`
-    // etc. exist to avoid. Mirrors their guard-free direct-PATCH pattern.
-    api
-      .patch<{ note: string }>(`/tasks/${task.id}`, { note: trimmed })
-      .then((row) => {
-        onSaved?.({ ...task, note: row.note })
-      })
-      .catch((err: unknown) => {
-        useToastStore.getState().addToast({ message: errorMessage(err, 'Could not save your change — please try again.') })
-        setNoteDraft(task.note)
+    if (trimmed === current.note) return
+    updateTaskNote(current.id, trimmed)
+      .then(commit)
+      .catch(() => {
+        // updateTaskNote already surfaced the error (toast); revert the
+        // draft so the field doesn't keep showing an unsaved edit.
+        setNoteDraft(current.note)
       })
   }
 
@@ -157,7 +162,7 @@ export function TaskDetailModal({
           <select
             id="task-detail-list"
             data-testid="task-detail-list"
-            value={task.listId ?? ''}
+            value={current.listId ?? ''}
             onChange={(e) => saveList(e.target.value)}
             className={fieldInputClass}
           >
@@ -177,7 +182,7 @@ export function TaskDetailModal({
           <DatePicker
             id="task-detail-date"
             data-testid="task-detail-date"
-            value={task.dueDate ?? ''}
+            value={current.dueDate ?? ''}
             onChange={(e) => saveDueDate(e.target.value)}
           />
         </div>
@@ -189,7 +194,7 @@ export function TaskDetailModal({
           <select
             id="task-detail-priority"
             data-testid="task-detail-priority"
-            value={task.priority}
+            value={current.priority}
             onChange={(e) => savePriority(e.target.value as TaskPriority)}
             className={fieldInputClass}
           >
@@ -209,7 +214,7 @@ export function TaskDetailModal({
             <select
               id="task-detail-assignee"
               data-testid="task-detail-assignee"
-              value={task.assigneeId ?? ''}
+              value={current.assigneeId ?? ''}
               onChange={(e) => saveAssignee(e.target.value)}
               className={fieldInputClass}
             >
