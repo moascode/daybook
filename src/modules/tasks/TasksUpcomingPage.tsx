@@ -56,7 +56,7 @@ function sortForBalancing(tasks: Task[]): Task[] {
  * it optimistically alongside every `rescheduleTasks`/`updateTask`/`completeTask` call.
  */
 export function TasksUpcomingPage() {
-  const { loadTasks, addTask, updateTask, updateTaskList, rescheduleTasks, completeTask } = useTasks()
+  const { loadTasks, addTask, updateTask, rescheduleTasks, completeTask } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
   const addToast = useToastStore((s) => s.addToast)
 
@@ -180,20 +180,16 @@ export function TasksUpcomingPage() {
 
   const handleAddTask = async (date: string, content: string, listId: string | null) => {
     try {
+      // `addTask` seeds the Zustand store with the new task, so this
+      // `updateTask` (right after, same id) passes its store-existence
+      // guard rather than silently no-opping — unlike this page's other
+      // due-date/list writes (moveTaskToDate, etc.), which target tasks
+      // loaded via `loadTasks('all')` and never touch the store at all.
       const newTask = await addTask(content, null, null)
-      await updateTask(newTask.id, { dueDate: date })
-      let finalTask: Task = { ...newTask, dueDate: date }
-      if (listId) {
-        // Guard-free direct-PATCH helper (see TaskDetailModal.tsx's saveList) —
-        // this page's local `tasks` state is never backed by the Zustand
-        // store (loadTasks('all') doesn't populate it), so `updateTask`'s
-        // store-existence guard would silently drop this.
-        const withList = await updateTaskList(newTask.id, listId)
-        finalTask = { ...finalTask, listId: withList.listId }
-      }
-      setTasks((prev) => [...prev, finalTask])
+      await updateTask(newTask.id, { dueDate: date, listId })
+      setTasks((prev) => [...prev, { ...newTask, dueDate: date, listId }])
     } catch {
-      // addTask/updateTask/updateTaskList already surfaced the error and reconciled the store.
+      // addTask/updateTask already surfaced the error and reconciled the store.
     }
   }
 

@@ -304,6 +304,7 @@ export function TaskListRow({
       {coMembers && (
         <select
           aria-label={`Assign ${task.content || 'task'} to`}
+          title={coMembers.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
           data-testid={`task-row-assignee-${task.id}`}
           value={assigneeDraft}
           onChange={(e) => {

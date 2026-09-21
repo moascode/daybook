@@ -254,8 +254,9 @@ export function TasksTodayPage() {
                 value={composerListId}
                 onChange={(e) => setComposerListId(e.target.value)}
                 disabled={composerBusy}
-                aria-label="New task list"
+                aria-label="List for new task"
                 data-testid="today-composer-list"
+                className="flex-none rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-fg-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               >
                 <option value="">Unsorted</option>
                 {taskLists.map((l) => (
@@ -269,8 +270,9 @@ export function TasksTodayPage() {
                 value={composerDueDate}
                 onChange={(e) => setComposerDueDate(e.target.value)}
                 disabled={composerBusy}
-                aria-label="New task due date"
+                aria-label="Due date for new task"
                 data-testid="today-composer-date"
+                className="flex-none rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-fg-subtle focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               />
               <span className="hint">Enter</span>
             </div>

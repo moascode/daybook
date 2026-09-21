@@ -53,10 +53,15 @@ test.describe('99 — Task detail modal', () => {
     await noteInput.fill('Bring old passport + photo')
     await Promise.all([patchResponse(), noteInput.blur()])
 
-    // Close and reopen from the row — every field round-tripped.
+    // Close, then reload — the modal never unmounts across a plain
+    // close/reopen (it keeps its own `current` state), so reopening without
+    // a reload would only prove the modal remembers itself, not that any of
+    // this actually reached the server. A reload forces every field to come
+    // back from a fresh GET.
     await page.keyboard.press('Escape')
     await expect(modal).not.toBeVisible()
     await expect(page.getByText('Renew passport (urgent)')).toBeVisible()
+    await page.reload()
 
     await page.getByTestId('today-task-row').filter({ hasText: 'Renew passport (urgent)' }).locator('.task-title').click()
     await expect(page.getByTestId('task-detail-name')).toHaveValue('Renew passport (urgent)')

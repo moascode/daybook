@@ -40,3 +40,4 @@ proven itself with real use.
 | [BUG-010](BUG-010-all-tasks-row-layout-squeezes-name.md) | All tasks row layout squeezes/hides the task name | Fixed |
 | [BUG-011](BUG-011-no-way-to-set-priority.md) | No UI anywhere to set or change a task's priority | Fixed |
 | [BUG-012](BUG-012-upcoming-card-no-detail-modal.md) | Upcoming board cards don't open a detail/edit view | Fixed |
+| [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up |

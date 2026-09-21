@@ -44,8 +44,12 @@ export function TaskDetailModal({
   onSaved,
 }: TaskDetailModalProps) {
   // `current` is this modal's own up-to-date copy of the task, re-synced
-  // from the `task` prop only when a DIFFERENT task opens. Every field reads
-  // from and saves onto `current`, not `task` directly: the caller's
+  // from the `task` prop whenever a DIFFERENT task opens, or the SAME task
+  // reopens (open flips false→true) — the latter matters because a row's
+  // own inline editors (e.g. TaskListRow's content/list/due-date pickers)
+  // can change the task while this modal is closed, and closing/reopening
+  // should show that, not whatever was last open in the modal. Every field
+  // reads from and saves onto `current`, not `task` directly: the caller's
   // `onSaved` updates its own local list (Today/All/Upcoming each keep one,
   // never the Zustand store), but none of them also refresh the `task` prop
   // this modal was opened with — so five fields auto-saving independently in
@@ -56,12 +60,16 @@ export function TaskDetailModal({
   const [nameDraft, setNameDraft] = useState(task?.content ?? '')
   const [noteDraft, setNoteDraft] = useState(task?.note ?? '')
   const [syncedTaskId, setSyncedTaskId] = useState(task?.id ?? null)
-  if (task && task.id !== syncedTaskId) {
+  const [syncedOpen, setSyncedOpen] = useState(open)
+  const taskChanged = task && task.id !== syncedTaskId
+  const reopened = task && open && !syncedOpen
+  if (taskChanged || reopened) {
     setSyncedTaskId(task.id)
     setCurrent(task)
     setNameDraft(task.content)
     setNoteDraft(task.note)
   }
+  if (open !== syncedOpen) setSyncedOpen(open)
 
   const { updateTaskContent, updateTaskNote, updateTaskList, updateTaskDueDate, updateTaskPriority, assignTask } =
     useTasks()

@@ -42,7 +42,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
 | [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
-| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 18 | Open |
+| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 19 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
 | [EP-10](EP-10-cross-cutting/README.md) | Cross-cutting | 4 | Open |
@@ -126,6 +126,7 @@ files.
 | [BUG-010](EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md) | Bug | All tasks row layout squeezes/hides the task name | Fixed |
 | [BUG-011](EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md) | Bug | No UI anywhere to set or change a task's priority | Fixed |
 | [BUG-012](EP-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Bug | Upcoming board cards don't open a detail/edit view | Fixed |
+| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up from BUG-011's review |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 
