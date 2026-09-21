@@ -34,3 +34,10 @@ proven itself with real use.
 | [BUG-006](BUG-006-no-due-date-change-in-list-view.md) | No due-date change from a list view | Fixed |
 | [FEAT-052](FEAT-052-edit-task-from-row.md) | Edit a task's text from any list-style view | Shipped |
 | [FEAT-053](FEAT-053-create-task-list.md) | A way to create a task list | Shipped |
+| [BUG-007](BUG-007-today-row-not-editable.md) | Today page rows can't be edited at all | Fixed |
+| [BUG-008](BUG-008-today-row-name-truncated.md) | Today rows truncate long names with no way to read them | Fixed |
+| [BUG-009](BUG-009-composer-no-list-or-date.md) | No way to pick a list or date while creating a task | Fixed |
+| [BUG-010](BUG-010-all-tasks-row-layout-squeezes-name.md) | All tasks row layout squeezes/hides the task name | Fixed |
+| [BUG-011](BUG-011-no-way-to-set-priority.md) | No UI anywhere to set or change a task's priority | Fixed |
+| [BUG-012](BUG-012-upcoming-card-no-detail-modal.md) | Upcoming board cards don't open a detail/edit view | Fixed |
+| [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up |

@@ -18,6 +18,7 @@ import type { TaskList } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
 import { cn, errorMessage } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import type { Task } from '@/types/tasks.types'
 
 const UNSORTED_COLOR = '#6b7280'
@@ -62,6 +63,13 @@ export function TasksUpcomingPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [proposal, setProposal] = useState<BalanceProposal | null>(null)
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
+  const openDetail = (task: Task) => {
+    setDetailTask(task)
+    setDetailOpen(true)
+  }
 
   // See TasksListDetailPage.tsx for the same pattern/comment: `useTasks()` /
   // `useTaskLists()` re-derive `loadTasks`/`loadTaskLists`/`addToast` on every
@@ -170,13 +178,18 @@ export function TasksUpcomingPage() {
     }
   }
 
-  const handleAddTask = async (date: string, content: string) => {
+  const handleAddTask = async (date: string, content: string, listId: string | null) => {
     try {
+      // `addTask` seeds the Zustand store with the new task, so this
+      // `updateTask` (right after, same id) passes its store-existence
+      // guard rather than silently no-opping — unlike this page's other
+      // due-date/list writes (moveTaskToDate, etc.), which target tasks
+      // loaded via `loadTasks('all')` and never touch the store at all.
       const newTask = await addTask(content, null, null)
-      await updateTask(newTask.id, { dueDate: date })
-      setTasks((prev) => [...prev, { ...newTask, dueDate: date }])
+      await updateTask(newTask.id, { dueDate: date, listId })
+      setTasks((prev) => [...prev, { ...newTask, dueDate: date, listId }])
     } catch {
-      // addTask already surfaced the error and reconciled the store.
+      // addTask/updateTask already surfaced the error and reconciled the store.
     }
   }
 
@@ -307,8 +320,10 @@ export function TasksUpcomingPage() {
                   date={date}
                   tasks={tasksByDay.get(date) ?? []}
                   listById={listById}
+                  taskLists={taskLists}
                   onComplete={handleComplete}
                   onAddTask={handleAddTask}
+                  onOpenDetail={openDetail}
                 />
               ))}
             </div>
@@ -332,12 +347,21 @@ export function TasksUpcomingPage() {
                     }
                     void moveTaskToDate(t.id, date)
                   }}
+                  onOpenDetail={openDetail}
                 />
               ))
             )}
           </div>
         </>
       )}
+
+      <TaskDetailModal
+        task={detailTask}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        availableLists={taskLists}
+        onSaved={(updated) => setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))}
+      />
     </div>
   )
 }
@@ -348,22 +372,27 @@ interface DayColumnProps {
   date: string
   tasks: Task[]
   listById: Map<string, TaskList>
+  taskLists: TaskList[]
   onComplete: (id: string) => void
-  onAddTask: (date: string, content: string) => Promise<void>
+  onAddTask: (date: string, content: string, listId: string | null) => Promise<void>
+  onOpenDetail: (task: Task) => void
 }
 
-function DayColumn({ date, tasks, listById, onComplete, onAddTask }: DayColumnProps) {
+function DayColumn({ date, tasks, listById, taskLists, onComplete, onAddTask, onOpenDetail }: DayColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: date })
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState('')
+  const [listId, setListId] = useState('')
   const d = parseISO(date)
 
   const commit = async () => {
     const text = draft.trim()
+    const chosenListId = listId || null
     setAdding(false)
     setDraft('')
+    setListId('')
     if (!text) return
-    await onAddTask(date, text)
+    await onAddTask(date, text, chosenListId)
   }
 
   return (
@@ -389,27 +418,54 @@ function DayColumn({ date, tasks, listById, onComplete, onAddTask }: DayColumnPr
             task={t}
             list={t.listId ? listById.get(t.listId) : undefined}
             onComplete={onComplete}
+            onOpenDetail={onOpenDetail}
           />
         ))}
       </div>
 
       {adding ? (
-        <input
-          autoFocus
-          data-testid={`upcoming-add-day-${date}`}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void commit()
-            else if (e.key === 'Escape') {
-              setAdding(false)
-              setDraft('')
-            }
+        <div
+          className="flex flex-col gap-1"
+          onBlur={(e) => {
+            // Both the text input and the list <select> live in this
+            // wrapper, and clicking from one to the other blurs the input —
+            // committing there (as a bare input-level onBlur would) closes
+            // the composer the moment someone picks a list before typing.
+            // Only commit once focus leaves the whole composer.
+            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+            void commit()
           }}
-          onBlur={() => void commit()}
-          placeholder="Add a task…"
-          className="rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-fg outline-none focus:border-brand-400"
-        />
+        >
+          <input
+            autoFocus
+            data-testid={`upcoming-add-day-${date}`}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void commit()
+              else if (e.key === 'Escape') {
+                setAdding(false)
+                setDraft('')
+                setListId('')
+              }
+            }}
+            placeholder="Add a task…"
+            className="rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-fg outline-none focus:border-brand-400"
+          />
+          <select
+            data-testid={`upcoming-add-day-list-${date}`}
+            value={listId}
+            onChange={(e) => setListId(e.target.value)}
+            className="rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-fg outline-none focus:border-brand-400"
+          >
+            <option value="">Unsorted</option>
+            {taskLists.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+        </div>
       ) : (
         <button
           type="button"
@@ -428,9 +484,10 @@ interface UpcomingCardProps {
   task: Task
   list: Pick<TaskList, 'id' | 'name' | 'color'> | undefined
   onComplete: (id: string) => void
+  onOpenDetail: (task: Task) => void
 }
 
-function UpcomingCard({ task, list, onComplete }: UpcomingCardProps) {
+function UpcomingCard({ task, list, onComplete, onOpenDetail }: UpcomingCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
   const color = list?.color ?? UNSORTED_COLOR
   const style = transform
@@ -457,7 +514,30 @@ function UpcomingCard({ task, list, onComplete }: UpcomingCardProps) {
       >
         <Check className="h-3.5 w-3.5" />
       </button>
-      <span className="min-w-0 flex-1 truncate text-fg">{task.content || 'Untitled task'}</span>
+      {/*
+        Plain onClick alongside dnd-kit's `listeners`/`attributes`: dnd-kit's
+        PointerSensor listeners register only `onKeyDown`/`onPointerDown`
+        (verified in @dnd-kit/core's source), never `onClick`, so there's no
+        handler collision from spreading both on this node — a stationary
+        click (under the 8px activation distance) never starts a drag, so it
+        reaches this handler untouched.
+      */}
+      <span
+        data-testid={`upcoming-card-open-${task.id}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpenDetail(task)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onOpenDetail(task)
+          }
+        }}
+        title={task.content}
+        className="min-w-0 flex-1 cursor-pointer truncate text-fg"
+      >
+        {task.content || 'Untitled task'}
+      </span>
     </div>
   )
 }
@@ -466,9 +546,10 @@ interface WaitingRowProps {
   task: Task
   list: Pick<TaskList, 'id' | 'name' | 'color'> | undefined
   onSetDate: (date: string) => void
+  onOpenDetail: (task: Task) => void
 }
 
-function WaitingRow({ task, list, onSetDate }: WaitingRowProps) {
+function WaitingRow({ task, list, onSetDate, onOpenDetail }: WaitingRowProps) {
   const color = list?.color ?? UNSORTED_COLOR
 
   return (
@@ -480,7 +561,22 @@ function WaitingRow({ task, list, onSetDate }: WaitingRowProps) {
         title={list?.name ?? 'Unsorted'}
       />
       <div className="min-w-0 flex-1">
-        <p className="task-title">{task.content || 'Untitled task'}</p>
+        <p
+          data-testid={`upcoming-waiting-open-${task.id}`}
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenDetail(task)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onOpenDetail(task)
+            }
+          }}
+          title={task.content}
+          className="task-title cursor-pointer"
+        >
+          {task.content || 'Untitled task'}
+        </p>
       </div>
       <DatePicker
         aria-label={`Schedule ${task.content || 'task'}`}

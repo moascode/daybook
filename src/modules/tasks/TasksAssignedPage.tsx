@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { errorMessage } from '@/lib/utils'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
+import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
@@ -37,6 +38,13 @@ export function TasksAssignedPage() {
   const [completed, setCompleted] = useState<Task[]>([])
   const [members, setMembers] = useState<GroupMember[]>([])
   const [loading, setLoading] = useState(true)
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+
+  const openDetail = (task: Task) => {
+    setDetailTask(task)
+    setDetailOpen(true)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -97,6 +105,16 @@ export function TasksAssignedPage() {
   const handleListChange = (taskId: string, listId: string | null) => {
     setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, listId } : t)))
     setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, listId } : t)))
+  }
+
+  // BUG-011: this page's rows don't cover priority/note — TaskDetailModal
+  // does. Same staleness story as the handlers above — patch every section
+  // that might hold this task by id, since the modal's own opener doesn't
+  // know which section its `task` came from.
+  const handleDetailSaved = (updated: Task) => {
+    setWaitingOnYou((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    setAllOpen((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    setDetailTask(updated)
   }
 
   const handleToggleComplete = () => {
@@ -212,6 +230,7 @@ export function TasksAssignedPage() {
                       onDueDateChange={handleDueDateChange}
                       availableLists={taskLists}
                       onListChange={handleListChange}
+                      onOpenDetail={openDetail}
                     />
                   ))}
                 </div>
@@ -257,6 +276,7 @@ export function TasksAssignedPage() {
                         onDueDateChange={handleDueDateChange}
                         availableLists={taskLists}
                         onListChange={handleListChange}
+                        onOpenDetail={openDetail}
                       />
                     </div>
                   </div>
@@ -291,6 +311,15 @@ export function TasksAssignedPage() {
           </div>
         </>
       )}
+
+      <TaskDetailModal
+        task={detailTask}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        availableLists={taskLists}
+        coMembers={coMembers}
+        onSaved={handleDetailSaved}
+      />
     </div>
   )
 }

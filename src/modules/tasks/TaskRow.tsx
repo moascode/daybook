@@ -6,6 +6,7 @@ import type { Task } from '@/types/tasks.types'
 export interface TaskRowProps {
   task: Task
   onToggleComplete: (id: string) => void
+  onOpenDetail: (task: Task) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -31,7 +32,7 @@ function formatDue(dateStr: string): string {
  * applied here): checkbox border colour = priority, due column red when
  * overdue / amber when due today.
  */
-export function TaskRow({ task, onToggleComplete }: TaskRowProps) {
+export function TaskRow({ task, onToggleComplete, onOpenDetail }: TaskRowProps) {
   const state = dueState(task)
 
   return (
@@ -51,7 +52,21 @@ export function TaskRow({ task, onToggleComplete }: TaskRowProps) {
       </button>
 
       <div className="min-w-0">
-        <p className="task-title">{task.content || 'Untitled task'}</p>
+        <p
+          className="task-title cursor-pointer"
+          title={task.content}
+          role="button"
+          tabIndex={0}
+          onClick={() => onOpenDetail(task)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              onOpenDetail(task)
+            }
+          }}
+        >
+          {task.content || 'Untitled task'}
+        </p>
         {task.note && <p className="task-sub truncate">{task.note}</p>}
       </div>
 

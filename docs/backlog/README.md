@@ -42,7 +42,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
 | [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
-| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 12 | Open |
+| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 19 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
 | [EP-10](EP-10-cross-cutting/README.md) | Cross-cutting | 4 | Open |
@@ -120,6 +120,13 @@ files.
 | [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Fixed |
 | [FEAT-052](EP-07-tasks-depth/FEAT-052-edit-task-from-row.md) | Feature | Edit a task's text from any list-style view | Shipped |
 | [FEAT-053](EP-07-tasks-depth/FEAT-053-create-task-list.md) | Feature | A way to create a task list | Shipped |
+| [BUG-007](EP-07-tasks-depth/BUG-007-today-row-not-editable.md) | Bug | Today page rows can't be edited at all | Fixed |
+| [BUG-008](EP-07-tasks-depth/BUG-008-today-row-name-truncated.md) | Bug | Today rows truncate long names with no way to read them | Fixed |
+| [BUG-009](EP-07-tasks-depth/BUG-009-composer-no-list-or-date.md) | Bug | No way to pick a list or date while creating a task | Fixed |
+| [BUG-010](EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md) | Bug | All tasks row layout squeezes/hides the task name | Fixed |
+| [BUG-011](EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md) | Bug | No UI anywhere to set or change a task's priority | Fixed |
+| [BUG-012](EP-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Bug | Upcoming board cards don't open a detail/edit view | Fixed |
+| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up from BUG-011's review |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 

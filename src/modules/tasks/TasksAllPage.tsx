@@ -12,6 +12,7 @@ import { useDashboardChartColors } from '@/modules/wallet/dashboard/chartColors'
 import { cn, errorMessage, todayISO } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
+import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import type { Task, TaskPriority } from '@/types/tasks.types'
 
 /** `days` from today, using local date parts — never toISOString() (CLAUDE.md
@@ -65,6 +66,15 @@ export function TasksAllPage() {
   const [priority, setPriority] = useState<TaskPriority | ''>('')
   const [assignee, setAssignee] = useState<AssigneeFilter>('all')
   const [listId, setListId] = useState<string>('')
+
+  // BUG-011: TaskDetailModal is the row's only route to priority/note edits —
+  // this row has no inline editor for either.
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const openDetail = (task: Task) => {
+    setDetailTask(task)
+    setDetailOpen(true)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -222,6 +232,16 @@ export function TasksAllPage() {
   // moved out of the filtered list must actually disappear from view.
   const handleListChange = (id: string, listId: string | null) => {
     setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, listId } : t)))
+  }
+
+  // BUG-011: TaskDetailModal saves the field itself; this only keeps this
+  // page's local arrays in sync, same staleness story as the handlers above.
+  // A task saved from the modal could be in either array (the modal doesn't
+  // know which), so both are patched — the id that isn't present is a no-op.
+  const handleDetailSaved = (updated: Task) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    setCompletedTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    setDetailTask(updated)
   }
 
   const handleScheduleUndated = async () => {
@@ -431,6 +451,7 @@ export function TasksAllPage() {
                         onDueDateChange={handleDueDateChange}
                         availableLists={taskLists}
                         onListChange={handleListChange}
+                        onOpenDetail={openDetail}
                       />
                     ))}
                   </div>
@@ -462,6 +483,7 @@ export function TasksAllPage() {
                       onDueDateChange={handleDueDateChange}
                       availableLists={taskLists}
                       onListChange={handleListChange}
+                      onOpenDetail={openDetail}
                     />
                   ))}
                 </div>
@@ -512,6 +534,14 @@ export function TasksAllPage() {
           </div>
         </>
       )}
+
+      <TaskDetailModal
+        task={detailTask}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        availableLists={taskLists}
+        onSaved={handleDetailSaved}
+      />
     </div>
   )
 }
