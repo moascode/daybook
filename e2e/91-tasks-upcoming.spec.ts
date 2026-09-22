@@ -204,4 +204,44 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(page.getByTestId(`upcoming-day-count-${monday}`)).toHaveText('0')
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('1')
   })
+
+  test('BUG-013: a Waiting-for-a-date row keeps its date input usable at a narrow viewport', async ({ browser }) => {
+    // WaitingRow (this page) shares the `.task` CSS grid with
+    // TaskListRow.tsx, but renders 3 bare children (no `.task-name`/
+    // `.task-meta` wrappers) — same shared-class risk as TaskRow.tsx on the
+    // Today page (see e2e/69-tasks-today.spec.ts's BUG-013 test). The
+    // ≤900px rule tasks.css added for TaskListRow is scoped to
+    // `.task:has(.task-meta)` so it can't catch this row too; without that
+    // scoping the native date input (the 3rd child) would auto-place into
+    // the checkbox's own 20px track instead of getting its own row.
+    const page = await newAppPage(browser, '/tasks')
+    await page.request.post(`${API}/tasks`, { data: { content: 'A reasonably long waiting-for-a-date task name' } })
+    await page.goto('/tasks/upcoming')
+
+    const waiting = page.getByTestId('upcoming-waiting-section')
+    await expect(waiting).toContainText('A reasonably long waiting-for-a-date task name')
+    const row = waiting.locator('.task').filter({ hasText: 'A reasonably long waiting-for-a-date task name' })
+
+    // Both a mid-width (700px, matches e2e/92's BUG-013 case) and a real
+    // phone width (375px) — the overflow this guards was only measured at
+    // narrower row content-box widths, which 700px alone doesn't reach.
+    for (const width of [700, 375]) {
+      await page.setViewportSize({ width, height: 900 })
+      const rowBox = await row.boundingBox()
+      const titleBox = await row.locator('.task-title').boundingBox()
+      const dateInputBox = await row.locator('input[type="date"]').boundingBox()
+      expect(rowBox).not.toBeNull()
+      expect(titleBox).not.toBeNull()
+      expect(dateInputBox).not.toBeNull()
+      // A usable native date input needs meaningfully more than the 20px
+      // checkbox track it would be squeezed into if the grid mis-placed it.
+      expect(titleBox!.width).toBeGreaterThan(80)
+      expect(dateInputBox!.width).toBeGreaterThan(60)
+      expect(dateInputBox!.x).toBeGreaterThan(titleBox!.x)
+      // The regression this most recently caught wasn't a squeeze but an
+      // overflow — the date input rendering past the row's own right edge
+      // instead of being constrained by it.
+      expect(dateInputBox!.x + dateInputBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1)
+    }
+  })
 })

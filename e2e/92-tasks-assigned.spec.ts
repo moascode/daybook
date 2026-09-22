@@ -13,6 +13,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
+import { businessDatePlus } from './helpers'
 
 const API = '/api'
 
@@ -236,6 +237,95 @@ test.describe('92 — Tasks assigned to me', () => {
     await expect(ownerPage.getByTestId('assigned-turnaround-empty')).toContainText(
       'No completed assignments with a recorded assignment time yet',
     )
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('BUG-013: a handed-out row with every optional field set renders without squeezing the name or overlapping controls', async ({ browser }) => {
+    // The "handed out" rail is the only place a TaskListRow ever gets every
+    // optional prop at once (coMembers, availableLists, onOpenDetail — see
+    // TasksAssignedPage.tsx's second <TaskListRow>), so it's the only page
+    // that can actually reproduce BUG-013: a fixed 6-track CSS grid whose
+    // tracks were assigned by DOM order, not by role. The list <select>
+    // (FEAT-051) rendered ahead of the title and could claim the grid's only
+    // flexible (1fr) track, capping the title at a fixed 128px on every row
+    // with a list — and the due-date picker's "Clear" button could overlap
+    // the edit-detail button once both were showing.
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const assigneeId = await currentUserId(assigneePage)
+
+    const listRes = await ownerPage.request.post(`${API}/task-lists`, { data: { name: 'Household errands' } })
+    const list = await listRes.json()
+
+    const longContent = 'Renew the household insurance policy before it lapses at month end'
+    const taskRes = await ownerPage.request.post(`${API}/tasks`, {
+      data: { content: longContent, listId: list.id, dueDate: businessDatePlus(60), recurrence: 'monthly', assigneeId },
+    })
+    const task = await taskRes.json()
+    // A subtask, so the subtask-count chip also renders — the last of
+    // TaskListRow's optional children, alongside list/assignee/recurrence/
+    // due-date/edit-detail set above.
+    await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Sub-step', parentId: task.id } })
+
+    await ownerPage.goto('/tasks/assigned')
+    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    const row = ownerPage.locator(`[data-task-id="${task.id}"]`)
+    await expect(row).toBeVisible()
+
+    // Every optional child is present at once.
+    await expect(row.getByTestId('all-tasks-row-list-chip')).toBeVisible()
+    await expect(row.getByTestId('all-tasks-row-subtasks')).toBeVisible()
+    await expect(row.getByTestId(`task-row-assignee-${task.id}`)).toBeVisible()
+    await expect(row.getByTestId('all-tasks-row-recurrence')).toBeVisible()
+    await expect(row.getByTestId(`task-row-detail-${task.id}`)).toBeVisible()
+
+    // The name column is genuinely flexible, not capped at the old fixed
+    // 128px track — 200px is a threshold the pre-fix layout could never
+    // reach (128px minus the row's own padding), so this fails under the
+    // regression and passes under the fix's `minmax(0, 1fr)` track.
+    const titleBox = await row.getByTestId('all-tasks-row-title').boundingBox()
+    expect(titleBox).not.toBeNull()
+    expect(titleBox!.width).toBeGreaterThan(200)
+
+    // Expand the due-date picker (BUG-011's original overlap: its "Clear"
+    // button vs. the edit-detail button) and assert the two no longer share
+    // any screen space — proof this is now structurally impossible (both
+    // wrap inside one `.task-meta` flex row) rather than avoided by hiding
+    // one control while the other is open.
+    await row.getByTestId(`all-tasks-row-due-${task.id}`).click()
+    const clearButton = row.getByRole('button', { name: 'Clear due date' })
+    await expect(clearButton).toBeVisible()
+    const editButton = row.getByTestId(`task-row-detail-${task.id}`)
+    await expect(editButton).toBeVisible()
+
+    const clearBox = await clearButton.boundingBox()
+    const editBox = await editButton.boundingBox()
+    expect(clearBox).not.toBeNull()
+    expect(editBox).not.toBeNull()
+    const overlaps =
+      clearBox!.x < editBox!.x + editBox!.width &&
+      clearBox!.x + clearBox!.width > editBox!.x &&
+      clearBox!.y < editBox!.y + editBox!.height &&
+      clearBox!.y + clearBox!.height > editBox!.y
+    expect(overlaps).toBe(false)
+
+    // BUG-013 (review round): the first structural fix only checked the
+    // default ~1280px viewport, where there's room for the name and meta
+    // groups to sit side by side at their natural size regardless of
+    // whether the grid math is right. The actual bug — an `auto` track
+    // claiming its full max-content width before the `1fr` name track gets
+    // anything — only shows up once the row is too narrow to fit both, which
+    // happens well above the ≤680px breakpoint (a `.task` nested in this
+    // page's card is ~392px wide around a 700px viewport). Re-check at that
+    // width, and at a real mobile width, that the name never collapses.
+    for (const width of [700, 375]) {
+      await ownerPage.setViewportSize({ width, height: 900 })
+      const narrowTitleBox = await row.getByTestId('all-tasks-row-title').boundingBox()
+      expect(narrowTitleBox).not.toBeNull()
+      expect(narrowTitleBox!.width).toBeGreaterThan(80)
+    }
 
     await ownerCtx.close()
     await assigneeCtx.close()

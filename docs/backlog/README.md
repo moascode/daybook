@@ -126,7 +126,7 @@ files.
 | [BUG-010](EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md) | Bug | All tasks row layout squeezes/hides the task name | Fixed |
 | [BUG-011](EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md) | Bug | No UI anywhere to set or change a task's priority | Fixed |
 | [BUG-012](EP-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Bug | Upcoming board cards don't open a detail/edit view | Fixed |
-| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up from BUG-011's review |
+| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 

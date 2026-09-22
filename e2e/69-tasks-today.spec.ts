@@ -131,4 +131,43 @@ test.describe('69 — Tasks Today page', () => {
     await assigned.click()
     await expect(page).toHaveURL(/\/tasks\/assigned$/)
   })
+
+  test('BUG-013: an overdue row keeps its due-date badge readable at a narrow viewport', async ({ browser }) => {
+    // TaskRow.tsx shares the `.task` CSS grid with TaskListRow.tsx, but
+    // renders 3 bare children (no `.task-name`/`.task-meta` wrappers). The
+    // ≤900px rule tasks.css added for TaskListRow's variable children is
+    // scoped to `.task:has(.task-meta)` specifically so it can't also catch
+    // TaskRow's plain 3-child rows — without that scoping, the 3rd child
+    // (the due-date badge here) auto-places into the checkbox's own track
+    // instead of getting its own row. Regression check for that scoping.
+    const page = await newAppPage(browser, '/tasks')
+
+    const taskRes = await page.request.post(`${API}/tasks`, {
+      data: { content: 'A reasonably long overdue task name to check for a narrow-viewport squeeze', dueDate: businessDatePlus(-30) },
+    })
+    const task = await taskRes.json()
+    await page.reload()
+
+    const row = page.locator(`[data-task-id="${task.id}"]`)
+    await expect(row).toBeVisible()
+
+    for (const width of [700, 375]) {
+      await page.setViewportSize({ width, height: 900 })
+      const rowBox = await row.boundingBox()
+      const titleBox = await row.locator('.task-title').boundingBox()
+      const whenBox = await row.locator('.task-when').boundingBox()
+      expect(rowBox).not.toBeNull()
+      expect(titleBox).not.toBeNull()
+      expect(whenBox).not.toBeNull()
+      // Both land on the checkbox's own row only if the grid mis-placed the
+      // due-date badge — they should instead sit side by side, badge to the
+      // right of the title, both comfortably wider than the 20px checkbox
+      // track that the bug would have squeezed them into, and the badge
+      // should never render past the row's own right edge.
+      expect(titleBox!.width).toBeGreaterThan(80)
+      expect(whenBox!.width).toBeGreaterThan(20)
+      expect(whenBox!.x).toBeGreaterThan(titleBox!.x)
+      expect(whenBox!.x + whenBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1)
+    }
+  })
 })

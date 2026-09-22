@@ -40,17 +40,51 @@
 .tcheck.pri-high { border-color: rgb(var(--neg)); }
 .tcheck.pri-med  { border-color: rgb(var(--warn)); }
 
-/* task row */
+/* task row
+   BUG-013 (docs/backlog/EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md):
+   was a fixed 6-track grid that assigned tracks by DOM order, not by role —
+   TaskListRow.tsx's list indicator (a variable-order child) could claim the
+   grid's only 1fr track ahead of the title, capping the name at a fixed 128px
+   regardless of viewport. `.task` itself is still just 3 tracks for every
+   consumer (checkbox / name / trailing content) — what changed is that
+   TaskListRow.tsx, the one consumer with a variable number of optional
+   trailing children, now wraps them into two explicit roles (.task-name /
+   .task-meta) so the name always gets the flexible track instead of
+   whichever child happens to render second. TaskRow.tsx (Today) and
+   TasksUpcomingPage.tsx's `WaitingRow` still render exactly 3 bare children
+   straight into `.task`'s 3 tracks, unchanged — see the ≤900px rule below
+   for why that distinction matters there too.
+   The name track's 160px floor is a backstop for `.task:has(.task-meta)`
+   ONLY (below), not the base rule — an `auto` track sizes to its max-content
+   before an `fr` track gets anything, so without ANY floor `.task-meta` (up
+   to 5 optional children, one of them a native date input while its picker
+   is open) could squeeze `.task-name` toward zero. The floor alone isn't
+   sufficient either, though — verified empirically, a fixed pixel value
+   can't also leave room for `.task-name`'s OWN competing children (the list
+   indicator) at the same time — so the real fix is the ≤900px breakpoint
+   below, which removes the competition entirely by giving `.task-meta` its
+   own row. Above that breakpoint the floor is what stops a pathological
+   content combination (e.g. an unusually long list name) from squeezing the
+   title before either group's flex-wrap would otherwise engage.
+   The floor must NOT apply to the base rule: TaskRow.tsx and `WaitingRow`
+   have no `.task-meta` and nothing to protect the name from, but DO still
+   need their name track to collapse below 160px on a narrow viewport (their
+   3rd child — a due-date span or native date input — has no wrapping row to
+   fall back on, unlike `.task-meta`), or that 3rd child overflows the row
+   instead. Verified empirically: a `WaitingRow`'s date input overflowed by
+   up to 86px at phone widths when the floor was on the base rule. */
 .task {
   display: grid; align-items: center; gap: var(--s3);
-  grid-template-columns: 20px 1fr 128px 108px 28px 32px;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   padding: var(--s3) var(--s2); margin: 0 calc(var(--s2) * -1);
   border-radius: var(--r-md); border-top: 1px solid rgb(var(--line-subtle));
   transition: background var(--dur-fast) var(--ease);
 }
 .task:first-of-type { border-top: none; }
 .task:hover { background: rgb(var(--surface-hover)); }
-.task:hover .trow-actions, .task:focus-within .trow-actions { opacity: 1; transform: translateX(0); }
+.task:has(.task-meta) { grid-template-columns: 20px minmax(160px, 1fr) auto; }
+.task-name { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.task-meta { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); min-width: 0; }
 .task-title { font-size: var(--t-base); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-sub { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); margin-top: 1px; display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
 .task-when { font-size: var(--t-sm); color: rgb(var(--fg-muted)); font-variant-numeric: tabular-nums; }
@@ -58,7 +92,6 @@
 .task-when.soon { color: rgb(var(--warn-fg)); font-weight: 550; }
 .task.done .task-title { text-decoration: line-through; color: rgb(var(--fg-subtle)); text-decoration-color: rgb(var(--fg-faint)); }
 .task.done .task-sub, .task.done .task-when { opacity: .7; }
-.task .trow-actions { opacity: 0; transform: translateX(4px); transition: opacity var(--dur-fast) var(--ease), transform var(--dur-base) var(--ease); }
 
 /* list chip — a task's list, coloured like a category */
 .lchip { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-xs); font-weight: 500; color: rgb(var(--fg-muted)); }
@@ -95,14 +128,33 @@
 .lrow-list:hover { background: rgb(var(--surface-hover)); }
 .lrow-list .track { width: 92px; flex-shrink: 0; }
 
-@media (max-width: 1080px) {
-  .task { grid-template-columns: 20px 1fr 104px 28px 32px; }
-  .task .col-hide-md { display: none; }
+@media (max-width: 900px) {
+  /* BUG-013: below this width, side-by-side name+meta isn't reliable —
+     `.task-name` can hold a list indicator AND the title competing for the
+     same track, and `.task-meta` can hold a full-width native date input
+     while its picker is open, so the two groups' combined natural width
+     regularly exceeds what's left after the checkbox. Measured against the
+     narrowest real case (TasksAssignedPage.tsx's "handed out" card, which
+     nests `.task` inside padding + margin well below the raw viewport
+     width): a fixed pixel floor on the name track couldn't cover the list
+     indicator AND a readable amount of title AND the meta group at once.
+     Two tracks side-steps that: `.task-meta` falls onto its own row,
+     indented under the name rather than the checkbox. 900px clears the
+     measured worst case with some margin, not a proven-safe number for
+     every combination — a row with an unusually long list name AND
+     assignee username AND an open due-date picker at just above 900px can
+     still render a narrow (not overlapping) title; the 160px floor above
+     this breakpoint is a backstop for that residual case, not a guarantee.
+     ONLY applies to `.task:has(.task-meta)` — TaskRow.tsx (Today) and
+     TasksUpcomingPage.tsx's `WaitingRow` also use the bare `.task` grid but
+     have exactly 3 fixed children and no `.task-meta` wrapper; forcing them
+     into 2 columns here would auto-place their 3rd child into the checkbox's
+     own track instead of the name's, which is worse than what this rule is
+     fixing. */
+  .task:has(.task-meta) { grid-template-columns: 20px 1fr; row-gap: 2px; }
+  .task-meta { grid-column: 2; justify-content: flex-start; }
 }
 @media (max-width: 680px) {
-  .task { grid-template-columns: 20px 1fr auto; padding: var(--s3) var(--s2); }
-  .task .col-mobile-hide { display: none; }
-  .task .trow-actions { display: none; }
   .qadd { height: 44px; padding: 0 var(--s3); }
   .qadd .hint { display: none; }
   .load { gap: 4px; }
