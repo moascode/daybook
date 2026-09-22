@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Flame, Plus, Trash2, Archive } from 'lucide-react'
 import { cn, errorMessage } from '@/lib/utils'
 import { useHabits } from '@/hooks/useHabits'
@@ -28,6 +29,28 @@ export function TasksHabitsPage() {
   const addToast = useToastStore((s) => s.addToast)
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+
+  // TasksTodayPage.tsx's composer "Habit" action navigates here with
+  // `{ openCreateHabit: true }` so the create-habit modal opens immediately
+  // instead of just changing the route — same one-shot nav-state +
+  // `location.key` guard TasksTodayPage.tsx already uses for its own
+  // `focusComposer` flag (BUG-005).
+  const location = useLocation()
+  const navigate = useNavigate()
+  const shouldOpenCreate = (location.state as { openCreateHabit?: boolean } | null)?.openCreateHabit
+  const [handledOpenKey, setHandledOpenKey] = useState<string | null>(null)
+  if (shouldOpenCreate && location.key !== handledOpenKey) {
+    setHandledOpenKey(location.key)
+  }
+  useEffect(() => {
+    if (shouldOpenCreate && handledOpenKey === location.key) {
+      // One-shot transition from nav state (TasksTodayPage.tsx's composer
+      // "Habit" action), same story as WalletPage.tsx's ?account= deep link.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowCreate(true)
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [shouldOpenCreate, handledOpenKey, location, navigate])
 
   const [name, setName] = useState('')
   const [color, setColor] = useState(COLOR_PRESETS[0])

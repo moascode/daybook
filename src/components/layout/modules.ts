@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Calendar,
   CheckSquare,
+  Clock,
   Wallet,
   Plane,
   List,
@@ -149,13 +150,12 @@ export const modules: ModuleDescriptor[] = [
     label: 'Tasks',
     icon: CheckSquare,
     path: '/tasks',
-    headSub: 'Outliner',
+    headSub: 'Household & personal',
     settingsBlurb: 'Lists, due dates and the outliner.',
     navGroups: [
       {
         items: [
-          { to: '/tasks', label: 'Today', icon: CheckSquare, end: true, testid: 'nav-tasks-today' },
-          { to: '/tasks/all', label: 'All tasks', icon: List, end: false, testid: 'nav-tasks-all' },
+          { to: '/tasks', label: 'Today', icon: Clock, end: true, testid: 'nav-tasks-today' },
           {
             to: '/tasks/upcoming',
             label: 'Upcoming',
@@ -163,6 +163,7 @@ export const modules: ModuleDescriptor[] = [
             end: false,
             testid: 'nav-tasks-upcoming',
           },
+          { to: '/tasks/all', label: 'All tasks', icon: List, end: false, testid: 'nav-tasks-all' },
           {
             to: '/tasks/assigned',
             label: 'Assigned to me',

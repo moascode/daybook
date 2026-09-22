@@ -412,6 +412,24 @@ export function useTasks() {
   }, [])
 
   /**
+   * Set or clear a single task's due time via a direct PATCH — same
+   * guard-free story as `updateTaskDueDate` above.
+   */
+  const updateTaskDueTime = useCallback(async (taskId: string, dueTime: string | null): Promise<void> => {
+    let row: TaskRow
+    try {
+      row = await api.patch<TaskRow>(`/tasks/${taskId}`, { dueTime })
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    const updated = rowToTask(row)
+    if (useTasksStore.getState().tasks.some((t) => t.id === taskId)) {
+      useTasksStore.getState().updateTask(taskId, updated)
+    }
+  }, [])
+
+  /**
    * Set a task's priority via a direct PATCH — same guard-free story as
    * `updateTaskDueDate` above.
    */
@@ -550,6 +568,29 @@ export function useTasks() {
 
     await loadTasks()
   }, [loadTasks])
+
+  /**
+   * Delete a single task via a direct DELETE — deliberately NOT `deleteTask`,
+   * whose `useTasksStore.getState().tasks.find(...)` guard silently no-ops
+   * for a task loaded via a store-bypassing `loadTasks(view)` call (same
+   * class of caller `updateTaskContent`/`updateTaskDueDate` exist for).
+   * `TaskRow.tsx`'s kebab-menu delete (Today page) is exactly such a caller:
+   * TasksTodayPage.tsx keeps its own local `tasks` state, not the outliner
+   * store, so `deleteTask` would silently do nothing there. No undo snapshot
+   * here (unlike `deleteTask`) — Today's row has no undo-toast affordance
+   * yet; the caller is told via a thrown error so it can surface one itself.
+   */
+  const deleteTaskById = useCallback(async (id: string): Promise<void> => {
+    try {
+      await api.delete(`/tasks/${id}`)
+    } catch (err) {
+      await reportAndReconcile(err)
+      throw err
+    }
+    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
+      useTasksStore.getState().setTasks(useTasksStore.getState().tasks.filter((t) => t.id !== id))
+    }
+  }, [])
 
   /**
    * CD-20: delete every selected task at once, with one-shot undo.
@@ -822,10 +863,12 @@ export function useTasks() {
     updateTaskContent,
     updateTaskNote,
     updateTaskDueDate,
+    updateTaskDueTime,
     updateTaskPriority,
     updateTaskList,
     rescheduleTasks,
     deleteTask,
+    deleteTaskById,
     restoreDeleted,
     bulkDeleteTasks,
     restoreBulkDeleted,

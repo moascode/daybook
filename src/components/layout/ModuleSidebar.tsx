@@ -135,6 +135,61 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
                 Sits between the primary destinations group and Review, per
                 docs/archive/design-adoption/03-app-shell.md's IA — hence injected
                 right after group 0 rather than appended at the end. */}
+            {/* Dynamic per-user "Lists" group (docs/archive/design-adoption/tasks-design-adoption.md
+                §Sidebar) — one item per task_lists row plus a fixed trailing
+                "Unsorted" bucket so orphaned (list_id NULL) tasks always have
+                a home. Injected right after group 0 (mirrors the Day
+                module's "Show on the timeline" group below), matching the
+                mockup's Lists-before-Review order — product-owner review of
+                FEAT-054 confirmed the app previously sat it after Review
+                instead. */}
+            {isTasksModule && i === 0 && (
+              <div className="nav-group">
+                <div className="flex items-center justify-between">
+                  <span className="u-label">Lists</span>
+                  <button
+                    type="button"
+                    aria-label="New list"
+                    data-testid="new-list-btn"
+                    onClick={() => setShowNewList(true)}
+                    className="rounded p-0.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {taskLists.map((list) => (
+                  <NavLink
+                    key={list.id}
+                    to={`/tasks/lists/${list.id}`}
+                    end
+                    onClick={onClose}
+                    data-testid={`nav-tasks-list-${list.id}`}
+                    className={navItemClass}
+                  >
+                    {/* Per-list colour is user data (D-10), not a semantic token —
+                        an inline style is the correct, documented exception. */}
+                    <span
+                      className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+                      style={{ background: list.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                    {list.openCount > 0 && <span className="nav-badge">{list.openCount}</span>}
+                  </NavLink>
+                ))}
+                <NavLink
+                  to="/tasks/lists/unsorted"
+                  end
+                  onClick={onClose}
+                  data-testid="nav-tasks-list-unsorted"
+                  className={navItemClass}
+                >
+                  <Inbox className="icon" size={16} />
+                  Unsorted
+                </NavLink>
+              </div>
+            )}
+
             {isDayModule && i === 0 && (
               <div className="nav-group">
                 <span className="u-label">Show on the timeline</span>
@@ -193,57 +248,6 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
             )}
           </Fragment>
         ))}
-
-        {/* Dynamic per-user "Lists" group (docs/archive/design-adoption/tasks-design-adoption.md
-            §Sidebar) — one item per task_lists row plus a fixed trailing
-            "Unsorted" bucket so orphaned (list_id NULL) tasks always have a
-            home. Injected here, not in modules.ts, which stays static/pure. */}
-        {isTasksModule && (
-          <div className="nav-group">
-            <div className="flex items-center justify-between">
-              <span className="u-label">Lists</span>
-              <button
-                type="button"
-                aria-label="New list"
-                data-testid="new-list-btn"
-                onClick={() => setShowNewList(true)}
-                className="rounded p-0.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            {taskLists.map((list) => (
-              <NavLink
-                key={list.id}
-                to={`/tasks/lists/${list.id}`}
-                end
-                onClick={onClose}
-                data-testid={`nav-tasks-list-${list.id}`}
-                className={navItemClass}
-              >
-                {/* Per-list colour is user data (D-10), not a semantic token —
-                    an inline style is the correct, documented exception. */}
-                <span
-                  className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-                  style={{ background: list.color }}
-                  aria-hidden="true"
-                />
-                <span className="min-w-0 flex-1 truncate">{list.name}</span>
-                {list.openCount > 0 && <span className="nav-badge">{list.openCount}</span>}
-              </NavLink>
-            ))}
-            <NavLink
-              to="/tasks/lists/unsorted"
-              end
-              onClick={onClose}
-              data-testid="nav-tasks-list-unsorted"
-              className={navItemClass}
-            >
-              <Inbox className="icon" size={16} />
-              Unsorted
-            </NavLink>
-          </div>
-        )}
 
         <div className="sidebar-spacer" />
 
