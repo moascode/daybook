@@ -159,7 +159,7 @@ export function TaskFormModal({
       title="New task"
       className="max-w-md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4" data-testid="task-form-modal">
         <Input
           ref={contentRef}
           label="Task"

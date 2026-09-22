@@ -114,6 +114,7 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
             onKeyDown={handleKeyDown}
             placeholder='Add a task — try "pay rent tomorrow 9am #household !high @tumpa"'
             aria-label="Add a task"
+            data-testid="today-composer-input"
             disabled={submitting}
           />
           <span className="kbd">N</span>

@@ -21,7 +21,11 @@ test.describe('99 — Task detail modal', () => {
     await expect(page.getByText('Renew passport')).toBeVisible()
 
     const row = page.getByTestId('today-task-row').filter({ hasText: 'Renew passport' })
-    await row.locator('.task-title').click()
+    // FEAT-054: clicking `.task-title` on Today is now inline click-to-edit
+    // (matching TaskListRow.tsx's pattern), not the detail-modal opener —
+    // that moved to the kebab menu's "Edit details" action.
+    await row.getByTestId(/^today-task-row-options-/).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
 
     const modal = page.getByTestId('task-detail-modal')
     await expect(modal).toBeVisible()
@@ -63,7 +67,9 @@ test.describe('99 — Task detail modal', () => {
     await expect(page.getByText('Renew passport (urgent)')).toBeVisible()
     await page.reload()
 
-    await page.getByTestId('today-task-row').filter({ hasText: 'Renew passport (urgent)' }).locator('.task-title').click()
+    const reopenedRow = page.getByTestId('today-task-row').filter({ hasText: 'Renew passport (urgent)' })
+    await reopenedRow.getByTestId(/^today-task-row-options-/).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
     await expect(page.getByTestId('task-detail-name')).toHaveValue('Renew passport (urgent)')
     await expect(page.getByTestId('task-detail-priority')).toHaveValue('high')
     await expect(page.getByTestId('task-detail-list').locator('option:checked')).toHaveText('Work')
@@ -74,17 +80,23 @@ test.describe('99 — Task detail modal', () => {
     const page = await newAppPage(browser, '/tasks')
     const future = businessDatePlus(5)
 
-    await page.getByTestId('today-composer-list').selectOption({ label: 'Errands' })
-    await page.getByTestId('today-composer-date').fill(future)
+    // FEAT-054 replaced the composer's inline list/date <select>s with the
+    // shared New Task modal (opened via the composer's "Task" shortcut,
+    // carrying over any text already typed) — same regression guard, new path.
     const composer = page.getByTestId('today-composer-input')
     await composer.fill('Pick up dry cleaning')
-    await composer.press('Enter')
+    await page.getByRole('button', { name: 'Task', exact: true }).click()
+
+    const modal = page.getByTestId('task-form-modal')
+    await expect(modal).toBeVisible()
+    await expect(page.getByTestId('task-form-content')).toHaveValue('Pick up dry cleaning')
+    await page.getByTestId('task-form-list').selectOption({ label: 'Errands' })
+    await page.getByTestId('task-form-due-date').fill(future)
+    await page.getByRole('button', { name: 'Add task' }).click()
+    await expect(modal).not.toBeVisible()
 
     // A future-dated task doesn't land in today's groups — it shows in Up next.
     await expect(page.getByTestId('upnext-row').filter({ hasText: 'Pick up dry cleaning' })).toBeVisible()
-
-    // Pickers reset to their defaults after a successful add.
-    await expect(page.getByTestId('today-composer-list')).toHaveValue('')
 
     // Confirm the list actually persisted (not misparented — regression
     // guard for the addTask/parentId bug this PR also fixed). The raw API
