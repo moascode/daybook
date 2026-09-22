@@ -37,12 +37,16 @@ confirmed in session on 2026-09-23.
       (mockup: "Wednesday is doing too much") — reuse the same
       max-vs-rest-of-week comparison FEAT-054 built for Today's "Heaviest day
       this week" chip; do not duplicate the logic, extract if needed.
-- [ ] Three band-stat cards: **Hard deadlines** (count of dated tasks with no
-      recurrence and no wallet link — the mockup's definition of "hard"),
-      **Recurring** (count with `recurrence` set), **Your usual week** (this
-      week's total task count) — each with the mockup's short descriptive
-      sub-line style (e.g. "insurance, rent, review" — the actual task names,
-      truncated to fit, not a fabricated stat).
+- [ ] Two band-stat cards: **Hard deadlines** (count of dated tasks with no
+      recurrence and no wallet link — the mockup's definition of "hard") and
+      **Recurring** (count with `recurrence` set) — each with the mockup's
+      short descriptive sub-line style (e.g. "insurance, rent, review" — the
+      actual task names, truncated to fit, not a fabricated stat). The
+      mockup's third stat, **"Your usual week … this week is 41% heavier,"**
+      is a comparison against a historical weekly average this page has no
+      data to compute (same category as Today's "best week since June",
+      which FEAT-054 also skipped) — do not fabricate it or implement a
+      "usual" that's actually just this week's own count relabelled.
 
 **Balance the week**
 - [ ] Becomes a dedicated card (not just a header button) when the week is
