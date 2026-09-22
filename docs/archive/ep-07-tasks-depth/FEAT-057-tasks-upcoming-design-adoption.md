@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-23 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-23 · **Filed:** 2026-09-23 · **Shipped:** 2026-09-23 (PR #238) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-057 — Tasks: Upcoming page exact design adoption
 

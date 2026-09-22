@@ -116,7 +116,7 @@ files.
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
 | [FEAT-055](EP-07-tasks-depth/FEAT-055-tasks-composer-reminder-shortcut.md) | Feature | Tasks: composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
 | [FEAT-056](EP-07-tasks-depth/FEAT-056-tasks-composer-checklist-shortcut.md) | Feature | Tasks: composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
-| [FEAT-057](EP-07-tasks-depth/FEAT-057-tasks-upcoming-design-adoption.md) | Feature | Tasks: Upcoming page exact design adoption | Yes — continuation of FEAT-054's design-adoption pass, 2026-09-23 |
+| [FEAT-058](EP-07-tasks-depth/FEAT-058-tasks-all-design-adoption.md) | Feature | Tasks: All tasks page exact design adoption | Yes — two real deltas (composer, stat cards), 2026-09-23 |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 
