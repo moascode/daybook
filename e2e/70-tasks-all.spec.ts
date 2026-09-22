@@ -22,10 +22,13 @@ test.describe('70 — All tasks page', () => {
     await navAll.click()
     await expect(page).toHaveURL(/\/tasks\/all$/)
 
-    await expect(page.getByTestId('stat-open')).toHaveText('0')
-    await expect(page.getByTestId('stat-overdue')).toHaveText('0')
-    await expect(page.getByTestId('stat-due-today')).toHaveText('0')
-    await expect(page.getByTestId('stat-no-due-date')).toHaveText('0')
+    // FEAT-058: the old Open/Overdue/Due-today/No-due-date `.stat-card`s
+    // were replaced with the mockup's four `.stat-card`s (Overdue/Due this
+    // week/No due date/Done this week) — "Open" was dropped entirely.
+    await expect(page.getByTestId('all-tasks-stat-overdue').locator('.stat-value')).toHaveText('0')
+    await expect(page.getByTestId('all-tasks-stat-due-this-week').locator('.stat-value')).toHaveText('0')
+    await expect(page.getByTestId('all-tasks-stat-no-due-date').locator('.stat-value')).toHaveText('0')
+    await expect(page.getByTestId('all-tasks-stat-done-this-week').locator('.stat-value')).toHaveText('0')
   })
 
   test('filtering by priority narrows the list and shows a removable chip', async ({ browser }) => {
