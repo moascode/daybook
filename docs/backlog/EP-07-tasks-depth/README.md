@@ -39,6 +39,7 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | [BUG-012](../../archive/ep-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Upcoming board cards don't open a detail/edit view | [PR #233](https://github.com/moascode/daybook/pull/233), 2026-09-21 |
 | [FEAT-054](../../archive/ep-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md) | Today page exact design adoption | [PR #237](https://github.com/moascode/daybook/pull/237), 2026-09-23 |
 | [FEAT-057](../../archive/ep-07-tasks-depth/FEAT-057-tasks-upcoming-design-adoption.md) | Upcoming page exact design adoption | [PR #238](https://github.com/moascode/daybook/pull/238), 2026-09-23 |
+| [FEAT-058](../../archive/ep-07-tasks-depth/FEAT-058-tasks-all-design-adoption.md) | All tasks page exact design adoption | [PR #239](https://github.com/moascode/daybook/pull/239), 2026-09-23 |
 
 ## Items still open
 
@@ -48,4 +49,4 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
 | [FEAT-055](FEAT-055-tasks-composer-reminder-shortcut.md) | Composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
 | [FEAT-056](FEAT-056-tasks-composer-checklist-shortcut.md) | Composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
-| [FEAT-058](FEAT-058-tasks-all-design-adoption.md) | All tasks page exact design adoption | Yes — two real deltas (composer, stat cards), continuation of the design-adoption pass, 2026-09-23 |
+| [FEAT-059](FEAT-059-tasks-assigned-design-adoption.md) | Assigned to me page exact design adoption | Yes — composer + band card, continuation of the design-adoption pass, 2026-09-23 |
