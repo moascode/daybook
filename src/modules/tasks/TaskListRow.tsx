@@ -68,8 +68,9 @@ export interface TaskListRowProps {
    * (content, list, due date, assignee) don't cover priority or note, so the
    * modal is the row's only route to editing those — same optional,
    * hide-when-absent convention as `coMembers`/`onAssigneeChange`/etc above.
-   * TasksListDetailPage.tsx and TasksAssignedPage.tsx don't pass this yet, so
-   * they're unaffected.
+   * TasksListDetailPage.tsx doesn't pass this yet, so it's unaffected;
+   * TasksAssignedPage.tsx wired it in for both its sections once
+   * TaskDetailModal.tsx shipped (BUG-007..012).
    */
   onOpenDetail?: (task: Task) => void
 }
@@ -202,232 +203,249 @@ export function TaskListRow({
         <Check />
       </button>
 
-      {/* Per-list colour is user data (D-10), not a semantic token — an
-          inline style is the correct, documented exception (same as
-          ModuleSidebar's list dots). */}
-      {!availableLists && list && (
-        <span
-          className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-          style={{ background: list.color }}
-          aria-hidden="true"
-          title={list.name}
-          data-testid="all-tasks-row-list-chip"
-        />
-      )}
-
-      {/* FEAT-051 — only rendered where a parent page resolved the list of
-          options (see the prop's own doc comment); every other page passes
-          nothing and gets the plain read-only dot above, unchanged. */}
-      {availableLists && (
-        <span
-          className="inline-flex shrink-0 items-center gap-1"
-          data-testid="all-tasks-row-list-chip"
-          title={list?.name ?? 'Unsorted'}
-        >
+      {/* BUG-013 (docs/backlog/EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md):
+          the list indicator and the title/note now share one `.task-name`
+          wrapper, which is what actually occupies the `.task` grid's
+          flexible track — previously the list indicator was its own grid
+          child and could claim that track ahead of the title, capping the
+          name at a fixed 128px on every row with a list. */}
+      <div className="task-name">
+        {/* Per-list colour is user data (D-10), not a semantic token — an
+            inline style is the correct, documented exception (same as
+            ModuleSidebar's list dots). */}
+        {!availableLists && list && (
           <span
-            className="h-2 w-2 flex-shrink-0 rounded-full"
-            style={{ background: list?.color ?? '#6b7280' }}
+            className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+            style={{ background: list.color }}
             aria-hidden="true"
+            title={list.name}
+            data-testid="all-tasks-row-list-chip"
           />
+        )}
+
+        {/* FEAT-051 — only rendered where a parent page resolved the list of
+            options (see the prop's own doc comment); every other page passes
+            nothing and gets the plain read-only dot above, unchanged. */}
+        {availableLists && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1"
+            data-testid="all-tasks-row-list-chip"
+            title={list?.name ?? 'Unsorted'}
+          >
+            <span
+              className="h-2 w-2 flex-shrink-0 rounded-full"
+              style={{ background: list?.color ?? '#6b7280' }}
+              aria-hidden="true"
+            />
+            <select
+              aria-label={`Move ${task.content || 'task'} to a list`}
+              data-testid={`task-row-list-${task.id}`}
+              value={task.listId ?? ''}
+              onChange={(e) => {
+                const value = e.target.value || null
+                updateTaskList(task.id, value)
+                  .then(() => onListChange?.(task.id, value))
+                  .catch(() => {
+                    // updateTaskList already surfaced the error (reportAndReconcile).
+                  })
+              }}
+              className={cn(
+                'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
+                // BUG-010 (docs/backlog/EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md):
+                // capped so a long list name can't claim space budgeted for the
+                // `.task` grid's 1fr name column — it truncates inside its own
+                // control instead.
+                'max-w-[92px]',
+                'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
+              )}
+            >
+              <option value="">Unsorted</option>
+              {availableLists.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </span>
+        )}
+
+        <div className="min-w-0 flex-1">
+          {isEditingContent ? (
+            <input
+              type="text"
+              autoFocus
+              value={contentDraft}
+              onChange={(e) => setContentDraft(e.target.value)}
+              onBlur={saveContent}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+                if (e.key === 'Escape') {
+                  setContentDraft(task.content)
+                  setIsEditingContent(false)
+                }
+              }}
+              aria-label={`Edit ${task.content || 'task'}`}
+              data-testid="all-tasks-row-content-input"
+              className="w-full rounded border border-brand-500 bg-surface px-1 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+          ) : (
+            <p
+              className="task-title cursor-text"
+              onClick={() => setIsEditingContent(true)}
+              data-testid="all-tasks-row-title"
+            >
+              {task.content || 'Untitled task'}
+            </p>
+          )}
+          {task.note && <p className="task-sub truncate">{task.note}</p>}
+        </div>
+      </div>
+
+      {/* BUG-013: every optional trailing element below now shares one
+          `.task-meta` wrapper (a single grid track) instead of each claiming
+          its own fixed-width grid column — however many of these a page
+          passes, they share that track and, below `tasks.css`'s ≤900px
+          breakpoint, its own row under `.task-name` (with its own internal
+          flex-wrap above that) rather than overflowing into each other's
+          fixed tracks. */}
+      <div className="task-meta">
+        {task.subtaskTotal > 0 && (
+          <span className="chip chip-mute" data-testid="all-tasks-row-subtasks">
+            {task.subtaskDone}/{task.subtaskTotal}
+          </span>
+        )}
+
+        {/* FEAT-027 — only rendered where a parent page resolved co-members
+            (currently just TasksAssignedPage.tsx); every other page passes no
+            `coMembers` and gets the row's existing layout, unchanged. */}
+        {coMembers && (
           <select
-            aria-label={`Move ${task.content || 'task'} to a list`}
-            data-testid={`task-row-list-${task.id}`}
-            value={task.listId ?? ''}
+            aria-label={`Assign ${task.content || 'task'} to`}
+            title={coMembers.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
+            data-testid={`task-row-assignee-${task.id}`}
+            value={assigneeDraft}
             onChange={(e) => {
-              const value = e.target.value || null
-              updateTaskList(task.id, value)
-                .then(() => onListChange?.(task.id, value))
+              const value = e.target.value
+              const previous = assigneeDraft
+              setAssigneeDraft(value)
+              assignTask(task.id, value || null)
+                .then(() => onAssigneeChange?.(task.id, value || null))
                 .catch(() => {
-                  // updateTaskList already surfaced the error (reportAndReconcile).
+                  // assignTask already surfaced the error (reportAndReconcile);
+                  // revert the optimistic draft so the control doesn't keep
+                  // showing a change that never persisted.
+                  setAssigneeDraft(previous)
                 })
             }}
             className={cn(
               'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
-              // BUG-010 (docs/backlog/EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md):
-              // capped so a long list name can't claim space budgeted for the
-              // `.task` grid's 1fr name column — it truncates inside its own
-              // control instead.
+              // BUG-010: same cap as the list picker above — a long co-member
+              // username can't squeeze the name column.
               'max-w-[92px]',
               'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
             )}
           >
-            <option value="">Unsorted</option>
-            {availableLists.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
+            <option value="">Unassigned</option>
+            {coMembers.map((m) => (
+              <option key={m.userId} value={m.userId}>
+                {m.username}
               </option>
             ))}
           </select>
-        </span>
-      )}
-
-      <div className="min-w-0 flex-1">
-        {isEditingContent ? (
-          <input
-            type="text"
-            autoFocus
-            value={contentDraft}
-            onChange={(e) => setContentDraft(e.target.value)}
-            onBlur={saveContent}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur()
-              if (e.key === 'Escape') {
-                setContentDraft(task.content)
-                setIsEditingContent(false)
-              }
-            }}
-            aria-label={`Edit ${task.content || 'task'}`}
-            data-testid="all-tasks-row-content-input"
-            className="w-full rounded border border-brand-500 bg-surface px-1 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          />
-        ) : (
-          <p
-            className="task-title cursor-text"
-            onClick={() => setIsEditingContent(true)}
-            data-testid="all-tasks-row-title"
-          >
-            {task.content || 'Untitled task'}
-          </p>
         )}
-        {task.note && <p className="task-sub truncate">{task.note}</p>}
-      </div>
 
-      {task.subtaskTotal > 0 && (
-        <span className="chip chip-mute" data-testid="all-tasks-row-subtasks">
-          {task.subtaskDone}/{task.subtaskTotal}
-        </span>
-      )}
+        {task.recurrence && (
+          <span
+            className="chip chip-mute inline-flex items-center gap-1"
+            data-testid="all-tasks-row-recurrence"
+            title={recurrenceLabel(task) ?? undefined}
+          >
+            <Repeat className="h-3 w-3" aria-hidden="true" />
+          </span>
+        )}
 
-      {/* FEAT-027 — only rendered where a parent page resolved co-members
-          (currently just TasksAssignedPage.tsx); every other page passes no
-          `coMembers` and gets the row's existing layout, unchanged. */}
-      {coMembers && (
-        <select
-          aria-label={`Assign ${task.content || 'task'} to`}
-          title={coMembers.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
-          data-testid={`task-row-assignee-${task.id}`}
-          value={assigneeDraft}
-          onChange={(e) => {
-            const value = e.target.value
-            const previous = assigneeDraft
-            setAssigneeDraft(value)
-            assignTask(task.id, value || null)
-              .then(() => onAssigneeChange?.(task.id, value || null))
-              .catch(() => {
-                // assignTask already surfaced the error (reportAndReconcile);
-                // revert the optimistic draft so the control doesn't keep
-                // showing a change that never persisted.
-                setAssigneeDraft(previous)
-              })
-          }}
-          className={cn(
-            'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
-            // BUG-010: same cap as the list picker above — a long co-member
-            // username can't squeeze the name column.
-            'max-w-[92px]',
-            'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
-          )}
-        >
-          <option value="">Unassigned</option>
-          {coMembers.map((m) => (
-            <option key={m.userId} value={m.userId}>
-              {m.username}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {task.recurrence && (
-        <span
-          className="chip chip-mute inline-flex items-center gap-1"
-          data-testid="all-tasks-row-recurrence"
-          title={recurrenceLabel(task) ?? undefined}
-        >
-          <Repeat className="h-3 w-3" aria-hidden="true" />
-        </span>
-      )}
-
-      {/* BUG-006: due date is now editable from this row, not just displayed.
-          The badge itself (when present) opens the picker; otherwise a bare
-          calendar icon does, matching BulletNode.tsx's due-date affordance. */}
-      {showDatePicker ? (
-        <span className="inline-flex shrink-0 items-center gap-1">
-          <input
-            type="date"
-            autoFocus
-            aria-label={`Due date for ${task.content || 'task'}`}
-            data-testid={`all-tasks-row-due-input-${task.id}`}
-            value={dueDateDraft}
-            onChange={(e) => setDueDateDraft(e.target.value)}
-            onBlur={() => saveDueDate(dueDateDraft || null)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
-              if (e.key === 'Escape') {
-                setDueDateDraft(task.dueDate ?? '')
-                setShowDatePicker(false)
-              }
-            }}
-            className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          />
-          {dueDateDraft && (
-            <button
-              type="button"
-              aria-label="Clear due date"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => saveDueDate(null)}
-              className="text-fg-faint hover:text-fg-muted"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </span>
-      ) : task.dueDate ? (
-        <button
-          type="button"
-          onClick={() => setShowDatePicker(true)}
-          data-testid={`all-tasks-row-due-${task.id}`}
-          className={cn('task-when', state === 'late' && 'late', state === 'soon' && 'soon')}
-        >
-          {task.isCompleted && task.completedAt
-            ? `Done ${formatDue(task.completedAt)}`
-            : state === 'late'
-              ? `Overdue · ${formatDue(task.dueDate)}`
-              : state === 'soon'
-                ? 'Today'
-                : formatDue(task.dueDate)}
-        </button>
-      ) : (
-        !task.isCompleted && (
+        {/* BUG-006: due date is now editable from this row, not just displayed.
+            The badge itself (when present) opens the picker; otherwise a bare
+            calendar icon does, matching BulletNode.tsx's due-date affordance. */}
+        {showDatePicker ? (
+          <span className="inline-flex shrink-0 items-center gap-1">
+            <input
+              type="date"
+              autoFocus
+              aria-label={`Due date for ${task.content || 'task'}`}
+              data-testid={`all-tasks-row-due-input-${task.id}`}
+              value={dueDateDraft}
+              onChange={(e) => setDueDateDraft(e.target.value)}
+              onBlur={() => saveDueDate(dueDateDraft || null)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
+                if (e.key === 'Escape') {
+                  setDueDateDraft(task.dueDate ?? '')
+                  setShowDatePicker(false)
+                }
+              }}
+              className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            />
+            {dueDateDraft && (
+              <button
+                type="button"
+                aria-label="Clear due date"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => saveDueDate(null)}
+                className="text-fg-faint hover:text-fg-muted"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </span>
+        ) : task.dueDate ? (
           <button
             type="button"
             onClick={() => setShowDatePicker(true)}
-            aria-label={`Set due date for ${task.content || 'task'}`}
-            data-testid={`all-tasks-row-set-due-${task.id}`}
+            data-testid={`all-tasks-row-due-${task.id}`}
+            className={cn('task-when', state === 'late' && 'late', state === 'soon' && 'soon')}
+          >
+            {task.isCompleted && task.completedAt
+              ? `Done ${formatDue(task.completedAt)}`
+              : state === 'late'
+                ? `Overdue · ${formatDue(task.dueDate)}`
+                : state === 'soon'
+                  ? 'Today'
+                  : formatDue(task.dueDate)}
+          </button>
+        ) : (
+          !task.isCompleted && (
+            <button
+              type="button"
+              onClick={() => setShowDatePicker(true)}
+              aria-label={`Set due date for ${task.content || 'task'}`}
+              data-testid={`all-tasks-row-set-due-${task.id}`}
+              className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+            </button>
+          )
+        )}
+
+        {/* BUG-011: this row's inline editors don't cover priority or note —
+            the modal does. Hide-when-absent, same as every other optional
+            affordance in this row. No longer needs to hide while the due-date
+            editor is expanded (BUG-013 fixed) — both are now flex siblings in
+            the same `.task-meta` wrapper, and flex siblings cannot overlap
+            regardless of content width, unlike the old competing fixed grid
+            tracks. */}
+        {onOpenDetail && (
+          <button
+            type="button"
+            onClick={() => onOpenDetail(task)}
+            aria-label={`Edit details for ${task.content || 'task'}`}
+            data-testid={`task-row-detail-${task.id}`}
             className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
           >
-            <CalendarClock className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5" />
           </button>
-        )
-      )}
-
-      {/* BUG-011: this row's inline editors don't cover priority or note —
-          the modal does. Hide-when-absent, same as every other optional
-          affordance in this row. Also hidden while the inline due-date
-          editor is expanded: its native date input overflows the row's
-          fixed-width `.task` grid track and visually overlaps whatever
-          renders in the next track, which used to intercept clicks meant
-          for the date editor's own "Clear due date" button. */}
-      {onOpenDetail && !showDatePicker && (
-        <button
-          type="button"
-          onClick={() => onOpenDetail(task)}
-          aria-label={`Edit details for ${task.content || 'task'}`}
-          data-testid={`task-row-detail-${task.id}`}
-          className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-      )}
+        )}
+      </div>
     </div>
   )
 }

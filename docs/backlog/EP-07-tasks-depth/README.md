@@ -9,8 +9,9 @@ Completed page that currently renders as a plain list.
 **Design:** [design.md](design.md) — the design work is done; this epic tracks *whether* to build each piece.
 
 **Is this epic still worth doing?** Most of it already shipped — 17 of the
-19 items filed under this epic are done (below). What's left is one small
-structural follow-up and one item deliberately parked.
+19 items filed under this epic are done (below), and the remaining
+structural item (BUG-013) is now fixed too. What's left is one item
+deliberately parked.
 
 ## Shipped
 
@@ -41,5 +42,5 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up flagged by review on the BUG-007..012 PR, not blocking |
+| [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed — [PR #235](https://github.com/moascode/daybook/pull/235), 2026-09-22 |
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Question it — sequence after the Wallet equivalent (FEAT-021) has proven itself with real use |

@@ -112,7 +112,7 @@ files.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up from BUG-011's review |
+| [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed — PR #235 |
 | [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
