@@ -42,7 +42,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
 | [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
-| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 19 | Open |
+| [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 2 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
 | [EP-10](EP-10-cross-cutting/README.md) | Cross-cutting | 4 | Open |
@@ -106,27 +106,14 @@ files.
 
 ### [EP-07](EP-07-tasks-depth/README.md) — Tasks depth
 
+17 of 19 items shipped 2026-09-18 through 2026-09-21 — see the epic's own
+[Shipped table](EP-07-tasks-depth/README.md#shipped) and their archived item
+files.
+
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-026](EP-07-tasks-depth/FEAT-026-tasks-upcoming-board.md) | Feature | Tasks: Upcoming week board | Shipped — PR #219 |
-| [FEAT-027](EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md) | Feature | Tasks: Assigned to me and the delegation ledger | Shipped — PR #221 |
-| [FEAT-028](EP-07-tasks-depth/FEAT-028-task-recurrence.md) | Feature | Tasks: recurrence | Shipped |
-| [FEAT-029](EP-07-tasks-depth/FEAT-029-tasks-habits.md) | Feature | Tasks: Habits | Shipped |
-| [FEAT-030](EP-07-tasks-depth/FEAT-030-tasks-completed-analytics.md) | Feature | Tasks: Completed analytics | Shipped |
-| [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
-| [FEAT-032](EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md) | Feature | Tasks: Wallet chips on task rows | Shipped (outliner only) |
-| [FEAT-051](EP-07-tasks-depth/FEAT-051-task-list-picker.md) | Feature | Assign a task's list (category) from the task row | Shipped |
-| [BUG-005](EP-07-tasks-depth/BUG-005-quick-add-task-noop.md) | Bug | Quick-add "Task" does nothing | Fixed |
-| [BUG-006](EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md) | Bug | No way to change a task's due date from a list view | Fixed |
-| [FEAT-052](EP-07-tasks-depth/FEAT-052-edit-task-from-row.md) | Feature | Edit a task's text from any list-style view | Shipped |
-| [FEAT-053](EP-07-tasks-depth/FEAT-053-create-task-list.md) | Feature | A way to create a task list | Shipped |
-| [BUG-007](EP-07-tasks-depth/BUG-007-today-row-not-editable.md) | Bug | Today page rows can't be edited at all | Fixed |
-| [BUG-008](EP-07-tasks-depth/BUG-008-today-row-name-truncated.md) | Bug | Today rows truncate long names with no way to read them | Fixed |
-| [BUG-009](EP-07-tasks-depth/BUG-009-composer-no-list-or-date.md) | Bug | No way to pick a list or date while creating a task | Fixed |
-| [BUG-010](EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md) | Bug | All tasks row layout squeezes/hides the task name | Fixed |
-| [BUG-011](EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md) | Bug | No UI anywhere to set or change a task's priority | Fixed |
-| [BUG-012](EP-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Bug | Upcoming board cards don't open a detail/edit view | Fixed |
 | [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Yes — structural follow-up from BUG-011's review |
+| [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 

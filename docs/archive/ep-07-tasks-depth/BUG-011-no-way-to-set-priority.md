@@ -1,4 +1,4 @@
-> **Status:** Fixed · **Filed:** 2026-09-21 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-22 · **Filed:** 2026-09-21 · **Shipped:** 2026-09-21 (PR #233) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # BUG-011 — No UI anywhere to set or change a task's priority
 

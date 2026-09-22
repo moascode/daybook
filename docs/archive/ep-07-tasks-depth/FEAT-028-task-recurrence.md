@@ -1,4 +1,4 @@
-> **Status:** Shipped · **Filed:** 2026-09-16 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-22 · **Filed:** 2026-09-16 · **Shipped:** 2026-09-19 (PR #223) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-028 — Tasks: recurrence
 
@@ -6,7 +6,7 @@
 
 **Why now.** The most-requested shape of task — weekly, monthly, every-quarter — cannot be expressed at all today.
 
-**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](../../backlog/EP-07-tasks-depth/design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
 **Still needed?** Shipped — daily/weekly/monthly/yearly/custom-weekday recurrence,
 optional interval and end (date or count), materialized via

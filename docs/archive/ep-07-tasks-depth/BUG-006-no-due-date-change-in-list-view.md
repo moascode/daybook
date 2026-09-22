@@ -1,4 +1,4 @@
-> **Status:** Fixed · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-22 · **Filed:** 2026-09-20 · **Shipped:** 2026-09-21 (PR #228) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # BUG-006 — No way to change a task's due date from a list view
 

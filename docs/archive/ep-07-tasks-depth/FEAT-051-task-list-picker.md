@@ -1,4 +1,4 @@
-> **Status:** Shipped · **Filed:** 2026-09-20 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-22 · **Filed:** 2026-09-20 · **Shipped:** 2026-09-21 (PR #229) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-051 — Assign a task's list (category) from the task row
 
