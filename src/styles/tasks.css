@@ -50,8 +50,11 @@
    TaskListRow.tsx, the one consumer with a variable number of optional
    trailing children, now wraps them into two explicit roles (.task-name /
    .task-meta) so the name always gets the flexible track instead of
-   whichever child happens to render second. TaskRow.tsx (Today) and
-   TasksUpcomingPage.tsx's `WaitingRow` still render exactly 3 bare children
+   whichever child happens to render second. TaskRow.tsx (Today, FEAT-054:
+   docs/backlog/EP-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md)
+   now uses the same .task-name/.task-meta split, and is matched by
+   `.task:has(.task-meta)` (below) by design, not by accident.
+   TasksUpcomingPage.tsx's `WaitingRow` still renders exactly 3 bare children
    straight into `.task`'s 3 tracks, unchanged — see the ≤900px rule below
    for why that distinction matters there too.
    The name track's 160px floor is a backstop for `.task:has(.task-meta)`
@@ -66,9 +69,9 @@
    own row. Above that breakpoint the floor is what stops a pathological
    content combination (e.g. an unusually long list name) from squeezing the
    title before either group's flex-wrap would otherwise engage.
-   The floor must NOT apply to the base rule: TaskRow.tsx and `WaitingRow`
-   have no `.task-meta` and nothing to protect the name from, but DO still
-   need their name track to collapse below 160px on a narrow viewport (their
+   The floor must NOT apply to the base rule: `WaitingRow` has no
+   `.task-meta` and nothing to protect the name from, but DOES still
+   need its name track to collapse below 160px on a narrow viewport (its
    3rd child — a due-date span or native date input — has no wrapping row to
    fall back on, unlike `.task-meta`), or that 3rd child overflows the row
    instead. Verified empirically: a `WaitingRow`'s date input overflowed by
@@ -145,12 +148,12 @@
      assignee username AND an open due-date picker at just above 900px can
      still render a narrow (not overlapping) title; the 160px floor above
      this breakpoint is a backstop for that residual case, not a guarantee.
-     ONLY applies to `.task:has(.task-meta)` — TaskRow.tsx (Today) and
-     TasksUpcomingPage.tsx's `WaitingRow` also use the bare `.task` grid but
-     have exactly 3 fixed children and no `.task-meta` wrapper; forcing them
-     into 2 columns here would auto-place their 3rd child into the checkbox's
-     own track instead of the name's, which is worse than what this rule is
-     fixing. */
+     ONLY applies to `.task:has(.task-meta)` — TaskRow.tsx (Today, FEAT-054)
+     now matches it by design, same as TaskListRow.tsx. TasksUpcomingPage.tsx's
+     `WaitingRow` still uses the bare `.task` grid with exactly 3 fixed
+     children and no `.task-meta` wrapper; forcing it into 2 columns here
+     would auto-place its 3rd child into the checkbox's own track instead of
+     the name's, which is worse than what this rule is fixing. */
   .task:has(.task-meta) { grid-template-columns: 20px 1fr; row-gap: 2px; }
   .task-meta { grid-column: 2; justify-content: flex-start; }
 }
