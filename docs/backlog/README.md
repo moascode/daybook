@@ -113,7 +113,10 @@ files.
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
 | [BUG-013](EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md) | Bug | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed — PR #235 |
-| [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Probably — question it after FEAT-021 ships and you see whether the pattern earns its keep |
+| [FEAT-031](EP-07-tasks-depth/FEAT-031-tasks-worth-knowing.md) | Feature | Tasks: "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
+| [FEAT-054](EP-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md) | Feature | Tasks: Today page exact design adoption | Yes — owner confirmed the full gap list 2026-09-22 |
+| [FEAT-055](EP-07-tasks-depth/FEAT-055-tasks-composer-reminder-shortcut.md) | Feature | Tasks: composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
+| [FEAT-056](EP-07-tasks-depth/FEAT-056-tasks-composer-checklist-shortcut.md) | Feature | Tasks: composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
 
 ### [EP-08](EP-08-trips-module/README.md) — Trips module
 

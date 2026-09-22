@@ -43,4 +43,7 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | ID | Title | Still needed? |
 |---|---|---|
 | [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed — [PR #235](https://github.com/moascode/daybook/pull/235), 2026-09-22 |
-| [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Question it — sequence after the Wallet equivalent (FEAT-021) has proven itself with real use |
+| [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
+| [FEAT-054](FEAT-054-tasks-today-design-adoption.md) | Today page exact design adoption | Yes — owner confirmed the full gap list 2026-09-22 |
+| [FEAT-055](FEAT-055-tasks-composer-reminder-shortcut.md) | Composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
+| [FEAT-056](FEAT-056-tasks-composer-checklist-shortcut.md) | Composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
