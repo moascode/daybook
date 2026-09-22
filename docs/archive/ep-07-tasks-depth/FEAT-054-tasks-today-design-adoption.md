@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-22 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-09-23 · **Filed:** 2026-09-22 · **Shipped:** 2026-09-23 (PR #237) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-054 — Tasks: Today page exact design adoption
 

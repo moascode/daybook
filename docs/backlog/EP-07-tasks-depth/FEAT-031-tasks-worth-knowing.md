@@ -8,7 +8,7 @@
 
 **Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** **Narrowed and folded into [FEAT-054](FEAT-054-tasks-today-design-adoption.md), 2026-09-22.** The
+**Still needed?** **Narrowed and folded into [FEAT-054](../../archive/ep-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md), 2026-09-22.** The
 owner asked for Today's "Worth knowing" rail card now, ahead of FEAT-021
 proving out — but scoped to only what's honestly computable from data already
 on the Today page (load imbalance across the 7-day strip, count of tasks with
