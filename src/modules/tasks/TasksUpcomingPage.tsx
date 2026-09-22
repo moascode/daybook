@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format, parseISO, startOfWeek, addDays } from 'date-fns'
 import {
   DndContext,
@@ -11,23 +12,22 @@ import {
   useDroppable,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { Check, CalendarClock } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import type { TaskList } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
+import { api } from '@/lib/api'
+import { mapMember } from '@/lib/household.mappers'
 import { cn, errorMessage } from '@/lib/utils'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
+import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
+import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
 import type { Task } from '@/types/tasks.types'
+import type { GroupMember } from '@/types/household.types'
 
 const UNSORTED_COLOR = '#6b7280'
-
-interface BalanceProposal {
-  fromDate: string
-  toDate: string
-  taskIds: string[]
-}
 
 /**
  * Sort candidates for "Balance the week": untimed tasks first, then
@@ -59,12 +59,18 @@ export function TasksUpcomingPage() {
   const { loadTasks, addTask, updateTask, rescheduleTasks, completeTask } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
   const addToast = useToastStore((s) => s.addToast)
+  const navigate = useNavigate()
 
   const [tasks, setTasks] = useState<Task[]>([])
+  const [members, setMembers] = useState<GroupMember[]>([])
   const [loading, setLoading] = useState(true)
-  const [proposal, setProposal] = useState<BalanceProposal | null>(null)
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  // FEAT-057: same shared "New task" modal FEAT-054 wired up on Today, opened
+  // from the composer's "Task"/"Assign" shortcuts — see TaskComposer.tsx.
+  const [taskFormOpen, setTaskFormOpen] = useState(false)
+  const [taskFormContent, setTaskFormContent] = useState<string | undefined>(undefined)
+  const [taskFormFocusField, setTaskFormFocusField] = useState<'assignee' | undefined>(undefined)
 
   const openDetail = (task: Task) => {
     setDetailTask(task)
@@ -89,10 +95,15 @@ export function TasksUpcomingPage() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([loadTasksRef.current('all'), loadTaskListsRef.current()])
-      .then(([open]) => {
+    Promise.all([
+      loadTasksRef.current('all'),
+      loadTaskListsRef.current(),
+      api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
+    ])
+      .then(([open, , memberRows]) => {
         if (cancelled) return
         setTasks(open)
+        setMembers(memberRows)
       })
       .catch((err) => {
         if (cancelled) return
@@ -107,6 +118,7 @@ export function TasksUpcomingPage() {
   }, [])
 
   const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
+  const coMembers = useMemo(() => members.map((m) => ({ userId: m.userId, username: m.username })), [members])
 
   const week = useMemo(() => {
     const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
@@ -132,6 +144,72 @@ export function TasksUpcomingPage() {
   const minEntry = dayCounts.reduce((a, b) => (b.count < a.count ? b : a))
   const gap = maxEntry.count - minEntry.count
   const canBalance = gap >= 2
+
+  // Band stats (FEAT-057): tasks due within `week`, split into "hard
+  // deadlines" (no recurrence, no wallet link — the mockup's definition of
+  // genuinely fixed) and "recurring" (recurrence set). Deliberately built
+  // from `tasksByDay`'s values rather than filtering `tasks` directly, so
+  // this only counts the same dated-within-the-displayed-week set the day
+  // columns show — a dated task outside this week (out of range) doesn't
+  // inflate either stat. The sub-line names real tasks (mockup: "insurance,
+  // rent, review" / "standup, plants, run"), not a fabricated stat.
+  //
+  // Single source of truth for "how many tasks are scheduled this week":
+  // `scheduledCount` (page-head summary line AND the band card's own
+  // band-main figure) derives from this same array's length, rather than
+  // separately re-summing `dayCounts` — both numbers can never drift apart.
+  const weekTasks = useMemo(() => [...tasksByDay.values()].flat(), [tasksByDay])
+  const scheduledCount = weekTasks.length
+
+  // Headline callout ("Wednesday is doing too much") — same "is the busiest
+  // day genuinely heavier than at least one other day" comparison
+  // TasksTodayPage.tsx's `isHeaviestDay` chip uses for its own load strip,
+  // just applied to the week's `dayCounts` instead: the two pages compare
+  // different shapes (Today checks whether *today specifically* is the max
+  // of a per-day-this-week strip; this page finds whichever day of the week
+  // is the max), so this stays a local one-liner rather than a shared
+  // extraction that would need to abstract over both call shapes for a
+  // single boolean comparison.
+  const isHeaviestDayGenuine = maxEntry.count > 0 && dayCounts.some((d) => d.count < maxEntry.count)
+
+  const hardDeadlineTasks = useMemo(
+    () => weekTasks.filter((t) => t.recurrence === null && t.walletRef === null),
+    [weekTasks],
+  )
+  const recurringTasks = useMemo(() => weekTasks.filter((t) => t.recurrence !== null), [weekTasks])
+
+  const summarizeTaskNames = (list: Task[], max = 3): string => {
+    const names = list.map((t) => t.content || 'Untitled task').filter(Boolean)
+    if (names.length === 0) return ''
+    if (names.length <= max) return names.join(', ')
+    return `${names.slice(0, max).join(', ')}…`
+  }
+  const hardDeadlineNames = useMemo(() => summarizeTaskNames(hardDeadlineTasks), [hardDeadlineTasks])
+  const recurringNames = useMemo(() => summarizeTaskNames(recurringTasks), [recurringTasks])
+
+  // Balance-the-week card (FEAT-057): recomputed from `tasksByDay` on every
+  // render, so as candidates move off `maxEntry.date` the list shrinks (and
+  // the card disappears once `canBalance` goes false) with no extra state —
+  // unlike the old single-batch `proposal`, each row here acts independently
+  // via `moveTaskToDate`. Same `Math.floor(gap / 2)` sizing and
+  // `sortForBalancing` candidate order FEAT-026's original batch move used.
+  const balanceCandidates = useMemo(() => {
+    if (!canBalance) return []
+    const n = Math.floor(gap / 2)
+    const maxDayTasks = tasksByDay.get(maxEntry.date) ?? []
+    return sortForBalancing(maxDayTasks).slice(0, n)
+  }, [canBalance, gap, tasksByDay, maxEntry.date])
+
+  // One-line reason per candidate — only what's honestly derivable from the
+  // task/day data already in scope (CLAUDE.md rule 7: no fabricated reasons).
+  // `sortForBalancing` already prefers untimed tasks, so most candidates hit
+  // the first branch; the fallback still names the real target-day gap.
+  const balanceReason = (task: Task): string => {
+    const targetDay = format(parseISO(minEntry.date), 'EEEE')
+    return task.dueTime === null
+      ? `No deadline, and ${targetDay} is nearly empty`
+      : `${targetDay} has ${minEntry.count} task${minEntry.count === 1 ? '' : 's'} — this has ${maxEntry.count}`
+  }
 
   // ── Mutations — optimistic on local state; rescheduleTasks/updateTask/
   // completeTask/addTask already toast + reconcile the outliner's store on
@@ -193,6 +271,75 @@ export function TasksUpcomingPage() {
     }
   }
 
+  // Composer wiring (FEAT-057), mirroring TasksTodayPage.tsx's
+  // handleCreateTask — same addTask-then-combined-PATCH shape, but WITHOUT
+  // Today's BUG-009 default-to-today: a task created from Upcoming with no
+  // date word in it stays undated and lands in "Waiting for a date", which
+  // is this page's whole point (unlike Today, whose composer intentionally
+  // forces every task into today's group).
+  const handleCreateTask = async (draft: TaskComposerDraft) => {
+    let newTask: Task
+    try {
+      newTask = await addTask(draft.content, null, null)
+    } catch {
+      // addTask already surfaced the error and reconciled the store.
+      return
+    }
+
+    const patch: Record<string, unknown> = {}
+    if (draft.dueDate !== null) patch.dueDate = draft.dueDate
+    if (draft.listId !== null) patch.listId = draft.listId
+    if (draft.priority !== null) patch.priority = draft.priority
+    if (draft.assigneeId !== null) patch.assigneeId = draft.assigneeId
+    if (draft.dueTime !== null) patch.dueTime = draft.dueTime
+
+    if (Object.keys(patch).length === 0) {
+      setTasks((prev) => [...prev, newTask])
+      return
+    }
+
+    try {
+      const row = await api.patch<Record<string, unknown>>(`/tasks/${newTask.id}`, patch)
+      const merged: Task = {
+        ...newTask,
+        listId: (row.list_id as string | null | undefined) ?? draft.listId ?? newTask.listId,
+        priority: (row.priority as Task['priority'] | undefined) ?? draft.priority ?? newTask.priority,
+        assigneeId: (row.assignee_id as string | null | undefined) ?? draft.assigneeId ?? newTask.assigneeId,
+        dueDate: (row.due_date as string | null | undefined) ?? draft.dueDate ?? newTask.dueDate,
+        dueTime: (row.due_time as string | null | undefined) ?? draft.dueTime ?? newTask.dueTime,
+      }
+      setTasks((prev) => [...prev, merged])
+    } catch (err) {
+      // The task itself was created — only the follow-up detail patch failed.
+      addToast({
+        message: errorMessage(err, 'Task added, but its details could not be saved — please edit it to fix that.'),
+      })
+      setTasks((prev) => [...prev, newTask])
+    }
+  }
+
+  const handleOpenHabitModal = () => {
+    navigate('/tasks/habits', { state: { openCreateHabit: true } })
+  }
+
+  const handleOpenTaskForm = (initialContent?: string) => {
+    setTaskFormContent(initialContent)
+    setTaskFormFocusField(undefined)
+    setTaskFormOpen(true)
+  }
+
+  const handleOpenAssignForm = (initialContent?: string) => {
+    setTaskFormContent(initialContent)
+    setTaskFormFocusField('assignee')
+    setTaskFormOpen(true)
+  }
+
+  // TaskFormModal's onSubmit — reuses handleCreateTask's addTask + combined
+  // PATCH logic, since the two draft shapes already match.
+  const handleTaskFormSubmit = async (draft: TaskFormDraft) => {
+    await handleCreateTask(draft)
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over) return
@@ -201,50 +348,6 @@ export function TasksUpcomingPage() {
     const task = tasks.find((t) => t.id === taskId)
     if (!task || task.dueDate === newDate) return
     void moveTaskToDate(taskId, newDate)
-  }
-
-  const handleOpenBalance = () => {
-    if (!canBalance) return
-    const n = Math.floor(gap / 2)
-    const maxDayTasks = tasksByDay.get(maxEntry.date) ?? []
-    const chosen = sortForBalancing(maxDayTasks).slice(0, n)
-    // Defensive: `canBalance` (gap >= 2) mathematically guarantees n >= 1 and
-    // therefore chosen.length >= 1 today, but this guards against a future
-    // change to the candidate-filtering logic silently opening a proposal
-    // with nothing to move.
-    if (chosen.length === 0) return
-    setProposal({ fromDate: maxEntry.date, toDate: minEntry.date, taskIds: chosen.map((t) => t.id) })
-  }
-
-  const handleConfirmBalance = async () => {
-    if (!proposal) return
-    const { taskIds, toDate } = proposal
-    const previousDates = new Map(tasks.filter((t) => taskIds.includes(t.id)).map((t) => [t.id, t.dueDate]))
-    setProposal(null)
-    setTasks((prev) => prev.map((t) => (taskIds.includes(t.id) ? { ...t, dueDate: toDate } : t)))
-    try {
-      const updated = await rescheduleTasks(taskIds, toDate)
-      // Same ownership boundary as `moveTaskToDate` above: a task the viewer
-      // doesn't own (assigned-to-me or shared-in) can be on this board but is
-      // not reschedulable by them, and the server just omits it rather than
-      // erroring — reconcile and say so instead of leaving the optimistic
-      // move in place for a task that never actually persisted.
-      const movedIds = new Set(updated.map((t) => t.id))
-      const skipped = taskIds.filter((id) => !movedIds.has(id))
-      if (skipped.length > 0) {
-        setTasks((prev) =>
-          prev.map((t) => (skipped.includes(t.id) ? { ...t, dueDate: previousDates.get(t.id) ?? null } : t)),
-        )
-        addToast({
-          message:
-            skipped.length === taskIds.length
-              ? "Couldn't move those tasks — you can only reschedule tasks you own."
-              : `Moved ${movedIds.size} of ${taskIds.length} tasks — the rest aren't yours to reschedule.`,
-        })
-      }
-    } catch {
-      // rescheduleTasks already surfaced the error and reconciled the store.
-    }
   }
 
   const sensors = useSensors(
@@ -259,53 +362,53 @@ export function TasksUpcomingPage() {
           <h1 className="page-title">Upcoming</h1>
           <p className="page-sub">This week's tasks, laid out day by day.</p>
         </div>
-        <button
-          type="button"
-          data-testid="upcoming-balance-week"
-          disabled={!canBalance}
-          title={canBalance ? 'Move tasks off the busiest day' : 'The week is already balanced'}
-          aria-label={canBalance ? 'Balance the week' : 'The week is already balanced'}
-          onClick={handleOpenBalance}
-          className={cn(
-            'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
-            canBalance
-              ? 'text-fg-subtle hover:bg-surface-hover hover:text-fg'
-              : 'cursor-not-allowed text-fg-faint',
-          )}
-        >
-          <CalendarClock className="h-3.5 w-3.5" />
-          Balance the week
-        </button>
       </div>
 
-      {proposal && (
-        <div
-          data-testid="upcoming-balance-proposal"
-          className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm"
-        >
-          <span>
-            Move {proposal.taskIds.length} task{proposal.taskIds.length === 1 ? '' : 's'} from{' '}
-            {format(parseISO(proposal.fromDate), 'EEEE')} to {format(parseISO(proposal.toDate), 'EEEE')}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              data-testid="upcoming-balance-confirm"
-              onClick={() => void handleConfirmBalance()}
-              className="btn btn-primary"
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              data-testid="upcoming-balance-cancel"
-              onClick={() => setProposal(null)}
-              className="btn btn-quiet"
-            >
-              Cancel
-            </button>
+      <TaskComposer
+        lists={taskLists}
+        coMembers={coMembers}
+        onCreateTask={handleCreateTask}
+        onOpenHabitModal={handleOpenHabitModal}
+        onOpenTaskForm={handleOpenTaskForm}
+        onOpenAssignForm={handleOpenAssignForm}
+      />
+
+      {!loading && weekTasks.length > 0 && (
+        <section className="card card-pad mb-4" data-testid="upcoming-band-stats">
+          <div className="card-head">
+            <div>
+              <span className="card-title">Next seven days</span>
+              <div className="card-sub" data-testid="upcoming-summary-line">
+                {scheduledCount} scheduled, {undated.length} waiting for a date
+              </div>
+            </div>
+            {isHeaviestDayGenuine && (
+              <span className="chip chip-warn ml-auto" data-testid="upcoming-heaviest-chip">
+                {format(parseISO(maxEntry.date), 'EEEE')} is doing too much
+              </span>
+            )}
           </div>
-        </div>
+          <div className="band">
+            <div className="band-main">
+              <div className="band-fig">
+                <span className="v">{scheduledCount}</span>
+                <span className="k">tasks across seven days</span>
+              </div>
+            </div>
+            <div className="band-stats">
+              <div className="band-stat" data-testid="upcoming-stat-hard-deadlines">
+                <p className="k">Hard deadlines</p>
+                <p className="v">{hardDeadlineTasks.length}</p>
+                {hardDeadlineNames && <p className="s">{hardDeadlineNames}</p>}
+              </div>
+              <div className="band-stat" data-testid="upcoming-stat-recurring">
+                <p className="k">Recurring</p>
+                <p className="v">{recurringTasks.length}</p>
+                {recurringNames && <p className="s">{recurringNames}</p>}
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {loading ? (
@@ -355,12 +458,57 @@ export function TasksUpcomingPage() {
         </>
       )}
 
+      {canBalance && (
+        <section className="card card-pad mt-4" data-testid="upcoming-balance-card">
+          <div className="card-head">
+            <div>
+              <span className="card-title">Balance the week</span>
+              <div className="card-sub">
+                {format(parseISO(maxEntry.date), 'EEEE')} has {maxEntry.count}, {format(parseISO(minEntry.date), 'EEEE')} has{' '}
+                {minEntry.count}
+              </div>
+            </div>
+          </div>
+          <div>
+            {balanceCandidates.map((task) => (
+              <div key={task.id} className="sug">
+                <div className="sug-main">
+                  <p className="sug-title">
+                    Move &quot;{task.content || 'Untitled task'}&quot; to {format(parseISO(minEntry.date), 'EEEE')}
+                  </p>
+                  <p className="sug-sub">{balanceReason(task)}</p>
+                </div>
+                <button
+                  type="button"
+                  data-testid={`upcoming-balance-move-${task.id}`}
+                  onClick={() => void moveTaskToDate(task.id, minEntry.date)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Move
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <TaskDetailModal
         task={detailTask}
         open={detailOpen}
         onOpenChange={setDetailOpen}
         availableLists={taskLists}
+        coMembers={coMembers}
         onSaved={(updated) => setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))}
+      />
+
+      <TaskFormModal
+        open={taskFormOpen}
+        onClose={() => setTaskFormOpen(false)}
+        lists={taskLists}
+        coMembers={coMembers}
+        initialContent={taskFormContent}
+        focusField={taskFormFocusField}
+        onSubmit={handleTaskFormSubmit}
       />
     </div>
   )

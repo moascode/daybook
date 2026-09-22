@@ -92,7 +92,7 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(page.getByTestId(`upcoming-day-count-${thursday}`)).toHaveText('1')
   })
 
-  test('Balance the week proposes and applies a move from the busiest to the quietest day', async ({ browser }) => {
+  test('Balance the week card shows candidates and a single Move applies just that task', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
     const monday = businessWeekMonday()
     const tuesday = addDaysIso(monday, 1)
@@ -103,8 +103,11 @@ test.describe('91 — Tasks upcoming week board', () => {
     // keeps the first zero-count day in week order, so leaving more than one
     // day at zero would make the target ambiguous and this assertion flaky
     // by construction, not by the app's behaviour.
+    let firstTuesdayTaskId = ''
     for (const content of ['Tue task 1', 'Tue task 2', 'Tue task 3']) {
-      await page.request.post(`${API}/tasks`, { data: { content, dueDate: tuesday } })
+      const res = await page.request.post(`${API}/tasks`, { data: { content, dueDate: tuesday } })
+      const task = await res.json()
+      if (!firstTuesdayTaskId) firstTuesdayTaskId = task.id
     }
     for (const [label, offset] of [['Mon', 0], ['Wed', 2], ['Thu', 3], ['Sat', 5], ['Sun', 6]] as const) {
       await page.request.post(`${API}/tasks`, {
@@ -116,16 +119,17 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('3')
     await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('0')
 
-    const balanceBtn = page.getByTestId('upcoming-balance-week')
-    await expect(balanceBtn).toBeEnabled()
-    await balanceBtn.click()
+    // FEAT-057: the card shows itself automatically (gap >= 2, no button
+    // click needed) with one candidate row per task (floor(gap/2) of them),
+    // each independently movable — not a single confirm/cancel batch.
+    const card = page.getByTestId('upcoming-balance-card')
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('Tuesday')
+    await expect(card).toContainText('Friday')
 
-    const proposal = page.getByTestId('upcoming-balance-proposal')
-    await expect(proposal).toBeVisible()
-    await expect(proposal).toContainText('Move')
-
-    await page.getByTestId('upcoming-balance-confirm').click()
-    await expect(proposal).not.toBeVisible()
+    const moveBtn = page.getByTestId(`upcoming-balance-move-${firstTuesdayTaskId}`)
+    await expect(moveBtn).toBeVisible()
+    await moveBtn.click()
 
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('2')
     await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('1')
@@ -135,6 +139,30 @@ test.describe('91 — Tasks upcoming week board', () => {
     await page.reload()
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('2')
     await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('1')
+
+    // Week is now within 1 of itself everywhere plausible for this seed
+    // (gap between the new max and min may still be >= 2 depending on the
+    // filler counts) — rather than asserting a specific hide/show state here
+    // (fragile against the exact seed shape), the card's continued presence
+    // or absence is exactly `canBalance`, already covered structurally by
+    // the initial appearance assertion above; a dedicated hide-when-balanced
+    // case is covered by the next test.
+  })
+
+  test('Balance the week card is absent when the week is already even', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    const monday = businessWeekMonday()
+
+    // One task per day — gap is 0, well under the canBalance >= 2 threshold.
+    for (const offset of [0, 1, 2, 3, 4, 5, 6]) {
+      await page.request.post(`${API}/tasks`, {
+        data: { content: `Day ${offset} task`, dueDate: addDaysIso(monday, offset) },
+      })
+    }
+
+    await page.goto('/tasks/upcoming')
+    await expect(page.getByTestId('upcoming-day-count-' + monday)).toHaveText('1')
+    await expect(page.getByTestId('upcoming-balance-card')).not.toBeVisible()
   })
 
   test('the dashed Add affordance creates a task on an empty day', async ({ browser }) => {
@@ -203,6 +231,93 @@ test.describe('91 — Tasks upcoming week board', () => {
     await page.reload()
     await expect(page.getByTestId(`upcoming-day-count-${monday}`)).toHaveText('0')
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('1')
+  })
+
+  test('FEAT-057: composer task with no date word lands in Waiting for a date, not a day column', async ({
+    browser,
+  }) => {
+    // Deliberate INVERSE of Today's BUG-009 default-to-today — this page's
+    // composer must NOT force an undated task into any day. Zero test
+    // coverage existed for this before, so a future "make Upcoming
+    // consistent with Today" refactor could silently break it.
+    const page = await newAppPage(browser, '/tasks')
+    await page.goto('/tasks/upcoming')
+
+    const composer = page.getByRole('textbox', { name: 'Add a task', exact: true })
+    await composer.fill('Read the quarterly report')
+    await composer.press('Enter')
+    await expect(composer).toHaveValue('')
+
+    const waiting = page.getByTestId('upcoming-waiting-section')
+    await expect(waiting).toContainText('Read the quarterly report')
+
+    const monday = businessWeekMonday()
+    for (let i = 0; i < 7; i++) {
+      await expect(page.getByTestId(`upcoming-day-column-${addDaysIso(monday, i)}`)).not.toContainText(
+        'Read the quarterly report',
+      )
+    }
+  })
+
+  test('FEAT-057: composer task with a parsed date lands in the correct day column', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    await page.goto('/tasks/upcoming')
+
+    const composer = page.getByRole('textbox', { name: 'Add a task', exact: true })
+    await composer.fill('Call the plumber tomorrow')
+    await composer.press('Enter')
+    await expect(composer).toHaveValue('')
+
+    const tomorrow = addDaysIso(businessToday(), 1)
+    await expect(page.getByTestId(`upcoming-day-column-${tomorrow}`)).toContainText('Call the plumber')
+  })
+
+  test('FEAT-057: summary line shows correct scheduled/waiting counts', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    const monday = businessWeekMonday()
+    const tuesday = addDaysIso(monday, 1)
+    const wednesday = addDaysIso(monday, 2)
+
+    for (const content of ['Dated task A', 'Dated task B']) {
+      await page.request.post(`${API}/tasks`, { data: { content, dueDate: tuesday } })
+    }
+    await page.request.post(`${API}/tasks`, { data: { content: 'Dated task C', dueDate: wednesday } })
+    for (const content of ['Undated task A', 'Undated task B', 'Undated task C']) {
+      await page.request.post(`${API}/tasks`, { data: { content } })
+    }
+
+    await page.goto('/tasks/upcoming')
+
+    await expect(page.getByTestId('upcoming-summary-line')).toHaveText('3 scheduled, 3 waiting for a date')
+  })
+
+  test('FEAT-057: Hard deadlines and Recurring band-stat cards show correct counts', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    const monday = businessWeekMonday()
+    const tuesday = addDaysIso(monday, 1)
+    const wednesday = addDaysIso(monday, 2)
+
+    await page.request.post(`${API}/tasks`, { data: { content: 'Pay the insurance', dueDate: tuesday } })
+    await page.request.post(`${API}/tasks`, {
+      data: { content: 'Take out the trash', dueDate: wednesday, recurrence: 'weekly' },
+    })
+
+    await page.goto('/tasks/upcoming')
+
+    const hardDeadlines = page.getByTestId('upcoming-stat-hard-deadlines')
+    await expect(hardDeadlines).toContainText('1')
+    await expect(hardDeadlines).toContainText('Pay the insurance')
+
+    const recurring = page.getByTestId('upcoming-stat-recurring')
+    await expect(recurring).toContainText('1')
+    await expect(recurring).toContainText('Take out the trash')
+  })
+
+  test('FEAT-057: band-stats card hides on a genuinely empty week', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    await page.goto('/tasks/upcoming')
+
+    await expect(page.getByTestId('upcoming-band-stats')).not.toBeVisible()
   })
 
   test('BUG-013: a Waiting-for-a-date row keeps its date input usable at a narrow viewport', async ({ browser }) => {

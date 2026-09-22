@@ -161,7 +161,10 @@ test.describe('99 — Task detail modal', () => {
     await page.getByTestId(`upcoming-add-day-list-${today}`).selectOption({ label: 'Household' })
     await page.getByTestId(`upcoming-add-day-${today}`).press('Enter')
 
-    await expect(page.getByText('Prep standup')).toBeVisible()
+    // Scoped to the day column — FEAT-057's Hard-deadlines/Recurring
+    // band-stat cards now also show real task names in their sub-line, so
+    // an unscoped getByText can match both.
+    await expect(page.getByTestId(`upcoming-day-column-${today}`).getByText('Prep standup')).toBeVisible()
     const tasks = (await (await page.request.get(`${API}/tasks?view=all`)).json()) as {
       content: string
       list_id: string | null
