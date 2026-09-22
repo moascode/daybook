@@ -37,6 +37,7 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | [BUG-010](../../archive/ep-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md) | All tasks row layout squeezes/hides the task name | [PR #233](https://github.com/moascode/daybook/pull/233), 2026-09-21 |
 | [BUG-011](../../archive/ep-07-tasks-depth/BUG-011-no-way-to-set-priority.md) | No UI anywhere to set or change a task's priority | [PR #233](https://github.com/moascode/daybook/pull/233), 2026-09-21 |
 | [BUG-012](../../archive/ep-07-tasks-depth/BUG-012-upcoming-card-no-detail-modal.md) | Upcoming board cards don't open a detail/edit view | [PR #233](https://github.com/moascode/daybook/pull/233), 2026-09-21 |
+| [FEAT-054](../../archive/ep-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md) | Today page exact design adoption | [PR #237](https://github.com/moascode/daybook/pull/237), 2026-09-23 |
 
 ## Items still open
 
@@ -44,6 +45,6 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 |---|---|---|
 | [BUG-013](BUG-013-task-row-grid-not-structurally-fixed.md) | `.task`'s fixed-column grid doesn't fit `TaskListRow`'s variable children | Fixed — [PR #235](https://github.com/moascode/daybook/pull/235), 2026-09-22 |
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
-| [FEAT-054](FEAT-054-tasks-today-design-adoption.md) | Today page exact design adoption | Yes — owner confirmed the full gap list 2026-09-22 |
 | [FEAT-055](FEAT-055-tasks-composer-reminder-shortcut.md) | Composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
 | [FEAT-056](FEAT-056-tasks-composer-checklist-shortcut.md) | Composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
+| [FEAT-057](FEAT-057-tasks-upcoming-design-adoption.md) | Upcoming page exact design adoption | Yes — continuation of FEAT-054's design-adoption pass, 2026-09-23 |
