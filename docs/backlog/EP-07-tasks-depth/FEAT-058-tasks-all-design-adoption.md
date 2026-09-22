@@ -24,10 +24,14 @@ autonomously.
   forced onto a specific date (an undated task here should stay undated,
   landing in the existing "No due date" group — same principle as
   Upcoming's composer, the inverse of Today's BUG-009 default).
-- Stat card idiom: `TasksTodayPage.tsx`'s `.band-stats`/`.band-stat`
-  (`.k`/`.v`/`.s`) cards (FEAT-054), which support a descriptive sub-line —
-  the current `.stat-card`/`.stat-topline`/`.stat-label`/`.stat-value`
-  idiom this page uses predates FEAT-054 and has no sub-line slot.
+- Stat card idiom: **correction, 2026-09-23** — this originally said to
+  replace `.stat-card` with `.band-stats`/`.band-stat`, claiming `.stat-card`
+  "has no sub-line slot." That was wrong on both counts, caught in review:
+  the real rendered mockup uses `.stat-card`/`.stat-topline`/`.stat-icon`/
+  `.stat-label`/`.stat-value`/**`.stat-foot`** — the sub-line slot already
+  exists (`src/styles/data.css` `.stat-foot`, already styled), and
+  `.band-stats` doesn't appear anywhere on this mockup page. Keep the
+  existing `.stat-card` idiom; add `.stat-foot` under each `.stat-value`.
 
 ## Acceptance criteria
 
@@ -38,9 +42,9 @@ autonomously.
       "No due date" group, not forced onto today.
 
 **Stat cards**
-- [ ] Replace the four `.stat-card`s with the `.band-stats`/`.band-stat`
-      idiom, matching the mockup's actual four stats and their real
-      sub-lines, all honestly derivable from data already loaded
+- [ ] Keep the four `.stat-card`s; update to the mockup's actual four
+      stats and add their real `.stat-foot` sub-lines, all honestly
+      derivable from data already loaded
       (`openTasks`/`completedTasks` — no new fetch):
       - **Overdue** (existing `overdueCount`) — sub-line: "oldest is N days
         old" (reuse the same days-late computation `TaskRow.tsx`'s

@@ -1,19 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { format, parseISO, startOfWeek } from 'date-fns'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Filter, SlidersHorizontal, X } from 'lucide-react'
-import { ListChecks, AlertTriangle, CalendarClock, Inbox } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, Filter, Inbox, SlidersHorizontal, X } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { useChartTheme } from '@/hooks/useChartTheme'
 import { useDashboardChartColors } from '@/modules/wallet/dashboard/chartColors'
+import { api } from '@/lib/api'
+import { mapMember } from '@/lib/household.mappers'
 import { cn, errorMessage, todayISO } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
+import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
+import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
 import type { Task, TaskPriority } from '@/types/tasks.types'
+import type { GroupMember } from '@/types/household.types'
 
 /** `days` from today, using local date parts — never toISOString() (CLAUDE.md
  *  §16 trap 1). A local copy rather than importing TasksTodayPage's — that
@@ -50,15 +55,17 @@ const PRIORITY_OPTIONS = [
  * calls per the plan.
  */
 export function TasksAllPage() {
-  const { loadTasks, completeTask, rescheduleTasks } = useTasks()
+  const { loadTasks, addTask, completeTask, rescheduleTasks } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
   const chart = useChartTheme()
   const colors = useDashboardChartColors()
+  const navigate = useNavigate()
 
   const [openTasks, setOpenTasks] = useState<Task[]>([])
   const [completedTasks, setCompletedTasks] = useState<Task[]>([])
+  const [members, setMembers] = useState<GroupMember[]>([])
   const [loading, setLoading] = useState(true)
 
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -66,6 +73,12 @@ export function TasksAllPage() {
   const [priority, setPriority] = useState<TaskPriority | ''>('')
   const [assignee, setAssignee] = useState<AssigneeFilter>('all')
   const [listId, setListId] = useState<string>('')
+
+  // FEAT-058: same shared "New task" modal FEAT-054/FEAT-057 wire up on
+  // Today/Upcoming, opened from the composer's "Task"/"Assign" shortcuts.
+  const [taskFormOpen, setTaskFormOpen] = useState(false)
+  const [taskFormContent, setTaskFormContent] = useState<string | undefined>(undefined)
+  const [taskFormFocusField, setTaskFormFocusField] = useState<'assignee' | undefined>(undefined)
 
   // BUG-011: TaskDetailModal is the row's only route to priority/note edits —
   // this row has no inline editor for either.
@@ -76,17 +89,40 @@ export function TasksAllPage() {
     setDetailOpen(true)
   }
 
+  // `useTasks()`/`useTaskLists()` re-derive `loadTasks`/`loadTaskLists`/
+  // `addToast` on every render of ANY subscriber to the tasks store,
+  // including this page's own store mutations (e.g. `addTask` inside
+  // `handleCreateTask`). Depending on those identities directly would
+  // re-fire the mount effect below every time — once re-fetched, it can
+  // overwrite this page's local optimistic state with a stale response.
+  // Refs keep the effect's dependency array empty (TasksUpcomingPage.tsx
+  // has the same pattern/comment).
+  const loadTasksRef = useRef(loadTasks)
+  const loadTaskListsRef = useRef(loadTaskLists)
+  const addToastRef = useRef(addToast)
+  useEffect(() => {
+    loadTasksRef.current = loadTasks
+    loadTaskListsRef.current = loadTaskLists
+    addToastRef.current = addToast
+  })
+
   useEffect(() => {
     let cancelled = false
-    Promise.all([loadTasks('all'), loadTasks('completed'), loadTaskLists()])
-      .then(([open, done]) => {
+    Promise.all([
+      loadTasksRef.current('all'),
+      loadTasksRef.current('completed'),
+      loadTaskListsRef.current(),
+      api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
+    ])
+      .then(([open, done, , memberRows]) => {
         if (cancelled) return
         setOpenTasks(open)
         setCompletedTasks(done)
+        setMembers(memberRows)
       })
       .catch((err) => {
         if (cancelled) return
-        addToast({ message: errorMessage(err, 'Could not load your tasks.') })
+        addToastRef.current({ message: errorMessage(err, 'Could not load your tasks.') })
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -94,7 +130,7 @@ export function TasksAllPage() {
     return () => {
       cancelled = true
     }
-  }, [loadTasks, loadTaskLists, addToast])
+  }, [])
 
   const today = todayISO()
 
@@ -104,11 +140,77 @@ export function TasksAllPage() {
   const hasAssignments = openTasks.some((t) => t.assigneeId !== null)
 
   const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
+  const coMembers = useMemo(() => members.map((m) => ({ userId: m.userId, username: m.username })), [members])
 
-  // ── Stat cards (criterion 2) — all from the one `openTasks` fetch ──────
-  const overdueCount = openTasks.filter((t) => t.dueDate !== null && t.dueDate < today).length
+  // ── Stat cards (FEAT-058) — all from the two fetches already loaded, no
+  // new network calls. ────────────────────────────────────────────────
+  const overdueTasks = openTasks.filter((t) => t.dueDate !== null && t.dueDate < today)
+  const overdueCount = overdueTasks.length
+  // Same "oldest is N days" max-days-late computation TasksTodayPage.tsx's
+  // `oldestOverdueDays` already has (mockup: Overdue band-stat sub-line) —
+  // kept as a second local copy rather than extracted into a shared util:
+  // TasksTodayPage.tsx is explicitly out of scope for this PR (locked file
+  // list), so a shared helper would need a third file touched for no benefit
+  // beyond these two ~6-line call sites.
+  const oldestOverdueDays =
+    overdueCount > 0
+      ? Math.max(
+          ...overdueTasks.map((t) => {
+            const [y1, m1, d1] = t.dueDate!.split('-').map(Number)
+            const [y2, m2, d2] = today.split('-').map(Number)
+            return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000)
+          }),
+        )
+      : null
+
+  // "Due this week" (mockup: replaces the old "Due today" stat, which
+  // undercounts vs the mockup's weekly framing) — dated open tasks within the
+  // next 7 days inclusive of today. `dueTodayCount` stays as the sub-line's
+  // "N of them today" subset.
+  const weekEnd = isoDatePlus(6)
+  const dueThisWeekTasks = openTasks.filter((t) => t.dueDate !== null && t.dueDate >= today && t.dueDate <= weekEnd)
+  const dueThisWeekCount = dueThisWeekTasks.length
   const dueTodayCount = openTasks.filter((t) => t.dueDate === today).length
-  const noDueDateCount = openTasks.filter((t) => t.dueDate === null).length
+
+  const noDueDateTasks = openTasks.filter((t) => t.dueDate === null)
+  const noDueDateCount = noDueDateTasks.length
+  // "N sitting in {list name}" — whichever single list holds the most of the
+  // no-due-date tasks, only named when it clearly dominates (a plurality of
+  // at least half, so the sub-line never implies a concentration that isn't
+  // real when the undated tasks are actually spread across many lists). Not
+  // wrapped in useMemo: `noDueDateTasks` above is a fresh array every render
+  // (it isn't itself memoized), so a memo keyed on it would never actually
+  // hit — plain computation matches the other stats on this page.
+  const noDueDateDominantList = (() => {
+    if (noDueDateTasks.length === 0) return null
+    const counts = new Map<string, number>()
+    for (const t of noDueDateTasks) {
+      const key = t.listId ?? ''
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    let topKey = ''
+    let topCount = 0
+    for (const [key, count] of counts) {
+      if (count > topCount) {
+        topKey = key
+        topCount = count
+      }
+    }
+    // A tie (exactly half) shows no sub-line — "dominates" should mean more
+    // than half, not an arbitrary pick by Map insertion order.
+    if (topKey === '' || topCount <= noDueDateTasks.length / 2) return null
+    const list = listById.get(topKey)
+    if (!list) return null
+    return { name: list.name, count: topCount }
+  })()
+
+  // "Done this week" — completions in the last 7 days, no "+N vs usual"
+  // comparison (that needs a historical weekly average this page doesn't
+  // load — same category FEAT-054/FEAT-057 both already declined to fabricate).
+  const weekStartISO = isoDatePlus(-6)
+  const doneThisWeekCount = completedTasks.filter(
+    (t) => t.completedAt && t.completedAt.slice(0, 10) >= weekStartISO && t.completedAt.slice(0, 10) <= today,
+  ).length
 
   // ── Filtering (criterion 3) ─────────────────────────────────────────
   const q = searchDraft.trim().toLowerCase()
@@ -257,6 +359,74 @@ export function TasksAllPage() {
     }
   }
 
+  // Composer wiring (FEAT-058), mirroring TasksUpcomingPage.tsx's
+  // handleCreateTask — same addTask-then-combined-PATCH shape, WITHOUT
+  // Today's BUG-009 default-to-today: a task created here with no parsed
+  // date stays undated and lands in the existing "No due date" group, which
+  // is the correct outcome for an all-tasks flat view.
+  const handleCreateTask = async (draft: TaskComposerDraft) => {
+    let newTask: Task
+    try {
+      newTask = await addTask(draft.content, null, null)
+    } catch {
+      // addTask already surfaced the error and reconciled the store.
+      return
+    }
+
+    const patch: Record<string, unknown> = {}
+    if (draft.dueDate !== null) patch.dueDate = draft.dueDate
+    if (draft.listId !== null) patch.listId = draft.listId
+    if (draft.priority !== null) patch.priority = draft.priority
+    if (draft.assigneeId !== null) patch.assigneeId = draft.assigneeId
+    if (draft.dueTime !== null) patch.dueTime = draft.dueTime
+
+    if (Object.keys(patch).length === 0) {
+      setOpenTasks((prev) => [...prev, newTask])
+      return
+    }
+
+    try {
+      const row = await api.patch<Record<string, unknown>>(`/tasks/${newTask.id}`, patch)
+      const merged: Task = {
+        ...newTask,
+        listId: (row.list_id as string | null | undefined) ?? draft.listId ?? newTask.listId,
+        priority: (row.priority as Task['priority'] | undefined) ?? draft.priority ?? newTask.priority,
+        assigneeId: (row.assignee_id as string | null | undefined) ?? draft.assigneeId ?? newTask.assigneeId,
+        dueDate: (row.due_date as string | null | undefined) ?? draft.dueDate ?? newTask.dueDate,
+        dueTime: (row.due_time as string | null | undefined) ?? draft.dueTime ?? newTask.dueTime,
+      }
+      setOpenTasks((prev) => [...prev, merged])
+    } catch (err) {
+      // The task itself was created — only the follow-up detail patch failed.
+      addToast({
+        message: errorMessage(err, 'Task added, but its details could not be saved — please edit it to fix that.'),
+      })
+      setOpenTasks((prev) => [...prev, newTask])
+    }
+  }
+
+  const handleOpenHabitModal = () => {
+    navigate('/tasks/habits', { state: { openCreateHabit: true } })
+  }
+
+  const handleOpenTaskForm = (initialContent?: string) => {
+    setTaskFormContent(initialContent)
+    setTaskFormFocusField(undefined)
+    setTaskFormOpen(true)
+  }
+
+  const handleOpenAssignForm = (initialContent?: string) => {
+    setTaskFormContent(initialContent)
+    setTaskFormFocusField('assignee')
+    setTaskFormOpen(true)
+  }
+
+  // TaskFormModal's onSubmit — reuses handleCreateTask's addTask + combined
+  // PATCH logic, since the two draft shapes already match.
+  const handleTaskFormSubmit = async (draft: TaskFormDraft) => {
+    await handleCreateTask(draft)
+  }
+
   return (
     <div className="content">
       <div className="page-head">
@@ -266,49 +436,75 @@ export function TasksAllPage() {
         </div>
       </div>
 
+      <TaskComposer
+        lists={taskLists}
+        coMembers={coMembers}
+        onCreateTask={handleCreateTask}
+        onOpenHabitModal={handleOpenHabitModal}
+        onOpenTaskForm={handleOpenTaskForm}
+        onOpenAssignForm={handleOpenAssignForm}
+      />
+
       {loading ? (
         <p className="text-sm text-fg-subtle">Loading your tasks…</p>
       ) : (
         <>
-          {/* Stat cards (criterion 2) */}
+          {/* Stat cards (FEAT-058) — four .stat-card tiles in a .grid.g4, the
+              real mockup idiom (confirmed against the rendered
+              tasks-all.html: each stat is `.card.stat-card` >
+              `.stat-topline` (`.stat-icon` + `.stat-label`) > `.stat-value`
+              > `.stat-foot`). NOT `.band-stats`/`.band-stat` — that idiom
+              belongs to Today/Upcoming, whose mockups pair it with a
+              `.band-main` sibling; without one here it renders with ~50%
+              blank space. `.stat-foot` (src/styles/data.css) already exists
+              for exactly the sub-line role below. */}
           <div className="grid g4 mb-4">
-            <div className="card stat-card">
-              <div className="stat-topline">
-                <span className="stat-icon bg-accent-bg text-accent-fg">
-                  <ListChecks className="h-3.5 w-3.5" />
-                </span>
-                <span className="stat-label">Open</span>
-              </div>
-              <p className="stat-value" data-testid="stat-open">{openTasks.length}</p>
-            </div>
-            <div className="card stat-card">
+            <div className="card stat-card" data-testid="all-tasks-stat-overdue">
               <div className="stat-topline">
                 <span className="stat-icon bg-neg-bg text-neg-fg">
                   <AlertTriangle className="h-3.5 w-3.5" />
                 </span>
                 <span className="stat-label">Overdue</span>
               </div>
-              <p className={cn('stat-value', overdueCount > 0 && 'neg')} data-testid="stat-overdue">
-                {overdueCount}
-              </p>
+              <p className={cn('stat-value', overdueCount > 0 && 'neg')}>{overdueCount}</p>
+              {oldestOverdueDays !== null && (
+                <p className="stat-foot">
+                  Oldest is {oldestOverdueDays} day{oldestOverdueDays === 1 ? '' : 's'} old
+                </p>
+              )}
             </div>
-            <div className="card stat-card">
+            <div className="card stat-card" data-testid="all-tasks-stat-due-this-week">
               <div className="stat-topline">
-                <span className="stat-icon bg-warn-bg text-warn-fg">
+                <span className="stat-icon bg-accent-bg text-accent-fg">
                   <CalendarClock className="h-3.5 w-3.5" />
                 </span>
-                <span className="stat-label">Due today</span>
+                <span className="stat-label">Due this week</span>
               </div>
-              <p className="stat-value" data-testid="stat-due-today">{dueTodayCount}</p>
+              <p className="stat-value">{dueThisWeekCount}</p>
+              {dueTodayCount > 0 && <p className="stat-foot">{dueTodayCount} of them today</p>}
             </div>
-            <div className="card stat-card">
+            <div className="card stat-card" data-testid="all-tasks-stat-no-due-date">
               <div className="stat-topline">
-                <span className="stat-icon bg-surface-hover text-fg-subtle">
+                <span className="stat-icon bg-info-bg text-info-fg">
                   <Inbox className="h-3.5 w-3.5" />
                 </span>
                 <span className="stat-label">No due date</span>
               </div>
-              <p className="stat-value" data-testid="stat-no-due-date">{noDueDateCount}</p>
+              <p className="stat-value">{noDueDateCount}</p>
+              {noDueDateDominantList && (
+                <p className="stat-foot">
+                  {noDueDateDominantList.count} sitting in {noDueDateDominantList.name}
+                </p>
+              )}
+            </div>
+            <div className="card stat-card" data-testid="all-tasks-stat-done-this-week">
+              <div className="stat-topline">
+                <span className="stat-icon bg-pos-bg text-pos-fg">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                </span>
+                <span className="stat-label">Done this week</span>
+              </div>
+              <p className={cn('stat-value', doneThisWeekCount > 0 && 'pos')}>{doneThisWeekCount}</p>
             </div>
           </div>
 
@@ -540,7 +736,18 @@ export function TasksAllPage() {
         open={detailOpen}
         onOpenChange={setDetailOpen}
         availableLists={taskLists}
+        coMembers={coMembers}
         onSaved={handleDetailSaved}
+      />
+
+      <TaskFormModal
+        open={taskFormOpen}
+        onClose={() => setTaskFormOpen(false)}
+        lists={taskLists}
+        coMembers={coMembers}
+        initialContent={taskFormContent}
+        focusField={taskFormFocusField}
+        onSubmit={handleTaskFormSubmit}
       />
     </div>
   )
