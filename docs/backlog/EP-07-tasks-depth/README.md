@@ -42,6 +42,7 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | [FEAT-058](../../archive/ep-07-tasks-depth/FEAT-058-tasks-all-design-adoption.md) | All tasks page exact design adoption | [PR #239](https://github.com/moascode/daybook/pull/239), 2026-09-23 |
 | [FEAT-059](../../archive/ep-07-tasks-depth/FEAT-059-tasks-assigned-design-adoption.md) | Assigned to me page exact design adoption | [PR #240](https://github.com/moascode/daybook/pull/240), 2026-09-23 |
 | [FEAT-060](../../archive/ep-07-tasks-depth/FEAT-060-tasks-completed-design-adoption.md) | Completed page exact design adoption | [PR #241](https://github.com/moascode/daybook/pull/241), 2026-10-02 |
+| [FEAT-061](../../archive/ep-07-tasks-depth/FEAT-061-tasks-habits-design-adoption.md) | Habits page exact design adoption | [PR #243](https://github.com/moascode/daybook/pull/243), 2026-10-03 |
 
 ## Items still open
 
@@ -51,4 +52,4 @@ coverage (`e2e/91-*` through `e2e/99-*`).
 | [FEAT-031](FEAT-031-tasks-worth-knowing.md) | "Worth knowing" insight engine | Narrowed and folded into FEAT-054, 2026-09-22 |
 | [FEAT-055](FEAT-055-tasks-composer-reminder-shortcut.md) | Composer "Reminder" shortcut | Question it — needs a product decision on what a reminder even is first |
 | [FEAT-056](FEAT-056-tasks-composer-checklist-shortcut.md) | Composer "Checklist" shortcut | Probably — blocked on subtask-add support in `TaskDetailModal.tsx` |
-| [FEAT-061](FEAT-061-tasks-habits-design-adoption.md) | Habits page exact design adoption | Yes — rings/dots/consistency summary, continuation of the design-adoption pass, 2026-10-02 |
+| [FEAT-062](FEAT-062-tasks-list-detail-design-adoption.md) | List detail page exact design adoption | Yes — composer, real Recurring/Wallet band stats, wallet chips + assignees in List view, continuation of the design-adoption pass, 2026-10-03 |
