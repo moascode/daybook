@@ -625,12 +625,15 @@ function HabitCard({
 
 /** "Habit options" (⋮) popover — Archive / Delete. Same outside-click +
  * Escape pattern as `src/components/layout/AccountMenu.tsx`'s own menu, but
- * with its OWN small `.habit-menu` styling (review fix #10) rather than
- * reusing that menu's `.menu-panel` — a 328px panel fixed to the account
- * button's own corner of the app bar, which clipped and mispositioned once
- * reused for a small per-card popover anywhere narrower than 1280px. Also
- * carries real popup-menu semantics: `role="menu"`/`"menuitem"`, focus moves
- * into the first item on open and back to the trigger on close. */
+ * with its OWN small `.row-menu` styling (review fix #10; renamed from
+ * `.habit-menu` by FEAT-062 review fix #9 once `TaskListRow.tsx`'s
+ * `RowMoreMenu` started reusing this exact same CSS for tasks, not just
+ * habits) rather than reusing that menu's `.menu-panel` — a 328px panel
+ * fixed to the account button's own corner of the app bar, which clipped and
+ * mispositioned once reused for a small per-card popover anywhere narrower
+ * than 1280px. Also carries real popup-menu semantics: `role="menu"`/
+ * `"menuitem"`, focus moves into the first item on open and back to the
+ * trigger on close. */
 function HabitOptionsMenu({ onArchive, onDelete }: { onArchive: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -678,12 +681,12 @@ function HabitOptionsMenu({ onArchive, onDelete }: { onArchive: () => void; onDe
         <MoreVertical className="h-4 w-4" />
       </button>
       {open && (
-        <div className="habit-menu open" role="menu" aria-label="Habit options" data-testid="habit-options-menu">
+        <div className="row-menu open" role="menu" aria-label="Habit options" data-testid="habit-options-menu">
           <button
             type="button"
             role="menuitem"
             ref={firstItemRef}
-            className="habit-menu-item"
+            className="row-menu-item"
             onClick={() => {
               setOpen(false)
               onArchive()
@@ -695,7 +698,7 @@ function HabitOptionsMenu({ onArchive, onDelete }: { onArchive: () => void; onDe
           <button
             type="button"
             role="menuitem"
-            className="habit-menu-item"
+            className="row-menu-item"
             onClick={() => {
               setOpen(false)
               onDelete()

@@ -37,6 +37,20 @@ export interface TaskFormModalProps {
    * whatever text was already typed, mirroring Wallet's
    * `onOpenBlankForm({ merchant: trimmed })` pattern. */
   initialContent?: string
+  /**
+   * FEAT-062 review fix #4: pre-selects the "List" dropdown so a submission
+   * that never touches it lands exactly where the dropdown visibly shows —
+   * the page's own current list, not a silently-different default. Before
+   * this, the dropdown always defaulted to "Unsorted" while the caller
+   * (`TasksListDetailPage.tsx`) discarded whatever was picked anyway in
+   * favour of the current list — so the UI was lying about where a
+   * blank-looking draft would land. Now that the default IS the current
+   * list, the caller honours `form.listId` verbatim, including an explicit
+   * "Unsorted" choice. `null`/omitted defaults to "Unsorted", same as every
+   * other caller (TasksTodayPage.tsx, TasksAssignedPage.tsx) that doesn't
+   * pass this.
+   */
+  initialListId?: string | null
   /** 'assignee' autofocuses the Assignee field on open — the "Assign"
    * shortcut's entry point, since there's no existing task to assign yet. */
   focusField?: 'assignee'
@@ -59,10 +73,10 @@ interface FormState {
   dueTime: string
 }
 
-function getInitialState(initialContent?: string): FormState {
+function getInitialState(initialContent?: string, initialListId?: string | null): FormState {
   return {
     content: initialContent ?? '',
-    listId: '',
+    listId: initialListId ?? '',
     priority: 'none',
     assigneeId: '',
     dueDate: '',
@@ -83,24 +97,27 @@ export function TaskFormModal({
   lists,
   coMembers,
   initialContent,
+  initialListId,
   focusField,
   onSubmit,
 }: TaskFormModalProps) {
-  const [form, setForm] = useState<FormState>(() => getInitialState(initialContent))
+  const [form, setForm] = useState<FormState>(() => getInitialState(initialContent, initialListId))
   const [saving, setSaving] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevInitialContent, setPrevInitialContent] = useState(initialContent)
+  const [prevInitialListId, setPrevInitialListId] = useState(initialListId)
   const contentRef = useRef<HTMLInputElement>(null)
   const assigneeRef = useRef<HTMLSelectElement>(null)
 
   // Reset the form when the modal (re)opens — adjust state during render
   // rather than in an effect, mirroring TransactionForm.tsx's identical
   // pattern.
-  if (open !== prevOpen || initialContent !== prevInitialContent) {
+  if (open !== prevOpen || initialContent !== prevInitialContent || initialListId !== prevInitialListId) {
     setPrevOpen(open)
     setPrevInitialContent(initialContent)
+    setPrevInitialListId(initialListId)
     if (open) {
-      setForm(getInitialState(initialContent))
+      setForm(getInitialState(initialContent, initialListId))
     }
   }
 

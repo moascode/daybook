@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-03 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-03 (PR #243) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-061 — Tasks: Habits page exact design adoption
 
