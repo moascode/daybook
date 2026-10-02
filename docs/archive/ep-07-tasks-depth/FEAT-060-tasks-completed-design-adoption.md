@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-02 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-02 (PR #241) · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-060 — Tasks: Completed page exact design adoption
 
