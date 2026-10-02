@@ -46,3 +46,20 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-023](FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | Yes |
 | [FEAT-024](FEAT-024-shared-minimum-transfers.md) | Shared: group-wide minimum-transfer set | Yes — read the settlement CAS trap first |
 | [FEAT-025](FEAT-025-shared-split-rules.md) | Shared: split rules with staleness | Yes |
+| [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | Yes |
+| [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | Yes |
+| [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
+| [FEAT-066](FEAT-066-budgets-composer.md) | Budgets: mount the transaction composer | Yes |
+| [FEAT-067](FEAT-067-goals-composer.md) | Goals: mount the transaction composer | Yes |
+| [FEAT-068](FEAT-068-recurring-composer.md) | Recurring: mount the transaction composer | Yes |
+| [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
+
+**FEAT-063–FEAT-069, filed 2026-10-02**, are a second-pass design-adoption
+audit (same pipeline as the Tasks module's FEAT-054–062): the real running
+app at `:8788` diffed page-by-page against the rendered mockup DOM at
+`:4873`, after checking this epic's own table above so nothing already
+tracked here as computation work got double-filed as "design." Six of
+eight Wallet pages had a genuine, verified gap; Reports and (for its own
+content) Goals/Budgets/Recurring did not get new items beyond the composer —
+their visible gaps are this epic's own FEAT-018/019/020/021/022/023, already
+listed above, not drift.
