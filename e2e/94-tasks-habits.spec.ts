@@ -1,6 +1,10 @@
 /**
  * FEAT-029 — Tasks: Habits (`/tasks/habits`,
- * docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md).
+ * docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md). Markup updated
+ * for FEAT-061's design adoption (rings/dots replacing the old square grid,
+ * the "Habit options" popover replacing the two separate inline icon
+ * buttons) — see e2e/100-tasks-habits-design.spec.ts for coverage of the
+ * new cards themselves.
  *
  * Covers: creating a manually-tracked habit, toggling a grid day to build a
  * streak, archiving removing it from the default list, and the Wallet-linked
@@ -23,8 +27,8 @@ test.describe('94 — Tasks habits', () => {
 
     const card = page.getByTestId('habit-card').filter({ hasText: 'Stretch' })
     await expect(card).toBeVisible()
-    await expect(card.getByTestId('habit-current-streak')).toContainText('0 days')
-    await expect(card.getByTestId('habit-best-streak')).toContainText('Best: 0')
+    await expect(card.getByTestId('habit-current-streak')).toHaveText('0-day streak')
+    await expect(card.getByTestId('habit-best-streak')).toHaveText('best 0 days')
   })
 
   test('toggling today builds a 1-day streak, and toggling again reverts it', async ({ browser }) => {
@@ -37,11 +41,11 @@ test.describe('94 — Tasks habits', () => {
 
     const card = page.getByTestId('habit-card').filter({ hasText: 'Meditate' })
     await card.getByTestId(`habit-grid-day-${today}`).click()
-    await expect(card.getByTestId('habit-current-streak')).toContainText('1 day')
-    await expect(card.getByTestId('habit-best-streak')).toContainText('Best: 1')
+    await expect(card.getByTestId('habit-current-streak')).toHaveText('1-day streak')
+    await expect(card.getByTestId('habit-best-streak')).toHaveText('best 1 day')
 
     await card.getByTestId(`habit-grid-day-${today}`).click()
-    await expect(card.getByTestId('habit-current-streak')).toContainText('0 days')
+    await expect(card.getByTestId('habit-current-streak')).toHaveText('0-day streak')
   })
 
   test('a streak built through yesterday still reads correctly before today is toggled', async ({ browser }) => {
@@ -59,8 +63,8 @@ test.describe('94 — Tasks habits', () => {
     const card = page.getByTestId('habit-card').filter({ hasText: 'Journal' })
     // Not yet 0: today is due and not yet done, but the day isn't over, so it
     // must not zero out yesterday's kept day.
-    await expect(card.getByTestId('habit-current-streak')).toContainText('1 day')
-    await expect(card.getByTestId('habit-best-streak')).toContainText('Best: 1')
+    await expect(card.getByTestId('habit-current-streak')).toHaveText('1-day streak')
+    await expect(card.getByTestId('habit-best-streak')).toHaveText('best 1 day')
   })
 
   test('archiving a habit removes it from the default (non-archived) list', async ({ browser }) => {
@@ -72,7 +76,8 @@ test.describe('94 — Tasks habits', () => {
 
     const card = page.getByTestId('habit-card').filter({ hasText: 'Journal' })
     await expect(card).toBeVisible()
-    await card.getByRole('button', { name: 'Archive habit' }).click()
+    await card.getByRole('button', { name: 'Habit options' }).click()
+    await card.getByRole('menuitem', { name: 'Archive' }).click()
     await expect(page.getByTestId('habit-card').filter({ hasText: 'Journal' })).not.toBeVisible()
   })
 
@@ -88,8 +93,10 @@ test.describe('94 — Tasks habits', () => {
 
     const card = page.getByTestId('habit-card').filter({ hasText: 'No spend day' })
     await expect(card).toBeVisible()
-    await expect(card.getByTestId(`habit-grid-day-${today}`)).toBeDisabled()
-    await expect(card.getByTestId('habit-current-streak')).not.toContainText('0 days')
+    // A linked habit's dot carries no `role="button"` / click handler — it
+    // derives `done` automatically and can't be toggled by hand.
+    await expect(card.getByTestId(`habit-grid-day-${today}`)).not.toHaveAttribute('role', 'button')
+    await expect(card.getByTestId('habit-current-streak')).not.toHaveText('0-day streak')
 
     // A manual toggle is rejected server-side, not just hidden client-side.
     const habitsRes = await page.request.get(`${API}/habits`)
@@ -108,6 +115,6 @@ test.describe('94 — Tasks habits', () => {
     await page.reload()
 
     const cardAfter = page.getByTestId('habit-card').filter({ hasText: 'No spend day' })
-    await expect(cardAfter.getByTestId('habit-current-streak')).toContainText('0 days')
+    await expect(cardAfter.getByTestId('habit-current-streak')).toHaveText('0-day streak')
   })
 })
