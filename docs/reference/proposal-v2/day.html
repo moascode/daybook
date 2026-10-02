@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook — Day</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-theme="light">
+
+<!-- ============================ APP BAR ============================ -->
+<header class="appbar">
+  <div class="appbar-left">
+    <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="appbar-logo" href="day.html" aria-label="Daybook home">D</a>
+    <label class="search">
+      <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+      <input type="search" placeholder="Search transactions, tasks, accounts…" aria-label="Search across all modules">
+    </label>
+  </div>
+
+  <nav class="modtabs" aria-label="Modules">
+    <a class="modtab" href="day.html" aria-current="page" data-tip="Day">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span class="tip-label">Day</span>
+    </a>
+    <a class="modtab" href="tasks.html" data-tip="Tasks">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg>
+      <span class="count">6</span>
+      <span class="tip-label">Tasks</span>
+    </a>
+    <a class="modtab" href="dashboard.html" data-tip="Wallet">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg>
+      <span class="tip-label">Wallet</span>
+    </a>
+      <a class="modtab" href="trips.html" data-tip="Trips">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Trips</span>
+    </a>
+</nav>
+
+  <div class="appbar-right">
+    <button class="circle-btn" aria-label="Quick add">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="tip-label">Quick add</span>
+    </button>
+    <button class="circle-btn" aria-label="Notifications">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Notifications</span>
+    </button>
+    <div class="pop-anchor">
+      <button class="avatar-btn" onclick="toggleAccount()" aria-haspopup="menu" aria-expanded="false" aria-label="Your account">
+        <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+        <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="tip-label" style="left:auto;right:0;transform:none">Account</span>
+      </button>
+
+      <div class="menu-panel" id="account" role="menu">
+        <div class="pane show" id="pane-root">
+          <div class="menu-card">
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+              <span>
+                <span class="menu-you-name" style="display:block">moascode</span>
+                <span class="menu-you-sub">View your profile</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">H</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Household</span>
+                <span class="menu-you-sub">3 members · active ledger</span>
+              </span>
+              <svg class="icon-sm" viewBox="0 0 24 24" style="margin-left:auto;color:rgb(var(--accent))"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </button>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Personal</span>
+                <span class="menu-you-sub">Just you</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-btn-wide" role="menuitem">
+              <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c0-4 3.4-6.6 7.5-6.6s7.5 2.6 7.5 6.6"/></svg>
+              See all ledgers
+            </button>
+          </div>
+
+          <button class="menu-wide" role="menuitem" onclick="showPane('pane-settings')">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.9 15.2a1.7 1.7 0 0 0 .34 1.87 2.06 2.06 0 1 1-2.92 2.92 1.7 1.7 0 0 0-2.88 1.21 2.06 2.06 0 1 1-4.12 0 1.7 1.7 0 0 0-2.88-1.2 2.06 2.06 0 1 1-2.92-2.93A1.7 1.7 0 0 0 3.3 14.2a2.06 2.06 0 1 1 0-4.12A1.7 1.7 0 0 0 4.5 7.2a2.06 2.06 0 1 1 2.92-2.92 1.7 1.7 0 0 0 2.88-1.2 2.06 2.06 0 1 1 4.12 0 1.7 1.7 0 0 0 2.88 1.2 2.06 2.06 0 1 1 2.92 2.92 1.7 1.7 0 0 0 1.2 2.88 2.06 2.06 0 1 1 0 4.12 1.7 1.7 0 0 0-1.52 1Z"/></svg></span>
+            Settings &amp; privacy
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.25c-.9.47-1.35 1-1.35 1.85v.4"/><circle cx="12" cy="16.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            Help &amp; support
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem" onclick="toggleTheme()">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+            Display &amp; accessibility
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"/><path d="M12 8.5v3.2"/><circle cx="12" cy="13.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            <span>Report a problem <span class="sub">⌘ B</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M15 12H4m0 0 3-3m-3 3 3 3"/><path d="M10 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1"/></svg></span>
+            Log out
+          </button>
+          <div class="menu-foot">Privacy · Terms · Your data · Open source · More<br>Daybook 2.4 · everything stays on your hardware</div>
+        </div>
+
+        <div class="pane" id="pane-settings">
+          <div class="menu-head">
+            <button class="circle-btn" style="width:34px;height:34px" onclick="showPane('pane-root')" aria-label="Back"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <span class="title">Settings &amp; privacy</span>
+          </div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>
+            <span>Preferences <span class="sub">Language, currency, week start</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
+            <span>Privacy &amp; data <span class="sub">Backups, sync, export</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span>
+            <span>Household <span class="sub">Members, roles, invites</span></span>
+          </button>
+          <div class="menu-hr"></div>
+          <div class="menu-label" style="padding-left:var(--s3)">Module settings</div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+            <span>Wallet <span class="sub">Categories, budgets, import rules</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span>
+            <span>Tasks <span class="sub">Lists, reminders, recurrence</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+            <span>Day <span class="sub">What appears on the timeline</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg></span>
+            <span>Trips <span class="sub">Currencies, rates, packing templates</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="module-head">
+      <span class="module-head-mark"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+      <span>
+        <span class="module-head-name" style="display:block">Day</span>
+        <span class="module-head-sub">Everything, by date</span>
+      </span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <nav class="nav-group">
+      <a class="nav-item active" aria-current="page" href="day.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/></svg>
+        Today
+        <span class="nav-badge">9</span>
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        This week
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18"/><path d="M8 13h2M14 13h2M8 17h2M14 17h2"/></svg>
+        Calendar
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h4"/></svg>
+        Notes
+        <span class="nav-badge">2</span>
+      </a>
+    </nav>
+
+    <div class="nav-group">
+      <span class="u-label">Show on the timeline</span>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--accent));margin:0 2px"></span>
+        Tasks &amp; habits
+        <span class="nav-badge">on</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--neg));margin:0 2px"></span>
+        Money
+        <span class="nav-badge">on</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--warn));margin:0 2px"></span>
+        Scheduled &amp; bills
+        <span class="nav-badge">on</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--fg-faint));margin:0 2px"></span>
+        Notes
+        <span class="nav-badge">on</span>
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <span class="u-label">Review</span>
+      <a class="nav-item" href="#">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+        Weekly review
+      </a>
+      <a class="nav-item" href="#">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></svg>
+        On this day
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="trust-note u-label" style="padding:var(--s3) var(--s2);border-top:1px solid rgb(var(--line-subtle));display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:rgb(var(--fg-subtle))">
+      <svg class="icon-sm" viewBox="0 0 24 24" style="color:rgb(var(--accent))"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+      On your hardware
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <main class="content">
+
+      <div class="page-head">
+        <h1 class="page-title">Today</h1>
+        <span class="page-sub hide-mobile">Sunday 17 August</span>
+        <div class="page-actions">
+          <div class="datenav" role="group" aria-label="Change date">
+            <button aria-label="Previous day"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <button class="is-today">Today</button>
+            <button aria-label="Next day"><svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></button>
+          </div>
+          <div class="segment" role="tablist" aria-label="What to show">
+            <button role="tab" aria-selected="true">Everything</button>
+            <button role="tab" aria-selected="false">Tasks</button>
+            <button role="tab" aria-selected="false">Money</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- one input, both modules. this is the argument for Day being the landing tab. -->
+      <section class="composer">
+        <div class="composer-top">
+          <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+          <label class="composer-field">
+            <input type="text" placeholder="Add to today — try &ldquo;coffee 4.20 cash&rdquo; or &ldquo;call the plumber 3pm&rdquo;" aria-label="Add to today">
+            <span class="kbd">N</span>
+          </label>
+          <button class="composer-send" aria-label="Save entry"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12h16m0 0-6-6m6 6-6 6"/></svg></button>
+        </div>
+        <div class="composer-acts">
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14m0 0 5-5m-5 5-5-5"/></svg></span> Expense</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span> Task</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--surface-sunk));color:rgb(var(--fg-muted))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h4"/></svg></span> Note</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--calm-bg));color:rgb(var(--calm-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 4v4h-4"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 20v-4h4"/></svg></span> Habit</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg></span> Transfer</button>
+        </div>
+      </section>
+
+      <div class="dash">
+
+        <!-- ===== the day, in one band. two figures, deliberately equal. ===== -->
+        <section class="card card-pad c12">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Sunday 17 August</div>
+              <div class="card-sub">14 entries so far · 8 still to come</div>
+            </div>
+            <span class="chip chip-warn" style="margin-left:auto">Your heaviest and priciest day of the week</span>
+          </div>
+
+          <div class="band">
+            <div class="band-main" style="flex:1">
+              <div class="dayfigs">
+                <div class="dayfig">
+                  <div class="k">Done</div>
+                  <span class="v">3 <small>of 9</small></span>
+                  <div class="track" style="margin-top:var(--s2);max-width:150px"><i style="width:33%;background:rgb(var(--accent))"></i></div>
+                  <div class="s">2 of the 6 left are already late</div>
+                </div>
+                <div class="dayfig">
+                  <div class="k">Spent</div>
+                  <span class="v">−$138.90</span>
+                  <div class="track" style="margin-top:var(--s2);max-width:150px"><i style="width:62%;background:rgb(var(--neg))"></i></div>
+                  <div class="s">$18.99 more is scheduled tonight</div>
+                </div>
+              </div>
+            </div>
+            <div class="band-stats" style="margin-left:auto">
+              <div class="band-stat">
+                <div class="k">Money in</div>
+                <div class="v">$0.00</div>
+                <div class="s">payday is Friday</div>
+              </div>
+              <div class="band-stat">
+                <div class="k">Moved to savings</div>
+                <div class="v" style="color:rgb(var(--pos-fg))">$150.00</div>
+                <div class="s">Tokyo &amp; Kyoto · now 88%</div>
+              </div>
+              <div class="band-stat">
+                <div class="k">Still to happen</div>
+                <div class="v">6 <span style="font-size:var(--t-sm);font-weight:550;color:rgb(var(--fg-subtle))">tasks</span></div>
+                <div class="s">plus 2 scheduled charges</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <!-- the shape of the day before you read a word of it -->
+          <div class="ribbon" role="img" aria-label="The day from 6am to midnight: fourteen entries clustered between 7am and 2pm, then a quiet gap until three tasks and two charges after 6pm. It is now 2:32pm.">
+            <div class="ribbon-track"></div>
+            <div class="ribbon-past" style="width:47.4%"></div>
+            <i class="calm" style="left:6.5%"  title="07:10 Morning run"></i>
+            <i class="neg"  style="left:10.4%" title="07:52 Blue Bottle −$4.20"></i>
+            <i class="task" style="left:13.9%" title="08:30 Cancel the Adobe seat"></i>
+            <i class="neg"  style="left:20.5%" title="09:41 Whole Foods −$86.40"></i>
+            <i class="task" style="left:21.4%" title="09:48 Log the Whole Foods receipt"></i>
+            <i class="info" style="left:34.3%" title="12:10 Transfer to Japan trip $150"></i>
+            <i class="neg"  style="left:39.4%" title="13:05 Shell −$48.30"></i>
+            <i          style="left:42.6%" title="13:40 Note"></i>
+            <i class="ahead" style="left:50%"   title="15:00 Draft the Q3 handover doc"></i>
+            <i class="ahead" style="left:66.7%" title="18:00 Move rent to the joint account"></i>
+            <i class="ahead warn" style="left:72.2%;background:rgb(var(--warn) / .35);border-color:rgb(var(--warn))" title="19:00 Netflix $18.99"></i>
+            <i class="ahead" style="left:77.8%" title="20:00 Water the plants"></i>
+            <div class="now" style="left:47.4%"></div>
+            <span class="h" style="left:0;transform:none">06:00</span>
+            <span class="h" style="left:16.7%">09:00</span>
+            <span class="h" style="left:33.3%">12:00</span>
+            <span class="h" style="left:50%">15:00</span>
+            <span class="h" style="left:66.7%">18:00</span>
+            <span class="h" style="left:83.3%">21:00</span>
+            <span class="h" style="left:auto;right:0;transform:none">24:00</span>
+          </div>
+        </section>
+
+        <!-- ===== the timeline ===== -->
+        <section class="c8">
+          <div class="card card-pad">
+            <div class="card-head">
+              <div>
+                <div class="card-title">The day</div>
+                <div class="card-sub">Everything that happened, and everything still to</div>
+              </div>
+              <a class="section-action" href="#">Yesterday <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+            </div>
+
+            <div class="tlist">
+
+              <!-- carried in from before today -->
+              <div class="tl">
+                <div class="tl-time">overdue</div>
+                <div class="tl-mark"><button class="tcheck pri-high" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Renew home insurance before the 26th</div>
+                  <div class="tl-sub">
+                    <span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span>
+                    <span class="chip chip-neg">3 days late</span>
+                    <span class="sub-count"><svg class="icon-sm" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M8 6h13M8 12h13M8 18h13"/></svg>2 of 4</span>
+                  </div>
+                </div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">overdue</div>
+                <div class="tl-mark"><button class="tcheck" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Send Jordan the utilities receipt</div>
+                  <div class="tl-sub">
+                    <span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span>
+                    <span class="chip chip-neg">Yesterday</span>
+                    <span class="chip chip-mute">Wallet · settles $60</span>
+                  </div>
+                </div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <!-- the record -->
+              <div class="tl done">
+                <div class="tl-time">07:10</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Mark incomplete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Morning run</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--calm))"></i>Habit</span><span class="chip chip-pos">14-day streak</span></div>
+                </div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">07:52</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">Blue Bottle Coffee</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Dining out</span><span class="chip chip-mute">Amex ·· 4021</span></div>
+                </div>
+                <div class="tl-amt neg">−$4.20</div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl done">
+                <div class="tl-time">08:30</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Mark incomplete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Cancel the unused Adobe seat</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--alt))"></i>Work</span><span class="chip chip-pos">Recurring −$59.99/mo removed</span></div>
+                </div>
+                <div class="tl-amt pos">+$59.99<span style="font-weight:500;font-size:var(--t-xs);color:rgb(var(--fg-subtle))">/mo</span></div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">09:41</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">Whole Foods Market</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--pos))"></i>Groceries</span><span class="chip chip-mute">Joint checking</span><span class="chip chip-info">Split 3 ways · your $28.80</span></div>
+                </div>
+                <div class="tl-amt neg">−$86.40</div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl done">
+                <div class="tl-time">09:48</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Mark incomplete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Log the Whole Foods receipt</div>
+                  <div class="tl-sub">
+                    <span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span>
+                    <span class="chip chip-mute"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 15 4 15a3.5 3.5 0 0 1 0-7h5M15 9h5a3.5 3.5 0 0 1 0 7h-5M8.5 12h7"/></svg>Matched the 09:41 purchase</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">12:10</div>
+                <div class="tl-mark"><span class="tl-dot info"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">Transfer to the Japan trip</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Transfer</span><a class="tchip t-violet" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">Joint checking → Goals</span><span class="chip chip-pos">Goal now 88% funded · leaves in 29 days</span></div>
+                </div>
+                <div class="tl-amt plan">$150.00</div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">13:05</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">Shell Broadway</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--calm))"></i>Transport</span><span class="chip chip-warn">Needs a category check</span></div>
+                </div>
+                <div class="tl-amt neg">−$48.30</div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl">
+                <div class="tl-time">13:40</div>
+                <div class="tl-mark"><span class="tl-dot"></span></div>
+                <div class="tl-body">
+                  <div class="tl-note">Boiler made the noise again on the way out. Landlord replied to say he'd send someone Tuesday — worth holding the plumber quote until then.</div>
+                </div>
+              </div>
+
+              <!-- everything above is record. everything below is plan. -->
+              <div class="tl-now">
+                <div class="t">14:32</div>
+                <div class="pin"></div>
+                <div class="lbl">Now</div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">15:00</div>
+                <div class="tl-mark"><button class="tcheck" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Draft the Q3 handover doc</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--alt))"></i>Work</span><span class="sub-count"><svg class="icon-sm" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M8 6h13M8 12h13M8 18h13"/></svg>3 of 5</span><span class="chip chip-mute">Review is Tue 14:00</span></div>
+                </div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">18:00</div>
+                <div class="tl-mark"><button class="tcheck pri-med" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Move rent to the joint account</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span><span class="chip chip-warn">Rent leaves 09:00 tomorrow</span></div>
+                </div>
+                <div class="tl-amt plan">$1,800.00</div>
+                <div class="trow-actions"><button class="btn btn-secondary btn-sm">Transfer</button></div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">19:00</div>
+                <div class="tl-mark"><span class="tl-dot warn"></span></div>
+                <div class="tl-body">
+                  <div class="tl-title">Netflix</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Subscriptions</span><span class="chip chip-warn">Up $3 from last month</span></div>
+                </div>
+                <div class="tl-amt plan">−$18.99</div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">20:00</div>
+                <div class="tl-mark"><button class="tcheck" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Water the plants</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span><span class="chip chip-mute">Repeats every 3 days</span><span class="chip chip-mute">Jordan</span></div>
+                </div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">anytime</div>
+                <div class="tl-mark"><button class="tcheck" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Book the dentist</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--calm))"></i>Errands</span><span class="chip chip-warn">Moved 4 times</span></div>
+                </div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">anytime</div>
+                <div class="tl-mark"><button class="tcheck" aria-label="Complete task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body">
+                  <div class="tl-title">Reply to the landlord about the boiler</div>
+                  <div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span><span class="chip chip-mute">Answered in your 13:40 note</span></div>
+                </div>
+                <div class="trow-actions"><button class="btn btn-quiet btn-sm">Mark done</button></div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <!-- ===== right rail ===== -->
+        <div class="c4 stack">
+
+          <!-- the day's one action -->
+          <section class="card card-pad">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Close the day</div>
+                <div class="card-sub">Three loose ends before Sunday is a finished record</div>
+              </div>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 12h13m0 0-4-4m4 4-4 4"/><path d="M20 5v14"/></svg></div>
+              <div class="sug-main">
+                <div class="sug-title">6 tasks won't get done today</div>
+                <div class="sug-sub">Monday already has 4 — Tuesday is lighter</div>
+              </div>
+              <button class="btn btn-secondary btn-sm">Move</button>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="9"/></svg></div>
+              <div class="sug-main">
+                <div class="sug-title">Shell $48.30 needs a category</div>
+                <div class="sug-sub">Transport, like the last six times</div>
+              </div>
+              <button class="btn btn-secondary btn-sm">Accept</button>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--surface-sunk));color:rgb(var(--fg-muted))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h4"/></svg></div>
+              <div class="sug-main">
+                <div class="sug-title">Write a line about today</div>
+                <div class="sug-sub">You've written on 21 of the last 30 days</div>
+              </div>
+              <button class="btn btn-secondary btn-sm">Write</button>
+            </div>
+            <div class="divider" style="margin:var(--s4) 0 var(--s3)"></div>
+            <button class="btn btn-primary" style="width:100%">Close Sunday</button>
+          </section>
+
+          <!-- tomorrow -->
+          <section class="card card-pad">
+            <div class="card-head">
+              <div class="card-title">Tomorrow</div>
+              <a class="section-action" href="#">Monday 18 <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-7h6v7"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">Rent leaves the account</div><div class="psub">09:00 · joint checking</div></div>
+              <div class="tl-amt" style="font-size:var(--t-sm)">−$1,800</div>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">4 tasks scheduled</div><div class="psub">2 Household · 2 Work</div></div>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">After rent clears</div><div class="psub">$5,432.30 safe to spend</div></div>
+            </div>
+          </section>
+
+          <!-- the thing only a day ledger knows -->
+          <section class="card card-pad">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Against your usual Sunday</div>
+                <div class="card-sub">Averaged over the last 12 Sundays</div>
+              </div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Tasks due</div>
+                <div class="cmp-bar"><i class="now" style="width:100%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:44%"></i></div>
+              </div>
+              <div class="cmp-v">9 <span>usually 4</span></div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Spent by 14:30</div>
+                <div class="cmp-bar"><i class="now" style="width:100%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:45%"></i></div>
+              </div>
+              <div class="cmp-v">$139 <span>usually $62</span></div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Finished by now</div>
+                <div class="cmp-bar"><i class="now" style="width:60%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:100%"></i></div>
+              </div>
+              <div class="cmp-v">3 <span>usually 5</span></div>
+            </div>
+            <div class="divider" style="margin:var(--s3) 0"></div>
+            <div class="sug-sub" style="line-height:1.5">Groceries is most of the gap — $86 of the $139. The task load is the real outlier: Sunday carries nine and Saturday carries one.</div>
+          </section>
+
+          <!-- the journal payoff: a day ledger can show you the same date, before -->
+          <section class="card card-pad">
+            <div class="card-head">
+              <div>
+                <div class="card-title">On this day</div>
+                <div class="card-sub">Sunday 17 August, a year ago</div>
+              </div>
+            </div>
+            <div class="kv"><span class="k">Spent</span><span class="v">$212.40</span></div>
+            <div class="kv"><span class="k">Tasks finished</span><span class="v">6 of 7</span></div>
+            <div class="kv"><span class="k">Note</span><span class="v" style="font-weight:500;color:rgb(var(--fg-muted))">"Boiler serviced"</span></div>
+            <div class="divider" style="margin:var(--s3) 0"></div>
+            <div class="sug-sub" style="line-height:1.5">Same boiler, same weekend. It has come up in your notes four times in twelve months.</div>
+          </section>
+        </div>
+
+        <!-- ===== jump to any day. Day is also the app's history. ===== -->
+        <section class="card card-pad c12">
+          <div class="card-head">
+            <div>
+              <div class="card-title">August</div>
+              <div class="card-sub">Dots are what happened · the figure is that day's net</div>
+            </div>
+            <div class="heat-key" style="margin-left:auto">
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--accent))"></i> Tasks
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--neg));margin-left:var(--s2)"></i> Money
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--warn));margin-left:var(--s2)"></i> Scheduled
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--fg-faint));margin-left:var(--s2)"></i> Note
+            </div>
+          </div>
+          <div class="cal">
+            <div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div><div class="cal-dow">Sun</div>
+
+            <div class="cal-day muted"><span class="cal-n">28</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">29</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">30</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">31</span><span class="cal-amt">—</span></div>
+            <div class="cal-day"><span class="cal-n">1</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">−$212</span></div>
+            <div class="cal-day"><span class="cal-n">2</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$64</span></div>
+            <div class="cal-day"><span class="cal-n">3</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">−$98</span></div>
+
+            <div class="cal-day"><span class="cal-n">4</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$41</span></div>
+            <div class="cal-day"><span class="cal-n">5</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">$0</span></div>
+            <div class="cal-day"><span class="cal-n">6</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">−$127</span></div>
+            <div class="cal-day"><span class="cal-n">7</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$33</span></div>
+            <div class="cal-day"><span class="cal-n">8</span><span class="cal-dots"><i style="background:rgb(var(--pos))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt" style="color:rgb(var(--pos-fg))">+$3,140</span></div>
+            <div class="cal-day"><span class="cal-n">9</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$88</span></div>
+            <div class="cal-day"><span class="cal-n">10</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">−$154</span></div>
+
+            <div class="cal-day"><span class="cal-n">11</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$52</span></div>
+            <div class="cal-day"><span class="cal-n">12</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">−$19</span></div>
+            <div class="cal-day"><span class="cal-n">13</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">−$203</span></div>
+            <div class="cal-day"><span class="cal-n">14</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$47</span></div>
+            <div class="cal-day"><span class="cal-n">15</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">−$76</span></div>
+            <div class="cal-day"><span class="cal-n">16</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">−$29</span></div>
+            <div class="cal-day today sel"><span class="cal-n">17</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--info))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">−$139</span></div>
+
+            <div class="cal-day muted"><span class="cal-n">18</span><span class="cal-dots"><i style="background:rgb(var(--warn))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">−$1,800</span></div>
+            <div class="cal-day muted"><span class="cal-n">19</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">20</span><span class="cal-dots"><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">−$64</span></div>
+            <div class="cal-day muted"><span class="cal-n">21</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">22</span><span class="cal-dots"><i style="background:rgb(var(--warn))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">−$132</span></div>
+            <div class="cal-day muted"><span class="cal-n">23</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">24</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">—</span></div>
+
+            <div class="cal-day muted"><span class="cal-n">25</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">26</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">27</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">28</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">29</span><span class="cal-dots"><i style="background:rgb(var(--pos))"></i></span><span class="cal-amt" style="color:rgb(var(--pos-fg))">+$3,140</span></div>
+            <div class="cal-day muted"><span class="cal-n">30</span><span class="cal-amt">—</span></div>
+            <div class="cal-day muted"><span class="cal-n">31</span><span class="cal-amt">—</span></div>
+          </div>
+        </section>
+
+      </div>
+
+    </main>
+
+<button class="fab" aria-label="Add to today"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar">
+  <a href="day.html" class="active"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>Today</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Week</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18"/><path d="M8 13h2M14 13h2"/></svg>Calendar</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Review</a>
+</nav>
+
+<script>
+  function toggleTheme(){const b=document.body;b.setAttribute('data-theme',b.getAttribute('data-theme')==='dark'?'light':'dark');}
+  function openSidebar(){document.getElementById('sidebar').classList.add('open');document.querySelector('.sidebar-backdrop').classList.add('show');}
+  function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.querySelector('.sidebar-backdrop').classList.remove('show');}
+  function toggleAccount(){
+    const p=document.getElementById('account'); const open=p.classList.toggle('open');
+    p.parentElement.querySelector('[aria-haspopup]').setAttribute('aria-expanded',String(open));
+    if(!open) showPane('pane-root');
+  }
+  function showPane(id){
+    document.querySelectorAll('#account .pane').forEach(x=>x.classList.toggle('show', x.id===id));
+  }
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.pop-anchor')){
+      const p=document.getElementById('account');
+      if(p && p.classList.contains('open')){ p.classList.remove('open'); showPane('pane-root'); }
+    }
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){const p=document.getElementById('account'); if(p){p.classList.remove('open'); showPane('pane-root');}}
+  });
+  document.querySelectorAll('.segment').forEach(s=>s.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    s.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected', b===e.target));
+  }));
+  // ticking a task on the timeline settles it in place rather than removing it —
+  // Day is a record, so nothing ever leaves it.
+  document.querySelectorAll('.tl .tcheck').forEach(c=>c.addEventListener('click',()=>{
+    const row=c.closest('.tl');
+    const on=c.classList.toggle('on');
+    row.classList.toggle('done',on); row.classList.toggle('ahead',!on);
+  }));
+</script>
+</body>
+</html>

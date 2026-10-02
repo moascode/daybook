@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook — Overview</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-theme="light">
+
+<!-- ============================ APP BAR ============================ -->
+<header class="appbar">
+  <div class="appbar-left">
+    <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="appbar-logo" href="dashboard.html" aria-label="Daybook home">D</a>
+    <label class="search">
+      <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+      <input type="search" placeholder="Search transactions, tasks, accounts…" aria-label="Search across all modules">
+    </label>
+  </div>
+
+  <!-- modules. fixed set — icon only, name on hover, underline marks where you are. -->
+  <nav class="modtabs" aria-label="Modules">
+    <a class="modtab" href="day.html" data-tip="Day">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span class="tip-label">Day</span>
+    </a>
+    <a class="modtab" href="tasks.html" data-tip="Tasks">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg>
+      <span class="count">6</span>
+      <span class="tip-label">Tasks</span>
+    </a>
+    <a class="modtab" href="dashboard.html" aria-current="page" data-tip="Wallet">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg>
+      <span class="tip-label">Wallet</span>
+    </a>
+      <a class="modtab" href="trips.html" data-tip="Trips">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Trips</span>
+    </a>
+</nav>
+
+  <div class="appbar-right">
+    <button class="circle-btn" aria-label="Quick add">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="tip-label">Quick add</span>
+    </button>
+    <button class="circle-btn" aria-label="Notifications">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Notifications</span>
+    </button>
+    <div class="pop-anchor">
+      <button class="avatar-btn" onclick="toggleAccount()" aria-haspopup="menu" aria-expanded="false" aria-label="Your account">
+        <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+        <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="tip-label" style="left:auto;right:0;transform:none">Account</span>
+      </button>
+
+      <div class="menu-panel" id="account" role="menu">
+        <!-- root pane -->
+        <div class="pane show" id="pane-root">
+          <div class="menu-card">
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+              <span>
+                <span class="menu-you-name" style="display:block">moascode</span>
+                <span class="menu-you-sub">View your profile</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">H</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Household</span>
+                <span class="menu-you-sub">3 members · active ledger</span>
+              </span>
+              <svg class="icon-sm" viewBox="0 0 24 24" style="margin-left:auto;color:rgb(var(--accent))"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </button>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Personal</span>
+                <span class="menu-you-sub">Just you</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-btn-wide" role="menuitem">
+              <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c0-4 3.4-6.6 7.5-6.6s7.5 2.6 7.5 6.6"/></svg>
+              See all ledgers
+            </button>
+          </div>
+
+          <button class="menu-wide" role="menuitem" onclick="showPane('pane-settings')">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.9 15.2a1.7 1.7 0 0 0 .34 1.87 2.06 2.06 0 1 1-2.92 2.92 1.7 1.7 0 0 0-2.88 1.21 2.06 2.06 0 1 1-4.12 0 1.7 1.7 0 0 0-2.88-1.2 2.06 2.06 0 1 1-2.92-2.93A1.7 1.7 0 0 0 3.3 14.2a2.06 2.06 0 1 1 0-4.12A1.7 1.7 0 0 0 4.5 7.2a2.06 2.06 0 1 1 2.92-2.92 1.7 1.7 0 0 0 2.88-1.2 2.06 2.06 0 1 1 4.12 0 1.7 1.7 0 0 0 2.88 1.2 2.06 2.06 0 1 1 2.92 2.92 1.7 1.7 0 0 0 1.2 2.88 2.06 2.06 0 1 1 0 4.12 1.7 1.7 0 0 0-1.52 1Z"/></svg></span>
+            Settings &amp; privacy
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.25c-.9.47-1.35 1-1.35 1.85v.4"/><circle cx="12" cy="16.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            Help &amp; support
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem" onclick="toggleTheme()">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+            Display &amp; accessibility
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"/><path d="M12 8.5v3.2"/><circle cx="12" cy="13.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            <span>Report a problem <span class="sub">⌘ B</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M15 12H4m0 0 3-3m-3 3 3 3"/><path d="M10 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1"/></svg></span>
+            Log out
+          </button>
+          <div class="menu-foot">Privacy · Terms · Your data · Open source · More<br>Daybook 2.4 · everything stays on your hardware</div>
+        </div>
+
+        <!-- settings pane: global first, then per module -->
+        <div class="pane" id="pane-settings">
+          <div class="menu-head">
+            <button class="circle-btn" style="width:34px;height:34px" onclick="showPane('pane-root')" aria-label="Back"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <span class="title">Settings &amp; privacy</span>
+          </div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>
+            <span>Preferences <span class="sub">Language, currency, week start</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
+            <span>Privacy &amp; data <span class="sub">Backups, sync, export</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span>
+            <span>Household <span class="sub">Members, roles, invites</span></span>
+          </button>
+          <div class="menu-hr"></div>
+          <div class="menu-label" style="padding-left:var(--s3)">Module settings</div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+            <span>Wallet <span class="sub">Categories, budgets, import rules</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span>
+            <span>Tasks <span class="sub">Lists, reminders, recurrence</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+            <span>Day <span class="sub">What appears on the timeline</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg></span>
+            <span>Trips <span class="sub">Currencies, rates, packing templates</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="module-head">
+      <span class="module-head-mark"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+      <span>
+        <span class="module-head-name" style="display:block">Wallet</span>
+        <span class="module-head-sub">Household ledger</span>
+      </span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <nav class="nav-group">
+      <a class="nav-item active" aria-current="page" href="dashboard.html">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Overview
+      </a>
+      <a class="nav-item " href="transactions.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg>
+        Transactions
+      </a>
+      <a class="nav-item " href="accounts.html">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/><circle cx="6.5" cy="14.5" r="1"/></svg>
+        Accounts
+      </a>
+      <a class="nav-item " href="shared.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/><path d="M15 13.6c2.9.2 5 2.6 5 6.4"/></svg>
+        Shared
+        <span class="nav-badge">2</span>
+      </a>
+    </nav>
+
+    <div class="nav-group">
+      <span class="u-label">Plan</span>
+      <a class="nav-item " href="budgets.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>
+        Budgets
+      </a>
+      <a class="nav-item " href="goals.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
+        Goals
+      </a>
+      <a class="nav-item " href="recurring.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 4v4h-4"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 20v-4h4"/></svg>
+        Recurring
+      </a>
+      <a class="nav-item " href="reports.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+        Reports
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="trust-note u-label" style="padding:var(--s3) var(--s2);border-top:1px solid rgb(var(--line-subtle));display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:rgb(var(--fg-subtle))">
+      <svg class="icon-sm" viewBox="0 0 24 24" style="color:rgb(var(--accent))"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+      On your hardware
+    </div>
+  </aside>
+
+  <div class="main-col">
+
+
+    <main class="content">
+
+      <div class="page-head">
+        <h1 class="page-title">Overview</h1>
+        <span class="page-sub hide-mobile">Wallet · 1–17 August</span>
+        <div class="page-actions">
+          <div class="segment" role="tablist">
+            <button role="tab" aria-selected="true">Month</button>
+            <button role="tab" aria-selected="false">Year</button>
+          </div>
+
+          <button class="btn btn-secondary"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg> Settle up <span class="chip chip-mute" style="margin-left:2px">2</span></button>
+        </div>
+      </div>
+
+      <section class="composer">
+        <div class="composer-top">
+          <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+          <label class="composer-field">
+            <input type="text" placeholder="Add a transaction — try &ldquo;coffee 4.20 cash&rdquo;" aria-label="Add a transaction">
+            <span class="kbd">N</span>
+          </label>
+          <button class="composer-send" aria-label="Save transaction"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12h16m0 0-6-6m6 6-6 6"/></svg></button>
+        </div>
+        <div class="composer-acts">
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span> Expense</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span> Income</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg></span> Transfer</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span> Split</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--surface-sunk));color:rgb(var(--fg-muted))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3v11M8 10.5l4 4 4-4"/><path d="M4 19.5h16"/></svg></span> Import CSV</button>
+        </div>
+      </section>
+
+      <div class="dash">
+
+        <!-- ============ A. hero + the account you check ============ -->
+        <section class="hero c8">
+          <div class="hero-eyebrow">Household net worth</div>
+          <div class="hero-greeting">Good afternoon 👋 — you're $1,012 ahead of last month</div>
+
+          <div class="hero-body">
+            <div class="hero-main">
+              <div class="u-label" style="color:rgb(255 255 255/.72)">Total net worth</div>
+              <div class="hero-figure-row" style="margin-top:var(--s1)">
+                <div class="hero-figure">$48,206<span class="cents">.18</span></div>
+                <span class="chip chip-glass">
+                  <svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg>2.1% vs last month
+                </span>
+              </div>
+            </div>
+            <div class="hero-stats">
+              <div>
+                <div class="hero-stat-k">Money in</div>
+                <div class="hero-stat-v">$6,420.00</div>
+              </div>
+              <div>
+                <div class="hero-stat-k">Money out</div>
+                <div class="hero-stat-v">$3,226.40</div>
+              </div>
+              <div>
+                <div class="hero-stat-k" style="color:#fff">Kept</div>
+                <div class="hero-stat-v">$3,193.60</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="acct acct-feature c4" style="gap:var(--s4)">
+          <div class="acct-top">
+            <div class="acct-mark"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/></svg></div>
+            <div>
+              <div class="acct-name">Joint checking</div>
+              <div class="acct-sub">•••• 4821 · synced 09:00</div>
+            </div>
+            <button class="icon-btn" style="margin-left:auto;color:rgb(255 255 255/.7)" aria-label="Account options"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          </div>
+          <div>
+            <div class="acct-bal" style="font-size:var(--t-2xl)">$9,412.30</div>
+            <div class="acct-sub" style="margin-top:var(--s1)">$7,232.30 safe to spend after $2,180 of bills</div>
+          </div>
+          <div style="display:flex;gap:var(--s2);margin-top:auto">
+            <button class="btn" style="flex:1;background:rgb(255 255 255/.14);color:#fff">Transfer</button>
+            <button class="btn" style="flex:1;background:rgb(255 255 255/.14);color:#fff">All accounts</button>
+          </div>
+        </section>
+
+        <!-- ============ B. what's already committed ============ -->
+        <section class="card card-pad c4">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Coming up</div>
+              <div class="card-sub">Next 5 days</div>
+            </div>
+            <a class="section-action" href="#">All bills <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+          </div>
+          <div class="prow">
+            <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12"/><path d="M9 21v-7h6v7"/></svg></div>
+            <div><div class="pname">Rent</div><div class="psub">Tomorrow · Joint checking</div></div>
+            <div class="pamt">$1,800.00</div>
+          </div>
+          <div class="prow">
+            <div class="tavatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M5 12.5a10 10 0 0 1 14 0M8 16a5.5 5.5 0 0 1 8 0"/><circle cx="12" cy="19" r=".8" fill="currentColor" stroke="none"/></svg></div>
+            <div><div class="pname">Internet</div><div class="psub">21 Aug · autopay</div></div>
+            <div class="pamt">$60.00</div>
+          </div>
+          <div class="prow">
+            <div class="tavatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10 9 5 3-5 3z"/></svg></div>
+            <div><div class="pname">Netflix</div><div class="psub">22 Aug · autopay</div></div>
+            <div class="pamt">$15.00</div>
+          </div>
+          <div class="prow">
+            <div class="tavatar" style="background:rgb(var(--calm-bg));color:rgb(var(--calm-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></svg></div>
+            <div><div class="pname">Phone</div><div class="psub">22 Aug · autopay</div></div>
+            <div class="pamt">$32.00</div>
+          </div>
+          <div class="divider" style="margin-top:auto"></div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--t-sm)">
+            <span style="color:rgb(var(--fg-subtle))">Total due</span>
+            <span class="money" style="font-weight:600">$1,907.00</span>
+          </div>
+        </section>
+
+        <section class="card card-pad c4">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Budget pace</div>
+              <div class="card-sub">The line marks where you should be on day 17</div>
+            </div>
+          </div>
+          <div class="budget">
+            <div class="brow-top"><span class="brow-name">Groceries</span><span class="brow-val">$604 of $700</span></div>
+            <div class="budget-track">
+              <div class="budget-fill" style="width:86%;background:rgb(var(--warn))"></div>
+              <div class="budget-mark" style="left:55%"></div>
+            </div>
+          </div>
+          <div class="budget">
+            <div class="brow-top"><span class="brow-name">Dining out</span><span class="brow-val">$206 of $250</span></div>
+            <div class="budget-track">
+              <div class="budget-fill" style="width:82%;background:rgb(var(--neg))"></div>
+              <div class="budget-mark" style="left:55%"></div>
+            </div>
+          </div>
+          <div class="budget">
+            <div class="brow-top"><span class="brow-name">Transport</span><span class="brow-val">$98 of $220</span></div>
+            <div class="budget-track">
+              <div class="budget-fill" style="width:45%;background:rgb(var(--pos))"></div>
+              <div class="budget-mark" style="left:55%"></div>
+            </div>
+          </div>
+          <div class="budget">
+            <div class="brow-top"><span class="brow-name">Subscriptions</span><span class="brow-val">$74 of $90</span></div>
+            <div class="budget-track">
+              <div class="budget-fill" style="width:82%;background:rgb(var(--warn))"></div>
+              <div class="budget-mark" style="left:55%"></div>
+            </div>
+          </div>
+          <div class="divider" style="margin-top:auto"></div>
+          <div style="display:flex;align-items:center;gap:var(--s2);font-size:var(--t-sm);color:rgb(var(--fg-subtle))">
+            <span class="chip chip-neg">2 over pace</span>
+            <span>Dining out runs out ~24 Aug.</span>
+          </div>
+        </section>
+
+        <section class="card card-pad c4">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Shared</div>
+              <div class="card-sub">Household · 3 members</div>
+            </div>
+            <a class="section-action" href="#">Settle up <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+          </div>
+          <div class="prow">
+            <div class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</div>
+            <div><div class="pname">Priya owes you</div><div class="psub">4 shared transactions</div></div>
+            <div class="pamt" style="color:rgb(var(--pos-fg))">$62.40</div>
+          </div>
+          <div class="prow">
+            <div class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">J</div>
+            <div><div class="pname">You owe Jordan</div><div class="psub">Utilities split</div></div>
+            <div class="pamt">$28.00</div>
+          </div>
+          <div class="prow">
+            <div class="avatar" style="background:rgb(var(--calm-bg));color:rgb(var(--calm-fg))">S</div>
+            <div><div class="pname">Sam owes you</div><div class="psub">Groceries · 2 items</div></div>
+            <div class="pamt" style="color:rgb(var(--pos-fg))">$18.60</div>
+          </div>
+          <div class="divider" style="margin-top:auto"></div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--t-sm)">
+            <span style="color:rgb(var(--fg-subtle))">Net position</span>
+            <span class="money" style="font-weight:600;color:rgb(var(--pos-fg))">+$53.00</span>
+          </div>
+        </section>
+
+        <!-- ============ C. how the month is running ============ -->
+        <section class="card card-pad c12">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Spend pace</div>
+              <div class="card-sub">Running total this month vs. your usual</div>
+            </div>
+            <div class="segment" role="tablist" style="margin-left:auto">
+              <button role="tab" aria-selected="false">Week</button>
+              <button role="tab" aria-selected="true">Month</button>
+              <button role="tab" aria-selected="false">Quarter</button>
+              <button role="tab" aria-selected="false">Year</button>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:baseline;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+            <div class="money" style="font-size:var(--t-xl);font-weight:660;letter-spacing:-.028em">$3,226.40</div>
+            <span class="chip chip-warn">$538 above usual</span>
+            <span class="hide-mobile" style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">tracking to <b class="money" style="font-weight:600;color:rgb(var(--fg-muted))">$6,096</b> by month end</span>
+            <div class="legend" style="margin-left:auto">
+              <span><i style="background:rgb(var(--accent))"></i>This month</span>
+              <span style="color:rgb(var(--fg-faint))"><i class="dash"></i><span style="color:rgb(var(--fg-subtle))">Your usual</span></span>
+              <span><i style="background:rgb(var(--accent));opacity:.45"></i>Projected</span>
+            </div>
+          </div>
+
+          <div class="chart">
+            <svg viewBox="0 0 730 210" style="height:280px" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Cumulative spending this month is $3,226, about $538 above the usual pace for day 17, and projected to reach $6,096 by month end.">
+              <g class="chart-grid">
+                <line x1="44" y1="162" x2="712" y2="162"/>
+                <line x1="44" y1="111.3" x2="712" y2="111.3" stroke-dasharray="2 4"/>
+                <line x1="44" y1="60.7" x2="712" y2="60.7" stroke-dasharray="2 4"/>
+                <line x1="44" y1="10" x2="712" y2="10" stroke-dasharray="2 4"/>
+              </g>
+              <g class="chart-axis" text-anchor="end">
+                <text x="36" y="166">$0</text><text x="36" y="115">$2k</text>
+                <text x="36" y="64">$4k</text><text x="36" y="14">$6k</text>
+              </g>
+              <g class="chart-axis" text-anchor="middle">
+                <text x="44" y="182">1</text><text x="133.1" y="182">5</text><text x="244.4" y="182">10</text>
+                <text x="355.7" y="182">15</text><text x="467.1" y="182">20</text><text x="578.4" y="182">25</text><text x="712" y="182">31</text>
+              </g>
+              <defs>
+                <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="rgb(var(--accent))" stop-opacity=".14"/>
+                  <stop offset="100%" stop-color="rgb(var(--accent))" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M44.0,159.0 L66.3,156.8 L88.5,155.4 L110.8,150.5 L133.1,144.5 L155.3,134.1 L177.6,124.3 L199.9,121.8 L222.1,119.9 L244.4,116.6 L266.7,115.1 L288.9,109.9 L311.2,98.0 L333.5,88.9 L355.7,86.6 L378.0,83.1 L400.3,80.3 L400.3,162 L44,162 Z" fill="url(#ag)"/>
+              <path d="M44.0,162.0 L155.3,139.9 L266.7,117.2 L378.0,93.9 L489.3,69.9 L600.7,45.4 L712.0,20.1"
+                    fill="none" stroke="rgb(var(--fg-faint))" stroke-width="1.5" stroke-dasharray="4 4" stroke-linecap="round"/>
+              <path d="M44.0,159.0 L66.3,156.8 L88.5,155.4 L110.8,150.5 L133.1,144.5 L155.3,134.1 L177.6,124.3 L199.9,121.8 L222.1,119.9 L244.4,116.6 L266.7,115.1 L288.9,109.9 L311.2,98.0 L333.5,88.9 L355.7,86.6 L378.0,83.1 L400.3,80.3"
+                    fill="none" stroke="rgb(var(--accent))" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+              <path d="M400.3,80.3 L444.8,69.9 L489.3,59.5 L533.9,49.1 L578.4,38.7 L622.9,28.3 L667.5,18.0 L712.0,7.6"
+                    fill="none" stroke="rgb(var(--accent))" stroke-width="2" stroke-dasharray="5 5" stroke-opacity=".45" stroke-linecap="round"/>
+              <line x1="400.3" y1="10" x2="400.3" y2="162" stroke="rgb(var(--line-strong))" stroke-width="1"/>
+              <text x="400.3" y="200" class="chart-axis" text-anchor="middle" style="fill:rgb(var(--fg-subtle));font-weight:600">today</text>
+              <circle cx="400.3" cy="80.3" r="4.5" fill="rgb(var(--surface))" stroke="rgb(var(--accent))" stroke-width="2.5"/>
+            </svg>
+            <div class="tip" style="left:53%; top:34%">
+              <div class="big">$3,226.40</div>
+              <div class="sub">Day 17 · usual is $2,688</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============ D. where it goes + rhythm ============ -->
+        <section class="card card-pad c6">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Where it goes</div>
+              <div class="card-sub">Share of everything spent this month</div>
+            </div>
+            <a class="section-action" href="#">Full report <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+          </div>
+          <div class="donut-wrap">
+            <div class="donut">
+              <svg viewBox="0 0 176 176" role="img" aria-label="Spending by category: rent and bills 30.4%, everything else 21.3%, groceries 18.7%, clothes 9.2%, transport 8.3%, cafés 6.4%, sport 5.7%.">
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--track))" stroke-width="22"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--info))"   stroke-dasharray="131.7 439.8" stroke-dashoffset="0"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--calm))"   stroke-dasharray="80.2 439.8"  stroke-dashoffset="-133.7"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--alt))"    stroke-dasharray="38.5 439.8"  stroke-dashoffset="-215.9"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--b-400))"  stroke-dasharray="34.5 439.8"  stroke-dashoffset="-256.4"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--warn))"   stroke-dasharray="26.1 439.8"  stroke-dashoffset="-292.9"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--t-400))"  stroke-dasharray="23.1 439.8"  stroke-dashoffset="-321.0"/>
+                <circle cx="88" cy="88" r="70" stroke="rgb(var(--fg-faint))" stroke-opacity=".55" stroke-dasharray="91.7 439.8" stroke-dashoffset="-346.1"/>
+              </svg>
+              <div class="donut-center">
+                <span class="k">THIS MONTH</span>
+                <span class="v">$3,226.40</span>
+              </div>
+            </div>
+            <div class="donut-legend">
+              <div class="dl-row"><i style="background:rgb(var(--info))"></i><span class="n">Rent &amp; bills</span><span class="a">$980.00</span><span class="p">30.4%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--calm))"></i><span class="n">Groceries</span><span class="a">$604.36</span><span class="p">18.7%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--alt))"></i><span class="n">Clothes &amp; shoes</span><span class="a">$296.65</span><span class="p">9.2%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--b-400))"></i><span class="n">Transport</span><span class="a">$268.20</span><span class="p">8.3%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--warn))"></i><span class="n">Cafés &amp; restaurants</span><span class="a">$206.48</span><span class="p">6.4%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--t-400))"></i><span class="n">Sport</span><span class="a">$182.44</span><span class="p">5.7%</span></div>
+              <div class="dl-row"><i style="background:rgb(var(--fg-faint));opacity:.55"></i><span class="n">Everything else</span><span class="a">$688.27</span><span class="p">21.3%</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card card-pad c6">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Week rhythm</div>
+              <div class="card-sub">Daily spend, last 7 days</div>
+            </div>
+          </div>
+          <div class="bars" style="margin-top:auto">
+            <div class="bars-avg" style="bottom:87px"></div>
+            <div class="bar"><span class="bar-val">$88</span><div class="bar-fill" style="height:30px"></div><span class="bar-day">Mon</span></div>
+            <div class="bar"><span class="bar-val">$140</span><div class="bar-fill" style="height:48px"></div><span class="bar-day">Tue</span></div>
+            <div class="bar"><span class="bar-val">$111</span><div class="bar-fill" style="height:38px"></div><span class="bar-day">Wed</span></div>
+            <div class="bar"><span class="bar-val">$58</span><div class="bar-fill" style="height:20px"></div><span class="bar-day">Thu</span></div>
+            <div class="bar"><span class="bar-val">$205</span><div class="bar-fill" style="height:70px"></div><span class="bar-day">Fri</span></div>
+            <div class="bar hi"><span class="bar-val">$470</span><div class="bar-fill" style="height:160px"></div><span class="bar-day">Sat</span></div>
+            <div class="bar hi"><span class="bar-val">$362</span><div class="bar-fill" style="height:123px"></div><span class="bar-day">Sun</span></div>
+          </div>
+          <div class="divider"></div>
+          <div style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">Daily average <b style="color:rgb(var(--fg));font-weight:600">$190</b> (dashed). Weekends run <b style="color:rgb(var(--fg));font-weight:600">2.3×</b> higher — Saturday alone was <b style="color:rgb(var(--fg));font-weight:600">$470</b>.</div>
+        </section>
+
+        <!-- ============ E. detail ============ -->
+        <section class="card card-pad c8">
+          <div class="card-head">
+            <div class="card-title">Recent activity</div>
+            <a class="section-action" href="transactions.html">All transactions <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></a>
+          </div>
+          <div class="tlist">
+            <div class="trow">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--calm-bg));color:rgb(var(--calm-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 7h16l-1.5 12.5a2 2 0 0 1-2 1.5H7.5a2 2 0 0 1-2-1.5Z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></div>
+                <div style="min-width:0"><div class="tname">Whole Foods Market</div><div class="tsub">Card •••• 4821</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--calm))"></i>Groceries</span></div>
+              <div class="tmeta col-mobile-hide">Today 09:42</div>
+              <div class="amt neg money">−$84.20</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 9h13a3 3 0 0 1 0 6h-1"/><path d="M4 9v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V9"/><path d="M7 3c-.8 1-.8 2 0 3M11 3c-.8 1-.8 2 0 3"/></svg></div>
+                <div style="min-width:0"><div class="tname">Blue Bottle Coffee</div><div class="tsub">Split with Priya</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--warn))"></i>Cafés</span></div>
+              <div class="tmeta col-mobile-hide">Today 08:15</div>
+              <div class="amt neg money">−$6.40</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Payroll — Acme Co.</div><div class="tsub">Recurring monthly</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--pos))"></i>Income</span></div>
+              <div class="tmeta col-mobile-hide">15 Aug</div>
+              <div class="amt pos money">+$4,200.00</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 8a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v11a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1Z"/><path d="M9 8V6M15 8V6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Uniqlo</div><div class="tsub">Card •••• 4821</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--alt))"></i>Clothing</span></div>
+              <div class="tmeta col-mobile-hide">14 Aug</div>
+              <div class="amt neg money">−$58.90</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--calm-bg));color:rgb(var(--calm-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div>
+                <div style="min-width:0"><div class="tname">Gym membership</div><div class="tsub">Recurring monthly</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--t-400))"></i>Sport</span></div>
+              <div class="tmeta col-mobile-hide">14 Aug</div>
+              <div class="amt neg money">−$41.30</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card card-pad c4">
+          <div class="card-head">
+            <div class="card-title">Top merchants</div>
+            <div class="segment" role="tablist" style="margin-left:auto">
+              <button role="tab" aria-selected="true">Month</button>
+              <button role="tab" aria-selected="false">Year</button>
+            </div>
+          </div>
+          <div class="prow" style="padding:var(--s2) 0">
+            <div style="min-width:0"><div class="pname">Whole Foods Market</div><div class="psub">6 visits · $61.40 avg</div></div>
+            <div class="pamt">$368.40</div>
+          </div>
+          <div class="prow" style="padding:var(--s2) 0">
+            <div style="min-width:0"><div class="pname">Uber</div><div class="psub">11 visits · $14.20 avg</div></div>
+            <div class="pamt">$156.20</div>
+          </div>
+          <div class="prow" style="padding:var(--s2) 0">
+            <div style="min-width:0"><div class="pname">Blue Bottle Coffee</div><div class="psub">14 visits · $6.10 avg</div></div>
+            <div class="pamt">$85.40</div>
+          </div>
+          <div class="prow" style="padding:var(--s2) 0">
+            <div style="min-width:0"><div class="pname">Uniqlo</div><div class="psub">2 visits · $41.30 avg</div></div>
+            <div class="pamt">$82.60</div>
+          </div>
+          <div class="prow" style="padding:var(--s2) 0">
+            <div style="min-width:0"><div class="pname">Shell</div><div class="psub">3 visits · $24.90 avg</div></div>
+            <div class="pamt">$74.70</div>
+          </div>
+          <div class="divider" style="margin-top:auto"></div>
+          <div style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">Blue Bottle is your most <b style="color:rgb(var(--fg));font-weight:600">frequent</b> merchant, Whole Foods your most <b style="color:rgb(var(--fg));font-weight:600">expensive</b>.</div>
+        </section>
+
+      </div>
+
+    </main>
+<!-- mobile chrome -->
+<button class="fab" aria-label="Add transaction"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar">
+  <a href="dashboard.html" class="active"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+  <a href="transactions.html" class=""><svg class="icon" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg>Activity</a>
+  <a href="accounts.html" class=""><svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/></svg>Accounts</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>Budgets</a>
+</nav>
+
+<script>
+  function toggleTheme(){const b=document.body;b.setAttribute('data-theme',b.getAttribute('data-theme')==='dark'?'light':'dark');}
+  function openSidebar(){document.getElementById('sidebar').classList.add('open');document.querySelector('.sidebar-backdrop').classList.add('show');}
+  function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.querySelector('.sidebar-backdrop').classList.remove('show');}
+  function toggleAccount(){
+    const p=document.getElementById('account'); const open=p.classList.toggle('open');
+    p.parentElement.querySelector('[aria-haspopup]').setAttribute('aria-expanded',String(open));
+    if(!open) showPane('pane-root');
+  }
+  function showPane(id){
+    document.querySelectorAll('#account .pane').forEach(x=>x.classList.toggle('show', x.id===id));
+  }
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.pop-anchor')){
+      const p=document.getElementById('account');
+      if(p && p.classList.contains('open')){ p.classList.remove('open'); showPane('pane-root'); }
+    }
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){const p=document.getElementById('account'); if(p){p.classList.remove('open'); showPane('pane-root');}}
+  });
+  document.querySelectorAll('.segment').forEach(s=>s.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    s.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected', b===e.target));
+  }));
+</script>
+</body>
+</html>

@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook &mdash; Today &mdash; day 3</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-theme="light">
+
+<header class="appbar">
+  <div class="appbar-left">
+    <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="appbar-logo" href="day.html" aria-label="Daybook home">D</a>
+    <label class="search">
+      <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+      <input type="search" placeholder="Search transactions, tasks, trips&hellip;" aria-label="Search across all modules">
+    </label>
+  </div>
+
+  <nav class="modtabs" aria-label="Modules"><a class="modtab" href="day.html" aria-current="page" data-tip="Day"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg><span class="tip-label">Day</span></a><a class="modtab" href="tasks.html" data-tip="Tasks"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg><span class="count">6</span><span class="tip-label">Tasks</span></a><a class="modtab" href="dashboard.html" data-tip="Wallet"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg><span class="tip-label">Wallet</span></a><a class="modtab" href="trips.html" data-tip="Trips"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg><span class="count">3</span><span class="tip-label">Trips</span></a></nav>
+
+  <div class="appbar-right">
+    <button class="circle-btn" aria-label="Quick add"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span class="tip-label">Quick add</span></button>
+    <button class="circle-btn" aria-label="Notifications"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg><span class="count">3</span><span class="tip-label">Notifications</span></button>
+    <div class="pop-anchor">
+      <button class="avatar-btn" onclick="toggleAccount()" aria-haspopup="menu" aria-expanded="false" aria-label="Your account">
+        <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+        <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="tip-label" style="left:auto;right:0;transform:none">Account</span>
+      </button>
+      <div class="menu-panel" id="account" role="menu">
+        <div class="pane show" id="pane-root">
+          <div class="menu-card">
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+              <span><span class="menu-you-name" style="display:block">moascode</span><span class="menu-you-sub">View your profile</span></span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">H</span>
+              <span><span class="menu-you-name" style="display:block">Household</span><span class="menu-you-sub">3 members &middot; active ledger</span></span>
+              <svg class="icon-sm" viewBox="0 0 24 24" style="margin-left:auto;color:rgb(var(--accent))"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </button>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</span>
+              <span><span class="menu-you-name" style="display:block">Personal</span><span class="menu-you-sub">Just you</span></span>
+            </button>
+          </div>
+          <button class="menu-wide" role="menuitem" onclick="showPane('pane-settings')">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.9 15.2a1.7 1.7 0 0 0 .34 1.87 2.06 2.06 0 1 1-2.92 2.92 1.7 1.7 0 0 0-2.88 1.21 2.06 2.06 0 1 1-4.12 0 1.7 1.7 0 0 0-2.88-1.2 2.06 2.06 0 1 1-2.92-2.93A1.7 1.7 0 0 0 3.3 14.2a2.06 2.06 0 1 1 0-4.12A1.7 1.7 0 0 0 4.5 7.2a2.06 2.06 0 1 1 2.92-2.92 1.7 1.7 0 0 0 2.88-1.2 2.06 2.06 0 1 1 4.12 0 1.7 1.7 0 0 0 2.88 1.2 2.06 2.06 0 1 1 2.92 2.92 1.7 1.7 0 0 0 1.2 2.88 2.06 2.06 0 1 1 0 4.12 1.7 1.7 0 0 0-1.52 1Z"/></svg></span>
+            Settings &amp; privacy <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem" onclick="toggleTheme()">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+            Display &amp; accessibility <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <div class="menu-foot">Privacy &middot; Terms &middot; Your data &middot; Open source &middot; More<br>Daybook 2.5 &middot; everything stays on your hardware</div>
+        </div>
+        <div class="pane" id="pane-settings">
+          <div class="menu-head">
+            <button class="circle-btn" style="width:34px;height:34px" onclick="showPane('pane-root')" aria-label="Back"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <span class="title">Settings &amp; privacy</span>
+          </div>
+          <button class="menu-wide" role="menuitem"><span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span><span>Preferences <span class="sub">Language, currency, week start</span></span></button>
+          <button class="menu-wide" role="menuitem"><span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span><span>Privacy &amp; data <span class="sub">Backups, sync, export</span></span></button>
+          <div class="menu-hr"></div>
+          <div class="menu-label" style="padding-left:var(--s3)">Module settings</div>
+          <button class="menu-wide" role="menuitem"><span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span><span>Wallet <span class="sub">Categories, budgets, import rules</span></span></button>
+          <button class="menu-wide" role="menuitem"><span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span><span>Tasks <span class="sub">Lists, reminders, recurrence</span></span></button>
+          <button class="menu-wide" role="menuitem"><span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span><span>Day <span class="sub">What appears on the timeline</span></span></button>
+          <button class="menu-wide" role="menuitem"><span class="bubble" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg></span><span>Trips <span class="sub">Currencies, rates, packing templates</span></span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar t-violet" id="sidebar">
+    <div class="module-head">
+      <span class="module-head-mark"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+      <span>
+        <span class="module-head-name" style="display:block">Day</span>
+        <span class="module-head-sub">Everything, by date</span>
+      </span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <nav class="nav-group">
+      <a class="nav-item active" aria-current="page" href="day-trip.html"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/></svg>
+        Today
+        <span class="nav-badge">7</span></a>
+      <a class="nav-item" href="#"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        This week
+        </a>
+      <a class="nav-item" href="#"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        Calendar
+        </a>
+      <a class="nav-item" href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h4"/></svg>
+        Notes
+        <span class="nav-badge">3</span></a>
+    </nav>
+
+    <div class="nav-group">
+      <span class="u-label">Show on the timeline</span>
+      <a class="nav-item" href="#"><span class="cat-dot" style="background:rgb(var(--accent));margin:0 2px"></span>Tasks &amp; habits<span class="nav-badge">on</span></a>
+      <a class="nav-item" href="#"><span class="cat-dot" style="background:rgb(var(--neg));margin:0 2px"></span>Money<span class="nav-badge">on</span></a>
+      <a class="nav-item" href="#"><span class="cat-dot" style="background:rgb(var(--warn));margin:0 2px"></span>Scheduled &amp; bills<span class="nav-badge">on</span></a>
+      <a class="nav-item" href="#"><span class="cat-dot" style="background:rgb(var(--fg-faint));margin:0 2px"></span>Notes<span class="nav-badge">on</span></a>
+      <a class="nav-item" href="trip.html"><span class="cat-dot" style="background:rgb(var(--trip));margin:0 2px"></span>The trip you&rsquo;re on<span class="nav-badge">on</span></a>
+    </div>
+
+    <div class="nav-group">
+      <span class="u-label">Review</span>
+      <a class="nav-item" href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+        Weekly review
+        </a>
+      <a class="nav-item" href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg>
+        On this day
+        </a>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="trust-note u-label" style="padding:var(--s3) var(--s2);border-top:1px solid rgb(var(--line-subtle));display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:rgb(var(--fg-subtle))">
+      <svg class="icon-sm" viewBox="0 0 24 24" style="color:rgb(var(--accent))"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+      On your hardware
+    </div>
+  </aside>
+  <div class="main-col">
+    <main class="content">
+      <div class="page-head">
+        <h1 class="page-title">Today</h1>
+        <span class="page-sub hide-mobile">Wednesday 17 September</span>
+        <div class="page-actions">
+          <div class="datenav" role="group" aria-label="Change date">
+            <button aria-label="Previous day"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <button class="is-today">Today</button>
+            <button aria-label="Next day"><svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></button>
+          </div>
+          <div class="segment cur-seg" data-cur role="tablist" aria-label="Show amounts in">
+            <button role="tab" aria-selected="true" data-c="local">&yen;</button>
+            <button role="tab" aria-selected="false" data-c="home">$</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- trip mode. the app knows where you are, says so, and lets you leave. -->
+      <div class="tripband t-violet">
+        <span class="mark"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg></span>
+        <div class="tb-main">
+          <div class="tb-t">Day 3 of Tokyo &amp; Kyoto</div>
+          <div class="tb-s">New entries go to this trip and default to yen &middot; <a href="trip.html" style="color:rgb(var(--trip-fg));font-weight:550">open the trip</a></div>
+        </div>
+        <div class="tb-figs">
+          <div class="tb-fig"><div class="k">Left today</div><div class="v">$53.94</div></div>
+          <div class="tb-fig"><div class="k">Left on the trip</div><div class="v">$1,151.53</div></div>
+          <div class="tb-fig"><div class="k">Rate</div><div class="v">&yen;147.2</div></div>
+        </div>
+        <button class="btn btn-quiet btn-sm">Turn off</button>
+      </div>
+
+      <section class="composer t-violet">
+        <div class="composer-top">
+          <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+          <label class="composer-field">
+            <span class="scope-pill"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto <button aria-label="Remove trip scope"><svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></button></span>
+            <input type="text" placeholder="Add to today &mdash; try &ldquo;ramen 1200 cash&rdquo; or &ldquo;call the ryokan 4pm&rdquo;" aria-label="Add to today">
+            <span class="kbd">N</span>
+          </label>
+          <button class="composer-send" aria-label="Save entry"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12h16m0 0-6-6m6 6-6 6"/></svg></button>
+        </div>
+        <div class="composer-acts">
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14m0 0 5-5m-5 5-5-5"/></svg></span> Expense</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span> Task</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--surface-sunk));color:rgb(var(--fg-muted))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h4"/></svg></span> Note</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 4 6 2 5.5-2v14L15 20l-6-2-5.5 2V6Z"/><path d="M9 4v14M15 6v14"/></svg></span> Itinerary item</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 6h4l4.5 12H20"/><path d="M20 6h-7.5"/><path d="m17.5 3.5 2.5 2.5-2.5 2.5"/><path d="m17.5 15.5 2.5 2.5-2.5 2.5"/></svg></span> Split with Jordan</button>
+        </div>
+      </section>
+
+      <div class="dash">
+
+        <section class="card card-pad c12">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Wednesday 17 September</div>
+              <div class="card-sub">13 entries so far &middot; 7 still to come &middot; two cities</div>
+            </div>
+            <span class="chip chip-info" style="margin-left:auto">Your quietest day of the trip, so far</span>
+          </div>
+
+          <div class="band">
+            <div class="band-main" style="flex:1">
+              <div class="dayfigs">
+                <div class="dayfig">
+                  <div class="k">Done</div>
+                  <span class="v">3 <small>of 7</small></span>
+                  <div class="track" style="margin-top:var(--s2);max-width:150px"><i style="width:43%;background:rgb(var(--accent))"></i></div>
+                  <div class="s">6 of the 7 belong to the trip</div>
+                </div>
+                <div class="dayfig">
+                  <div class="k">Spent</div>
+                  <span class="v">&minus;&yen;28,860</span>
+                  <div class="s" style="font-variant-numeric:tabular-nums;color:rgb(var(--fg-muted));font-weight:550">&minus;$196.06 at &yen;147.2</div>
+                  <div class="track" style="margin-top:var(--s2);max-width:150px"><i style="width:78%;background:rgb(var(--neg))"></i></div>
+                  <div class="s">of a $250 allowance for today</div>
+                </div>
+              </div>
+            </div>
+            <div class="band-stats" style="margin-left:auto">
+              <div class="band-stat"><div class="k">Still to spend today</div><div class="v">&yen;6,000</div><div class="s">dinner, estimated &middot; $40.76</div></div>
+              <div class="band-stat"><div class="k">Prepaid, happening today</div><div class="v" style="color:rgb(var(--pos-fg))">$0.00</div><div class="s">train and ryokan already paid</div></div>
+              <div class="band-stat"><div class="k">At home, meanwhile</div><div class="v">&minus;$1,800</div><div class="s">rent leaves on the 25th</div></div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="ribbon" role="img" aria-label="The day from 6am to midnight. Eight entries clustered between 7:40am and 2pm, then the train at 5pm, dinner at 7:30pm and check-in at 9pm. It is now 2:32pm.">
+            <div class="ribbon-track"></div>
+            <div class="ribbon-past" style="width:47.4%"></div>
+<i class="calm" style="left:9.3%" title="07:40 Morning run"></i><i class="neg" style="left:12.0%" title="08:10 Konbini ¥940"></i><i class="task" style="left:16.4%" title="08:55 Ryokan address saved"></i><i class="neg" style="left:19.4%" title="09:30 teamLab ¥7,600"></i><i class="task" style="left:24.1%" title="10:20 Nozomi seats confirmed"></i><i class="neg" style="left:31.9%" title="11:45 Toyosu lunch ¥2,180"></i><i class="task" style="left:38.0%" title="12:50 Receipts photographed"></i><i class="neg" style="left:40.7%" title="13:20 Coffee ¥1,240"></i><i class="neg" style="left:42.6%" title="13:40 Depachika ¥16,900"></i><i class="" style="left:44.0%" title="13:55 Note"></i><i class="ahead" style="left:49.1%" title="14:50 Charger sweep"></i><i class="ahead" style="left:50.0%" title="15:00 Check out"></i><i class="ahead" style="left:61.5%" title="17:04 Nozomi to Kyoto"></i><i class="ahead" style="left:75.0%" title="19:30 Dinner, Pontocho"></i><i class="ahead" style="left:83.3%" title="21:00 Check in, Kyoto"></i>
+            <div class="now" style="left:47.4%"></div>
+            <span class="h" style="left:0;transform:none">06:00</span>
+            <span class="h" style="left:16.7%">09:00</span>
+            <span class="h" style="left:33.3%">12:00</span>
+            <span class="h" style="left:50%">15:00</span>
+            <span class="h" style="left:66.7%">18:00</span>
+            <span class="h" style="left:83.3%">21:00</span>
+            <span class="h" style="left:auto;right:0;transform:none">24:00</span>
+          </div>
+        </section>
+
+        <section class="c8">
+          <div class="card card-pad t-violet">
+            <div class="card-head">
+              <div>
+                <div class="card-title">The day</div>
+                <div class="card-sub">Yen leads because you&rsquo;re in Japan. Every row keeps both.</div>
+              </div>
+              <a class="section-action" href="trip-itinerary.html">Against the itinerary <svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></a>
+            </div>
+
+            <div class="tlist">
+              <div class="tl done">
+                <div class="tl-time">07:40</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Morning run, Imperial Palace loop</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--calm))"></i>Habit</span><span class="chip chip-pos">17-day streak</span></div></div>
+                
+              </div>
+              <div class="tl ">
+                <div class="tl-time">08:10</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body"><div class="tl-title">Konbini breakfast, Kanda</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Food &amp; drink</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">Cash &yen;</span></div></div>
+                <div class="tl-amt"><span class="fx" data-local="&minus;&yen;940" data-home="$6.39"><span class="fx-main">&minus;&yen;940</span><span class="fx-sub">$6.39</span></span></div><div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+              <div class="tl done">
+                <div class="tl-time">08:55</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Save the ryokan address offline, in Japanese</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a></div></div>
+                
+              </div>
+              <div class="tl ">
+                <div class="tl-time">09:30</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body"><div class="tl-title">teamLab Planets</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--alt))"></i>Attractions</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 15 4 15a3.5 3.5 0 0 1 0-7h5M15 9h5a3.5 3.5 0 0 1 0 7h-5M8.5 12h7"/></svg>Matched the 09:30 itinerary item &middot; exact</span></div></div>
+                <div class="tl-amt"><span class="fx" data-local="&minus;&yen;7,600" data-home="$51.63"><span class="fx-main">&minus;&yen;7,600</span><span class="fx-sub">$51.63</span></span></div><div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+              <div class="tl done">
+                <div class="tl-time">10:20</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Confirm the Nozomi seats</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-pos">Car 8, C &amp; D</span></div></div>
+                
+              </div>
+              <div class="tl ">
+                <div class="tl-time">11:45</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body"><div class="tl-title">Lunch, Toyosu Market</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Food &amp; drink</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-info">Split with Jordan &middot; your $7.41</span></div></div>
+                <div class="tl-amt"><span class="fx" data-local="&minus;&yen;2,180" data-home="$14.81"><span class="fx-main">&minus;&yen;2,180</span><span class="fx-sub">$14.81</span></span></div><div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+              <div class="tl done">
+                <div class="tl-time">12:50</div>
+                <div class="tl-mark"><button class="tcheck on" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Photograph yesterday&rsquo;s receipts</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">7 attached to Tuesday</span></div></div>
+                
+              </div>
+              <div class="tl ">
+                <div class="tl-time">13:20</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body"><div class="tl-title">Coffee, Kiyosumi-Shirakawa</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Food &amp; drink</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a></div></div>
+                <div class="tl-amt"><span class="fx" data-local="&minus;&yen;1,240" data-home="$8.42"><span class="fx-main">&minus;&yen;1,240</span><span class="fx-sub">$8.42</span></span></div><div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+              <div class="tl ">
+                <div class="tl-time">13:40</div>
+                <div class="tl-mark"><span class="tl-dot neg"></span></div>
+                <div class="tl-body"><div class="tl-title">Depachika, Nihonbashi Mitsukoshi</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--neg))"></i>Shopping</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-warn">Nothing in the itinerary matches this</span></div></div>
+                <div class="tl-amt"><span class="fx neg" data-local="&minus;&yen;16,900" data-home="$114.81"><span class="fx-main">&minus;&yen;16,900</span><span class="fx-sub">$114.81</span></span></div><div class="trow-actions"><button class="btn btn-secondary btn-sm">Add to day 3</button></div>
+              </div>
+              <div class="tl ">
+                <div class="tl-time">13:55</div>
+                <div class="tl-mark"><span class="tl-dot "></span></div>
+                <div class="tl-body"><div class="tl-note">Bought far too much at the depachika and I&rsquo;m not sorry. Note for Kyoto: the good stuff is in the basement of the department stores, not the tourist streets. Also the JR pass reader at Tokyo station is on the far left, not where the signs say.</div></div>
+                
+              </div>
+
+              <div class="tl-now">
+                <div class="t">14:32</div>
+                <div class="pin"></div>
+                <div class="lbl">Now</div>
+              </div>
+
+              <div class="tl ahead">
+                <div class="tl-time">14:50</div>
+                <div class="tl-mark"><button class="tcheck  pri-high" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Charger and laundry bag sweep</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-neg">You left a charger in Ho Chi Minh City</span></div></div>
+                <div class="trow-actions"><a class="btn btn-secondary btn-sm" href="trip-prep.html">Open</a></div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">15:00</div>
+                <div class="tl-mark"><button class="tcheck  pri-med" aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Check out, leave the bags at the desk</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">Train is 17:04</span></div></div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">17:04</div>
+                <div class="tl-mark"><span class="tl-dot info"></span></div>
+                <div class="tl-body"><div class="tl-title">Nozomi 231 to Kyoto</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--calm))"></i>Transport</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-pos">Covered by the rail pass</span></div></div>
+                <div class="tl-amt plan">&yen;0</div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">19:30</div>
+                <div class="tl-mark"><span class="tl-dot warn"></span></div>
+                <div class="tl-body"><div class="tl-title">Dinner, Pontocho</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--warn))"></i>Food &amp; drink</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">Estimated, not yet spent</span></div></div>
+                <div class="tl-amt"><span class="fx plan" data-local="&minus;&yen;6,000" data-home="$40.76"><span class="fx-main">&minus;&yen;6,000</span><span class="fx-sub">$40.76</span></span></div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">21:00</div>
+                <div class="tl-mark"><span class="tl-dot info"></span></div>
+                <div class="tl-body"><div class="tl-title">Check in &mdash; Yadoya, Kyoto</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Lodging</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-mute">Prepaid on 2 August</span></div></div>
+                <div class="tl-amt plan">&yen;0</div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">anytime</div>
+                <div class="tl-mark"><button class="tcheck " aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Split today&rsquo;s depachika with Jordan</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Trip prep</span><a class="tchip" href="trip.html"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M10.2 3.6a1.6 1.6 0 0 1 3.1 0l1.3 5.9 5.9 3a1.3 1.3 0 0 1-.3 2.4l-5 1 .5 3.7-1.7 1.9-1.8-4.4h-2.4l-1.8 4.4-1.7-1.9.5-3.7-5-1a1.3 1.3 0 0 1-.3-2.4l5.9-3Z"/></svg>Tokyo &amp; Kyoto</a><span class="chip chip-info">$114.81 &middot; you&rsquo;ve split every meal so far</span></div></div>
+                <div class="trow-actions"><button class="btn btn-secondary btn-sm">Split</button></div>
+              </div>
+              <div class="tl ahead">
+                <div class="tl-time">anytime</div>
+                <div class="tl-mark"><button class="tcheck " aria-label="Toggle task"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button></div>
+                <div class="tl-body"><div class="tl-title">Reply to the landlord about the boiler</div><div class="tl-sub"><span class="lchip"><i style="background:rgb(var(--info))"></i>Household</span><span class="chip chip-mute">Nothing to do with the trip &mdash; still yours</span></div></div>
+                <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <div class="c4 stack">
+
+          <section class="card card-pad t-violet">
+            <div class="card-head">
+              <div><div class="card-title">Close day 3</div><div class="card-sub">Tokyo is finished in two hours either way</div></div>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4.5 8h15l-1.2 12H5.7Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div>
+              <div class="sug-main"><div class="sug-title">&yen;16,900 has no itinerary item</div><div class="sug-sub">Put it on day 3 as shopping, or leave it unplanned and let the trip carry it</div></div>
+              <button class="btn btn-secondary btn-sm">Add</button>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 6h4l4.5 12H20"/><path d="M20 6h-7.5"/><path d="m17.5 3.5 2.5 2.5-2.5 2.5"/><path d="m17.5 15.5 2.5 2.5-2.5 2.5"/></svg></div>
+              <div class="sug-main"><div class="sug-title">Split it with Jordan?</div><div class="sug-sub">Every meal so far has been split, no shopping has</div></div>
+              <button class="btn btn-secondary btn-sm">Keep mine</button>
+            </div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16.5" r=".8" fill="currentColor" stroke="none"/></svg></div>
+              <div class="sug-main"><div class="sug-title">2 tasks won&rsquo;t survive the train</div><div class="sug-sub">The charger sweep is one of them, and it is 14:50</div></div>
+              <button class="btn btn-secondary btn-sm">Do now</button>
+            </div>
+            <div class="divider" style="margin:var(--s4) 0 var(--s3)"></div>
+            <button class="btn btn-primary" style="width:100%">Close Wednesday</button>
+          </section>
+
+          <!-- the actual payoff of a "worry-free" trip: home is fine. -->
+          <section class="card card-pad">
+            <div class="card-head">
+              <div><div class="card-title">Home, while you&rsquo;re away</div><div class="card-sub">Nothing here needs you today</div></div>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">Rent leaves on the 25th</div><div class="psub">two days after you land &middot; funded</div></div>
+              <div class="tl-amt" style="font-size:var(--t-sm)">&minus;$1,800</div>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">4 household tasks waiting</div><div class="psub">Priya took the plants and the bins</div></div>
+            </div>
+            <div class="prow">
+              <div class="tavatar" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+              <div style="min-width:0;flex:1"><div class="pname">Nothing overdue at home</div><div class="psub">first time in eleven weeks</div></div>
+            </div>
+            <div class="divider" style="margin:var(--s3) 0"></div>
+            <div class="sug-sub" style="line-height:1.5">Trip mode changes what you add, not what you can see. The boiler task is still on today&rsquo;s list, because it is still yours.</div>
+          </section>
+
+          <section class="card card-pad t-violet">
+            <div class="card-head">
+              <div><div class="card-title">Tomorrow, in Kyoto</div><div class="card-sub">Day 4 &middot; Thursday 18 September</div></div>
+              <a class="section-action" href="trip-itinerary.html">Plan <svg class="icon-sm" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg></a>
+            </div>
+            <div class="kv"><span class="k">Itinerary items</span><span class="v">7</span></div>
+            <div class="kv"><span class="k">Estimated</span><span class="v">&yen;25,900 &middot; $175.94</span></div>
+            <div class="kv"><span class="k">Day allowance</span><span class="v">$240.00</span></div>
+            <div class="divider" style="margin:var(--s3) 0"></div>
+            <div class="sug">
+              <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M5 3v8a2.5 2.5 0 0 0 5 0V3M7.5 11v10"/><path d="M17 3c-1.5 1.5-2 3.5-2 5.5s.7 3 2 3.5v9"/></svg></div>
+              <div class="sug-main"><div class="sug-title">$122.28 of it is one kaiseki dinner</div><div class="sug-sub">The largest single estimate left in the trip</div></div>
+            </div>
+          </section>
+
+          <section class="card card-pad">
+            <div class="card-head">
+              <div><div class="card-title">Against your Tokyo days</div><div class="card-sub">Day 3 measured against days 1 and 2</div></div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Spent by 14:30</div>
+                <div class="cmp-bar"><i class="now" style="width:44%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:100%"></i></div>
+              </div>
+              <div class="cmp-v">$196 <span>usually $446</span></div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Entries logged</div>
+                <div class="cmp-bar"><i class="now" style="width:100%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:71%"></i></div>
+              </div>
+              <div class="cmp-v">13 <span>usually 9</span></div>
+            </div>
+            <div class="cmp">
+              <div>
+                <div class="cmp-k">Unplanned spend</div>
+                <div class="cmp-bar"><i class="now" style="width:26%"></i></div>
+                <div class="cmp-bar"><i class="usual" style="width:100%"></i></div>
+              </div>
+              <div class="cmp-v">$115 <span>usually $442</span></div>
+            </div>
+            <div class="divider" style="margin:var(--s3) 0"></div>
+            <div class="sug-sub" style="line-height:1.5">A travel day is cheaper than a city day, which is exactly what the plan assumed. Tuesday is the outlier, not today.</div>
+          </section>
+        </div>
+
+        <section class="card card-pad c12 t-violet">
+          <div class="card-head">
+            <div>
+              <div class="card-title">September</div>
+              <div class="card-sub">The trip is nine tinted days &middot; the figure is that day&rsquo;s net</div>
+            </div>
+            <div class="heat-key" style="margin-left:auto">
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--accent))"></i> Tasks
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--neg));margin-left:var(--s2)"></i> Money
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--warn));margin-left:var(--s2)"></i> Scheduled
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--alt));margin-left:var(--s2)"></i> Trip
+              <i style="width:7px;height:7px;border-radius:var(--r-full);background:rgb(var(--fg-faint));margin-left:var(--s2)"></i> Note
+            </div>
+          </div>
+          <div class="cal">
+            <div class="cal-dow">Mon</div><div class="cal-dow">Tue</div><div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div><div class="cal-dow">Sun</div>
+<div class="cal-day "><span class="cal-n">1</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$64</span></div><div class="cal-day "><span class="cal-n">2</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$41</span></div><div class="cal-day "><span class="cal-n">3</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">&minus;$118</span></div><div class="cal-day "><span class="cal-n">4</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">$0</span></div><div class="cal-day "><span class="cal-n">5</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$92</span></div><div class="cal-day "><span class="cal-n">6</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">&minus;$36</span></div><div class="cal-day "><span class="cal-n">7</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$74</span></div><div class="cal-day "><span class="cal-n">8</span><span class="cal-dots"><i style="background:rgb(var(--pos))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">+$3,140</span></div><div class="cal-day "><span class="cal-n">9</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$28</span></div><div class="cal-day "><span class="cal-n">10</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$61</span></div><div class="cal-day "><span class="cal-n">11</span><span class="cal-dots"><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">&minus;$204</span></div><div class="cal-day "><span class="cal-n">12</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&minus;$18</span></div><div class="cal-day "><span class="cal-n">13</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--neg))"></i></span><span class="cal-amt">&minus;$57</span></div><div class="cal-day "><span class="cal-n">14</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">&minus;$212</span></div><div class="cal-day trip"><span class="cal-n">15</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&minus;$198</span></div><div class="cal-day trip"><span class="cal-n">16</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">&minus;$694</span></div><div class="cal-day trip today sel"><span class="cal-n">17</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i><i style="background:rgb(var(--neg))"></i><i style="background:rgb(var(--accent))"></i><i style="background:rgb(var(--fg-faint))"></i></span><span class="cal-amt">&minus;$196</span></div><div class="cal-day trip muted"><span class="cal-n">18</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i></span><span class="cal-amt">&minus;$240</span></div><div class="cal-day trip muted"><span class="cal-n">19</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i></span><span class="cal-amt">&minus;$230</span></div><div class="cal-day trip muted"><span class="cal-n">20</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i></span><span class="cal-amt">&minus;$275</span></div><div class="cal-day trip muted"><span class="cal-n">21</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i></span><span class="cal-amt">&minus;$245</span></div><div class="cal-day trip muted"><span class="cal-n">22</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&minus;$285</span></div><div class="cal-day trip muted"><span class="cal-n">23</span><span class="cal-dots"><i style="background:rgb(var(--alt))"></i><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&minus;$235</span></div><div class="cal-day muted"><span class="cal-n">24</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">25</span><span class="cal-dots"><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">&minus;$1,800</span></div><div class="cal-day muted"><span class="cal-n">26</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">27</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">28</span><span class="cal-dots"><i style="background:rgb(var(--warn))"></i></span><span class="cal-amt">&minus;$64</span></div><div class="cal-day muted"><span class="cal-n">29</span><span class="cal-dots"><i style="background:rgb(var(--pos))"></i></span><span class="cal-amt">+$3,140</span></div><div class="cal-day muted"><span class="cal-n">30</span><span class="cal-dots"><i style="background:rgb(var(--accent))"></i></span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">1</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">2</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">3</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">4</span><span class="cal-amt">&mdash;</span></div><div class="cal-day muted"><span class="cal-n">5</span><span class="cal-amt">&mdash;</span></div>
+          </div>
+          <div class="divider"></div>
+          <div class="sug-sub" style="line-height:1.55">A trip is a tinted range on the same grid the rest of your year lives on. Nine of September&rsquo;s thirty days are away, and the month&rsquo;s figures already know it.</div>
+        </section>
+
+      </div>
+
+    </main>
+
+<button class="fab" aria-label="Add to today"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar">
+  <a href="day-trip.html" class="active"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>Today</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/></svg>Week</a>
+  <a href="trip-itinerary.html"><svg class="icon" viewBox="0 0 24 24"><path d="m9 4 6 2 5.5-2v14L15 20l-6-2-5.5 2V6Z"/><path d="M9 4v14M15 6v14"/></svg>Plan</a>
+  <a href="trip.html"><svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>Trip</a>
+</nav>
+  </div>
+</div>
+<script>
+  function toggleTheme(){const b=document.body;b.setAttribute('data-theme',b.getAttribute('data-theme')==='dark'?'light':'dark');}
+  function openSidebar(){document.getElementById('sidebar').classList.add('open');document.querySelector('.sidebar-backdrop').classList.add('show');}
+  function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.querySelector('.sidebar-backdrop').classList.remove('show');}
+  function toggleAccount(){
+    const p=document.getElementById('account'); const open=p.classList.toggle('open');
+    p.parentElement.querySelector('[aria-haspopup]').setAttribute('aria-expanded',String(open));
+    if(!open) showPane('pane-root');
+  }
+  function showPane(id){document.querySelectorAll('#account .pane').forEach(x=>x.classList.toggle('show', x.id===id));}
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.pop-anchor')){
+      const p=document.getElementById('account');
+      if(p && p.classList.contains('open')){ p.classList.remove('open'); showPane('pane-root'); }
+    }
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){const p=document.getElementById('account'); if(p){p.classList.remove('open'); showPane('pane-root');}}});
+  document.querySelectorAll('.segment').forEach(s=>s.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    s.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected', b===e.target));
+  }));
+  // currency toggle: every dual-currency figure flips which line leads.
+  function setCur(which){
+    document.querySelectorAll('.fx').forEach(f=>{
+      const m=f.querySelector('.fx-main'), s=f.querySelector('.fx-sub');
+      if(!m||!s) return;
+      const lead = which==='home' ? f.dataset.home : f.dataset.local;
+      const sub  = which==='home' ? f.dataset.local : f.dataset.home;
+      if(lead && sub){ m.textContent=lead; s.textContent=sub; }
+    });
+  }
+  document.querySelectorAll('[data-cur]').forEach(seg=>seg.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return; setCur(e.target.dataset.c);
+  }));
+  document.querySelectorAll('.tcheck').forEach(c=>c.addEventListener('click',()=>{
+    const row=c.closest('.tl,.task,.ir'); const on=c.classList.toggle('on');
+    if(row){row.classList.toggle('done',on); row.classList.toggle('ahead',!on);}
+  }));
+</script>
+</body>
+</html>

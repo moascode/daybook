@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook — Import transactions</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+/* ---- Bulk-select checkbox column (real WalletPage adds this to .trow's grid;
+   the static mock predates it). Scoped per breakpoint so it extends theme.css's
+   own desktop/mobile .trow grids rather than overriding them unconditionally
+   (an earlier unscoped version broke the mobile 2-column layout entirely). ---- */
+.trow input[type=checkbox]{width:16px;height:16px;}
+@media (min-width:681px){ .trow{grid-template-columns:20px 1fr 132px 128px 112px 32px;} }
+@media (max-width:680px){ .trow{grid-template-columns:20px 1fr auto;} }
+/* ---- Import modal — ONE popup for every import kind (CSV or photo), not a
+   chooser that immediately navigates away. Drag-and-drop or Browse, right
+   here, same as CsvImport.tsx's drop zone gives CSV today — photos aren't a
+   second-class, click-only citizen, and CSV/photo share one entry point
+   instead of two different interaction models. ---- */
+.modal-overlay{position:fixed;inset:0;background:rgb(0 0 0 / .45);z-index:90;display:flex;align-items:center;justify-content:center;}
+.modal-box{width:520px;max-width:calc(100vw - var(--s6));background:rgb(var(--surface));border-radius:var(--r-lg);box-shadow:var(--e3);padding:var(--s5);}
+.modal-box .modal-title{font-size:var(--t-md);font-weight:650;letter-spacing:-.01em;}
+.modal-box .modal-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:var(--s4);}
+.modal-box .field-label{font-size:var(--t-sm);font-weight:650;margin:0 0 var(--s2);}
+.type-segment{display:flex;width:100%;margin-bottom:var(--s4);}
+.type-segment button{flex:1;}
+.dropzone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;border:1.5px dashed rgb(var(--line-strong));border-radius:var(--r-md);background:rgb(var(--canvas));padding:var(--s6) var(--s4);cursor:pointer;transition:border-color .15s var(--ease),background-color .15s var(--ease);}
+.dropzone:hover,.dropzone.drop-active{border-color:rgb(var(--accent));background:rgb(var(--accent-bg) / .4);}
+.dropzone svg{width:26px;height:26px;color:rgb(var(--fg-faint));margin-bottom:2px;}
+.dropzone-text{font-size:var(--t-sm);color:rgb(var(--fg-muted));}
+.dropzone-text b{color:rgb(var(--fg));font-weight:650;}
+.dropzone-text .link{color:rgb(var(--accent-fg));font-weight:650;}
+.dropzone-hint{font-size:var(--t-micro);color:rgb(var(--fg-faint));}
+.modal-flist{margin-top:var(--s3);max-height:220px;overflow-y:auto;}
+.modal-foot{display:flex;align-items:center;justify-content:space-between;margin-top:var(--s4);padding-top:var(--s4);border-top:1px solid rgb(var(--line-subtle));}
+.modal-proc{text-align:center;padding:var(--s3) 0;}
+.modal-proc .spin{width:28px;height:28px;margin:0 auto var(--s3);animation:mrot 1.1s linear infinite;}
+@keyframes mrot{to{transform:rotate(360deg);}}
+.modal-proc .proc-title{font-size:var(--t-base);font-weight:650;margin:0 0 var(--s4);}
+/* ---- Column mapping — a THIRD in-place modal view (not a fourth page), same
+   idea as photo's pick→processing swap. No full preview table here: a modal
+   is the wrong shape for a wide grid, so each row keeps just a one-line
+   sample value instead — the dedicated review page (already built) is where
+   you see everything at full width, same split the photo path already uses. ---- */
+.map-file-chip{display:flex;align-items:center;gap:var(--s3);padding-bottom:var(--s3);margin-bottom:var(--s3);border-bottom:1px solid rgb(var(--line-subtle));}
+.map-file-chip-name{font-size:var(--t-sm);font-weight:600;color:rgb(var(--fg));}
+.map-file-chip-sub{font-size:var(--t-xs);color:rgb(var(--fg-subtle));}
+.header-toggle{display:flex;align-items:center;gap:var(--s2);font-size:var(--t-xs);color:rgb(var(--fg-subtle));margin-bottom:var(--s3);}
+.maprow{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:var(--s3);padding:var(--s2) 0;border-top:1px solid rgb(var(--line-subtle));}
+.flist .maprow:first-of-type{border-top:none;}
+.maprow-field{font-size:var(--t-sm);font-weight:650;color:rgb(var(--fg));}
+.maprow-field .req{color:rgb(var(--neg-fg));margin-left:2px;}
+.maprow select{width:100%;height:34px;border-radius:var(--r-sm);border:1px solid rgb(var(--line));background:rgb(var(--surface));padding:0 var(--s3);font-size:var(--t-sm);color:rgb(var(--fg));}
+.progress-track{height:6px;border-radius:999px;background:rgb(var(--track));overflow:hidden;}
+.progress-fill{height:100%;width:0%;border-radius:999px;background:rgb(var(--accent));transition:width .5s var(--ease);}
+/* Same row shape used on the review step's table and the (retired)
+   full-page picker — thumbnail, name/size, trailing status/remove slot. */
+.flist{display:flex;flex-direction:column;}
+.frow{display:flex;align-items:center;gap:var(--s3);padding:var(--s2) 0;border-top:1px solid rgb(var(--line-subtle));}
+.flist .frow:first-of-type{border-top:none;}
+.frow-thumb{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgb(var(--surface-sunk));color:rgb(var(--fg-faint));}
+.frow-thumb svg{width:14px;height:14px;}
+.frow-name{font-size:var(--t-sm);font-weight:500;color:rgb(var(--fg));}
+.frow-size{font-size:var(--t-micro);color:rgb(var(--fg-subtle));}
+.frow-trail{margin-left:auto;flex-shrink:0;}
+.pstatus{font-size:var(--t-xs);font-weight:600;display:flex;align-items:center;gap:5px;}
+.pstatus svg{width:13px;height:13px;}
+.pstatus.done{color:rgb(var(--pos-fg));}
+.pstatus.wait{color:rgb(var(--fg-faint));}
+.pstatus.active{color:rgb(var(--accent));}
+@media (max-width:680px){
+  .modal-overlay{align-items:flex-end;}
+  .modal-box{width:100%;max-width:none;border-radius:20px 20px 0 0;padding-bottom:var(--s6);}
+}
+</style>
+</head>
+<body data-theme="light">
+
+<!-- ============================ APP BAR ============================ -->
+<header class="appbar">
+  <div class="appbar-left">
+    <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="appbar-logo" href="dashboard.html" aria-label="Daybook home">D</a>
+    <label class="search">
+      <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+      <input type="search" placeholder="Search transactions, tasks, accounts…" aria-label="Search across all modules">
+    </label>
+  </div>
+
+  <!-- modules. fixed set — icon only, name on hover, underline marks where you are. -->
+  <nav class="modtabs" aria-label="Modules">
+    <a class="modtab" href="day.html" data-tip="Day">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span class="tip-label">Day</span>
+    </a>
+    <a class="modtab" href="tasks.html" data-tip="Tasks">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg>
+      <span class="count">6</span>
+      <span class="tip-label">Tasks</span>
+    </a>
+    <a class="modtab" href="dashboard.html" aria-current="page" data-tip="Wallet">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg>
+      <span class="tip-label">Wallet</span>
+    </a>
+      <a class="modtab" href="trips.html" data-tip="Trips">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Trips</span>
+    </a>
+</nav>
+
+  <div class="appbar-right">
+    <button class="circle-btn" aria-label="Quick add">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="tip-label">Quick add</span>
+    </button>
+    <button class="circle-btn" aria-label="Notifications">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Notifications</span>
+    </button>
+    <div class="pop-anchor">
+      <button class="avatar-btn" onclick="toggleAccount()" aria-haspopup="menu" aria-expanded="false" aria-label="Your account">
+        <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+        <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="tip-label" style="left:auto;right:0;transform:none">Account</span>
+      </button>
+
+      <div class="menu-panel" id="account" role="menu">
+        <!-- root pane -->
+        <div class="pane show" id="pane-root">
+          <div class="menu-card">
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+              <span>
+                <span class="menu-you-name" style="display:block">moascode</span>
+                <span class="menu-you-sub">View your profile</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">H</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Household</span>
+                <span class="menu-you-sub">3 members · active ledger</span>
+              </span>
+              <svg class="icon-sm" viewBox="0 0 24 24" style="margin-left:auto;color:rgb(var(--accent))"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </button>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Personal</span>
+                <span class="menu-you-sub">Just you</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-btn-wide" role="menuitem">
+              <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c0-4 3.4-6.6 7.5-6.6s7.5 2.6 7.5 6.6"/></svg>
+              See all ledgers
+            </button>
+          </div>
+
+          <button class="menu-wide" role="menuitem" onclick="showPane('pane-settings')">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.9 15.2a1.7 1.7 0 0 0 .34 1.87 2.06 2.06 0 1 1-2.92 2.92 1.7 1.7 0 0 0-2.88 1.21 2.06 2.06 0 1 1-4.12 0 1.7 1.7 0 0 0-2.88-1.2 2.06 2.06 0 1 1-2.92-2.93A1.7 1.7 0 0 0 3.3 14.2a2.06 2.06 0 1 1 0-4.12A1.7 1.7 0 0 0 4.5 7.2a2.06 2.06 0 1 1 2.92-2.92 1.7 1.7 0 0 0 2.88-1.2 2.06 2.06 0 1 1 4.12 0 1.7 1.7 0 0 0 2.88 1.2 2.06 2.06 0 1 1 2.92 2.92 1.7 1.7 0 0 0 1.2 2.88 2.06 2.06 0 1 1 0 4.12 1.7 1.7 0 0 0-1.52 1Z"/></svg></span>
+            Settings &amp; privacy
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.25c-.9.47-1.35 1-1.35 1.85v.4"/><circle cx="12" cy="16.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            Help &amp; support
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem" onclick="toggleTheme()">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+            Display &amp; accessibility
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"/><path d="M12 8.5v3.2"/><circle cx="12" cy="13.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            <span>Report a problem <span class="sub">⌘ B</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M15 12H4m0 0 3-3m-3 3 3 3"/><path d="M10 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1"/></svg></span>
+            Log out
+          </button>
+          <div class="menu-foot">Privacy · Terms · Your data · Open source · More<br>Daybook 2.4 · everything stays on your hardware</div>
+        </div>
+
+        <!-- settings pane: global first, then per module -->
+        <div class="pane" id="pane-settings">
+          <div class="menu-head">
+            <button class="circle-btn" style="width:34px;height:34px" onclick="showPane('pane-root')" aria-label="Back"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <span class="title">Settings &amp; privacy</span>
+          </div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>
+            <span>Preferences <span class="sub">Language, currency, week start</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
+            <span>Privacy &amp; data <span class="sub">Backups, sync, export</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span>
+            <span>Household <span class="sub">Members, roles, invites</span></span>
+          </button>
+          <div class="menu-hr"></div>
+          <div class="menu-label" style="padding-left:var(--s3)">Module settings</div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+            <span>Wallet <span class="sub">Categories, budgets, import rules</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span>
+            <span>Tasks <span class="sub">Lists, reminders, recurrence</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+            <span>Day <span class="sub">What appears on the timeline</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg></span>
+            <span>Trips <span class="sub">Currencies, rates, packing templates</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="module-head">
+      <span class="module-head-mark"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+      <span>
+        <span class="module-head-name" style="display:block">Wallet</span>
+        <span class="module-head-sub">Household ledger</span>
+      </span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <nav class="nav-group">
+      <a class="nav-item " href="dashboard.html">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        Overview
+      </a>
+      <a class="nav-item active" aria-current="page" href="transactions.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg>
+        Transactions
+      </a>
+      <a class="nav-item " href="accounts.html">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/><circle cx="6.5" cy="14.5" r="1"/></svg>
+        Accounts
+      </a>
+      <a class="nav-item " href="shared.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/><path d="M15 13.6c2.9.2 5 2.6 5 6.4"/></svg>
+        Shared
+        <span class="nav-badge">2</span>
+      </a>
+    </nav>
+
+    <div class="nav-group">
+      <span class="u-label">Plan</span>
+      <a class="nav-item " href="budgets.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>
+        Budgets
+      </a>
+      <a class="nav-item " href="goals.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
+        Goals
+      </a>
+      <a class="nav-item " href="recurring.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.3-6.4L21 8"/><path d="M21 4v4h-4"/><path d="M21 12a9 9 0 0 1-15.3 6.4L3 16"/><path d="M3 20v-4h4"/></svg>
+        Recurring
+      </a>
+      <a class="nav-item " href="reports.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+        Reports
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="trust-note u-label" style="padding:var(--s3) var(--s2);border-top:1px solid rgb(var(--line-subtle));display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:rgb(var(--fg-subtle))">
+      <svg class="icon-sm" viewBox="0 0 24 24" style="color:rgb(var(--accent))"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+      On your hardware
+    </div>
+  </aside>
+
+  <div class="main-col">
+
+
+    <main class="content">
+
+      <div class="page-head">
+        <h1 class="page-title">Transactions</h1>
+        <span class="page-sub hide-mobile">128 in range · 1–17 August</span>
+        
+
+      </div>
+
+      <section class="composer">
+        <div class="composer-top">
+          <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+          <label class="composer-field">
+            <input type="text" placeholder="Add a transaction — try &ldquo;coffee 4.20 cash&rdquo;" aria-label="Add a transaction">
+            <span class="kbd">N</span>
+          </label>
+          <button class="composer-send" aria-label="Save transaction"><svg class="icon" viewBox="0 0 24 24"><path d="M4 12h16m0 0-6-6m6 6-6 6"/></svg></button>
+        </div>
+        <div class="composer-acts">
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span> Expense</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span> Income</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg></span> Transfer</button>
+          <button class="composer-act"><span class="cdot" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span> Split</button>
+          <button class="composer-act" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><span class="cdot" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3v11M8 10.5l4 4 4-4"/><path d="M4 19.5h16"/></svg></span> Import</button>
+        </div>
+      </section>
+
+
+      <!-- three cards, each reading off the filtered set (no comparison chips — those numbers aren't real, per the shipped WalletPage) -->
+      <div class="grid g3 g-tight-mobile">
+        <div class="card stat-card">
+          <div class="stat-topline">
+            <span class="stat-icon" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>
+            <span class="stat-label">Money in</span>
+          </div>
+          <div class="stat-value money pos">$6,420.00</div>
+          <div class="stat-foot">3 deposits</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-topline">
+            <span class="stat-icon" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></span>
+            <span class="stat-label">Money out</span>
+          </div>
+          <div class="stat-value money">$3,226.40</div>
+          <div class="stat-foot">125 payments · $25.81 median</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-topline">
+            <span class="stat-icon" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/></svg></span>
+            <span class="stat-label">Net</span>
+          </div>
+          <div class="stat-value money pos">+$3,193.60</div>
+        </div>
+      </div>
+
+      <section class="section">
+        <!-- matches WalletPage.tsx's actual filter bar: This/Last month presets, a
+             collapsing search icon (not an inline field), a Filters popup (Type/
+             Account/Category/Tags/Sharing live inside it), icon-only sort toggle —
+             not the mock's original inline search + 7d/30d/90d/Year segment. -->
+        <div class="filters" style="margin-bottom:var(--s3)">
+          <div class="segment" role="tablist">
+            <button role="tab" aria-selected="true">This month</button>
+            <button role="tab" aria-selected="false">Last month</button>
+          </div>
+          <button class="icon-btn" aria-label="Search transactions" style="border:1px solid rgb(var(--line))">
+            <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+          </button>
+          <button class="filter-btn">
+            <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="8" cy="7" r="2"/><circle cx="16" cy="17" r="2"/><path d="M4 7h2m4 0h10M4 17h10m4 0h2"/></svg>
+            Filters <span class="count">2</span>
+          </button>
+          <button class="icon-btn hide-mobile" aria-label="Sort" style="margin-left:auto;border:1px solid rgb(var(--line))">
+            <svg class="icon-sm" viewBox="0 0 24 24"><path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3"/></svg>
+          </button>
+        </div>
+
+        <div class="filters" style="margin-bottom:var(--s4)">
+          <span class="chip chip-mute">Account: Joint checking <svg class="icon-sm" viewBox="0 0 24 24" style="opacity:.6"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+          <span class="chip chip-mute">Excludes transfers <svg class="icon-sm" viewBox="0 0 24 24" style="opacity:.6"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
+          <button class="btn btn-quiet" style="height:26px;font-size:var(--t-xs)">Clear all</button>
+        </div>
+
+        <div class="card card-pad">
+          <div class="tlist">
+
+            <div class="tgroup-head">
+              <span class="tg-date"><b>Today</b> · Sun 17 Aug</span>
+              <span class="tg-total">−$90.60</span>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Whole Foods Market</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--calm))"></i>Groceries</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Joint checking</div>
+              <div class="amt neg money">−$84.20</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Blue Bottle Coffee <span class="chip chip-mute" style="margin-left:4px">Split</span></div><div class="tsub">your share −$6.40 · with Priya</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--warn))"></i>Cafés</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Cash wallet</div>
+              <div class="amt neg money">−$12.80</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+
+            <div class="tgroup-head">
+              <span class="tg-date"><b>Yesterday</b> · Sat 16 Aug</span>
+              <span class="tg-total pos">+$4,141.10</span>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Payroll — Acme Co.</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--pos))"></i>Income</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Joint checking</div>
+              <div class="amt pos money">+$4,200.00</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Uniqlo</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--alt))"></i>Clothing</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Joint checking</div>
+              <div class="amt neg money">−$58.90</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Uber</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--b-400))"></i>Transport</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Joint checking</div>
+              <div class="amt neg money">−$18.20</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+
+            <div class="tgroup-head">
+              <span class="tg-date"><b>Friday</b> · 15 Aug</span>
+              <span class="tg-total">−$63.40</span>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Local Diner</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--warn))"></i>Cafés</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Cash wallet</div>
+              <div class="amt neg money">−$22.10</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+            <div class="trow">
+              <input type="checkbox" style="margin-right:var(--s2)">
+              <div class="tlead">
+                <div class="tavatar" style="background:rgb(var(--neg-bg));color:rgb(var(--neg-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
+                <div style="min-width:0"><div class="tname">Gym membership</div></div>
+              </div>
+              <div class="tmeta col-mobile-hide"><span class="tag"><i style="background:rgb(var(--t-400))"></i>Sport</span></div>
+              <div class="tmeta col-hide-md col-mobile-hide">Joint checking</div>
+              <div class="amt neg money">−$41.30</div>
+              <div class="trow-actions"><button class="icon-btn" aria-label="More"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button></div>
+            </div>
+
+          </div>
+
+          <div class="divider"></div>
+          <div style="display:flex;align-items:center;gap:var(--s3)">
+            <span style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">Showing 6 of 128</span>
+            <button class="btn btn-secondary" style="margin-left:auto">Load more</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+<!-- mobile chrome -->
+<button class="fab" aria-label="Add transaction"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar">
+  <a href="dashboard.html" class="active"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+  <a href="transactions.html" class=""><svg class="icon" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg>Activity</a>
+  <a href="accounts.html" class=""><svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/></svg>Accounts</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>Budgets</a>
+</nav>
+
+<div class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Import transactions</div>
+      <button class="circle-btn" style="width:28px;height:28px" aria-label="Close" onclick="window.location.href='transactions.html'"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <div id="modal-pick">
+      <div class="segment type-segment" role="tablist" id="type-segment">
+        <button role="tab" aria-selected="true" data-type="photo">Photo</button>
+        <button role="tab" aria-selected="false" data-type="csv">CSV</button>
+      </div>
+
+      <div id="kind-row" style="margin-bottom:var(--s4)">
+        <p class="field-label">What are these photos?</p>
+        <div class="segment" role="tablist">
+          <button role="tab" aria-selected="true" style="white-space:nowrap">Receipt</button>
+          <button role="tab" aria-selected="false" style="white-space:nowrap">Bank statement</button>
+        </div>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="modal-file-input">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+        <div class="dropzone-text"><b>Drag files here</b>, or <span class="link">browse</span></div>
+        <div class="dropzone-hint" id="dropzone-hint">JPG, PNG or WEBP · up to 10 photos</div>
+      </label>
+      <input type="file" id="modal-file-input" accept="image/*" multiple style="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;">
+
+      <div class="flist modal-flist" id="modal-flist" style="display:none"></div>
+    </div>
+
+    <div id="modal-map" style="display:none">
+      <div class="map-file-chip">
+        <div class="frow-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><path d="M8 13h8M8 16h8M8 10h2"/></svg></div>
+        <div>
+          <div class="map-file-chip-name">statement-august.csv</div>
+          <div class="map-file-chip-sub">128 rows detected</div>
+        </div>
+      </div>
+      <label class="header-toggle"><input type="checkbox" checked style="width:15px;height:15px;accent-color:rgb(var(--ink))"> First row is a header</label>
+      <div class="flist">
+        <div class="maprow">
+          <span class="maprow-field">Date<span class="req">*</span></span>
+          <select><option>Date</option><option>Description</option><option>Amount</option><option>Balance</option></select>
+        </div>
+        <div class="maprow">
+          <span class="maprow-field">Amount<span class="req">*</span></span>
+          <select><option>Date</option><option>Description</option><option selected>Amount</option><option>Balance</option></select>
+        </div>
+        <div class="maprow">
+          <span class="maprow-field">Merchant</span>
+          <select><option>— None —</option><option selected>Description</option><option>Balance</option></select>
+        </div>
+        <div class="maprow">
+          <span class="maprow-field">Description</span>
+          <select><option>— None —</option><option selected>Description</option><option>Balance</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-proc" id="modal-proc" style="display:none">
+      <svg class="spin" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="none" stroke="#E1E5EB" stroke-width="5"/><circle cx="25" cy="25" r="20" fill="none" stroke="#0A8564" stroke-width="5" stroke-linecap="round" stroke-dasharray="90 126"/></svg>
+      <p class="proc-title" id="modal-proc-title">Reading your photos…</p>
+      <div class="progress-track"><div class="progress-fill" id="modal-progress-fill"></div></div>
+      <p class="progress-label" id="modal-progress-label" style="font-size:var(--t-xs);color:rgb(var(--fg-subtle));text-align:left;margin-top:6px;font-weight:550">Starting…</p>
+    </div>
+
+    <div class="modal-foot" id="modal-foot" style="display:none">
+      <span class="count-txt" id="modal-count"></span>
+      <div style="display:flex;gap:var(--s2)">
+        <button class="btn btn-secondary" onclick="window.location.href='transactions.html'">Cancel</button>
+        <button class="btn btn-primary" id="modal-cta" onclick="modalExtract()">Extract transactions <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toggleTheme(){const b=document.body;b.setAttribute('data-theme',b.getAttribute('data-theme')==='dark'?'light':'dark');}
+  function openSidebar(){document.getElementById('sidebar').classList.add('open');document.querySelector('.sidebar-backdrop').classList.add('show');}
+  function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.querySelector('.sidebar-backdrop').classList.remove('show');}
+  function toggleAccount(){
+    const p=document.getElementById('account'); const open=p.classList.toggle('open');
+    p.parentElement.querySelector('[aria-haspopup]').setAttribute('aria-expanded',String(open));
+    if(!open) showPane('pane-root');
+  }
+  function showPane(id){
+    document.querySelectorAll('#account .pane').forEach(x=>x.classList.toggle('show', x.id===id));
+  }
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.pop-anchor')){
+      const p=document.getElementById('account');
+      if(p && p.classList.contains('open')){ p.classList.remove('open'); showPane('pane-root'); }
+    }
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){const p=document.getElementById('account'); if(p){p.classList.remove('open'); showPane('pane-root');}}
+  });
+  document.querySelectorAll('.segment').forEach(s=>s.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    s.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected', b===e.target));
+  }));
+
+  // ---- One import modal for every kind (CSV or photo) ----
+  const RECEIPT_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+  const CSV_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><path d="M8 13h8M8 16h8M8 10h2"/></svg>';
+  const MOCK_FILES={
+    photo: [ {name:'receipt-wholefoods.jpg', size:'2.1 MB'}, {name:'receipt-uniqlo.jpg', size:'3.4 MB'}, {name:'receipt-diner.jpg', size:'1.8 MB'} ],
+    csv:   [ {name:'statement-august.csv', size:'48 KB'} ],
+  };
+  let importType='photo';
+
+  function renderFlist(){
+    const files=MOCK_FILES[importType];
+    const icon=importType==='photo'?RECEIPT_ICON:CSV_ICON;
+    document.getElementById('modal-flist').innerHTML=files.map((f,i)=>`
+      <div class="frow" id="mfrow-${i}">
+        <div class="frow-thumb">${icon}</div>
+        <div style="min-width:0;flex:1">
+          <div class="frow-name">${f.name}</div>
+          <div class="frow-size">${f.size}</div>
+        </div>
+        <div class="frow-trail" id="mfrow-trail-${i}"><button class="icon-btn" aria-label="Remove"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      </div>`).join('');
+    document.getElementById('modal-flist').style.display='flex';
+    document.getElementById('modal-foot').style.display='flex';
+    const n=files.length;
+    document.getElementById('modal-count').innerHTML = importType==='photo'
+      ? `<b>${n} photo${n===1?'':'s'}</b> selected`
+      : `<b>${n} file</b> selected`;
+    document.getElementById('modal-cta').innerHTML = importType==='photo'
+      ? 'Extract transactions <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>'
+      : 'Continue <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>';
+    // Restore the CTA's behaviour, not just its label — showMapView() rewires
+    // this same button to startCsvProcessing() further down the flow, and
+    // without resetting it here, Back → Continue would silently skip the
+    // mapping step it's supposed to reopen.
+    document.getElementById('modal-cta').setAttribute('onclick','modalExtract()');
+  }
+
+  document.getElementById('type-segment').addEventListener('click', e=>{
+    if(e.target.tagName!=='BUTTON') return;
+    importType=e.target.dataset.type;
+    document.getElementById('kind-row').style.display = importType==='photo' ? 'block' : 'none';
+    document.getElementById('modal-file-input').accept = importType==='photo' ? 'image/*' : '.csv';
+    document.getElementById('dropzone-hint').textContent = importType==='photo' ? 'JPG, PNG or WEBP · up to 10 photos' : 'CSV files exported from your bank';
+    document.getElementById('modal-flist').style.display='none';
+    document.getElementById('modal-foot').style.display='none';
+  });
+
+  // Drag-and-drop AND click-to-browse on the same surface — same affordance
+  // CsvImport.tsx's dashed drop zone already gives CSV, now shared by photo
+  // import too instead of photo being click-only.
+  const dropzone=document.getElementById('dropzone');
+  const fileInput=document.getElementById('modal-file-input');
+  let dragDepth=0;
+  dropzone.addEventListener('dragenter',e=>{ e.preventDefault(); dragDepth++; dropzone.classList.add('drop-active'); });
+  dropzone.addEventListener('dragover',e=>{ e.preventDefault(); });
+  dropzone.addEventListener('dragleave',()=>{ dragDepth=Math.max(0,dragDepth-1); if(dragDepth===0) dropzone.classList.remove('drop-active'); });
+  dropzone.addEventListener('drop',e=>{
+    e.preventDefault(); dragDepth=0; dropzone.classList.remove('drop-active');
+    renderFlist(); // real implementation: read e.dataTransfer.files
+  });
+  fileInput.addEventListener('change',renderFlist);
+
+  function modalExtract(){
+    if(importType==='csv'){ showMapView(); return; }
+    document.getElementById('modal-pick').style.display='none';
+    document.getElementById('modal-foot').style.display='none';
+    document.getElementById('modal-proc').style.display='block';
+    const fill=document.getElementById('modal-progress-fill');
+    const label=document.getElementById('modal-progress-label');
+    document.getElementById('modal-proc-title').textContent='Reading your photos…';
+    const n=MOCK_FILES.photo.length;
+    for(let i=1;i<=n;i++){
+      setTimeout(()=>{ fill.style.width=Math.round(i/n*100)+'%'; label.textContent=`${i} of ${n} photos processed`; }, i*500);
+    }
+    setTimeout(()=>{ window.location.href='transactions-import-review.html'; }, n*500+500);
+  }
+
+  // ---- CSV goes one step further in-place: pick → map columns → (AI pass) →
+  // review. Mapping stays in the modal for the same reason picking does; only
+  // the final wide table needs a real page, so that's still where this hands off. ----
+  function showMapView(){
+    document.getElementById('modal-pick').style.display='none';
+    document.getElementById('modal-map').style.display='block';
+    document.getElementById('modal-count').textContent='128 rows';
+    document.getElementById('modal-cta').innerHTML='Review rows <svg class="icon-sm" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>';
+    document.getElementById('modal-cta').setAttribute('onclick','startCsvProcessing()');
+    document.querySelector('#modal-foot .btn-secondary').textContent='Back';
+    document.querySelector('#modal-foot .btn-secondary').setAttribute('onclick','showPickView()');
+  }
+  function showPickView(){
+    document.getElementById('modal-map').style.display='none';
+    document.getElementById('modal-pick').style.display='block';
+    document.querySelector('#modal-foot .btn-secondary').textContent='Cancel';
+    document.querySelector('#modal-foot .btn-secondary').setAttribute('onclick',"window.location.href='transactions.html'");
+    renderFlist();
+  }
+
+  // CSV runs the same two AI passes CLAUDE.md §6 documents — merchant-name
+  // resolution, then category suggestion — so it earns the same progress
+  // treatment photo extraction gets, not an instant, unexplained jump to review.
+  function startCsvProcessing(){
+    document.getElementById('modal-map').style.display='none';
+    document.getElementById('modal-foot').style.display='none';
+    document.getElementById('modal-proc').style.display='block';
+    document.getElementById('modal-proc-title').textContent='Preparing your import…';
+    const fill=document.getElementById('modal-progress-fill');
+    const label=document.getElementById('modal-progress-label');
+    const phases=['Resolving merchant names…','Suggesting categories…'];
+    phases.forEach((text,i)=>{
+      setTimeout(()=>{ fill.style.width=Math.round((i+1)/phases.length*100)+'%'; label.textContent=text; }, i*600+120);
+    });
+    setTimeout(()=>{ window.location.href='transactions-import-csv-review.html'; }, phases.length*600+500);
+  }
+</script>
+</body>
+</html>
