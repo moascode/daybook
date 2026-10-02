@@ -59,46 +59,54 @@ wording matters enough to the owner to justify the backend change.
 ## Acceptance criteria
 
 **Page head**
-- [ ] A `.segment` 30d/6m/All range toggle (default "6m" per the mockup),
-      filtering the "Recently finished" list and its day groups by
-      `completedAt` — the heatmap and "What you finish"/"Time to finish"
-      cards stay on their existing full-year/all-time aggregation (the
-      heatmap is explicitly "a year of finishing things," constant
-      regardless of the list's range).
-- [ ] An "Export" button that triggers an immediate client-side CSV
-      download of the currently-filtered completed tasks (content, list
-      name, completed date) — no modal/picker (the mockup shows a single
-      click, not Wallet's `ExportModal` multi-step flow; don't import that
-      pattern's complexity for a single-click affordance this page
-      doesn't ask for).
-- [ ] Page-sub reads "N in the last year" (or "N completed" if the range
-      toggle changes what's being counted — pick whichever reads more
-      honestly given the toggle's actual scope, and say which in the PR).
+- [x] A `.segment` 30d/6m/All range toggle (default "6m"), filtering the
+      "Recently finished" list and its day groups by `completedAt` — the
+      heatmap and "What you finish"/"Time to finish" cards stay on their
+      existing full-year/all-time aggregation, confirmed by tracing the
+      data flow in review.
+- [x] An "Export" button, single click, client-side CSV of the
+      currently-filtered completed tasks (content, list name, completed
+      date) — RFC-4180 quote-escaping plus a leading-apostrophe guard
+      against formula injection, with a try/catch surfacing a toast on
+      failure (CLAUDE.md rule 10).
+- [x] Page-sub is range-dependent ("N in the last 30 days" / "N in the
+      last 6 months" / "N completed") rather than a fixed "N in the last
+      year" — reads correctly for whichever range is selected rather than
+      claiming a window the toggle has already changed.
+- [x] An honest empty state when the selected range has zero completions
+      but the user has completed tasks outside it (`completed-empty-range`,
+      distinct from the genuine "never completed anything" state) — caught
+      in review; the first pass showed the wrong message here.
 
 **Heatmap card**
-- [ ] `.band-main`/`.band-fig`: the existing `totalCompleted` figure with
-      a "tasks completed" caption.
-- [ ] `.band-stats` with three real stats, all derivable from the
-      already-loaded `heatmap` array (`{date, count}[]`) with no new
-      fetch: **Longest streak** (longest run of consecutive days with
-      count > 0, sub-line: the date it ended), **Current streak** (the
-      run ending today/yesterday, sub-line something like "best run since
-      X" only if honestly computable — otherwise a simpler honest
-      sub-line), **Busiest day** (which day-of-week has the highest total
-      completions summed across the year, sub-line: its % share of the
-      total).
-- [ ] Card title/sub updated to "A year of finishing things" / "One
-      square per day — darker means more done", matching the mockup
-      (currently "Analytics" / inline total+avg text).
+- [x] `.band-main`/`.band-fig`: the sum of the loaded `heatmap` array
+      (364-day window) rather than the server's all-time `totalCompleted`
+      — caught in review: the original figure disagreed with the card's
+      own "Busiest day" percentage (which is necessarily heatmap-scoped)
+      for any user with over a year of history. `totalCompleted` keeps its
+      honest all-time meaning everywhere else it's used.
+- [x] `.band-stats`: **Longest streak**, **Current streak** (with a "best
+      run since X" sub-line when an earlier, equal-or-longer run exists,
+      falling back to an honest "N days running" otherwise), **Busiest
+      day** — all derived client-side from the already-loaded `heatmap`
+      array, no new fetch. Streak math reviewed in detail (boundary
+      handling, UTC-safe date arithmetic, tie-breaking) and confirmed
+      correct.
+- [x] Card title/sub: "A year of finishing things" / "One square per day
+      — darker means more done", plus the mockup's `.heat-key` Less→More
+      legend (the CSS already existed, unused until now).
 
 **Split into two cards**
-- [ ] "What you finish" — share of completions by list: count + % of
-      total, each as its own row with a progress bar (`.track`), sorted
-      by count descending (not by avg-days, which is the OTHER card's
-      sort).
-- [ ] "Time to finish" — per-list **average** days (keep existing
-      `avgDays` data, label honestly), sorted slowest-first, with the
-      existing graveyard insight sentence kept exactly as it is today.
+- [x] "What you finish" — count + % share per list with a `.track` bar,
+      sorted by count descending.
+- [x] "Time to finish" — per-list average days, labeled "average" (not
+      the mockup's "median," which the data doesn't compute), sorted
+      slowest-first, with the pre-existing graveyard insight unchanged.
+
+**Deferred, not built:** the mockup's "Filter completed…" search input
+on the "Recently finished" card — real search/filter logic against the
+day-groups is a bigger feature than this wiring pass's scope, flagged
+explicitly rather than skipped silently.
 
 **Out of scope.** Time-tracking sub-text (no such data exists). A true
 server-side median (kept as average, honestly labeled). Pagination
@@ -106,7 +114,4 @@ server-side median (kept as average, honestly labeled). Pagination
 once, which isn't worse UX and isn't broken; not changing it for this
 pass). Habits / List detail pages (separate future items, same pattern).
 
-**Still needed?** Yes — the band-stats, the card split, and the page-head
-controls are real, visible gaps; everything else on this page (the
-heatmap itself, the day-grouped list, the graveyard insight) was confirmed
-already shipped and correct.
+**Still needed?** Shipped — PR to follow.

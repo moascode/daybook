@@ -172,6 +172,21 @@ export function nowISO(): string {
 }
 
 /**
+ * `dateStr` shifted by `days` (negative moves forward). CLAUDE.md §3 trap:
+ * never call `toISOString()` on "now" for date math — this is safe because
+ * the Date itself is built from `Date.UTC` and only ever moved with
+ * `setUTCDate`, so the UTC fields `toISOString()` reads back out are the
+ * same ones that went in. Used by the Completed page's heatmap, streak
+ * math and 30d/6m/All range filter (all client-side, no new fetch).
+ */
+export function dateMinusDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() - days)
+  return dt.toISOString().slice(0, 10)
+}
+
+/**
  * True when the build should expose e2e test hooks (window.__test* helpers and
  * the UAT Tests nav entry).
  *
