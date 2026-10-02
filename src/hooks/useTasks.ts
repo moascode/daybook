@@ -579,17 +579,30 @@ export function useTasks() {
    * store, so `deleteTask` would silently do nothing there. No undo snapshot
    * here (unlike `deleteTask`) — Today's row has no undo-toast affordance
    * yet; the caller is told via a thrown error so it can surface one itself.
+   *
+   * Returns every id the server actually removed — the task itself plus any
+   * CASCADE-deleted descendants (worker/routes/tasks.ts's DELETE handler,
+   * FEAT-062 review fix #2) — so a store-bypassing caller can also drop any
+   * orphaned child rows from its own local arrays, not just the one id it
+   * asked to delete. Falls back to `[id]` if an old cached worker response
+   * ever lacks the field, so a caller that reads this is never left with
+   * nothing to remove.
    */
-  const deleteTaskById = useCallback(async (id: string): Promise<void> => {
+  const deleteTaskById = useCallback(async (id: string): Promise<string[]> => {
+    let result: { deletedIds?: string[] } | undefined
     try {
-      await api.delete(`/tasks/${id}`)
+      result = await api.delete<{ deletedIds?: string[] }>(`/tasks/${id}`)
     } catch (err) {
       await reportAndReconcile(err)
       throw err
     }
-    if (useTasksStore.getState().tasks.some((t) => t.id === id)) {
-      useTasksStore.getState().setTasks(useTasksStore.getState().tasks.filter((t) => t.id !== id))
+    const deletedIds = result?.deletedIds ?? [id]
+    if (useTasksStore.getState().tasks.some((t) => deletedIds.includes(t.id))) {
+      useTasksStore.getState().setTasks(
+        useTasksStore.getState().tasks.filter((t) => !deletedIds.includes(t.id)),
+      )
     }
+    return deletedIds
   }, [])
 
   /**

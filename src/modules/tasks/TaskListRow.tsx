@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Check, Repeat, CalendarClock, X, Pencil } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Repeat, CalendarClock, X, Pencil, MoreVertical, Trash2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
@@ -73,6 +73,34 @@ export interface TaskListRowProps {
    * TaskDetailModal.tsx shipped (BUG-007..012).
    */
   onOpenDetail?: (task: Task) => void
+  /**
+   * FEAT-062 (docs/backlog/EP-07-tasks-depth/FEAT-062-tasks-list-detail-design-adoption.md):
+   * the resolved chip text for a task's `walletRef`, already produced by the
+   * parent page's own `useWalletRefChips().resolveChip()` call (the same hook
+   * `BulletNode.tsx` uses) — resolved once per section, not re-implemented
+   * here. Optional and hide-when-absent, same convention as `coMembers`/
+   * `list`: every page except `TasksListDetailPage.tsx`'s List view passes
+   * nothing and gets no wallet chip.
+   */
+  walletChip?: string | null
+  /**
+   * FEAT-062 (review fix #3/#6/#7): called when the user picks Delete in this
+   * row's own "More" menu. The row itself makes NO API call and keeps no
+   * undo state — every page that renders this row keeps its own local
+   * `openTasks`/`completedInList`-style arrays independent of the outliner's
+   * Zustand store (same staleness story as `onContentChange`/`onDueDateChange`/
+   * `onListChange` above), and a task assigned to the viewer by a co-member
+   * or living in a group-shared list is never IN that store at all — routing
+   * the actual delete through it (as an earlier version of this row did, via
+   * `useTasks().deleteTask`) silently no-oped for exactly those tasks
+   * (CLAUDE.md §2 rule 10). The parent page performs the real delete (via
+   * `useTasks().deleteTaskById`, the store-independent variant) using the
+   * full `Task` object it already holds for this row, and owns the
+   * undo-snapshot/toast itself. Its presence also gates whether the "More"
+   * button renders at all — hide-when-absent, same convention as every
+   * other optional affordance here.
+   */
+  onDelete?: (taskId: string) => void
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
@@ -124,6 +152,8 @@ export function TaskListRow({
   availableLists,
   onListChange,
   onOpenDetail,
+  walletChip,
+  onDelete,
 }: TaskListRowProps) {
   const state = dueState(task)
   const { assignTask, updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
@@ -364,6 +394,16 @@ export function TaskListRow({
           </span>
         )}
 
+        {/* FEAT-062 — resolved by the parent page's `useWalletRefChips()`,
+            same hook BulletNode.tsx already uses; hidden when the parent
+            doesn't pass one (either no walletRef, or the Wallet data hasn't
+            loaded yet). */}
+        {walletChip && (
+          <span className="chip chip-mute" data-testid="all-tasks-row-wallet-chip">
+            {walletChip}
+          </span>
+        )}
+
         {/* BUG-006: due date is now editable from this row, not just displayed.
             The badge itself (when present) opens the picker; otherwise a bare
             calendar icon does, matching BulletNode.tsx's due-date affordance. */}
@@ -445,7 +485,110 @@ export function TaskListRow({
             <Pencil className="h-3.5 w-3.5" />
           </button>
         )}
+
+        {/* FEAT-062 — List-view-only "More" menu, hide-when-absent like every
+            other optional affordance here. */}
+        {onDelete && (
+          <RowMoreMenu
+            taskId={task.id}
+            taskContent={task.content}
+            onDelete={() => onDelete(task.id)}
+          />
+        )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * FEAT-062 — a per-row "More" (⋮) popover with a single real action,
+ * Delete. Reuses FEAT-061's popover CSS (`tasks.css`'s `.row-menu`/
+ * `.row-menu-item` — renamed from `.habit-menu`/`.habit-menu-item` in this
+ * same change, since it was never actually habit-specific and is now used
+ * for tasks too — see `TasksHabitsPage.tsx`'s matching rename) and the same
+ * outside-click/Escape/focus handling `TasksHabitsPage.tsx`'s
+ * `HabitOptionsMenu` already built, rather than inventing a third popover
+ * implementation or reusing `AccountMenu`'s page-level 328px panel (which
+ * clips/mispositions when anchored to a per-row trigger — the exact reason
+ * FEAT-061 built its own in the first place).
+ */
+function RowMoreMenu({
+  taskId,
+  taskContent,
+  onDelete,
+}: {
+  taskId: string
+  taskContent: string
+  onDelete: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const firstItemRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    firstItemRef.current?.focus()
+    function handlePointerDown(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+      // FEAT-062 review fix #9: Tab doesn't trap focus inside this menu (no
+      // full arrow-key roving either — judged not worth the extra complexity
+      // here), so without this a Tab press leaves the menu open while focus
+      // moves on past it. Closing on Tab (without preventDefault, so the
+      // browser's own default tab order still proceeds) is the cheap half of
+      // that gap worth fixing now.
+      if (e.key === 'Tab') setOpen(false)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [open])
+
+  // Closing by any route (item click, outside click, Escape) returns focus to
+  // the trigger — same story as HabitOptionsMenu's identical effect.
+  const wasOpen = useRef(false)
+  useEffect(() => {
+    if (wasOpen.current && !open) triggerRef.current?.focus()
+    wasOpen.current = open
+  }, [open])
+
+  return (
+    <div className="pop-anchor" ref={containerRef}>
+      <button
+        type="button"
+        ref={triggerRef}
+        className="icon-btn"
+        aria-label={`More actions for ${taskContent || 'task'}`}
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        data-testid={`task-row-more-${taskId}`}
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="row-menu open" role="menu" aria-label="Task options" data-testid={`task-row-more-menu-${taskId}`}>
+          <button
+            type="button"
+            role="menuitem"
+            ref={firstItemRef}
+            className="row-menu-item"
+            onClick={() => {
+              setOpen(false)
+              onDelete()
+            }}
+          >
+            <Trash2 className="icon h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 }

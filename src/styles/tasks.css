@@ -214,25 +214,28 @@
 .habit-main .stat-foot { margin-top: var(--s3); }
 .streak { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
 
-/* ---- habit options popover (FEAT-061 review fix #10) — its own small,
-   trigger-anchored menu. Deliberately NOT a reuse of AccountMenu's 328px
+/* ---- row options popover (FEAT-061 review fix #10, renamed from
+   `.habit-menu`/`.habit-menu-item` by FEAT-062 review fix #9: it was never
+   actually habit-specific — TasksHabitsPage's `HabitOptionsMenu` AND
+   TaskListRow's `RowMoreMenu` (FEAT-062) both use this exact small,
+   trigger-anchored menu). Deliberately NOT a reuse of AccountMenu's 328px
    fixed-right `.menu-panel`, which clipped/mispositioned once attached to a
-   per-habit-card trigger instead of the app bar's account button. */
-.habit-menu {
+   per-card/per-row trigger instead of the app bar's account button. */
+.row-menu {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
   min-width: 160px;
   background: rgb(var(--surface)); border: 1px solid rgb(var(--line));
   border-radius: var(--r-md); box-shadow: var(--e3); padding: var(--s1);
   display: none;
 }
-.habit-menu.open { display: block; }
-.habit-menu-item {
+.row-menu.open { display: block; }
+.row-menu-item {
   display: flex; align-items: center; gap: var(--s2); width: 100%;
   padding: var(--s2) var(--s3); border-radius: var(--r-sm);
   font-size: var(--t-sm); color: rgb(var(--fg-muted)); text-align: left;
 }
-.habit-menu-item:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
-.habit-menu-item .icon { color: rgb(var(--fg-faint)); width: 16px; height: 16px; flex-shrink: 0; }
+.row-menu-item:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+.row-menu-item .icon { color: rgb(var(--fg-faint)); width: 16px; height: 16px; flex-shrink: 0; }
 
 @media (max-width: 1080px) { .board { grid-template-columns: repeat(4, minmax(0,1fr)); } }
 /* FEAT-061 review fix #11: between 680px (where .c6 collapses to one column

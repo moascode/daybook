@@ -649,11 +649,52 @@ tasks.post('/tasks/recurring/process', async (c) => {
   return c.json({ created })
 })
 
+// FEAT-062 review fix #3: scoped like POST /tasks/:id/complete (D-15) — the
+// owner, the assignee, or a member with write access on the task's list may
+// delete it. The original `WHERE id = ? AND user_id = ?` silently no-oped
+// (still 204/empty) for a task assigned to the caller by someone else, or one
+// in a list shared to the caller's group — exactly the cases client-side
+// `deleteTaskById` is meant to cover, so the server-side scope had to widen
+// too or that fix would be a no-op in disguise.
+//
+// FEAT-062 review fix #2: the DB's ON DELETE CASCADE removes descendants
+// server-side regardless, but the client keeps its own local `openTasks`/
+// `completedInList` copies (every List-detail-style page bypasses the
+// outliner store) and has no way to know which rows just vanished — so the
+// full set of removed ids (the task plus every descendant) is collected
+// before the delete and returned, replacing the old bodiless 204.
 tasks.delete('/tasks/:id', async (c) => {
-  await c.env.DB.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?')
-    .bind(c.req.param('id'), c.get('userId'))
-    .run()
-  return c.body(null, 204)
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const task = await c.env.DB.prepare(
+    'SELECT id, user_id, assignee_id, list_id FROM tasks WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; assignee_id: string | null; list_id: string | null }>()
+  if (!task) return c.json({ error: 'task not found' }, 404)
+
+  const writable = await writableListIds(c.env.DB, userId)
+  const allowed =
+    task.user_id === userId ||
+    task.assignee_id === userId ||
+    (task.list_id !== null && writable.has(task.list_id))
+  if (!allowed) return c.json({ error: 'task not found' }, 404)
+
+  const { results: descendants } = await c.env.DB.prepare(
+    `WITH RECURSIVE sub(id) AS (
+       SELECT id FROM tasks WHERE id = ?
+       UNION ALL
+       SELECT t.id FROM tasks t JOIN sub ON t.parent_id = sub.id
+     )
+     SELECT id FROM sub`,
+  )
+    .bind(id)
+    .all<{ id: string }>()
+  const deletedIds = descendants.map((r) => r.id)
+
+  await c.env.DB.prepare('DELETE FROM tasks WHERE id = ?').bind(id).run()
+  return c.json({ deletedIds })
 })
 
 // ── Task lists (R4 / D-15) ───────────────────────────
