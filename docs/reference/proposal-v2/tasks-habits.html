@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daybook — Overview</title>
+<link rel="stylesheet" href="theme.css">
+</head>
+<body data-theme="light">
+
+<!-- ============================ APP BAR ============================ -->
+<header class="appbar">
+  <div class="appbar-left">
+    <button class="icon-btn menu-btn" onclick="openSidebar()" aria-label="Open menu"><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <a class="appbar-logo" href="dashboard.html" aria-label="Daybook home">D</a>
+    <label class="search">
+      <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.3-4.3"/></svg>
+      <input type="search" placeholder="Search transactions, tasks, accounts…" aria-label="Search across all modules">
+    </label>
+  </div>
+
+  <!-- modules. fixed set — icon only, name on hover, underline marks where you are. -->
+  <nav class="modtabs" aria-label="Modules">
+    <a class="modtab" href="day.html" data-tip="Day">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/><circle cx="8.5" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="12.5" cy="14" r="1.1" fill="currentColor" stroke="none"/></svg>
+      <span class="tip-label">Day</span>
+    </a>
+    <a class="modtab" href="tasks.html" aria-current="page" data-tip="Tasks">
+      <svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg>
+      <span class="count">6</span>
+      <span class="tip-label">Tasks</span>
+    </a>
+    <a class="modtab" href="dashboard.html" data-tip="Wallet">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg>
+      <span class="tip-label">Wallet</span>
+    </a>
+      <a class="modtab" href="trips.html" data-tip="Trips">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Trips</span>
+    </a>
+</nav>
+
+  <div class="appbar-right">
+    <button class="circle-btn" aria-label="Quick add">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="tip-label">Quick add</span>
+    </button>
+    <button class="circle-btn" aria-label="Notifications">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M18 8.5a6 6 0 1 0-12 0c0 5.5-2 7-2 7h16s-2-1.5-2-7"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+      <span class="count">3</span>
+      <span class="tip-label">Notifications</span>
+    </button>
+    <div class="pop-anchor">
+      <button class="avatar-btn" onclick="toggleAccount()" aria-haspopup="menu" aria-expanded="false" aria-label="Your account">
+        <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+        <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+        <span class="tip-label" style="left:auto;right:0;transform:none">Account</span>
+      </button>
+
+      <div class="menu-panel" id="account" role="menu">
+        <!-- root pane -->
+        <div class="pane show" id="pane-root">
+          <div class="menu-card">
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))">MA</span>
+              <span>
+                <span class="menu-you-name" style="display:block">moascode</span>
+                <span class="menu-you-sub">View your profile</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))">H</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Household</span>
+                <span class="menu-you-sub">3 members · active ledger</span>
+              </span>
+              <svg class="icon-sm" viewBox="0 0 24 24" style="margin-left:auto;color:rgb(var(--accent))"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </button>
+            <button class="menu-you" role="menuitem">
+              <span class="avatar" style="background:rgb(var(--alt-bg));color:rgb(var(--alt-fg))">P</span>
+              <span>
+                <span class="menu-you-name" style="display:block">Personal</span>
+                <span class="menu-you-sub">Just you</span>
+              </span>
+            </button>
+            <div class="menu-hr"></div>
+            <button class="menu-btn-wide" role="menuitem">
+              <svg class="icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c0-4 3.4-6.6 7.5-6.6s7.5 2.6 7.5 6.6"/></svg>
+              See all ledgers
+            </button>
+          </div>
+
+          <button class="menu-wide" role="menuitem" onclick="showPane('pane-settings')">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.9 15.2a1.7 1.7 0 0 0 .34 1.87 2.06 2.06 0 1 1-2.92 2.92 1.7 1.7 0 0 0-2.88 1.21 2.06 2.06 0 1 1-4.12 0 1.7 1.7 0 0 0-2.88-1.2 2.06 2.06 0 1 1-2.92-2.93A1.7 1.7 0 0 0 3.3 14.2a2.06 2.06 0 1 1 0-4.12A1.7 1.7 0 0 0 4.5 7.2a2.06 2.06 0 1 1 2.92-2.92 1.7 1.7 0 0 0 2.88-1.2 2.06 2.06 0 1 1 4.12 0 1.7 1.7 0 0 0 2.88 1.2 2.06 2.06 0 1 1 2.92 2.92 1.7 1.7 0 0 0 1.2 2.88 2.06 2.06 0 1 1 0 4.12 1.7 1.7 0 0 0-1.52 1Z"/></svg></span>
+            Settings &amp; privacy
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.6 2.25c-.9.47-1.35 1-1.35 1.85v.4"/><circle cx="12" cy="16.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            Help &amp; support
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem" onclick="toggleTheme()">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg></span>
+            Display &amp; accessibility
+            <svg class="icon-sm chev" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"/><path d="M12 8.5v3.2"/><circle cx="12" cy="13.8" r=".6" fill="currentColor" stroke="none"/></svg></span>
+            <span>Report a problem <span class="sub">⌘ B</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M15 12H4m0 0 3-3m-3 3 3 3"/><path d="M10 6V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-1"/></svg></span>
+            Log out
+          </button>
+          <div class="menu-foot">Privacy · Terms · Your data · Open source · More<br>Daybook 2.4 · everything stays on your hardware</div>
+        </div>
+
+        <!-- settings pane: global first, then per module -->
+        <div class="pane" id="pane-settings">
+          <div class="menu-head">
+            <button class="circle-btn" style="width:34px;height:34px" onclick="showPane('pane-root')" aria-label="Back"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></svg></button>
+            <span class="title">Settings &amp; privacy</span>
+          </div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></span>
+            <span>Preferences <span class="sub">Language, currency, week start</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg></span>
+            <span>Privacy &amp; data <span class="sub">Backups, sync, export</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/></svg></span>
+            <span>Household <span class="sub">Members, roles, invites</span></span>
+          </button>
+          <div class="menu-hr"></div>
+          <div class="menu-label" style="padding-left:var(--s3)">Module settings</div>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble" style="background:rgb(var(--accent-bg));color:rgb(var(--accent-fg))"><svg class="icon" viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5-9 4.5Z"/><path d="m3 15 9 4.5L21 15"/></svg></span>
+            <span>Wallet <span class="sub">Categories, budgets, import rules</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span>
+            <span>Tasks <span class="sub">Lists, reminders, recurrence</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg></span>
+            <span>Day <span class="sub">What appears on the timeline</span></span>
+          </button>
+          <button class="menu-wide" role="menuitem">
+            <span class="bubble"><svg class="icon" viewBox="0 0 24 24"><path d="M10.5 19.5 12 21l1.5-1.5"/><path d="M12 21v-5.2"/><path d="M3 12.2 12 3l9 9.2-3.4 1.1-1.3 3.3H7.7l-1.3-3.3Z"/></svg></span>
+            <span>Trips <span class="sub">Currencies, rates, packing templates</span></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <div class="sidebar-backdrop" onclick="closeSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="module-head">
+      <span class="module-head-mark"><svg class="icon-sm" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="m8.5 12 2.4 2.4L16 9.5"/></svg></span>
+      <span>
+        <span class="module-head-name" style="display:block">Tasks</span>
+        <span class="module-head-sub">Household &amp; personal</span>
+      </span>
+      <button class="sidebar-close" onclick="closeSidebar()" aria-label="Close menu"><svg class="icon" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+
+    <nav class="nav-group">
+      <a class="nav-item " href="tasks.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3.5 2"/></svg>
+        Today
+        <span class="nav-badge alert">6</span>
+      </a>
+      <a class="nav-item " href="tasks-upcoming.html">
+        <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16" rx="3"/><path d="M3 9.5h18M8 3v3M16 3v3"/></svg>
+        Upcoming
+      </a>
+      <a class="nav-item " href="tasks-all.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="m3 6 1.2 1.2L6.5 5M3 12l1.2 1.2L6.5 11M3 18l1.2 1.2L6.5 17"/></svg>
+        All tasks
+      </a>
+      <a class="nav-item " href="tasks-assigned.html">
+        <svg class="icon" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6.2 6.5-6.2S15.5 16.4 15.5 20"/><circle cx="17.5" cy="8.5" r="2.6"/><path d="M15 13.6c2.9.2 5 2.6 5 6.4"/></svg>
+        Assigned to me
+        <span class="nav-badge">3</span>
+      </a>
+    </nav>
+
+    <div class="nav-group">
+      <span class="u-label">Lists</span>
+      <a class="nav-item " href="tasks-list.html">
+        <span class="cat-dot" style="background:rgb(var(--info));margin:0 2px"></span>
+        Household
+        <span class="nav-badge">12</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--alt));margin:0 2px"></span>
+        Work
+        <span class="nav-badge">8</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--calm));margin:0 2px"></span>
+        Errands
+        <span class="nav-badge">5</span>
+      </a>
+      <a class="nav-item" href="#">
+        <span class="cat-dot" style="background:rgb(var(--warn));margin:0 2px"></span>
+        Someday
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <span class="u-label">Review</span>
+      <a class="nav-item " href="tasks-completed.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+        Completed
+      </a>
+      <a class="nav-item active" aria-current="page" href="tasks-habits.html">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M4 20V10M11 20V4M18 20v-7"/></svg>
+        Habits
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+
+    <div class="trust-note u-label" style="padding:var(--s3) var(--s2);border-top:1px solid rgb(var(--line-subtle));display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-weight:500;color:rgb(var(--fg-subtle))">
+      <svg class="icon-sm" viewBox="0 0 24 24" style="color:rgb(var(--accent))"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+      On your hardware
+    </div>
+  </aside>
+
+  <div class="main-col">
+
+
+
+
+    <main class="content">
+
+      <div class="page-head">
+        <h1 class="page-title">Habits</h1>
+        <span class="page-sub hide-mobile">4 active · 9-day streak</span>
+        <div class="page-actions">
+          <button class="btn btn-primary"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> New habit</button>
+        </div>
+      </div>
+
+      <div class="dash">
+
+        <section class="card card-pad c12">
+          <div class="card-head">
+            <div><div class="card-title">Consistency</div><div class="card-sub">The things you asked to do repeatedly</div></div>
+            <span class="chip chip-pos" style="margin-left:auto">3 of 4 above 70%</span>
+          </div>
+          <div class="band">
+            <div class="band-main"><div class="band-fig"><span class="v">78%</span><span class="k">of habit days kept, last 30</span></div></div>
+            <div class="band-stats">
+              <div class="band-stat"><div class="k">Current streak</div><div class="v" style="color:rgb(var(--pos-fg))">9 days</div><div class="s">all four kept</div></div>
+              <div class="band-stat"><div class="k">Longest ever</div><div class="v">23 days</div><div class="s">ended 4 June</div></div>
+              <div class="band-stat"><div class="k">Weakest day</div><div class="v">Friday</div><div class="s">52% kept</div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card card-pad c6">
+          <div class="habit">
+            <div class="ring">
+              <svg viewBox="0 0 92 92" role="img" aria-label="Morning run completed 87% of days.">
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--track))"/>
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--calm))" stroke-dasharray="218.6 251.3"/>
+              </svg>
+              <div class="ring-center"><span class="v">87%</span><span class="k">30 DAYS</span></div>
+            </div>
+            <div class="habit-main">
+              <div class="goal-name">Morning run</div>
+              <div class="goal-sub">Every day before 08:00 · Errands</div>
+              <div class="dots" style="margin-top:var(--s3)"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+              <div class="stat-foot" style="margin-top:var(--s3)">
+                <span class="streak" style="color:rgb(var(--calm))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3c2 3.5-1 4.5 0 7 1.5-1 2-2.5 2-2.5 2 2 3 4 3 6a5 5 0 0 1-10 0c0-2 1-3.5 2-5 .5 1 1 1.5 1 1.5-1-3 1-5 2-7Z"/></svg>14-day streak</span>
+                <span>best 21 days</span>
+              </div>
+            </div>
+            <button class="icon-btn" aria-label="Habit options"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          </div>
+        </section>
+
+        <section class="card card-pad c6">
+          <div class="habit">
+            <div class="ring">
+              <svg viewBox="0 0 92 92" role="img" aria-label="Water the plants completed 79% of days.">
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--track))"/>
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--info))" stroke-dasharray="198.5 251.3"/>
+              </svg>
+              <div class="ring-center"><span class="v">79%</span><span class="k">30 DAYS</span></div>
+            </div>
+            <div class="habit-main">
+              <div class="goal-name">Water the plants</div>
+              <div class="goal-sub">Every 3 days · Household</div>
+              <div class="dots" style="margin-top:var(--s3)"><i class="on"></i><i class="miss"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="miss"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class="on"></i><i class="on"></i><i class="miss"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+              <div class="stat-foot" style="margin-top:var(--s3)">
+                <span class="streak" style="color:rgb(var(--info))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3c2 3.5-1 4.5 0 7 1.5-1 2-2.5 2-2.5 2 2 3 4 3 6a5 5 0 0 1-10 0c0-2 1-3.5 2-5 .5 1 1 1.5 1 1.5-1-3 1-5 2-7Z"/></svg>6-day streak</span>
+                <span>best 15 days</span>
+              </div>
+            </div>
+            <button class="icon-btn" aria-label="Habit options"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          </div>
+        </section>
+
+        <section class="card card-pad c6">
+          <div class="habit">
+            <div class="ring">
+              <svg viewBox="0 0 92 92" role="img" aria-label="Standup notes completed 93% of days.">
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--track))"/>
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--alt))" stroke-dasharray="233.7 251.3"/>
+              </svg>
+              <div class="ring-center"><span class="v">93%</span><span class="k">30 DAYS</span></div>
+            </div>
+            <div class="habit-main">
+              <div class="goal-name">Standup notes</div>
+              <div class="goal-sub">Weekdays 10:30 · Work</div>
+              <div class="dots" style="margin-top:var(--s3)"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class=""></i><i class=""></i></div>
+              <div class="stat-foot" style="margin-top:var(--s3)">
+                <span class="streak" style="color:rgb(var(--alt))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3c2 3.5-1 4.5 0 7 1.5-1 2-2.5 2-2.5 2 2 3 4 3 6a5 5 0 0 1-10 0c0-2 1-3.5 2-5 .5 1 1 1.5 1 1.5-1-3 1-5 2-7Z"/></svg>5-day streak</span>
+                <span>best 30 days</span>
+              </div>
+            </div>
+            <button class="icon-btn" aria-label="Habit options"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          </div>
+        </section>
+
+        <section class="card card-pad c6">
+          <div class="habit">
+            <div class="ring">
+              <svg viewBox="0 0 92 92" role="img" aria-label="No spend day completed 48% of days.">
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--track))"/>
+                <circle cx="46" cy="46" r="40" stroke="rgb(var(--warn))" stroke-dasharray="120.6 251.3"/>
+              </svg>
+              <div class="ring-center"><span class="v">48%</span><span class="k">30 DAYS</span></div>
+            </div>
+            <div class="habit-main">
+              <div class="goal-name">No spend day</div>
+              <div class="goal-sub">Target 3 a week · Wallet</div>
+              <div class="dots" style="margin-top:var(--s3)"><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class=""></i><i class="miss"></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class=""></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class=""></i><i class="on"></i><i class=""></i><i class="miss"></i><i class="on"></i><i class=""></i><i class=""></i><i class="on"></i><i class=""></i><i class="on"></i><i class=""></i><i class="on"></i><i class=""></i></div>
+              <div class="stat-foot" style="margin-top:var(--s3)">
+                <span class="streak" style="color:rgb(var(--warn))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 3c2 3.5-1 4.5 0 7 1.5-1 2-2.5 2-2.5 2 2 3 4 3 6a5 5 0 0 1-10 0c0-2 1-3.5 2-5 .5 1 1 1.5 1 1.5-1-3 1-5 2-7Z"/></svg>2-day streak</span>
+                <span>best 7 days</span>
+              </div>
+            </div>
+            <button class="icon-btn" aria-label="Habit options"><svg class="icon-sm" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+          </div>
+        </section>
+
+        <section class="card card-pad c8">
+          <div class="card-head"><div><div class="card-title">Kept by weekday</div><div class="card-sub">All habits, last 12 weeks</div></div></div>
+          <div class="bars">
+            <div class="bars-avg" style="bottom:80px"></div>
+            <div class="bar hi"><span class="bar-val">91%</span><div class="bar-fill" style="height:130px"></div><span class="bar-day">Mon</span></div>
+            <div class="bar hi"><span class="bar-val">88%</span><div class="bar-fill" style="height:126px"></div><span class="bar-day">Tue</span></div>
+            <div class="bar"><span class="bar-val">84%</span><div class="bar-fill" style="height:120px"></div><span class="bar-day">Wed</span></div>
+            <div class="bar"><span class="bar-val">76%</span><div class="bar-fill" style="height:109px"></div><span class="bar-day">Thu</span></div>
+            <div class="bar"><span class="bar-val">52%</span><div class="bar-fill" style="height:74px"></div><span class="bar-day">Fri</span></div>
+            <div class="bar"><span class="bar-val">69%</span><div class="bar-fill" style="height:99px"></div><span class="bar-day">Sat</span></div>
+            <div class="bar"><span class="bar-val">86%</span><div class="bar-fill" style="height:123px"></div><span class="bar-day">Sun</span></div>
+          </div>
+          <div class="divider"></div>
+          <div style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">Friday is the only day below 70%. It is also the day with the most scheduled tasks after Wednesday — the habits are being squeezed out, not forgotten.</div>
+        </section>
+
+        <section class="card card-pad c4">
+          <div class="card-head"><div><div class="card-title">Worth knowing</div></div></div>
+          <div class="sug">
+            <div class="tavatar" style="background:rgb(var(--warn-bg));color:rgb(var(--warn-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M12 4v9"/><circle cx="12" cy="17.5" r=".8" fill="currentColor" stroke="none"/><path d="M10.3 3.6 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/></svg></div>
+            <div class="sug-main"><div class="sug-title">"No spend day" is at 48%</div><div class="sug-sub">Target is 3 a week, you average 1.4</div></div>
+            <button class="btn btn-secondary btn-sm">Lower it</button>
+          </div>
+          <div class="sug">
+            <div class="tavatar" style="background:rgb(var(--pos-bg));color:rgb(var(--pos-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></div>
+            <div class="sug-main"><div class="sug-title">The run survives everything</div><div class="sug-sub">87% kept, including three sick days</div></div>
+          </div>
+          <div class="sug">
+            <div class="tavatar" style="background:rgb(var(--info-bg));color:rgb(var(--info-fg))"><svg class="icon-sm" viewBox="0 0 24 24"><path d="M4 12h16m0 0-5-5m5 5-5 5"/></svg></div>
+            <div class="sug-main"><div class="sug-title">Protect Friday</div><div class="sug-sub">Move two Friday tasks to Saturday</div></div>
+            <button class="btn btn-secondary btn-sm">Move</button>
+          </div>
+          <div class="divider" style="margin-top:auto"></div>
+          <div style="font-size:var(--t-sm);color:rgb(var(--fg-subtle))">A habit kept <b style="color:rgb(var(--fg));font-weight:600">above 80%</b> for six weeks almost never lapses. Two of yours are there.</div>
+        </section>
+
+      </div>
+
+    </main>
+
+<!-- mobile chrome -->
+<button class="fab" aria-label="Add task"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+<nav class="tabbar">
+  <a href="dashboard.html" class="active"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Overview</a>
+  <a href="transactions.html" class=""><svg class="icon" viewBox="0 0 24 24"><path d="M4 8h13m0 0-3-3m3 3-3 3"/><path d="M20 16H7m0 0 3-3m-3 3 3 3"/></svg>Activity</a>
+  <a href="accounts.html" class=""><svg class="icon" viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="13" rx="2.5"/><path d="M2.5 10.5h19"/></svg>Accounts</a>
+  <a href="#"><svg class="icon" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>Budgets</a>
+</nav>
+
+<script>
+  function toggleTheme(){const b=document.body;b.setAttribute('data-theme',b.getAttribute('data-theme')==='dark'?'light':'dark');}
+  function openSidebar(){document.getElementById('sidebar').classList.add('open');document.querySelector('.sidebar-backdrop').classList.add('show');}
+  function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.querySelector('.sidebar-backdrop').classList.remove('show');}
+  function toggleAccount(){
+    const p=document.getElementById('account'); const open=p.classList.toggle('open');
+    p.parentElement.querySelector('[aria-haspopup]').setAttribute('aria-expanded',String(open));
+    if(!open) showPane('pane-root');
+  }
+  function showPane(id){
+    document.querySelectorAll('#account .pane').forEach(x=>x.classList.toggle('show', x.id===id));
+  }
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.pop-anchor')){
+      const p=document.getElementById('account');
+      if(p && p.classList.contains('open')){ p.classList.remove('open'); showPane('pane-root'); }
+    }
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){const p=document.getElementById('account'); if(p){p.classList.remove('open'); showPane('pane-root');}}
+  });
+  document.querySelectorAll('.segment').forEach(s=>s.addEventListener('click',e=>{
+    if(e.target.tagName!=='BUTTON')return;
+    s.querySelectorAll('button').forEach(b=>b.setAttribute('aria-selected', b===e.target));
+  }));
+</script>
+</body>
+</html>

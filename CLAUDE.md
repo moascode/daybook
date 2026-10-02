@@ -242,6 +242,7 @@ This file is deliberately short. The long-form material is one click away.
 | Deploy, release, rollback | [`docs/guides/ci-cd.md`](docs/guides/ci-cd.md) |
 | What's planned, and whether it's still wanted | [`docs/backlog/README.md`](docs/backlog/README.md) |
 | Undecided design questions (D-5, D-6, D-9) | [`docs/reference/open-decisions.md`](docs/reference/open-decisions.md) |
+| The v2 design mockup, rendered (not guessed from markup) | [`docs/reference/proposal-v2/`](docs/reference/proposal-v2/README.md) — `preview_start {"name": "design-mockup"}` |
 | Everything that shipped | [`docs/archive/README.md`](docs/archive/README.md) |
 | The whole docs tree and its rules | [`docs/README.md`](docs/README.md) |
 

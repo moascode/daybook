@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:worker"],
       "port": 8788
+    },
+    {
+      "name": "design-mockup",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "4873", "--directory", "docs/reference/proposal-v2"],
+      "port": 4873
     }
   ]
 }
