@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { api } from '@/lib/api'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
-import type { Habit, HabitDayEntry, HabitLinkedKind, HabitStats } from '@/types/habits.types'
+import type { Habit, HabitDayEntry, HabitLinkedKind, HabitStats, JointHabitStats } from '@/types/habits.types'
 
 /** DB row shape (+ server-computed `stats`) returned by the habits endpoints. */
 interface HabitRow {
@@ -21,6 +21,7 @@ interface HabitRow {
     entries: { date: string; done: boolean; due: boolean }[]
     currentStreak: number
     bestStreak: number
+    bestStreakEnd: string | null
     weekdayRates: number[]
     weeklyRate: number
   }
@@ -31,6 +32,7 @@ function rowToHabit(row: HabitRow): Habit {
     entries: row.stats.entries as HabitDayEntry[],
     currentStreak: row.stats.currentStreak,
     bestStreak: row.stats.bestStreak,
+    bestStreakEnd: row.stats.bestStreakEnd,
     weekdayRates: row.stats.weekdayRates,
     weeklyRate: row.stats.weeklyRate,
   }
@@ -59,6 +61,14 @@ export function useHabits() {
     setHabits(mapped)
     setLoaded(true)
     return mapped
+  }, [])
+
+  /** The joint "all habits kept" streak, computed server-side over each
+   * habit's full 84-day window (FEAT-061 review fix #6) — a sibling GET,
+   * not folded into `loadHabits`'s response, so that endpoint's existing
+   * plain-array shape doesn't change. */
+  const loadJointStats = useCallback(async (): Promise<JointHabitStats> => {
+    return api.get<JointHabitStats>('/habits/joint-stats')
   }, [])
 
   const createHabit = useCallback(
@@ -133,5 +143,5 @@ export function useHabits() {
     setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)))
   }, [])
 
-  return { habits, loaded, loadHabits, createHabit, updateHabit, deleteHabit, toggleHabitEntry }
+  return { habits, loaded, loadHabits, loadJointStats, createHabit, updateHabit, deleteHabit, toggleHabitEntry }
 }

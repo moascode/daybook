@@ -93,6 +93,9 @@ interface HabitStats {
   entries: { date: string; done: boolean; due: boolean }[]
   currentStreak: number
   bestStreak: number
+  /** The date (YYYY-MM-DD) `bestStreak`'s run ended, within the stats window — null if bestStreak is 0.
+   *  FEAT-061: ties (multiple runs of the same max length) report the most recent one. */
+  bestStreakEnd: string | null
   weekdayRates: number[] // index 0=Sun..6=Sat; fraction of due days kept, over the last 84 days (12 weeks)
   weeklyRate: number // this week's kept / target_per_week
 }
@@ -102,7 +105,14 @@ interface HabitStats {
 const STATS_WINDOW_DAYS = 84
 const GRID_DAYS = 28
 
-async function computeStats(db: D1Database, habit: HabitRow, today: string): Promise<HabitStats> {
+type WindowDay = { date: string; done: boolean; due: boolean }
+
+/** Fetches + builds the full `STATS_WINDOW_DAYS` (oldest-first) due/done
+ * window for one habit — the single DB round trip `computeStats` and
+ * `computeJointStats` (FEAT-061 review fix #6) both build their numbers from,
+ * so a joint "all habits kept" streak can see the same 84-day history each
+ * habit's own streak is computed over, not just the 28-day grid slice. */
+async function computeWindow(db: D1Database, habit: HabitRow, today: string): Promise<WindowDay[]> {
   const windowStart = dateMinusDays(today, STATS_WINDOW_DAYS - 1)
   const { results } = await db
     .prepare('SELECT date, done FROM habit_entries WHERE habit_id = ? AND date >= ? AND date <= ?')
@@ -113,21 +123,33 @@ async function computeStats(db: D1Database, habit: HabitRow, today: string): Pro
   const spendDates =
     habit.linked_kind === 'wallet:no-spend' ? await noSpendDatesInRange(db, habit.user_id, windowStart, today) : null
 
-  const dueByWeekday = new Array(7).fill(0)
-  const keptByWeekday = new Array(7).fill(0)
-  let bestStreak = 0
-  let runningStreak = 0
-  const entries: { date: string; done: boolean; due: boolean }[] = []
-  // Oldest-first, so `entries` and the weekday tallies can be built forward in
-  // one pass; the whole window (not just the 28-day grid slice), since
-  // bestStreak needs the full history to find its longest run.
-  const window: { date: string; done: boolean; due: boolean }[] = []
-
+  const window: WindowDay[] = []
   for (let i = STATS_WINDOW_DAYS - 1; i >= 0; i--) {
     const date = dateMinusDays(today, i)
     const weekday = weekdayOf(date)
     const due = isDueOn(schedule, weekday)
     const done = isDoneOn(habit, entryMap, spendDates, date)
+    window.push({ date, done, due })
+  }
+  return window
+}
+
+/** Pure (no DB) — derives one habit's stats from its already-fetched window. */
+function computeStatsFromWindow(habit: HabitRow, window: WindowDay[]): HabitStats {
+  const today = window[window.length - 1]!.date
+  const dueByWeekday = new Array(7).fill(0)
+  const keptByWeekday = new Array(7).fill(0)
+  let bestStreak = 0
+  let bestStreakEnd: string | null = null
+  let runningStreak = 0
+  // Oldest-first, so `entries` and the weekday tallies can be built forward
+  // in one pass; the whole window (not just the 28-day grid slice), since
+  // bestStreak needs the full history to find its longest run.
+  const entries: WindowDay[] = []
+
+  for (let idx = 0; idx < window.length; idx++) {
+    const { date, done, due } = window[idx]!
+    const weekday = weekdayOf(date)
 
     if (due) {
       dueByWeekday[weekday]++
@@ -136,13 +158,17 @@ async function computeStats(db: D1Database, habit: HabitRow, today: string): Pro
 
     if (due && done) {
       runningStreak++
-      bestStreak = Math.max(bestStreak, runningStreak)
+      // >= (not >) so a later run that TIES the max reports its own end date —
+      // "ended {date}" should name the most recent occurrence, not the first.
+      if (runningStreak >= bestStreak) {
+        bestStreak = runningStreak
+        bestStreakEnd = date
+      }
     } else if (due) {
       runningStreak = 0
     }
 
-    window.push({ date, done, due })
-    if (i < GRID_DAYS) entries.push({ date, done, due })
+    if (window.length - idx <= GRID_DAYS) entries.push({ date, done, due })
   }
 
   // Current streak: walk backward from today (the END of `window`) — a day
@@ -153,7 +179,7 @@ async function computeStats(db: D1Database, habit: HabitRow, today: string): Pro
   // instead of the one ending today, which is the bug this replaced.
   let currentStreak = 0
   for (let i = window.length - 1; i >= 0; i--) {
-    const day = window[i]
+    const day = window[i]!
     // Today is a special case for a MANUALLY-tracked habit only: due-but-
     // not-yet-checked-off doesn't break the streak, since the day isn't over
     // and the user may still tick it — it just doesn't extend the streak
@@ -182,7 +208,69 @@ async function computeStats(db: D1Database, habit: HabitRow, today: string): Pro
   const keptThisWeek = entries.filter((e) => e.date >= weekStart && e.done).length
   const weeklyRate = habit.target_per_week > 0 ? Math.min(1, keptThisWeek / habit.target_per_week) : 0
 
-  return { entries, currentStreak, bestStreak, weekdayRates, weeklyRate }
+  return { entries, currentStreak, bestStreak, bestStreakEnd, weekdayRates, weeklyRate }
+}
+
+async function computeStats(db: D1Database, habit: HabitRow, today: string): Promise<HabitStats> {
+  const window = await computeWindow(db, habit, today)
+  return computeStatsFromWindow(habit, window)
+}
+
+/** FEAT-061 review fix #6 — the joint "every habit due that day was kept"
+ * streak, computed server-side over each habit's full `STATS_WINDOW_DAYS`
+ * window (not the client's 28-day grid slice), so it can't disagree with a
+ * per-habit card that legitimately shows a longer streak than 28 days.
+ * Mirrors the per-habit day-status rule above, applied jointly: a date is
+ * 'broken' the moment any habit due that date was missed (today is forgiven
+ * for a manually-tracked habit not yet ticked), 'kept' when at least one
+ * habit was due and kept with none missed, otherwise 'skip'. */
+function computeJointStats(
+  habits: HabitRow[],
+  windows: WindowDay[][],
+): { currentStreak: number; bestRun: { length: number; end: string } | null } {
+  if (habits.length === 0) return { currentStreak: 0, bestRun: null }
+  const dates = windows[0]!.map((d) => d.date)
+  const today = dates[dates.length - 1]!
+
+  const statuses: ('kept' | 'skip' | 'broken')[] = dates.map((date, i) => {
+    let broken = false
+    let anyCounted = false
+    for (let h = 0; h < habits.length; h++) {
+      const day = windows[h]![i]
+      if (!day) continue
+      if (day.due && !day.done) {
+        if (date === today && !habits[h]!.linked_kind) continue
+        broken = true
+        break
+      }
+      if (day.due && day.done) anyCounted = true
+    }
+    return broken ? 'broken' : anyCounted ? 'kept' : 'skip'
+  })
+
+  let currentStreak = 0
+  for (let i = statuses.length - 1; i >= 0; i--) {
+    if (statuses[i] === 'broken') break
+    if (statuses[i] === 'kept') currentStreak++
+  }
+
+  let bestLen = 0
+  let bestEnd: string | null = null
+  let runLen = 0
+  for (let i = 0; i < statuses.length; i++) {
+    if (statuses[i] === 'broken') {
+      runLen = 0
+    } else if (statuses[i] === 'kept') {
+      runLen++
+      // Same >= tie-break as the per-habit bestStreak above.
+      if (runLen >= bestLen) {
+        bestLen = runLen
+        bestEnd = dates[i]!
+      }
+    }
+  }
+
+  return { currentStreak, bestRun: bestLen > 0 ? { length: bestLen, end: bestEnd! } : null }
 }
 
 habits.get('/habits', async (c) => {
@@ -199,6 +287,24 @@ habits.get('/habits', async (c) => {
     results.map(async (habit) => ({ ...habit, stats: await computeStats(c.env.DB, habit, today) })),
   )
   return c.json(withStats)
+})
+
+// FEAT-061 review fix #6 — a sibling, additive GET so `GET /habits`'s
+// existing plain-array response shape (e2e/94 destructures it directly)
+// doesn't have to change. The client was computing "all habits kept"
+// current streak from only its 28-day `entries`, capping a figure that
+// should be allowed to run as long as each habit's own `currentStreak`
+// (84 days) — this recomputes it server-side over the same full window.
+habits.get('/habits/joint-stats', async (c) => {
+  const userId = c.get('userId')
+  const { results } = await c.env.DB.prepare(`SELECT * FROM habits WHERE user_id = ? AND archived = 0 ORDER BY created_at ASC`)
+    .bind(userId)
+    .all<HabitRow>()
+  if (results.length === 0) return c.json({ currentStreak: 0, bestRun: null })
+
+  const today = todayStr()
+  const windows = await Promise.all(results.map((habit) => computeWindow(c.env.DB, habit, today)))
+  return c.json(computeJointStats(results, windows))
 })
 
 const LINKED_KINDS = new Set(['wallet:no-spend'])

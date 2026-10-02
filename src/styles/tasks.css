@@ -197,7 +197,7 @@
 
 
 /* ---- habit dot grid ---- */
-.dots { display: flex; gap: 4px; flex-wrap: wrap; }
+.dots { display: flex; gap: 4px; flex-wrap: wrap; margin-top: var(--s3); }
 .dots i {
   width: 14px; height: 14px; border-radius: 5px; background: rgb(var(--track));
   transition: transform var(--dur-base) var(--ease);
@@ -207,13 +207,49 @@
 .dots i.miss { background: rgb(var(--neg) / .3); }
 .habit { display: flex; align-items: center; gap: var(--s4); }
 .habit-main { flex: 1; min-width: 0; }
+/* FEAT-061 review fix #11: the mockup's `.dots`/`.stat-foot` sit `var(--s3)`
+ * below `.goal-sub`, not flush against it — `.stat-foot`'s own base rule
+ * (data.css) only gives it `var(--s1)`, correct for the stat-card context it
+ * was built for but not this one. */
+.habit-main .stat-foot { margin-top: var(--s3); }
 .streak { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-sm); font-weight: 650; font-variant-numeric: tabular-nums; }
 
+/* ---- habit options popover (FEAT-061 review fix #10) — its own small,
+   trigger-anchored menu. Deliberately NOT a reuse of AccountMenu's 328px
+   fixed-right `.menu-panel`, which clipped/mispositioned once attached to a
+   per-habit-card trigger instead of the app bar's account button. */
+.habit-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20;
+  min-width: 160px;
+  background: rgb(var(--surface)); border: 1px solid rgb(var(--line));
+  border-radius: var(--r-md); box-shadow: var(--e3); padding: var(--s1);
+  display: none;
+}
+.habit-menu.open { display: block; }
+.habit-menu-item {
+  display: flex; align-items: center; gap: var(--s2); width: 100%;
+  padding: var(--s2) var(--s3); border-radius: var(--r-sm);
+  font-size: var(--t-sm); color: rgb(var(--fg-muted)); text-align: left;
+}
+.habit-menu-item:hover { background: rgb(var(--surface-hover)); color: rgb(var(--fg)); }
+.habit-menu-item .icon { color: rgb(var(--fg-faint)); width: 16px; height: 16px; flex-shrink: 0; }
+
 @media (max-width: 1080px) { .board { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+/* FEAT-061 review fix #11: between 680px (where .c6 collapses to one column
+   anyway) and 1080px, the sidebar is still visible and two .c6 habit cards
+   share the row, squeezing `.habit-main` down to ~30px and wrapping the
+   name/dots badly. Stacking the ring + options button on their own row and
+   letting `.habit-main` take the full card width below them avoids the
+   squeeze without touching the shared .c6 breakpoint other cards rely on. */
+@media (max-width: 900px) {
+  .habit { flex-wrap: wrap; }
+  .habit-main { flex-basis: 100%; }
+}
 @media (max-width: 680px) {
   .board { grid-template-columns: minmax(0,1fr); }
   .bcol-body { min-height: 0; }
-  .habit { gap: var(--s3); }
+  .habit { gap: var(--s3); flex-wrap: nowrap; }
+  .habit-main { flex-basis: auto; }
 }
 
 /* =====================================================================
