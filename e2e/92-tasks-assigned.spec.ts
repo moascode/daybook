@@ -116,6 +116,9 @@ test.describe('92 — Tasks assigned to me', () => {
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // FEAT-059: "What you've handed out" now sits behind the From-me tab
+    // (default is To-me).
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
 
     const handedOut = ownerPage.getByTestId('assigned-handed-out-section')
     await expect(handedOut).toContainText('Sort out the storage unit')
@@ -141,6 +144,9 @@ test.describe('92 — Tasks assigned to me', () => {
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // FEAT-059: the handed-out rail (where this picker renders) sits behind
+    // the From-me tab now.
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
 
     const picker = ownerPage.getByTestId(`task-row-assignee-${task.id}`)
     await expect(picker).toBeVisible()
@@ -215,6 +221,8 @@ test.describe('92 — Tasks assigned to me', () => {
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // FEAT-059: the standalone turnaround card moved under the From-me tab.
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
 
     const row = ownerPage.getByTestId(`assigned-turnaround-${assigneeId}`)
     await expect(row).toBeVisible()
@@ -233,10 +241,128 @@ test.describe('92 — Tasks assigned to me', () => {
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // FEAT-059: the turnaround card moved under the From-me tab.
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
 
     await expect(ownerPage.getByTestId('assigned-turnaround-empty')).toContainText(
       'No completed assignments with a recorded assignment time yet',
     )
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('FEAT-059: To me is selected by default, and From me swaps which section shows', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const ownerId = await currentUserId(ownerPage)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // A task waiting on the owner (assigned by the other user) ...
+    const waitingRes = await assigneePage.request.post(`${API}/tasks`, { data: { content: 'Waiting on owner task' } })
+    const waitingTask = await waitingRes.json()
+    await assigneePage.request.patch(`${API}/tasks/${waitingTask.id}`, { data: { assigneeId: ownerId } })
+
+    // ... and one the owner has handed out to the other user, so both
+    // sections have something to show/hide.
+    const handedRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Owner handed out task' } })
+    const handedTask = await handedRes.json()
+    await ownerPage.request.patch(`${API}/tasks/${handedTask.id}`, { data: { assigneeId } })
+
+    await ownerPage.goto('/tasks/assigned')
+    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    await expect(ownerPage.getByTestId('assigned-audience-to-me')).toHaveAttribute('aria-selected', 'true')
+    await expect(ownerPage.getByTestId('assigned-audience-from-me')).toHaveAttribute('aria-selected', 'false')
+    await expect(ownerPage.getByTestId('assigned-waiting-section')).toBeVisible()
+    await expect(ownerPage.getByTestId('assigned-handed-out-section')).not.toBeVisible()
+
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
+
+    await expect(ownerPage.getByTestId('assigned-audience-to-me')).toHaveAttribute('aria-selected', 'false')
+    await expect(ownerPage.getByTestId('assigned-audience-from-me')).toHaveAttribute('aria-selected', 'true')
+    await expect(ownerPage.getByTestId('assigned-waiting-section')).not.toBeVisible()
+    await expect(ownerPage.getByTestId('assigned-handed-out-section')).toBeVisible()
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('FEAT-059: the composer creates a task', async ({ browser }) => {
+    const { ownerPage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+
+    await ownerPage.goto('/tasks/assigned')
+    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    const composer = ownerPage.getByRole('textbox', { name: 'Add a task', exact: true })
+    await composer.fill('Clean out the garage')
+    await composer.press('Enter')
+    await expect(composer).toHaveValue('')
+
+    // A plain-text task with no date/list/priority/`@mention` is neither
+    // "waiting on you" (not assigned to the viewer) nor "handed out" (not
+    // assigned to anyone) — handleCreateTask's patch ends up empty and
+    // nothing re-renders either section on THIS page. Confirm the create
+    // actually landed server-side instead of asserting a visible placement
+    // this page was never going to give it.
+    const after = await ownerPage.request.get(`${API}/tasks?view=all`)
+    const rows = await after.json()
+    expect(rows.some((r: { content: string }) => r.content === 'Clean out the garage')).toBe(true)
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('FEAT-059: band card stats reflect real waiting/handed-out figures', async ({ browser }) => {
+    const { ownerPage, assigneePage, assigneeName, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const ownerId = await currentUserId(ownerPage)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // One task waiting on the owner, assigned by the other user.
+    const waitingRes = await assigneePage.request.post(`${API}/tasks`, { data: { content: 'Waiting task for band' } })
+    const waitingTask = await waitingRes.json()
+    await assigneePage.request.patch(`${API}/tasks/${waitingTask.id}`, { data: { assigneeId: ownerId } })
+
+    // Two tasks the owner hands out to the other user, so "You assigned
+    // out" has a real count and a real per-assignee sub-line to assert on.
+    for (const content of ['Handed out A', 'Handed out B']) {
+      const res = await ownerPage.request.post(`${API}/tasks`, { data: { content, dueDate: businessDatePlus(3) } })
+      const task = await res.json()
+      await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
+    }
+
+    await ownerPage.goto('/tasks/assigned')
+    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    await expect(ownerPage.getByTestId('assigned-household-chip')).toContainText('Household · 2 members')
+
+    const handedOutStat = ownerPage.getByTestId('assigned-stat-handed-out')
+    await expect(handedOutStat).toContainText('2')
+    await expect(handedOutStat).toContainText(`2 to ${assigneeName}`)
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('FEAT-059: Never picked up counts a handed-out, undated task assigned over a month ago', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // Handed out, no due date (the sole "gone quiet" signal this page
+    // uses) AND assigned well past NEVER_PICKED_UP_DAYS (30) — both
+    // conditions are required for the stat to count it.
+    const assignedAt = `${businessDatePlus(-40)} 09:00:00`
+    const res = await ownerPage.request.post(`${API}/tasks`, {
+      data: { content: 'Stale handoff', assigneeId, assignedAt },
+    })
+    const task = await res.json()
+    expect(task).not.toBeNull()
+
+    await ownerPage.goto('/tasks/assigned')
+    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    const stat = ownerPage.getByTestId('assigned-stat-never-picked-up')
+    await expect(stat).toContainText('1')
+    await expect(stat).toContainText('older than a month')
 
     await ownerCtx.close()
     await assigneeCtx.close()
@@ -270,6 +396,8 @@ test.describe('92 — Tasks assigned to me', () => {
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
+    // FEAT-059: the handed-out rail sits behind the From-me tab now.
+    await ownerPage.getByTestId('assigned-audience-from-me').click()
 
     const row = ownerPage.locator(`[data-task-id="${task.id}"]`)
     await expect(row).toBeVisible()
