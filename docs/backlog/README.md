@@ -41,7 +41,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-03](EP-03-consistency-remainder/README.md) | Consistency remainder | 4 | Open |
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
-| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 8 | Open |
+| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 15 | Open |
 | [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 2 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
@@ -103,6 +103,13 @@ files.
 | [FEAT-023](EP-06-wallet-depth/FEAT-023-reports-category-trends.md) | Feature | Reports: category sparkline trends | Yes — R9, unstarted |
 | [FEAT-024](EP-06-wallet-depth/FEAT-024-shared-minimum-transfers.md) | Feature | Shared: group-wide minimum-transfer set | Yes — R9. Touches settlement maths — see the §3 CAS trap before starting. |
 | [FEAT-025](EP-06-wallet-depth/FEAT-025-shared-split-rules.md) | Feature | Shared: split rules with staleness | Yes — R9, unstarted |
+| [FEAT-063](EP-06-wallet-depth/FEAT-063-transactions-category-avatar.md) | Feature | Transactions: category-coloured row avatar | Yes — filed 2026-10-02 |
+| [FEAT-064](EP-06-wallet-depth/FEAT-064-dashboard-settle-up-header.md) | Feature | Dashboard: page-header "Settle up" quick action | Yes — filed 2026-10-02 |
+| [FEAT-065](EP-06-wallet-depth/FEAT-065-accounts-composer.md) | Feature | Accounts: mount the transaction composer | Yes — filed 2026-10-02 |
+| [FEAT-066](EP-06-wallet-depth/FEAT-066-budgets-composer.md) | Feature | Budgets: mount the transaction composer | Yes — filed 2026-10-02 |
+| [FEAT-067](EP-06-wallet-depth/FEAT-067-goals-composer.md) | Feature | Goals: mount the transaction composer | Yes — filed 2026-10-02 |
+| [FEAT-068](EP-06-wallet-depth/FEAT-068-recurring-composer.md) | Feature | Recurring: mount the transaction composer | Yes — filed 2026-10-02 |
+| [FEAT-069](EP-06-wallet-depth/FEAT-069-shared-composer-and-activity-icons.md) | Feature | Shared: mount the transaction composer; category-coloured activity icons | Yes — filed 2026-10-02 |
 
 ### [EP-07](EP-07-tasks-depth/README.md) — Tasks depth
 
