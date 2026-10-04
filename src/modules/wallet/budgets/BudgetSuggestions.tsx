@@ -54,7 +54,10 @@ function rowCopy(s: BudgetSuggestion): { title: string; sub: string; actionLabel
       }
     case 'create-missing':
       return {
-        title: `Set a ${s.categoryName} budget`,
+        // N4(c) fix: "Set a Entertainment budget" was wrong for a vowel-led
+        // category name. Restructured rather than picking a/an conditionally,
+        // so there's no a/an case left to get wrong for any category name.
+        title: `Set up a budget for ${s.categoryName}`,
         sub: `${formatMYR(s.avgMonthlySpend)} a month, unbudgeted`,
         actionLabel: 'Create',
       }
@@ -81,7 +84,11 @@ export function BudgetSuggestions({
   // pending (and re-enable the button) of a DIFFERENT row still in flight.
   const [pending, setPending] = useState<Set<string>>(new Set())
 
-  if (suggestions.length === 0) return null
+  // N4(a) fix: this used to return null whenever there were zero *suggestion*
+  // rows, even when there WAS overspend to report — hiding the insight line
+  // before it ever got a chance to render. Only bail out when there is
+  // neither a suggestion to show nor an overspend insight to report.
+  if (suggestions.length === 0 && !overspendShare) return null
 
   async function run(key: string, action: () => Promise<void>) {
     setPending((p) => new Set(p).add(key))
@@ -138,7 +145,9 @@ export function BudgetSuggestions({
         <>
           <div className="divider" style={{ marginTop: 'auto' }} />
           <div style={{ fontSize: 'var(--t-sm)', color: 'rgb(var(--fg-subtle))' }} data-testid="overspend-insight">
-            {overspendShare.categoryNames.join(' and ')} are{' '}
+            {overspendShare.categoryNames.join(' and ')}{' '}
+            {/* N4(b) fix: "Dining are 100%" — singular subject needs "is". */}
+            {overspendShare.categoryNames.length > 1 ? 'are' : 'is'}{' '}
             <b style={{ color: 'rgb(var(--fg))', fontWeight: 600 }}>{overspendShare.pct}%</b> of all overspend.
             Everything else is behaving.
           </div>

@@ -52,6 +52,14 @@ export function BudgetsPage() {
   const [spending, setSpending] = useState<Map<string, number>>(new Map())
   const [rollingSpending, setRollingSpending] = useState<Map<string, number>>(new Map())
   const [spendingHistory, setSpendingHistory] = useState<CategorySpendHistory>(new Map())
+  // Bug fix (post-Gate-2 review): `spendingHistory.size > 0` is not a
+  // reliable "has it loaded" proxy — a genuinely empty history (no past spend
+  // anywhere) is indistinguishable from "hasn't loaded yet" by size alone.
+  // An explicit status instead: `effectiveLimit`/`topOverspendCategories`
+  // must not apply rollover math against a history that isn't actually in —
+  // whether still loading or because the fetch failed — or a rollover
+  // budget's limit silently doubles (reads "no data" as "zero spend").
+  const [historyStatus, setHistoryStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
 
   const today = todayISO()
   const currentMonth = monthKey(today)
@@ -69,14 +77,26 @@ export function BudgetsPage() {
     // fetched alongside the calendar-month figure above (not on toggle, so
     // switching tabs is instant) rather than lazily, since it's one more
     // cheap aggregate query, not a per-row fan-out.
-    getBudgetSpendingRange(addDaysISO(today, -29), today).then(setRollingSpending)
+    // A failed fetch must not render identically to "nothing spent" — say so
+    // (CLAUDE.md §2 rule 10), matching the history fetch's convention below.
+    getBudgetSpendingRange(addDaysISO(today, -29), today)
+      .then(setRollingSpending)
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load the last 30 days of spending — try the month view instead.'), duration: 4000 }))
     // FEAT-018: 6 months of per-category spend — the suggestions engine's
     // only input besides the budgets/categories already loaded above. A
     // failed fetch must not render identically to "no suggestions" — say so.
     getBudgetSpendingHistory(6)
-      .then(setSpendingHistory)
-      .catch((err) => addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 }))
+      .then((history) => { setSpendingHistory(history); setHistoryStatus('loaded') })
+      .catch((err) => {
+        setHistoryStatus('error')
+        addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 })
+      })
   }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingRange, getBudgetSpendingHistory, addToast, today, currentMonth])
+
+  // Only true once the history fetch has actually succeeded — `effectiveLimit`
+  // and `topOverspendCategories` fall back to the raw, undoubled limit for
+  // both the 'loading' and 'error' states (F1 above).
+  const historyReady = historyStatus === 'loaded'
 
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
 
@@ -86,8 +106,8 @@ export function BudgetsPage() {
   )
 
   const overspendShare = useMemo(
-    () => topOverspendCategories(budgets, categoryName, spending, spendingHistory, currentMonth),
-    [budgets, categoryName, spending, spendingHistory, currentMonth],
+    () => topOverspendCategories(budgets, categoryName, spending, spendingHistory, currentMonth, historyReady),
+    [budgets, categoryName, spending, spendingHistory, currentMonth, historyReady],
   )
 
   const budgetVsActual = useMemo(
@@ -257,7 +277,7 @@ export function BudgetsPage() {
   // every "limit" read here and in the table below goes through it, never
   // raw `limitAmount` (FEAT-066 AC), except the row sub-text which
   // deliberately shows the configured limit so rollover's effect is visible.
-  const totalBudgeted = budgets.reduce((sum, b) => sum + effectiveLimit(b, spendingHistory, currentMonth), 0)
+  const totalBudgeted = budgets.reduce((sum, b) => sum + effectiveLimit(b, spendingHistory, currentMonth, historyReady), 0)
   const totalSpent = budgets.reduce((sum, b) => sum + (activeSpending.get(b.categoryId) ?? 0), 0)
   const monthPct = totalBudgeted > 0 ? Math.min((totalSpent / totalBudgeted) * 100, 100) : 0
 
@@ -270,7 +290,7 @@ export function BudgetsPage() {
   const statusByBudgetId = new Map(
     budgets.map((b) => [
       b.id,
-      budgetStatus(activeSpending.get(b.categoryId) ?? 0, effectiveLimit(b, spendingHistory, currentMonth), statusElapsed),
+      budgetStatus(activeSpending.get(b.categoryId) ?? 0, effectiveLimit(b, spendingHistory, currentMonth, historyReady), statusElapsed),
     ]),
   )
   const onTrackCount = budgets.filter((b) => {
@@ -281,9 +301,16 @@ export function BudgetsPage() {
 
   const aheadPoints = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted - elapsed) * 100) : 0
 
+  // Bug fix (post-Gate-2 review): this was still comparing against the
+  // calendar-month `elapsed` fraction, the exact "no pace concept in a
+  // trailing 30-day window" problem `statusElapsed` exists to fix for the
+  // per-row chips below. In Rolling 30d mode (`statusElapsed` pinned to 1),
+  // `monthPct / 100 > 1 + AHEAD_OF_PACE_THRESHOLD` can never be true since
+  // monthPct is capped at 100 — so this collapses to the two tiers that are
+  // still honest without a partial-period concept: over the limit, or not.
   const fillColor = totalSpent > totalBudgeted
     ? 'rgb(var(--neg))'
-    : monthPct / 100 > elapsed + AHEAD_OF_PACE_THRESHOLD
+    : monthPct / 100 > statusElapsed + AHEAD_OF_PACE_THRESHOLD
       ? 'rgb(var(--warn))'
       : 'rgb(var(--pos))'
 
@@ -361,14 +388,23 @@ export function BudgetsPage() {
                   <div className="band-stat">
                     <div className="k">Left to spend</div>
                     <div className="v">{formatMYR(leftToSpend)}</div>
-                    {daysRemaining > 0 && <div className="s">{formatMYR(perDay)} a day for {daysRemaining} days</div>}
+                    {daysRemaining > 0 && (
+                      // N3 fix: once spend has already passed the total budget,
+                      // `perDay` goes negative — "RM -50.00 a day" reads like a
+                      // typo, not a rate. Name the overage instead of dividing it.
+                      leftToSpend >= 0
+                        ? <div className="s">{formatMYR(perDay)} a day for {daysRemaining} days</div>
+                        : <div className="s" style={{ color: 'rgb(var(--neg-fg))' }}>{formatMYR(Math.abs(leftToSpend))} over already</div>
+                    )}
                   </div>
                   <div className="band-stat">
                     <div className="k">Projected finish</div>
                     <div className="v">{formatMYR(projected)}</div>
-                    {projectedOver !== null && (
-                      <div className="s" style={{ color: 'rgb(var(--neg-fg))' }}>{formatMYR(projectedOver)} over</div>
-                    )}
+                    {/* N2 fix: a favourable projection used to leave this stat's
+                        sub-line silently blank — show how much room is left too. */}
+                    {projectedOver !== null
+                      ? <div className="s" style={{ color: 'rgb(var(--neg-fg))' }}>{formatMYR(projectedOver)} over</div>
+                      : <div className="s">{formatMYR(totalBudgeted - projected)} under</div>}
                   </div>
                   <div className="band-stat">
                     <div className="k">On track</div>
@@ -417,7 +453,7 @@ export function BudgetsPage() {
 
             {budgets.map((budget) => {
               const category = categories.find((c) => c.id === budget.categoryId)
-              const limit = effectiveLimit(budget, spendingHistory, currentMonth)
+              const limit = effectiveLimit(budget, spendingHistory, currentMonth, historyReady)
               const spent = activeSpending.get(budget.categoryId) ?? 0
               const left = limit - spent
               const ratio = limit > 0 ? spent / limit : 0

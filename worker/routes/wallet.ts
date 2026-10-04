@@ -2772,6 +2772,11 @@ wallet.get('/budgets/spending', async (c) => {
     if (!from || !to || !ISO_DATE_RE.test(from) || !ISO_DATE_RE.test(to)) {
       return c.json({ error: 'from and to must both be YYYY-MM-DD' }, 400)
     }
+    // N8: 'YYYY-MM-DD' strings compare lexicographically the same as
+    // chronologically, so a plain string comparison catches a reversed range.
+    if (from > to) {
+      return c.json({ error: 'from must not be after to' }, 400)
+    }
     const { results } = await c.env.DB.prepare(
       `SELECT t.category_id AS categoryId,
               SUM(${EFFECTIVE_AMOUNT_SQL('t')}) AS spent
@@ -2866,6 +2871,17 @@ function positiveAmountError(v: unknown, field: string): string | null {
   return null
 }
 
+// N7: `rolloverEnabled` reached updateRow()/normalizeBind() unvalidated —
+// normalizeBind only special-cases a real `boolean`, so a string like "false"
+// (truthy as a JS value, and not coerced by normalizeBind) would otherwise be
+// bound as the literal string "false" and stored wrong. Reject anything that
+// isn't a genuine boolean or its 0/1 numeric equivalent, same shape as
+// positiveAmountError above.
+function booleanFieldError(v: unknown, field: string): string | null {
+  if (typeof v === 'boolean' || v === 0 || v === 1) return null
+  return `${field} must be a boolean`
+}
+
 wallet.post('/budgets', async (c) => {
   const b = await body(c)
   const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
@@ -2890,6 +2906,10 @@ wallet.patch('/budgets/:id', async (c) => {
   if ('limitAmount' in b) {
     const amtErr = positiveAmountError(b.limitAmount, 'limitAmount')
     if (amtErr) return c.json({ error: amtErr }, 400)
+  }
+  if ('rolloverEnabled' in b) {
+    const rollErr = booleanFieldError(b.rolloverEnabled, 'rolloverEnabled')
+    if (rollErr) return c.json({ error: rollErr }, 400)
   }
   const row = await updateRow(c.env.DB, 'budgets', c.req.param('id'), c.get('userId'), {
     limitAmount: 'limit_amount',

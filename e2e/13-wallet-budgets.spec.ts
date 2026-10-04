@@ -16,7 +16,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navItem, openBlankTransactionForm, businessToday } from './helpers'
+import { newAppPage, fillAccountForm, fillTransactionForm, navItem, openBlankTransactionForm, businessToday, businessDatePlus } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -283,5 +283,103 @@ test.describe('13b — Budgets design adoption (FEAT-066)', () => {
     await fp.goto('/wallet/budgets')
     const row = fp.getByTestId('budget-row').filter({ hasText: 'RolloverCat' })
     await expect(row).toContainText('RM 160.00')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════
+// FEAT-066 fix pass (Gate 2 review) — F2/F5: the Rolling 30d toggle had no
+// coverage at all, and the new `from`/`to` route branch on GET
+// /budgets/spending (including its validation) was untested. Reuses 13b's
+// fixture page/account.
+// ═══════════════════════════════════════════════════════════════════════
+
+test.describe('13c — Rolling 30d toggle and the spending range route (fix pass)', () => {
+  const API = '/api'
+
+  async function mkCategory(p: Page, name: string) {
+    return (await p.request.post(`${API}/categories`, {
+      data: { name, type: 'expense', icon: 'tag', color: '#378ADD' },
+    })).json()
+  }
+
+  async function spend(p: Page, accountId: string, categoryId: string, date: string, amount: number) {
+    await p.request.post(`${API}/transactions`, {
+      data: { accountId, categoryId, date, merchant: 'Store', amount, type: 'expense', tag: '[]' },
+    })
+  }
+
+  let fp: Page
+  let accountId: string
+
+  test.beforeAll(async ({ browser }) => {
+    fp = await newAppPage(browser, '/wallet/budgets')
+    const account = await (await fp.request.post(`${API}/accounts`, {
+      data: { name: 'FEAT066 Fix Cash', type: 'cash', currency: 'MYR', color: '#1D9E75', icon: 'wallet', openingBalance: 0 },
+    })).json()
+    accountId = account.id
+  })
+
+  test.afterAll(async () => {
+    await fp.context().close()
+  })
+
+  test('Rolling 30d toggle hides the month-pace UI and the window follows the toggle', async () => {
+    const cat = await mkCategory(fp, 'Rolling30 Only')
+    await fp.request.post(`${API}/budgets`, { data: { categoryId: cat.id, limitAmount: 1000 } })
+    // Inside the trailing 30-day window — counted by Rolling 30d.
+    await spend(fp, accountId, cat.id, businessDatePlus(-5), 50)
+    // Well outside it (window is [-29, 0]) — must NOT be counted in Rolling
+    // 30d, even though it may still land within this calendar month.
+    await spend(fp, accountId, cat.id, businessDatePlus(-40), 900)
+    await fp.goto('/wallet/budgets')
+
+    await fp.getByRole('tab', { name: 'Rolling 30d' }).click()
+
+    // The band's pace-only stats (Left to spend / Projected finish / On
+    // track) and the "N points ahead of pace" chip only exist in month mode.
+    await expect(fp.locator('.band-stat')).toHaveCount(0)
+    await expect(fp.getByTestId('budget-pace-caption')).toHaveCount(0)
+
+    const row = fp.getByTestId('budget-row').filter({ hasText: 'Rolling30 Only' })
+    // The per-row pace notch is month-only too...
+    await expect(row.getByTestId('budget-pace-notch')).toHaveCount(0)
+    // ...but the status chip is still shown, now computed via statusElapsed
+    // (pinned to 1 in Rolling mode) rather than disappearing with the notch.
+    await expect(row.getByTestId('budget-status-chip')).toBeVisible()
+
+    // Spent/Left reflect only the in-window RM50, not the RM900 from 40 days
+    // ago — proof the row is reading `rollingSpending`, not the calendar
+    // month's `spending`.
+    await expect(row.locator('.num.money').first()).toHaveText(/50\.00/)
+    await expect(row.locator('.num.money').nth(1)).toHaveText(/950\.00/)
+  })
+
+  test('GET /budgets/spending?from&to returns per-category spend for a valid range', async () => {
+    const cat = await mkCategory(fp, 'Range Route Cat')
+    await spend(fp, accountId, cat.id, businessDatePlus(-3), 75)
+    // A transaction outside the requested range must not be summed in.
+    await spend(fp, accountId, cat.id, businessDatePlus(-20), 999)
+
+    const res = await fp.request.get(
+      `${API}/budgets/spending?from=${businessDatePlus(-10)}&to=${businessToday()}`,
+    )
+    expect(res.status()).toBe(200)
+    const rows: { categoryId: string; spent: number }[] = await res.json()
+    const row = rows.find((r) => r.categoryId === cat.id)
+    expect(row?.spent).toBe(75)
+  })
+
+  test('GET /budgets/spending?from&to rejects a missing, malformed, or reversed range with 400', async () => {
+    const missingTo = await fp.request.get(`${API}/budgets/spending?from=${businessToday()}`)
+    expect(missingTo.status()).toBe(400)
+
+    const badFormat = await fp.request.get(`${API}/budgets/spending?from=not-a-date&to=${businessToday()}`)
+    expect(badFormat.status()).toBe(400)
+
+    // from after to — the N8 fix.
+    const reversed = await fp.request.get(
+      `${API}/budgets/spending?from=${businessToday()}&to=${businessDatePlus(-10)}`,
+    )
+    expect(reversed.status()).toBe(400)
   })
 })

@@ -103,7 +103,7 @@ test.describe('89 — Budgets suggestions', () => {
 
   test('create-missing row proposes a budget for Entertainment', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Entertainment' })
-    await expect(row).toContainText('Set a Entertainment budget')
+    await expect(row).toContainText('Set up a budget for Entertainment')
     await expect(row).toContainText('RM 40.00')
     await expect(row.getByRole('button', { name: 'Create' })).toBeVisible()
   })

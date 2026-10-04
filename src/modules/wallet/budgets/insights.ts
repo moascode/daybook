@@ -70,6 +70,9 @@ const RIGHT_SIZE_MIN_OVER_MONTHS = 2
 /** Below this, a missing budget is noise — a RM3/month category doesn't need tracking. */
 const CREATE_MISSING_MIN_SPEND = 20
 
+/** Below this, a positive leftover is noise — a budget run almost exactly to its limit every month shouldn't be offered rollover over rounding dust ("RM 0.00 left over, 3 months running"). Mirrors CREATE_MISSING_MIN_SPEND's role as a noise floor. */
+const ROLL_FORWARD_MIN_LEFTOVER = 10
+
 /** Every month present anywhere in a history, oldest first, sorted lexicographically (safe for 'YYYY-MM'). */
 function allMonths(history: CategorySpendHistory): string[] {
   const all = new Set<string>()
@@ -273,14 +276,17 @@ function rollForwardSuggestions(
     if (b.limitAmount <= 0) continue
     if (b.rolloverEnabled) continue
     if (donorCategoryIds.has(b.categoryId)) continue
+    if (!history.has(b.categoryId)) continue // needs SOME real usage — a never-touched budget isn't "consistently under-used", it's just unused (mirrors reallocateSuggestions' donor guard)
     const leftovers = window.map((m) => Math.max(0, b.limitAmount - spendIn(history, b.categoryId, m)))
     if (leftovers.some((l) => l <= 0)) continue // "consistently" — every month, not an average
     const avgLeftover = leftovers.reduce((s, v) => s + v, 0) / leftovers.length
+    const roundedLeftover = Math.round(avgLeftover)
+    if (roundedLeftover < ROLL_FORWARD_MIN_LEFTOVER) continue // run almost exactly to the limit — not worth surfacing
     suggestions.push({
       type: 'roll-forward',
       categoryId: b.categoryId,
       categoryName: categoryName.get(b.categoryId) ?? 'Unknown',
-      avgLeftover: Math.round(avgLeftover),
+      avgLeftover: roundedLeftover,
       lookbackMonths: CONSISTENCY_WINDOW,
     })
   }
@@ -327,8 +333,19 @@ export function generateBudgetSuggestions(
  * that goes unused for three months in a row only ever rolls forward the
  * most recent month's slack, not all three.
  */
-export function effectiveLimit(budget: Budget, history: CategorySpendHistory, currentMonth: string): number {
-  if (!budget.rolloverEnabled) return budget.limitAmount
+export function effectiveLimit(
+  budget: Budget,
+  history: CategorySpendHistory,
+  currentMonth: string,
+  // Bug fix (post-Gate-2 review): while spending history is still loading —
+  // or once its fetch has failed — `spendIn` reads "no data yet" as "zero
+  // spend last month", which makes every rollover-enabled budget compute
+  // `rollover = limitAmount - 0 = limitAmount`, i.e. `limitAmount * 2`. The
+  // caller passes `false` for exactly those two windows so this falls back to
+  // the raw, honest `limitAmount` instead of silently doubling it.
+  historyLoaded = true,
+): number {
+  if (!budget.rolloverEnabled || !historyLoaded) return budget.limitAmount
   const previousMonth = shiftMonth(currentMonth, -1)
   const rollover = Math.max(0, budget.limitAmount - spendIn(history, budget.categoryId, previousMonth))
   return budget.limitAmount + rollover
@@ -381,11 +398,13 @@ export function topOverspendCategories(
   spending: Map<string, number>,
   history: CategorySpendHistory,
   currentMonth: string,
+  // See effectiveLimit's historyLoaded param — same loading/failed-fetch fallback.
+  historyLoaded = true,
 ): OverspendShare | null {
   const overages = budgets
     .map((b) => ({
       categoryId: b.categoryId,
-      overage: Math.max(0, (spending.get(b.categoryId) ?? 0) - effectiveLimit(b, history, currentMonth)),
+      overage: Math.max(0, (spending.get(b.categoryId) ?? 0) - effectiveLimit(b, history, currentMonth, historyLoaded)),
     }))
     .filter((o) => o.overage > 0)
     .sort((a, b) => b.overage - a.overage)
