@@ -33,12 +33,12 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-015](../../archive/ep-06-wallet-depth/FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | `BalanceSummary.tsx`, `AccountCard.tsx`, `insights.ts` |
 | [FEAT-016](../../archive/ep-06-wallet-depth/FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | `AccountCard.tsx`, `NetWorthHistoryChart.tsx` |
 | [FEAT-017](../../archive/ep-06-wallet-depth/FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | [PR #213](https://github.com/moascode/daybook/pull/213), 2026-09-19 |
+| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | [PR #214](https://github.com/moascode/daybook/pull/214)/[#215](https://github.com/moascode/daybook/pull/215)/[#216](https://github.com/moascode/daybook/pull/216) — doc corrected 2026-10-04, was stale |
 
 ## Items
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | Scheduled — split into 3 PRs, 1/3 and 2/3 merged, [PR #216](https://github.com/moascode/daybook/pull/216) is 3/3 |
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
 | [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | **Yes — build early.** Pays for the module |
@@ -49,7 +49,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | Yes |
 | [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | Yes |
 | [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
-| [FEAT-066](FEAT-066-budgets-composer.md) | Budgets: mount the transaction composer | Yes |
+| [FEAT-066](FEAT-066-budgets-design-adoption.md) | Budgets: exact mock parity (no composer — a Plan page) | Yes |
 | [FEAT-067](FEAT-067-goals-composer.md) | Goals: mount the transaction composer | Yes |
 | [FEAT-068](FEAT-068-recurring-composer.md) | Recurring: mount the transaction composer | Yes |
 | [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
@@ -58,8 +58,13 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 audit (same pipeline as the Tasks module's FEAT-054–062): the real running
 app at `:8788` diffed page-by-page against the rendered mockup DOM at
 `:4873`, after checking this epic's own table above so nothing already
-tracked here as computation work got double-filed as "design." Six of
-eight Wallet pages had a genuine, verified gap; Reports and (for its own
-content) Goals/Budgets/Recurring did not get new items beyond the composer —
-their visible gaps are this epic's own FEAT-018/019/020/021/022/023, already
-listed above, not drift.
+tracked here as computation work got double-filed as "design." Reports got
+no new item — its entire visible gap is FEAT-022/023, already listed above.
+
+**FEAT-066 revised 2026-10-04** to full exact-mock-parity scope (owner
+call) rather than composer-only — see the item for why, and for why that
+also folds in and corrects FEAT-018's stale status. **FEAT-067/068
+(Goals/Recurring) are still filed composer-only** pending the same
+page-by-page review when work reaches them — a page's gap list isn't
+final until that page has actually been looked at this closely, same as
+Budgets wasn't.
