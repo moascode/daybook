@@ -79,9 +79,15 @@ not being silently overridden, the owner made the call directly.
       aheadPts = (ratio − elapsedFraction) × 100
       over-limit OR aheadPts ≥ 20   → "Over pace"  (chip-neg)
       aheadPts ≥ 8                  → "Tight"      (chip-warn)
-      not ahead, but ratio ≥ 0.70   → "Watch"      (chip-mute)
+      aheadPts < 8, but ratio ≥ 0.70 → "Watch"     (chip-mute)
       otherwise                     → "On track"   (chip-pos)
       ```
+      Note: "Watch" is reachable with `aheadPts` anywhere below 8, including
+      a small positive value (modestly ahead but not "Tight" yet) — not only
+      the behind-or-exactly-on-pace case the wording above might suggest.
+      Gate 2 review flagged this as a docs/code wording mismatch and judged
+      the code's actual behaviour the more sensible of the two; this doc was
+      corrected to match the code rather than the other way around.
       Tunable after review — the thresholds (20/8/0.70) are this item's
       best-effort pick, called out explicitly so they're easy to find and
       change, not buried as a magic number.
@@ -135,6 +141,37 @@ though the mockup shows one.
 **Also fixes.** [FEAT-018](FEAT-018-budgets-suggestions.md)'s doc says
 "Still needed: Yes" — stale; all 3 of its PRs (#214/#215/#216) are merged.
 This item corrects that status as part of the same PR.
+
+## Known trade-offs (Gate 2 review, acknowledged not fixed)
+
+- **Suggestion copy for the 3 pre-existing types changed**, not just their
+  markup — e.g. "Raise X to RM Y" wording, shortened button labels
+  (Apply/Raise/Create). This reads closer to the mock than the original
+  sentence-style copy and is almost certainly wanted, but it's a deliberate
+  deviation from this item's original "copy preserved, markup only" plan,
+  flagged here so it isn't mistaken for drift.
+- **Rollover and the suggestion engine's other rules see different numbers.**
+  `computeBudgetVsActual` (the 6-month chart) and the reallocate/right-size
+  rules still compare against the raw `limitAmount`, not `effectiveLimit` —
+  so a rollover-enabled budget can look "On track" in its own row while still
+  being offered as a reallocate *receiver* (its raw limit is still exceeded).
+  Reconciling the whole suggestion engine to rollover-aware limits throughout
+  is a larger change than this item's scope; flagged for a future pass if it
+  proves confusing in practice.
+- **No way to turn rollover back off** once enabled (no toggle in the edit
+  modal, no per-row indicator beyond the Left-vs-configured-limit
+  difference). The AC never asked for either; noted as a gap, not a bug.
+- **Roll-forward and reallocate both use a 3-month window that includes the
+  current, still-in-progress month.** Early in a calendar month, a
+  thin-history budget's current-month "leftover" sits close to its full
+  limit, which can inflate `avgLeftover` and make a budget that's
+  genuinely on pace this month still surface a roll-forward suggestion
+  (on top of F4's never-used-budget guard, which only excludes the
+  no-history case). This is an existing characteristic of
+  `reallocateSuggestions`' donor detection (FEAT-018, shipped before this
+  item) that `rollForwardSuggestions` inherited by reusing the same window
+  — not a new regression, but worth a dedicated look if it recurs often
+  with real usage data.
 
 ## Out of scope
 
