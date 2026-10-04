@@ -63,6 +63,8 @@ export interface Budget {
   id: string
   categoryId: string
   limitAmount: number
+  /** FEAT-066: fold last month's unused limit into this month's effective limit. See insights.ts effectiveLimit(). */
+  rolloverEnabled: boolean
   createdAt: string
   updatedAt: string
 }

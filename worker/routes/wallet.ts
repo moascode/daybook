@@ -2762,6 +2762,33 @@ const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/
 // per-row loop is a per-row network round trip.
 wallet.get('/budgets/spending', async (c) => {
   const userId = c.get('userId')
+  const from = str(c.req.query('from'))
+  const to = str(c.req.query('to'))
+
+  // FEAT-066: Budgets' "Rolling 30d" toggle needs a trailing window, not a
+  // calendar month — an explicit date range in place of `month`. Same
+  // aggregate query, same effective-amount accounting, just a different WHERE.
+  if (from !== undefined || to !== undefined) {
+    if (!from || !to || !ISO_DATE_RE.test(from) || !ISO_DATE_RE.test(to)) {
+      return c.json({ error: 'from and to must both be YYYY-MM-DD' }, 400)
+    }
+    const { results } = await c.env.DB.prepare(
+      `SELECT t.category_id AS categoryId,
+              SUM(${EFFECTIVE_AMOUNT_SQL('t')}) AS spent
+       FROM transactions t
+       WHERE t.user_id = ?
+         AND t.type = 'expense'
+         AND t.is_balance_only = 0
+         AND t.category_id IS NOT NULL
+         AND t.date >= ? AND t.date <= ?
+       GROUP BY t.category_id`,
+    )
+      // EFFECTIVE_AMOUNT_SQL's bind leads — its placeholder is in the projection.
+      .bind(userId, userId, from, to)
+      .all()
+    return c.json(results)
+  }
+
   const month = str(c.req.query('month')) ?? todayStr().slice(0, 7)
   if (!MONTH_RE.test(month)) {
     return c.json({ error: 'month must be in YYYY-MM format' }, 400)
@@ -2866,6 +2893,9 @@ wallet.patch('/budgets/:id', async (c) => {
   }
   const row = await updateRow(c.env.DB, 'budgets', c.req.param('id'), c.get('userId'), {
     limitAmount: 'limit_amount',
+    // FEAT-066: boolean → 0/1 is handled by updateRowStmt's normalizeBind(),
+    // same as canWrite on account shares — never hand-convert here.
+    rolloverEnabled: 'rollover_enabled',
   }, b)
   if (!row) return c.json({ error: 'budget not found' }, 404)
   return c.json(row)

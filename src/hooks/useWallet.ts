@@ -153,6 +153,7 @@ interface BudgetRow {
   id: string
   category_id: string
   limit_amount: number
+  rollover_enabled: number
   created_at: string
   updated_at: string
 }
@@ -175,6 +176,7 @@ function mapBudget(row: BudgetRow): Budget {
     id: row.id,
     categoryId: row.category_id,
     limitAmount: row.limit_amount,
+    rolloverEnabled: !!row.rollover_enabled,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -232,6 +234,8 @@ export interface CategoryInput {
 interface BudgetInput {
   categoryId: string
   limitAmount: number
+  /** FEAT-066: only ever set via PATCH (roll-forward suggestion's "Enable") — never on create. */
+  rolloverEnabled?: boolean
 }
 
 interface RecurringInput {
@@ -538,6 +542,16 @@ export function useWallet() {
     return new Map(rows.map((r) => [r.categoryId, r.spent]))
   }, [])
 
+  // FEAT-066: the Budgets page's "Rolling 30d" toggle — an explicit date
+  // range instead of a calendar month. Same effective-amount accounting as
+  // getBudgetSpending above, just a different window shape.
+  const getBudgetSpendingRange = useCallback(async (from: string, to: string): Promise<Map<string, number>> => {
+    const rows = await api.get<{ categoryId: string; spent: number }[]>(
+      `/budgets/spending?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    )
+    return new Map(rows.map((r) => [r.categoryId, r.spent]))
+  }, [])
+
   // FEAT-018: per-category spend for each of the last `months` — the input
   // the suggestions engine (modules/wallet/budgets/insights.ts) and the
   // budget-vs-actual chart both need. Nested by category first, then month,
@@ -742,6 +756,7 @@ export function useWallet() {
     updateBudget,
     deleteBudget,
     getBudgetSpending,
+    getBudgetSpendingRange,
     getBudgetSpendingHistory,
 
     // Recurring CRUD

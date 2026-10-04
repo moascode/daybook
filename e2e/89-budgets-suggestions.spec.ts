@@ -12,6 +12,11 @@ test.describe.configure({ mode: 'serial' })
  * the pure engine's rules directly; this covers what a person actually sees
  * and clicks.
  *
+ * FEAT-066 restyled these rows to the mock's `.sug` pattern and shortened the
+ * action button copy (Reallocate -> Apply, "Raise to $X" -> Raise, "Create
+ * budget" -> Create) — the assertions below were updated to match; the
+ * underlying suggestion logic/fixture is unchanged.
+ *
  * Fixture design (all amounts chosen well clear of the engine's thresholds
  * in src/modules/wallet/budgets/insights.ts, so this isn't sensitive to
  * exact boundary values):
@@ -85,29 +90,27 @@ test.describe('89 — Budgets suggestions', () => {
 
   test('reallocate row names the donor, its rate, and the receiver', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Transport' })
-    await expect(row).toContainText('Move RM 40.00 from Transport')
-    await expect(row).toContainText('20%')
-    await expect(row).toContainText('to Dining')
-    await expect(row.getByRole('button', { name: 'Reallocate' })).toBeVisible()
+    await expect(row).toContainText('Move RM 40.00 to Dining')
+    await expect(row).toContainText('Transport has run at 20%')
+    await expect(row.getByRole('button', { name: 'Apply' })).toBeVisible()
   })
 
   test('right-size row proposes raising Groceries to actual spend', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Groceries' })
-    await expect(row).toContainText('Raise Groceries to what you actually spend')
-    await expect(row).toContainText('RM 150.00')
-    await expect(row.getByRole('button', { name: 'Raise to RM 150.00' })).toBeVisible()
+    await expect(row).toContainText('Raise Groceries to RM 150.00')
+    await expect(row.getByRole('button', { name: 'Raise' })).toBeVisible()
   })
 
   test('create-missing row proposes a budget for Entertainment', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Entertainment' })
-    await expect(row).toContainText('no Entertainment budget')
-    await expect(row).toContainText('RM 40.00/mo')
-    await expect(row.getByRole('button', { name: 'Create budget' })).toBeVisible()
+    await expect(row).toContainText('Set a Entertainment budget')
+    await expect(row).toContainText('RM 40.00')
+    await expect(row.getByRole('button', { name: 'Create' })).toBeVisible()
   })
 
-  test('clicking "Create budget" creates it and drops the suggestion', async () => {
+  test('clicking "Create" creates it and drops the suggestion', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Entertainment' })
-    await row.getByRole('button', { name: 'Create budget' }).click()
+    await row.getByRole('button', { name: 'Create' }).click()
 
     const budgetRow = page.getByTestId('budget-row').filter({ hasText: 'Entertainment' })
     await expect(budgetRow).toBeVisible()
@@ -115,18 +118,18 @@ test.describe('89 — Budgets suggestions', () => {
     await expect(page.getByTestId('suggestion-row').filter({ hasText: 'Entertainment' })).toHaveCount(0)
   })
 
-  test('clicking "Raise to RM 150.00" updates the budget and drops the suggestion', async () => {
+  test('clicking "Raise" updates the budget and drops the suggestion', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Groceries' })
-    await row.getByRole('button', { name: 'Raise to RM 150.00' }).click()
+    await row.getByRole('button', { name: 'Raise' }).click()
 
     const budgetRow = page.getByTestId('budget-row').filter({ hasText: 'Groceries' })
     await expect(budgetRow).toContainText('RM 150.00')
     await expect(page.getByTestId('suggestion-row').filter({ hasText: 'Groceries' })).toHaveCount(0)
   })
 
-  test('clicking "Reallocate" moves the limit between both budgets and drops the suggestion', async () => {
+  test('clicking "Apply" moves the limit between both budgets and drops the suggestion', async () => {
     const row = page.getByTestId('suggestion-row').filter({ hasText: 'Transport' })
-    await row.getByRole('button', { name: 'Reallocate' }).click()
+    await row.getByRole('button', { name: 'Apply' }).click()
 
     await expect(page.getByTestId('budget-row').filter({ hasText: 'Transport' })).toContainText('RM 60.00')
     await expect(page.getByTestId('budget-row').filter({ hasText: 'Dining' })).toContainText('RM 90.00')
