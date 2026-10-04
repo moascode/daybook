@@ -133,7 +133,18 @@ test.describe('89 — Budgets suggestions', () => {
 
     await expect(page.getByTestId('budget-row').filter({ hasText: 'Transport' })).toContainText('RM 60.00')
     await expect(page.getByTestId('budget-row').filter({ hasText: 'Dining' })).toContainText('RM 90.00')
-    await expect(page.getByTestId('suggestion-row')).toHaveCount(0)
-    await expect(page.getByTestId('budget-suggestions')).not.toBeVisible()
+
+    // The reallocate suggestion itself is gone, but Apply just right-sized
+    // Transport to its own steady RM20/month (new RM60 limit, since the old
+    // RM100 gave up its RM40 slack to Dining) — a consistent RM40/month
+    // leftover at that new limit newly qualifies Transport for roll-forward
+    // (insights.ts rollForwardSuggestions, FEAT-066's 4th suggestion type).
+    // That's a genuine, independent suggestion the engine is supposed to
+    // produce, not a leftover of the reallocate row this test resolves, so
+    // this scopes its "dropped" assertion to the reallocate type rather than
+    // asserting a hard zero across every suggestion type.
+    await expect(page.getByTestId('suggestion-row').filter({ hasText: 'Move' })).toHaveCount(0)
+    await expect(page.getByTestId('suggestion-row')).toHaveCount(1)
+    await expect(page.getByTestId('suggestion-row').first()).toContainText('Roll unused Transport forward')
   })
 })

@@ -78,7 +78,12 @@ test('save a budget: Food & Drink at MYR 500/month', async () => {
 
 test('budget row shows category name and monthly limit amount', async () => {
   const row = page.getByTestId('budget-row').filter({ hasText: 'Food & Drink' })
-  await expect(row.getByText(/500|MYR 500/)).toBeVisible()
+  // FEAT-066's table row has a "Left" column (limit minus spent) alongside the
+  // category's own "$X limit" subtext — with nothing spent yet, both read
+  // "RM 500.00", so a plain `row.getByText(/500/)` is ambiguous (strict-mode
+  // violation: two matches). The `.tsub` subtext is specifically the limit,
+  // so assert against it directly rather than loosening the regex.
+  await expect(row.locator('.tsub')).toHaveText(/500|MYR 500/)
 })
 
 test('budget row contains a progress bar element', async () => {
