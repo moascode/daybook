@@ -95,7 +95,7 @@ FEAT-015, FEAT-016, FEAT-017 and FEAT-018 all shipped — see the epic's own
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | Yes — R9, unstarted |
+| [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | No — superseded by FEAT-067 |
 | [FEAT-020](EP-06-wallet-depth/FEAT-020-recurring-calendar.md) | Feature | Recurring: month calendar and annual cost | Yes — R9, unstarted |
 | [FEAT-021](EP-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Feature | Recurring: "Worth a look" anomalies | Yes — R9, unstarted |
 | [FEAT-022](EP-06-wallet-depth/FEAT-022-reports-what-changed.md) | Feature | Reports: paired columns, savings gap and "What changed" | Yes — R9, unstarted |
@@ -106,7 +106,7 @@ FEAT-015, FEAT-016, FEAT-017 and FEAT-018 all shipped — see the epic's own
 | [FEAT-064](EP-06-wallet-depth/FEAT-064-dashboard-settle-up-header.md) | Feature | Dashboard: page-header "Settle up" quick action | Yes — filed 2026-10-02 |
 | [FEAT-065](EP-06-wallet-depth/FEAT-065-accounts-composer.md) | Feature | Accounts: mount the transaction composer | Yes — filed 2026-10-02 |
 | [FEAT-066](EP-06-wallet-depth/FEAT-066-budgets-design-adoption.md) | Feature | Budgets: exact mock parity (no composer) | Yes — revised 2026-10-04, in progress |
-| [FEAT-067](EP-06-wallet-depth/FEAT-067-goals-composer.md) | Feature | Goals: mount the transaction composer | Yes — filed 2026-10-02 |
+| [FEAT-067](EP-06-wallet-depth/FEAT-067-goals-design-adoption.md) | Feature | Goals: exact mock parity, incl. FEAT-019 (no composer) | Yes — revised 2026-10-06 |
 | [FEAT-068](EP-06-wallet-depth/FEAT-068-recurring-composer.md) | Feature | Recurring: mount the transaction composer | Yes — filed 2026-10-02 |
 | [FEAT-069](EP-06-wallet-depth/FEAT-069-shared-composer-and-activity-icons.md) | Feature | Shared: mount the transaction composer; category-coloured activity icons | Yes — filed 2026-10-02 |
 

@@ -39,7 +39,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Yes |
+| [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | No — superseded by FEAT-067 |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
 | [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | **Yes — build early.** Pays for the module |
 | [FEAT-022](FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | Yes |
@@ -50,7 +50,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | Yes |
 | [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
 | [FEAT-066](FEAT-066-budgets-design-adoption.md) | Budgets: exact mock parity (no composer — a Plan page) | Yes |
-| [FEAT-067](FEAT-067-goals-composer.md) | Goals: mount the transaction composer | Yes |
+| [FEAT-067](FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | Yes |
 | [FEAT-068](FEAT-068-recurring-composer.md) | Recurring: mount the transaction composer | Yes |
 | [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
 
@@ -63,8 +63,10 @@ no new item — its entire visible gap is FEAT-022/023, already listed above.
 
 **FEAT-066 revised 2026-10-04** to full exact-mock-parity scope (owner
 call) rather than composer-only — see the item for why, and for why that
-also folds in and corrects FEAT-018's stale status. **FEAT-067/068
-(Goals/Recurring) are still filed composer-only** pending the same
-page-by-page review when work reaches them — a page's gap list isn't
-final until that page has actually been looked at this closely, same as
-Budgets wasn't.
+also folds in and corrects FEAT-018's stale status. **FEAT-067 revised
+2026-10-06** the same way for Goals, and absorbs FEAT-019 whole — that page's
+gap was the funding-rate computation, not restyling. It adds two nullable
+columns (`goals.target_date`, `goals.note`) on owner sign-off. **FEAT-068
+(Recurring) is still filed composer-only** pending the same page-by-page
+review when work reaches it — a page's gap list isn't final until that page
+has actually been looked at this closely, same as Budgets and Goals weren't.

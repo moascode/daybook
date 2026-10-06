@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-09-16
+> **Status:** Live · **Last verified:** 2026-10-06
 
 # Database schema
 
@@ -344,6 +344,26 @@ CREATE TABLE IF NOT EXISTS merchant_corrections (
 - Never affects `import_hash` (G11, [`feature-specs.md` §Wallet](feature-specs.md)): duplicate detection stays keyed on
   the raw narrative text captured before any resolution step runs.
 
+### Goal target date + note (migration `0026_goal_target_date.sql` / `0025_goal_target_date.sql` on the server, FEAT-067)
+
+```sql
+ALTER TABLE goals ADD COLUMN target_date TEXT;  -- nullable ISO date (YYYY-MM-DD), no default
+ALTER TABLE goals ADD COLUMN note        TEXT;  -- nullable card subtitle, trimmed <= 80 chars
+```
+
+- A goal's "saved" figure stays the linked account's balance (clamped to
+  `[0, target]`) — no new table for contributions; they are derived from
+  that account's monthly net inflow (`GET /goals/flows`, below).
+- `target_date` drives the On track / Behind / Ahead status chip and the
+  "needs $X/mo" figure (`src/modules/wallet/goals/projection.ts`). Paused is
+  **derived** from flow history, never stored.
+- `note` is the goal card's subtitle; `''` is normalized to `null` on write.
+- `GET /goals/flows` (`worker/routes/wallet.ts`) returns, per goal-linked
+  account visible to the user, monthly net inflow `{ accountId, month:
+  'YYYY-MM', net }` — the same income/expense/transfer-out/transfer-in arms
+  and `is_non_cash = 0` filter as `GET /accounts/balances`, bucketed by
+  `substr(date, 1, 7)`.
+
 ---
 
 ## 7. TypeScript Types
@@ -414,6 +434,24 @@ export interface DailyGroup {
   totalIncome: number
   totalExpense: number
   // Note: transfer transactions are excluded from totalIncome and totalExpense
+}
+
+// ── FEAT-067 ─────────────────────────────────────────
+export interface Goal {
+  id: string
+  name: string
+  targetAmount: number
+  accountId: string
+  targetDate: string | null  // YYYY-MM-DD, nullable
+  note: string | null        // trimmed, <= 80 chars, '' stored as null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GoalFlow {
+  accountId: string
+  month: string  // YYYY-MM
+  net: number
 }
 ```
 

@@ -89,8 +89,25 @@ export interface Goal {
   name: string
   targetAmount: number
   accountId: string
+  /** FEAT-067: optional target date (YYYY-MM-DD) driving On track / Behind / Ahead status. null when unset. */
+  targetDate: string | null
+  /** FEAT-067: optional card subtitle, trimmed, <= 80 chars. '' stored as null. */
+  note: string | null
   createdAt: string
   updatedAt: string
+}
+
+/**
+ * FEAT-067: one goal-linked account's net inflow for one calendar month.
+ * `net` = income - expense - transfers out + transfers in, excluding
+ * is_non_cash rows (the same arms GET /accounts/balances sums), bucketed
+ * by month. Drives funding rate, paused state, "Added this month," and
+ * the Total saved trajectory chart.
+ */
+export interface GoalFlow {
+  accountId: string
+  month: string // YYYY-MM
+  net: number
 }
 
 export interface DailyGroup {
