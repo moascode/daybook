@@ -1,34 +1,28 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, RefreshCw, Pencil, Trash2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Plus, Search as SearchIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
-import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
-import { Select } from '@/components/ui/Select'
-import { Input } from '@/components/ui/Input'
-import { DatePicker } from '@/components/ui/DatePicker'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { useWallet } from '@/hooks/useWallet'
+import { useWallet, mapTransaction, type TransactionRow } from '@/hooks/useWallet'
+import { api } from '@/lib/api'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useWalletStore } from '@/stores/wallet.store'
 import { useToastStore } from '@/stores/toast.store'
 import { formatMYR, errorMessage, todayISO } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
-import type {
-  RecurringTransaction,
-  RecurrenceFrequency,
-  TransactionType,
-} from '@/types/wallet.types'
-
-interface RecurringFormData {
-  accountId: string
-  amount: string
-  merchant: string
-  type: TransactionType
-  categoryId: string
-  frequency: RecurrenceFrequency
-  nextDueDate: string
-}
+import { shiftMonth } from '@/modules/wallet/dashboard/insights'
+import { RecurringBand } from '@/modules/wallet/recurring/RecurringBand'
+import { WorthALook } from '@/modules/wallet/recurring/WorthALook'
+import { RecurringCalendar } from '@/modules/wallet/recurring/RecurringCalendar'
+import { RecurringTable } from '@/modules/wallet/recurring/RecurringTable'
+import { RecurringFormModal, type RecurringFormData } from '@/modules/wallet/recurring/RecurringFormModal'
+import { DetectFromHistoryModal } from '@/modules/wallet/recurring/DetectFromHistoryModal'
+import {
+  incomeBaseline, activeIncomeMonthlyEquivalent, priceRises as computePriceRises,
+  costliestNudge, sameDayCollision, worthALookRows, detectCandidates, lockedIn,
+  type DetectCandidate,
+} from '@/modules/wallet/recurring/insights'
+import type { RecurringTransaction, Transaction, TransactionType } from '@/types/wallet.types'
 
 export function RecurringPage() {
   const {
@@ -47,9 +41,10 @@ export function RecurringPage() {
   const invalidate = useWalletStore((s) => s.invalidate)
 
   const crud = useCrudModal<RecurringTransaction>()
-  const [postingId, setPostingId] = useState<string | null>(null)
+  const [updatingRuleId, setUpdatingRuleId] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [detectOpen, setDetectOpen] = useState(false)
   const [form, setForm] = useState<RecurringFormData>({
     accountId: '',
     amount: '',
@@ -60,6 +55,10 @@ export function RecurringPage() {
     nextDueDate: '',
   })
 
+  const today = todayISO()
+  const monthName = format(parseISO(today), 'MMMM')
+  const monthAbbr = format(parseISO(today), 'MMM')
+
   useEffect(() => {
     loadRecurringTransactions()
     loadAccounts()
@@ -69,6 +68,52 @@ export function RecurringPage() {
   // Recurring rules auto-post, so they stay own-accounts-only — never offer a
   // shared-in account the server would reject at posting time.
   const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+  const ownAccountIds = useMemo(() => new Set(ownAccounts.map((a) => a.id)), [ownAccounts])
+
+  // Page-local history fetch (FEAT-068 "Data loading") — NOT through
+  // useWallet().loadTransactions, same reasoning as GoalsPage's
+  // reloadMonthTxns: this is a page-local figure, not the shared transaction
+  // list every other wallet page reads from. Feeds the income baseline,
+  // price rise (a) and Detect from history. `null` means "unavailable"
+  // (not yet loaded, or the fetch failed) — never treated as zero rows.
+  //
+  // Fetched ONCE, keyed only on `today` — storing the raw (unfiltered)
+  // mapped rows and deriving own-account rows in a separate useMemo below.
+  // Keying the fetch itself on `ownAccountIds` caused a race + a double
+  // fetch: that Set's identity changes on every `accounts` reference change
+  // even when its contents don't, re-triggering the effect. A request
+  // counter still guards against an in-flight older request overwriting a
+  // newer one if `today` ever changes mid-flight (e.g. crossing midnight).
+  const [allTxns, setAllTxns] = useState<Transaction[] | null>(null)
+  const [historyFailed, setHistoryFailed] = useState(false)
+  const historyRequestRef = useRef(0)
+
+  const reloadHistory = useCallback(() => {
+    const dateFrom = `${shiftMonth(today.slice(0, 7), -6)}-01`
+    const qs = new URLSearchParams({ dateFrom, dateTo: today })
+    const requestId = ++historyRequestRef.current
+    api.get<TransactionRow[]>(`/transactions?${qs.toString()}`)
+      .then((rows) => {
+        if (historyRequestRef.current !== requestId) return // superseded by a later request
+        setAllTxns(rows.map(mapTransaction))
+        setHistoryFailed(false)
+      })
+      .catch((err) => {
+        if (historyRequestRef.current !== requestId) return
+        setAllTxns(null)
+        setHistoryFailed(true)
+        addToast({ message: errorMessage(err, 'Could not load transaction history — some Recurring figures may be unavailable.'), duration: 4000 })
+      })
+  }, [today, addToast])
+
+  useEffect(() => {
+    reloadHistory()
+  }, [reloadHistory])
+
+  const ownTxns = useMemo(() => {
+    if (allTxns === null) return null
+    return allTxns.filter((t) => ownAccountIds.has(t.accountId))
+  }, [allTxns, ownAccountIds])
 
   // Categories valid for the rule's direction (income/expense + 'both').
   const categoryOptions = useMemo(
@@ -79,10 +124,7 @@ export function RecurringPage() {
     [categories, form.type],
   )
 
-  const openCreate = useCallback(() => {
-    // Match the sibling forms (TransactionForm/Goals/CsvImport): pre-select the
-    // first account and default the next-due date to today, so a new rule needs
-    // no mandatory picks the other forms don't demand.
+  const openCreate = useCallback((prefill?: Partial<RecurringFormData>) => {
     setForm({
       accountId: ownAccounts[0]?.id ?? '',
       amount: '',
@@ -91,6 +133,7 @@ export function RecurringPage() {
       categoryId: '',
       frequency: 'monthly',
       nextDueDate: todayISO(),
+      ...prefill,
     })
     setFormError(null)
     crud.openCreate()
@@ -112,7 +155,6 @@ export function RecurringPage() {
 
   const handleSubmit = useCallback(async () => {
     const amount = parseFloat(form.amount)
-    // U-04: surface the specific blocker instead of a dead button.
     if (!form.accountId) { setFormError('Choose an account.'); return }
     if (isNaN(amount) || amount <= 0) { setFormError('Enter an amount greater than 0.'); return }
     if (!form.nextDueDate) { setFormError('Pick the next due date.'); return }
@@ -139,6 +181,10 @@ export function RecurringPage() {
           frequency: form.frequency,
           nextDueDate: form.nextDueDate,
         })
+        // A new rule (whether from "Add recurring" or a Detect candidate)
+        // can change which merchants still look like unregistered repeats —
+        // refresh history so Detect's candidate list reflects it.
+        reloadHistory()
       }
       crud.closeForm(false)
     } catch (err) {
@@ -146,10 +192,9 @@ export function RecurringPage() {
     } finally {
       setSaving(false)
     }
-  }, [form, crud, addRecurringTransaction, updateRecurringTransaction, addToast])
+  }, [form, crud, addRecurringTransaction, updateRecurringTransaction, addToast, reloadHistory])
 
   const handlePostNow = useCallback(async (rule: RecurringTransaction) => {
-    setPostingId(rule.id)
     try {
       await postRecurringNow(rule.id)
       const account = accounts.find((a) => a.id === rule.accountId)
@@ -157,14 +202,14 @@ export function RecurringPage() {
         message: `Posted ${formatMYR(rule.amount)}${rule.merchant ? ` · ${rule.merchant}` : ''}${account ? ` → ${account.name}` : ''}`,
         duration: 3500,
       })
-      // A transaction was created — refresh balances/lists on other pages.
       invalidate()
+      // A fresh posting changes the own-account transaction history that
+      // feeds price rise (a) and Detect — refresh it too.
+      reloadHistory()
     } catch (err) {
-      addToast({ message: errorMessage(err, 'Could not post this recurring rule — please try again.'), duration: 4000 })
-    } finally {
-      setPostingId(null)
+      addToast({ message: errorMessage(err, 'Could not post this recurring rule — it may be paused.'), duration: 4000 })
     }
-  }, [postRecurringNow, addToast, accounts, invalidate])
+  }, [postRecurringNow, addToast, accounts, invalidate, reloadHistory])
 
   const handleDelete = useCallback(async (id: string) => {
     try {
@@ -175,23 +220,103 @@ export function RecurringPage() {
     }
   }, [deleteRecurringTransaction, crud, addToast])
 
+  const handleTogglePause = useCallback(async (rule: RecurringTransaction) => {
+    const next = !rule.paused
+    try {
+      await updateRecurringTransaction(rule.id, { paused: next })
+      addToast({
+        message: next
+          ? `Paused ${rule.merchant || 'recurring rule'}.`
+          : `Resumed ${rule.merchant || 'recurring rule'}${rule.nextDueDate < today ? ' — the next run will catch up any missed charges.' : '.'}`,
+        duration: 3500,
+      })
+      // Pausing/resuming changes which rules count toward the band/Worth-a-
+      // look figures — refresh history so they stay consistent.
+      reloadHistory()
+    } catch (err) {
+      addToast({ message: errorMessage(err, `Could not ${next ? 'pause' : 'resume'} this recurring rule — please try again.`), duration: 4000 })
+    }
+  }, [updateRecurringTransaction, addToast, today, reloadHistory])
+
+  const handleUpdateRuleAmount = useCallback(async (rule: RecurringTransaction, newAmount: number) => {
+    setUpdatingRuleId(rule.id)
+    try {
+      await updateRecurringTransaction(rule.id, { amount: newAmount })
+      addToast({ message: `Updated ${rule.merchant || 'recurring rule'} to ${formatMYR(newAmount)}.`, duration: 3500 })
+      reloadHistory()
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not update this rule — please try again.'), duration: 4000 })
+    } finally {
+      setUpdatingRuleId(null)
+    }
+  }, [updateRecurringTransaction, addToast, reloadHistory])
+
+  // ── Derived figures (FEAT-068 "Stated rules") ──────────────────
+
+  const ownIncomeTxns = useMemo(() => ownTxns ?? [], [ownTxns])
+  const income = useMemo(() => {
+    const baseline = incomeBaseline(ownIncomeTxns, today)
+    if (baseline > 0) return baseline
+    return activeIncomeMonthlyEquivalent(recurringTransactions)
+  }, [ownIncomeTxns, today, recurringTransactions])
+
+  const rises = useMemo(
+    () => computePriceRises(recurringTransactions, ownIncomeTxns, today),
+    [recurringTransactions, ownIncomeTxns, today],
+  )
+  const nudge = useMemo(() => costliestNudge(recurringTransactions, today), [recurringTransactions, today])
+  const collision = useMemo(() => sameDayCollision(recurringTransactions, today), [recurringTransactions, today])
+  const lookRows = useMemo(() => worthALookRows(rises, collision, nudge), [rises, collision, nudge])
+
+  const candidates: DetectCandidate[] | null = useMemo(() => {
+    if (ownTxns === null) return null
+    return detectCandidates(ownTxns, recurringTransactions, today)
+  }, [ownTxns, recurringTransactions, today])
+
+  const handleAddCandidate = useCallback((candidate: DetectCandidate) => {
+    setDetectOpen(false)
+    openCreate({
+      accountId: candidate.accountId,
+      amount: String(candidate.amount),
+      merchant: candidate.merchant,
+      type: 'expense' as TransactionType,
+      categoryId: candidate.categoryId ?? '',
+      frequency: 'monthly',
+      nextDueDate: candidate.nextDueDate,
+    })
+  }, [openCreate])
+
+  const activeCount = recurringTransactions.filter((r) => !r.paused).length
+  const lockedInMonthly = useMemo(() => lockedIn(recurringTransactions), [recurringTransactions])
+
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Recurring</h2>
-          <p className="text-xs text-fg-subtle mt-0.5">
-            Repeating bills &amp; income — posted automatically when due
-          </p>
+    <div className="mx-auto max-w-6xl">
+      <div className="page-head">
+        <h2 className="page-title">Recurring</h2>
+        <span className="page-sub hide-mobile" data-testid="recurring-subtitle">
+          {activeCount} active · {formatMYR(lockedInMonthly)} a month
+        </span>
+        <div className="page-actions">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              // Retry a previously failed history load whenever Detect is
+              // reopened — the user is asking us to try the scan again.
+              if (historyFailed) reloadHistory()
+              setDetectOpen(true)
+            }}
+          >
+            <SearchIcon className="h-3.5 w-3.5" />
+            Detect from history
+          </Button>
+          <Button size="sm" onClick={() => openCreate()}>
+            <Plus className="h-3.5 w-3.5" />
+            Add recurring
+          </Button>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-3.5 w-3.5" />
-          Add Recurring
-        </Button>
       </div>
 
-      {/* List */}
       {recurringTransactions.length === 0 ? (
         <EmptyState
           icon={<RefreshCw className="h-10 w-10" />}
@@ -199,164 +324,59 @@ export function RecurringPage() {
           description="No recurring transactions. Set up repeating rules for regular bills, subscriptions, or income — they post automatically on their due date."
         />
       ) : (
-        <div className="flex flex-col gap-3">
-          {recurringTransactions.map((rule) => {
-            const account = accounts.find((a) => a.id === rule.accountId)
-            const category = rule.categoryId ? categories.find((c) => c.id === rule.categoryId) : undefined
-            const freqLabel = rule.frequency === 'monthly' ? 'Monthly' : 'Weekly'
-            const dueDateDisplay = format(parseISO(rule.nextDueDate), 'dd MMM yyyy')
-            const isIncome = rule.type === 'income'
-
-            return (
-              <div
-                key={rule.id}
-                data-testid="recurring-row"
-                className="card card-pad hover:bg-surface-hover transition-colors"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-fg text-sm">
-                        {rule.merchant || '(no merchant)'}
-                      </span>
-                      <Badge variant={isIncome ? 'success' : 'danger'}>
-                        {isIncome ? 'Income' : 'Expense'}
-                      </Badge>
-                      <Badge variant="default">{freqLabel}</Badge>
-                      {category && <Badge variant="default">{category.name}</Badge>}
-                    </div>
-                    <div className="text-xs text-fg-subtle">
-                      Next: {dueDateDisplay}
-                      {account && <span className="ml-3">{account.name}</span>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={
-                        isIncome
-                          ? 'text-sm font-semibold text-positive-700'
-                          : 'text-sm font-semibold text-fg'
-                      }
-                    >
-                      {isIncome ? '+' : '−'}
-                      {formatMYR(rule.amount)}
-                    </span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs font-medium text-brand-600 hover:bg-brand-50"
-                        onClick={() => handlePostNow(rule)}
-                        loading={postingId === rule.id}
-                      >
-                        Post now
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(rule)}
-                        aria-label={`Edit ${rule.merchant || 'recurring rule'}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-fg-subtle hover:text-red-600"
-                        onClick={() => crud.openDelete(rule.id)}
-                        aria-label={`Delete ${rule.merchant || 'recurring rule'}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+        <div className="dash">
+          <RecurringBand
+            rules={recurringTransactions}
+            categories={categories}
+            income={income}
+            today={today}
+            monthLabel={monthAbbr}
+            priceRises={rises}
+            historyUnavailable={ownTxns === null}
+            historyFailed={historyFailed}
+          />
+          <WorthALook
+            rows={lookRows}
+            onUpdateRule={handleUpdateRuleAmount}
+            updatingRuleId={updatingRuleId}
+            onReview={openEdit}
+          />
+          <RecurringCalendar rules={recurringTransactions} categories={categories} today={today} monthName={monthName} />
+          <RecurringTable
+            rules={recurringTransactions}
+            accounts={accounts}
+            categories={categories}
+            priceRises={rises}
+            today={today}
+            onPostNow={handlePostNow}
+            onEdit={openEdit}
+            onTogglePause={handleTogglePause}
+            onDelete={(rule) => crud.openDelete(rule.id)}
+          />
         </div>
       )}
 
-      {/* Add / Edit modal */}
-      <Modal
+      <RecurringFormModal
         open={crud.formOpen}
         onOpenChange={crud.closeForm}
-        title={crud.editingItem ? 'Edit Recurring Rule' : 'New Recurring Rule'}
-      >
-        <div className="flex flex-col gap-4">
-          <Select
-            label="Type"
-            id="type"
-            options={[
-              { value: 'expense', label: 'Expense' },
-              { value: 'income', label: 'Income' },
-            ]}
-            value={form.type}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, type: e.target.value as TransactionType, categoryId: '' }))
-            }
-          />
-          <Input
-            label="Amount"
-            id="amount"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={form.amount}
-            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-          />
-          <Select
-            label="Account"
-            id="account"
-            options={ownAccounts.map((a) => ({ value: a.id, label: a.name }))}
-            placeholder="Select account"
-            value={form.accountId}
-            onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
-          />
-          <Input
-            label="Merchant"
-            id="merchant"
-            type="text"
-            placeholder="e.g. Netflix"
-            value={form.merchant}
-            onChange={(e) => setForm((f) => ({ ...f, merchant: e.target.value }))}
-          />
-          <Select
-            label="Category"
-            id="category"
-            options={[{ value: '', label: 'No category' }, ...categoryOptions]}
-            value={form.categoryId}
-            onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-          />
-          <Select
-            label="Frequency"
-            id="frequency"
-            options={[
-              { value: 'monthly', label: 'Monthly' },
-              { value: 'weekly', label: 'Weekly' },
-            ]}
-            value={form.frequency}
-            onChange={(e) => setForm((f) => ({ ...f, frequency: e.target.value as RecurrenceFrequency }))}
-          />
-          <DatePicker
-            label="Next due"
-            value={form.nextDueDate}
-            onChange={(e) => setForm((f) => ({ ...f, nextDueDate: e.target.value }))}
-          />
-          {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSubmit} loading={saving}>
-              {crud.editingItem ? 'Save Changes' : 'Create Rule'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        isEdit={!!crud.editingItem}
+        form={form}
+        setForm={setForm}
+        accounts={ownAccounts}
+        categoryOptions={categoryOptions}
+        formError={formError}
+        saving={saving}
+        onSubmit={handleSubmit}
+      />
 
-      {/* Delete confirm modal */}
+      <DetectFromHistoryModal
+        open={detectOpen}
+        onOpenChange={setDetectOpen}
+        candidates={candidates}
+        historyFailed={historyFailed}
+        onAdd={handleAddCandidate}
+      />
+
       <ConfirmDeleteModal
         open={!!crud.confirmDeleteId}
         onOpenChange={(open) => { if (!open) crud.closeDelete() }}

@@ -192,8 +192,9 @@ async function pendingInvites(db: D1Database, userId: string): Promise<Notificat
 async function billsDue(db: D1Database, userId: string): Promise<Notification | null> {
   const row = await db
     .prepare(
+      // FEAT-068: a paused rule notifies nothing.
       `SELECT COUNT(*) AS n FROM recurring_transactions
-        WHERE user_id = ? AND next_due_date >= ? AND next_due_date <= ?`,
+        WHERE user_id = ? AND next_due_date >= ? AND next_due_date <= ? AND paused = 0`,
     )
     .bind(userId, todayStr(), businessDatePlus(7))
     .first<{ n: number }>()

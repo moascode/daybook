@@ -302,7 +302,10 @@ export function Dashboard() {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     return recurringTransactions
-      .filter((r) => r.type === 'expense' && differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS)
+      .filter(
+        // FEAT-068: paused rules don't appear in Upcoming bills.
+        (r) => !r.paused && r.type === 'expense' && differenceInDays(parseISO(r.nextDueDate), today) <= UPCOMING_BILLS_WINDOW_DAYS,
+      )
       .map((r) => ({ ...r, daysUntilDue: differenceInDays(parseISO(r.nextDueDate), today) }))
   }, [recurringTransactions])
 

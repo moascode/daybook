@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md)
+> **Status:** Open — superseded by [FEAT-068](FEAT-068-recurring-design-adoption.md) · **Filed:** 2026-09-16 · **Last verified:** 2026-10-06 · **Epic:** [EP-06](README.md)
 
 # FEAT-020 — Recurring: month calendar and annual cost
 
@@ -8,4 +8,4 @@
 
 **Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** Yes — R9, unstarted
+**Still needed?** No — superseded. [FEAT-068](FEAT-068-recurring-design-adoption.md) (revised 2026-10-06 to exact mock parity) builds this whole item — month calendar and annual cost (calendar card, Annual column, Annual cost stat) — with the stated rules and owner decisions recorded there. Close this when FEAT-068 ships.

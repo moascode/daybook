@@ -2938,6 +2938,10 @@ const RECURRING_COLS: Record<string, string> = {
   categoryId: 'category_id',
   frequency: 'frequency',
   nextDueDate: 'next_due_date',
+  // FEAT-068: client sends a boolean; normalizeBind() in updateRowStmt
+  // coerces it to 0/1. `previous_amount`/`amount_changed_at` are NOT here —
+  // they are server-computed in the PATCH handler below, never client-writable.
+  paused: 'paused',
 }
 
 wallet.get('/recurring-transactions', async (c) => {
@@ -3057,6 +3061,7 @@ interface RecurringRecord {
   category_id: string | null
   frequency: string
   next_due_date: string
+  paused: number
 }
 
 // Process every rule that is due on/before today, posting a real transaction for
@@ -3072,7 +3077,8 @@ wallet.post('/recurring-transactions/process', async (c) => {
   const today = todayStr()
 
   const { results: due } = await c.env.DB.prepare(
-    'SELECT * FROM recurring_transactions WHERE user_id = ? AND next_due_date <= ?',
+    // FEAT-068: a paused rule posts nothing — skip it in the sweep entirely.
+    'SELECT * FROM recurring_transactions WHERE user_id = ? AND next_due_date <= ? AND paused = 0',
   )
     .bind(userId, today)
     .all<RecurringRecord>()
@@ -3127,6 +3133,10 @@ wallet.post('/recurring-transactions/:id/post', async (c) => {
     .bind(c.req.param('id'), userId)
     .first<RecurringRecord>()
   if (!rule) return c.json({ error: 'recurring transaction not found' }, 404)
+  // FEAT-068: paused rules refuse "Post now" — resume first.
+  if (rule.paused) {
+    return c.json({ error: 'This rule is paused — resume it before posting.' }, 409)
+  }
 
   const today = todayStr()
   // Only advance the schedule when the rule was actually due. Posting an early,
@@ -3182,6 +3192,11 @@ wallet.patch('/recurring-transactions/:id', async (c) => {
     const dateErr = isoDateError(b.nextDueDate, 'nextDueDate') ?? farPastDueError(b.nextDueDate)
     if (dateErr) return c.json({ error: dateErr }, 400)
   }
+  // FEAT-068: paused is boolean-only — a truthy/falsy string or number would
+  // silently coerce via normalizeBind() instead of failing loudly.
+  if ('paused' in b && typeof b.paused !== 'boolean') {
+    return c.json({ error: 'paused must be a boolean' }, 400)
+  }
 
   const refs: Array<[string, unknown]> = []
   if ('accountId' in b) refs.push(['accounts', b.accountId])
@@ -3190,13 +3205,51 @@ wallet.patch('/recurring-transactions/:id', async (c) => {
     return c.json({ error: 'invalid account or category reference' }, 400)
   }
 
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  // FEAT-068 price-rise source (b): when `amount` actually changes, stamp the
+  // old figure and today's date server-side so "{merchant} went up" can be
+  // computed later without a transaction-to-rule link. Neither field is
+  // client-writable: `patch` starts as a COPY of the body with
+  // previousAmount/amountChangedAt (camelCase and snake_case) stripped, so a
+  // client-supplied value for either key is discarded up front rather than
+  // merely shadowed — `patch = b` by reference would let a client-supplied
+  // key survive untouched whenever `amount` wasn't itself part of the
+  // request. Whether the extended column map is used is driven by a local
+  // `amountChanged` boolean, never by `'previousAmount' in patch`, since
+  // that key is only ever present once we add it ourselves below.
+  const cols = RECURRING_COLS
+  const patch: Record<string, unknown> = { ...b }
+  delete patch.previousAmount
+  delete patch.amountChangedAt
+  delete patch.previous_amount
+  delete patch.amount_changed_at
+
+  let amountChanged = false
+  if ('amount' in b) {
+    const existing = await c.env.DB.prepare(
+      'SELECT amount FROM recurring_transactions WHERE id = ? AND user_id = ?',
+    )
+      .bind(id, userId)
+      .first<{ amount: number }>()
+    if (!existing) return c.json({ error: 'recurring transaction not found' }, 404)
+    if (Number(existing.amount) !== Number(b.amount)) {
+      amountChanged = true
+      patch.previousAmount = existing.amount
+      patch.amountChangedAt = todayStr()
+    }
+  }
+
   const row = await updateRow(
     c.env.DB,
     'recurring_transactions',
-    c.req.param('id'),
-    c.get('userId'),
-    RECURRING_COLS,
-    b,
+    id,
+    userId,
+    amountChanged
+      ? { ...cols, previousAmount: 'previous_amount', amountChangedAt: 'amount_changed_at' }
+      : cols,
+    patch,
   )
   if (!row) return c.json({ error: 'recurring transaction not found' }, 404)
   return c.json(row)

@@ -669,8 +669,13 @@ function committedSplitCore(
   history: Map<string, Map<string, number>>,
   historyBuckets: string[],
 ): CommittedSplit {
+  // FEAT-068: a paused rule counts in no total — it should neither mark a
+  // merchant as committed nor be treated as "decided once" spending.
   const ruleMerchants = new Set(
-    rules.map((r) => r.merchant.trim().toLowerCase()).filter(Boolean),
+    rules
+      .filter((r) => !r.paused)
+      .map((r) => r.merchant.trim().toLowerCase())
+      .filter(Boolean),
   )
 
   const items: CommittedSplit['items'] = []
@@ -784,6 +789,7 @@ export function safeToSpend(
 ): SafeToSpend {
   let bills = 0
   for (const r of recurring) {
+    if (r.paused) continue // FEAT-068: paused rules count in no total
     if (r.accountId !== accountId) continue
     if (r.type !== 'expense') continue
     if (dismissedIds.has(r.id)) continue

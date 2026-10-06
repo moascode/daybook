@@ -15,7 +15,7 @@ in D1, and every item is a read over existing rows — no schema changes, no
 one-way doors.
 
 **Sequencing note.** [FEAT-021](FEAT-021-recurring-anomalies.md)
-(recurring anomalies) and [FEAT-018](FEAT-018-budgets-suggestions.md)
+(recurring anomalies, now built as part of [FEAT-068](FEAT-068-recurring-design-adoption.md)) and [FEAT-018](FEAT-018-budgets-suggestions.md)
 (budget suggestions) are the two that change behaviour rather than just
 displaying it. If only part of this epic gets built, build those.
 
@@ -40,8 +40,8 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | ID | Title | Still needed? |
 |---|---|---|
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | No — superseded by FEAT-067 |
-| [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Yes |
-| [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | **Yes — build early.** Pays for the module |
+| [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | No — superseded by FEAT-068 |
+| [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | No — superseded by FEAT-068 |
 | [FEAT-022](FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | Yes |
 | [FEAT-023](FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | Yes |
 | [FEAT-024](FEAT-024-shared-minimum-transfers.md) | Shared: group-wide minimum-transfer set | Yes — read the settlement CAS trap first |
@@ -51,7 +51,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
 | [FEAT-066](FEAT-066-budgets-design-adoption.md) | Budgets: exact mock parity (no composer — a Plan page) | Yes |
 | [FEAT-067](FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | Yes |
-| [FEAT-068](FEAT-068-recurring-composer.md) | Recurring: mount the transaction composer | Yes |
+| [FEAT-068](FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 (no composer — a Plan page) | Yes |
 | [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
 
 **FEAT-063–FEAT-069, filed 2026-10-02**, are a second-pass design-adoption
@@ -67,6 +67,7 @@ also folds in and corrects FEAT-018's stale status. **FEAT-067 revised
 2026-10-06** the same way for Goals, and absorbs FEAT-019 whole — that page's
 gap was the funding-rate computation, not restyling. It adds two nullable
 columns (`goals.target_date`, `goals.note`) on owner sign-off. **FEAT-068
-(Recurring) is still filed composer-only** pending the same page-by-page
-review when work reaches it — a page's gap list isn't final until that page
-has actually been looked at this closely, same as Budgets and Goals weren't.
+revised 2026-10-06** the same way for Recurring, and absorbs FEAT-020 and
+FEAT-021 whole. It adds three nullable/defaulted columns to
+`recurring_transactions` (`paused`, `previous_amount`, `amount_changed_at`)
+on owner sign-off.
