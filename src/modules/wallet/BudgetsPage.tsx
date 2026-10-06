@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Plus, PieChart, Pencil, Trash2, AlertTriangle } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { Plus, PieChart, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { Select } from '@/components/ui/Select'
@@ -10,11 +10,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useToastStore } from '@/stores/toast.store'
-import { cn, formatMYR, errorMessage, monthRange, todayISO } from '@/lib/utils'
-import { dayOfMonth, daysInMonth, monthKey } from '@/modules/wallet/dashboard/insights'
+import { cn, formatMYR, errorMessage, todayISO } from '@/lib/utils'
+import { dayOfMonth, daysInMonth, monthKey, addDaysISO } from '@/modules/wallet/dashboard/insights'
 import { AHEAD_OF_PACE_THRESHOLD } from '@/modules/wallet/dashboard/BudgetPace'
 import {
-  generateBudgetSuggestions, computeBudgetVsActual, type CategorySpendHistory, type BudgetSuggestion,
+  generateBudgetSuggestions, computeBudgetVsActual, effectiveLimit, budgetStatus, topOverspendCategories,
+  BUDGET_STATUS_DISPLAY, type CategorySpendHistory, type BudgetSuggestion, type BudgetStatusLevel,
 } from '@/modules/wallet/budgets/insights'
 import { BudgetSuggestions } from '@/modules/wallet/budgets/BudgetSuggestions'
 import { BudgetVsActualChart } from '@/modules/wallet/budgets/BudgetVsActualChart'
@@ -25,10 +26,21 @@ interface BudgetFormData {
   limitAmount: string
 }
 
+/** The per-row pace track's fill colour — status-derived (not the category's own colour, which the `.cat-dot` already carries), so the bar itself still reads as a pace signal at a glance. */
+const STATUS_TRACK_COLOR: Record<BudgetStatusLevel, string> = {
+  over: 'rgb(var(--neg))',
+  tight: 'rgb(var(--warn))',
+  watch: 'rgb(var(--fg-faint))',
+  'on-track': 'rgb(var(--pos))',
+}
+
+/** Table grid: Category | Pace | Spent | Left | Status | actions — matches the mock's 5 data columns (budgets.html) plus one trailing slot for the existing Edit/Delete icons, which the read-only mock has no equivalent of. */
+const TABLE_COLUMNS = '200px 1fr 108px 108px 100px 64px'
+
 export function BudgetsPage() {
   const {
     budgets, categories, loadBudgets, loadCategories, addBudget, updateBudget, deleteBudget, getBudgetSpending,
-    getBudgetSpendingHistory,
+    getBudgetSpendingRange, getBudgetSpendingHistory,
   } = useWallet()
   const { addToast } = useToastStore()
 
@@ -36,8 +48,21 @@ export function BudgetsPage() {
   const [form, setForm] = useState<BudgetFormData>({ categoryId: '', limitAmount: '' })
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [period, setPeriod] = useState<'month' | 'rolling30'>('month')
   const [spending, setSpending] = useState<Map<string, number>>(new Map())
+  const [rollingSpending, setRollingSpending] = useState<Map<string, number>>(new Map())
   const [spendingHistory, setSpendingHistory] = useState<CategorySpendHistory>(new Map())
+  // Bug fix (post-Gate-2 review): `spendingHistory.size > 0` is not a
+  // reliable "has it loaded" proxy — a genuinely empty history (no past spend
+  // anywhere) is indistinguishable from "hasn't loaded yet" by size alone.
+  // An explicit status instead: `effectiveLimit`/`topOverspendCategories`
+  // must not apply rollover math against a history that isn't actually in —
+  // whether still loading or because the fetch failed — or a rollover
+  // budget's limit silently doubles (reads "no data" as "zero spend").
+  const [historyStatus, setHistoryStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+
+  const today = todayISO()
+  const currentMonth = monthKey(today)
 
   useEffect(() => {
     loadCategories()
@@ -47,23 +72,47 @@ export function BudgetsPage() {
     // transaction total. GET /budgets/spending computes this server-side as
     // one aggregate query, scoped to the caller's own transactions and
     // bounded to the current month.
-    getBudgetSpending(monthRange(0).dateFrom.slice(0, 7)).then(setSpending)
+    getBudgetSpending(currentMonth).then(setSpending)
+    // FEAT-066: the trailing-30-day window for the "Rolling 30d" toggle —
+    // fetched alongside the calendar-month figure above (not on toggle, so
+    // switching tabs is instant) rather than lazily, since it's one more
+    // cheap aggregate query, not a per-row fan-out.
+    // A failed fetch must not render identically to "nothing spent" — say so
+    // (CLAUDE.md §2 rule 10), matching the history fetch's convention below.
+    getBudgetSpendingRange(addDaysISO(today, -29), today)
+      .then(setRollingSpending)
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load the last 30 days of spending — try the month view instead.'), duration: 4000 }))
     // FEAT-018: 6 months of per-category spend — the suggestions engine's
     // only input besides the budgets/categories already loaded above. A
     // failed fetch must not render identically to "no suggestions" — say so.
     getBudgetSpendingHistory(6)
-      .then(setSpendingHistory)
-      .catch((err) => addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 }))
-  }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingHistory, addToast])
+      .then((history) => { setSpendingHistory(history); setHistoryStatus('loaded') })
+      .catch((err) => {
+        setHistoryStatus('error')
+        addToast({ message: errorMessage(err, 'Could not load spending history — suggestions may be incomplete.'), duration: 4000 })
+      })
+  }, [loadBudgets, loadCategories, getBudgetSpending, getBudgetSpendingRange, getBudgetSpendingHistory, addToast, today, currentMonth])
+
+  // Only true once the history fetch has actually succeeded — `effectiveLimit`
+  // and `topOverspendCategories` fall back to the raw, undoubled limit for
+  // both the 'loading' and 'error' states (F1 above).
+  const historyReady = historyStatus === 'loaded'
+
+  const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
 
   const suggestions = useMemo(
-    () => generateBudgetSuggestions(budgets, categories, spendingHistory, todayISO()),
-    [budgets, categories, spendingHistory],
+    () => generateBudgetSuggestions(budgets, categories, spendingHistory, today),
+    [budgets, categories, spendingHistory, today],
+  )
+
+  const overspendShare = useMemo(
+    () => topOverspendCategories(budgets, categoryName, spending, spendingHistory, currentMonth, historyReady),
+    [budgets, categoryName, spending, spendingHistory, currentMonth, historyReady],
   )
 
   const budgetVsActual = useMemo(
-    () => computeBudgetVsActual(budgets, spendingHistory, todayISO()),
-    [budgets, spendingHistory],
+    () => computeBudgetVsActual(budgets, spendingHistory, today),
+    [budgets, spendingHistory, today],
   )
 
   const handleReallocate = useCallback(async (s: Extract<BudgetSuggestion, { type: 'reallocate' }>) => {
@@ -135,6 +184,24 @@ export function BudgetsPage() {
     }
   }, [addBudget, addToast, loadBudgets])
 
+  const handleRollForward = useCallback(async (s: Extract<BudgetSuggestion, { type: 'roll-forward' }>) => {
+    const budget = budgets.find((b) => b.categoryId === s.categoryId)
+    if (!budget) {
+      addToast({ message: 'That budget has changed — refreshing suggestions.', duration: 4000 })
+      loadBudgets()
+      return
+    }
+    try {
+      await updateBudget(budget.id, { rolloverEnabled: true })
+      addToast({ message: `${s.categoryName} now rolls its unused limit forward.`, duration: 4000 })
+    } catch (err) {
+      // Reload rather than trust local state — an error here can still mean
+      // a lost response after the server actually committed the write.
+      await loadBudgets()
+      addToast({ message: errorMessage(err, `Could not confirm rollover was enabled for ${s.categoryName} — please check before trying again.`), duration: 4000 })
+    }
+  }, [budgets, updateBudget, addToast, loadBudgets])
+
   const openCreate = useCallback(() => {
     setForm({ categoryId: '', limitAmount: '' })
     setFormError(null)
@@ -177,35 +244,75 @@ export function BudgetsPage() {
     }
   }, [deleteBudget, crud, addToast])
 
-  // Summary-band figures: reduces over the same `budgets`/`spending` data
-  // every row below already renders — no new fetch, no new aggregation.
-  const totalBudgeted = budgets.reduce((sum, b) => sum + b.limitAmount, 0)
-  const totalSpent = budgets.reduce((sum, b) => sum + (spending.get(b.categoryId) ?? 0), 0)
-  const monthPct = totalBudgeted > 0 ? Math.min((totalSpent / totalBudgeted) * 100, 100) : 0
-  const overBudgetCount = budgets.filter((b) => (spending.get(b.categoryId) ?? 0) > b.limitAmount).length
-
   // Pace: where you SHOULD be today, same day-of-month elapsed fraction
   // `BudgetPace` (dashboard/BudgetPace.tsx) uses for its notch — this page is
   // always the current month (no date-range picker), so it's always in
-  // progress and never needs that component's multi-month scaling.
-  const today = todayISO()
+  // progress and never needs that component's multi-month scaling. Rolling
+  // 30d has no "day N of the period" to project a pace from (FEAT-066 AC) —
+  // the notch, the pace chip and the band's Projected-finish/On-track stats
+  // are all gated on `isMonthMode` below.
+  const isMonthMode = period === 'month'
   const day = dayOfMonth(today)
-  const monthLength = daysInMonth(monthKey(today))
+  const monthLength = daysInMonth(currentMonth)
   const elapsed = day / monthLength
   const daysRemaining = monthLength - day
+  const monthLabel = format(parseISO(`${currentMonth}-01`), 'MMMM')
+  const monthLabelShort = format(parseISO(`${currentMonth}-01`), 'MMM')
+  const lastDayLabel = `${monthLength} ${monthLabelShort}`
 
-  // "RM34 a day instead of RM46 brings it in exactly on budget" — a
-  // CORRECTIVE instruction, not a projection (design.md, R8 Budgets): only
-  // shown when the current pace overshoots what's needed to land on budget,
-  // never the reverse (a household under budget doesn't need telling to
-  // spend MORE). Needs an actual remaining day to spread the rest over, and
-  // skipped once already over — the per-row "Over budget" badges say that.
-  const actualDailyRate = day > 0 ? totalSpent / day : 0
-  const neededDailyRate = daysRemaining > 0 ? (totalBudgeted - totalSpent) / daysRemaining : null
-  const paceInstruction =
-    neededDailyRate !== null && neededDailyRate >= 0 && actualDailyRate - neededDailyRate >= 0.5
-      ? `${formatMYR(neededDailyRate)} a day instead of ${formatMYR(actualDailyRate)} brings it in exactly on budget.`
-      : null
+  const activeSpending = isMonthMode ? spending : rollingSpending
+
+  // A 30-day trailing window has no "day N of 31" to be ahead or behind —
+  // it's always "complete" by definition. Feeding it the calendar month's
+  // elapsed fraction into `budgetStatus` would compare a full rolling sum
+  // against a tiny early-month fraction and call almost everything "Over
+  // pace" on day 2. Passing 1 instead collapses the pace-dependent tiers
+  // (aheadPts is never positive unless genuinely over) to the two that are
+  // still honest for a window with no partial-period concept: over the
+  // limit, or using most of it ("Watch") — matching the Rolling 30d band's
+  // own choice to drop pace/projection entirely (FEAT-066 AC).
+  const statusElapsed = isMonthMode ? elapsed : 1
+
+  // Summary-band figures. `effectiveLimit` folds in last month's rollover —
+  // every "limit" read here and in the table below goes through it, never
+  // raw `limitAmount` (FEAT-066 AC), except the row sub-text which
+  // deliberately shows the configured limit so rollover's effect is visible.
+  const totalBudgeted = budgets.reduce((sum, b) => sum + effectiveLimit(b, spendingHistory, currentMonth, historyReady), 0)
+  const totalSpent = budgets.reduce((sum, b) => sum + (activeSpending.get(b.categoryId) ?? 0), 0)
+  const monthPct = totalBudgeted > 0 ? Math.min((totalSpent / totalBudgeted) * 100, 100) : 0
+
+  const leftToSpend = totalBudgeted - totalSpent
+  const perDay = daysRemaining > 0 ? leftToSpend / daysRemaining : leftToSpend
+  const projected = elapsed > 0 ? totalSpent / elapsed : totalSpent
+  const projectedOver = projected > totalBudgeted ? projected - totalBudgeted : null
+  const shouldBeAt = totalBudgeted * elapsed
+
+  const statusByBudgetId = new Map(
+    budgets.map((b) => [
+      b.id,
+      budgetStatus(activeSpending.get(b.categoryId) ?? 0, effectiveLimit(b, spendingHistory, currentMonth, historyReady), statusElapsed),
+    ]),
+  )
+  const onTrackCount = budgets.filter((b) => {
+    const s = statusByBudgetId.get(b.id)
+    return s === 'on-track' || s === 'watch'
+  }).length
+  const needsAttentionCount = budgets.length - onTrackCount
+
+  const aheadPoints = totalBudgeted > 0 ? Math.round((totalSpent / totalBudgeted - elapsed) * 100) : 0
+
+  // Bug fix (post-Gate-2 review): this was still comparing against the
+  // calendar-month `elapsed` fraction, the exact "no pace concept in a
+  // trailing 30-day window" problem `statusElapsed` exists to fix for the
+  // per-row chips below. In Rolling 30d mode (`statusElapsed` pinned to 1),
+  // `monthPct / 100 > 1 + AHEAD_OF_PACE_THRESHOLD` can never be true since
+  // monthPct is capped at 100 — so this collapses to the two tiers that are
+  // still honest without a partial-period concept: over the limit, or not.
+  const fillColor = totalSpent > totalBudgeted
+    ? 'rgb(var(--neg))'
+    : monthPct / 100 > statusElapsed + AHEAD_OF_PACE_THRESHOLD
+      ? 'rgb(var(--warn))'
+      : 'rgb(var(--pos))'
 
   const expenseCategories = categories.filter((c) => c.type === 'expense' || c.type === 'both')
   const usedCategoryIds = new Set(budgets.map((b) => b.categoryId))
@@ -214,32 +321,32 @@ export function BudgetsPage() {
     : expenseCategories.filter((c) => !usedCategoryIds.has(c.id))
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="mx-auto max-w-5xl">
       {/* Header */}
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Budgets</h2>
-          <p className="text-xs text-fg-subtle mt-0.5">Monthly spend limits per category</p>
+      <div className="page-head">
+        <h1 className="page-title">Budgets</h1>
+        <span className="page-sub hide-mobile">{monthLabel} · {daysRemaining} days left</span>
+        <div className="page-actions">
+          <div className="segment" role="tablist">
+            <button type="button" role="tab" aria-selected={isMonthMode} onClick={() => setPeriod('month')}>
+              {monthLabel}
+            </button>
+            <button type="button" role="tab" aria-selected={!isMonthMode} onClick={() => setPeriod('rolling30')}>
+              Rolling 30d
+            </button>
+          </div>
+          <Button
+            size="sm"
+            onClick={openCreate}
+            disabled={availableCategories.length === 0}
+            title={availableCategories.length === 0 ? 'Every expense category already has a budget' : undefined}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Budget
+          </Button>
         </div>
-        <Button
-          size="sm"
-          onClick={openCreate}
-          disabled={availableCategories.length === 0}
-          title={availableCategories.length === 0 ? 'Every expense category already has a budget' : undefined}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add Budget
-        </Button>
       </div>
 
-      <BudgetSuggestions
-        suggestions={suggestions}
-        onReallocate={handleReallocate}
-        onRightSize={handleRightSize}
-        onCreateMissing={handleCreateMissing}
-      />
-
-      {/* Budget list */}
       {budgets.length === 0 ? (
         <EmptyState
           icon={<PieChart className="h-10 w-10" />}
@@ -252,125 +359,142 @@ export function BudgetsPage() {
           }
         />
       ) : (
-        <>
-          {/* Month summary band — figure left, three stats right of a
-              hairline, pace bar full width beneath. Reduces over the same
-              `budgets`/`spending` data the rows below already render. */}
-          <div className="card card-pad mb-4">
+        <div className="dash">
+          {/* Month summary band */}
+          <section className="card card-pad c12">
+            <div className="card-head">
+              <div>
+                <div className="card-title">{isMonthMode ? monthLabel : 'Rolling 30 days'}</div>
+                {isMonthMode && (
+                  <div className="card-sub">
+                    You are {Math.round(elapsed * 100)}% through the month and {Math.round(monthPct)}% through the money
+                  </div>
+                )}
+              </div>
+              {isMonthMode && aheadPoints > 0 && (
+                <span className="chip chip-warn" style={{ marginLeft: 'auto' }}>{aheadPoints} points ahead of pace</span>
+              )}
+            </div>
+
             <div className="band">
               <div className="band-main">
                 <div className="band-fig">
                   <span className="v">{formatMYR(totalSpent)}</span>
                   <span className="k">of {formatMYR(totalBudgeted)} budgeted</span>
                 </div>
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-hover">
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all',
-                      totalSpent > totalBudgeted
-                        ? 'bg-red-500'
-                        : monthPct > 80
-                          ? 'bg-orange-400'
-                          : 'bg-brand-500',
+              </div>
+              {isMonthMode && (
+                <div className="band-stats">
+                  <div className="band-stat">
+                    <div className="k">Left to spend</div>
+                    <div className="v">{formatMYR(leftToSpend)}</div>
+                    {daysRemaining > 0 && (
+                      // N3 fix: once spend has already passed the total budget,
+                      // `perDay` goes negative — "RM -50.00 a day" reads like a
+                      // typo, not a rate. Name the overage instead of dividing it.
+                      leftToSpend >= 0
+                        ? <div className="s">{formatMYR(perDay)} a day for {daysRemaining} days</div>
+                        : <div className="s" style={{ color: 'rgb(var(--neg-fg))' }}>{formatMYR(Math.abs(leftToSpend))} over already</div>
                     )}
-                    style={{ width: `${monthPct}%` }}
-                  />
-                </div>
-              </div>
-              <div className="band-stats">
-                <div className="band-stat">
-                  <p className="k">Remaining</p>
-                  <p className="v">{formatMYR(totalBudgeted - totalSpent)}</p>
-                </div>
-                <div className="band-stat">
-                  <p className="k">Categories</p>
-                  <p className="v">{budgets.length}</p>
-                </div>
-                <div className="band-stat">
-                  <p className="k">Over budget</p>
-                  <p className="v">{overBudgetCount}</p>
-                </div>
-              </div>
-            </div>
-            {paceInstruction && (
-              <>
-                <div className="divider" />
-                <p className="text-sm text-fg-subtle" data-testid="budget-pace-instruction">{paceInstruction}</p>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-3">
-          {budgets.map((budget) => {
-            const category = categories.find((c) => c.id === budget.categoryId)
-            const spent = spending.get(budget.categoryId) ?? 0
-            const ratio = budget.limitAmount > 0 ? spent / budget.limitAmount : 0
-            const pct = Math.min(ratio * 100, 100)
-            const isOver = spent > budget.limitAmount
-            const isAheadOfPace = !isOver && ratio > elapsed + AHEAD_OF_PACE_THRESHOLD
-
-            return (
-              <div
-                key={budget.id}
-                data-testid="budget-row"
-                className="card card-pad hover:bg-surface-hover transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-fg text-sm">
-                        {category?.name ?? 'Unknown'}
-                      </span>
-                      {isOver && (
-                        <Badge variant="danger" className="gap-1" data-testid="over-budget-alert">
-                          <AlertTriangle className="h-3 w-3" />
-                          Over budget
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-fg-subtle mb-2">
-                      <span>
-                        {formatMYR(spent)} spent of{' '}
-                        <span className="font-medium text-fg-muted">{formatMYR(budget.limitAmount)}</span>
-                      </span>
-                      <span className={cn(isOver ? 'text-red-600 font-medium' : 'text-fg-faint')}>
-                        {Math.round(pct)}%
-                      </span>
-                    </div>
-                    {/* Progress bar with a pace notch — the line marks where spend
-                        SHOULD be today (day/daysInMonth), same math as the
-                        Dashboard's `BudgetPace`. Colour follows position against
-                        that notch, not a flat 80% threshold: red once over the
-                        limit, amber once ahead of pace, green otherwise. */}
-                    <div
-                      data-testid="budget-progress"
-                      role="img"
-                      aria-label={
-                        `${category?.name ?? 'This category'}: ${Math.round(ratio * 100)}% of budget used, ` +
-                        `${Math.round(elapsed * 100)}% of the month elapsed` +
-                        (isOver ? ' — over limit.' : isAheadOfPace ? ' — ahead of pace.' : ' — on track.')
-                      }
-                      className="relative h-2 w-full overflow-hidden rounded-full bg-surface-hover"
-                    >
-                      <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          isOver ? 'bg-red-500' : isAheadOfPace ? 'bg-orange-400' : 'bg-brand-500',
-                        )}
-                        style={{ width: `${pct}%` }}
-                      />
-                      <div
-                        data-testid="budget-pace-notch"
-                        className="absolute top-0 h-full w-px bg-fg/40"
-                        // Capped short of 100% — at the exact right edge, `overflow-hidden`
-                        // on the track clips this 1px line to zero width and it disappears
-                        // (only visible on the month's last day, but real every month).
-                        style={{ left: `${Math.min(99.5, elapsed * 100)}%` }}
-                      />
-                    </div>
                   </div>
-                  {/* Actions */}
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="band-stat">
+                    <div className="k">Projected finish</div>
+                    <div className="v">{formatMYR(projected)}</div>
+                    {/* N2 fix: a favourable projection used to leave this stat's
+                        sub-line silently blank — show how much room is left too. */}
+                    {projectedOver !== null
+                      ? <div className="s" style={{ color: 'rgb(var(--neg-fg))' }}>{formatMYR(projectedOver)} over</div>
+                      : <div className="s">{formatMYR(totalBudgeted - projected)} under</div>}
+                  </div>
+                  <div className="band-stat">
+                    <div className="k">On track</div>
+                    <div className="v">{onTrackCount} of {budgets.length}</div>
+                    {needsAttentionCount > 0 && <div className="s">{needsAttentionCount} need attention</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isMonthMode ? (
+              <>
+                <div className="budget-track" style={{ height: 10, marginTop: 'var(--s5)' }}>
+                  <div className="budget-fill" style={{ width: `${monthPct}%`, background: fillColor }} />
+                  <div className="budget-mark" style={{ left: `${Math.min(99.5, elapsed * 100)}%`, top: -4, bottom: -4, opacity: 1 }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--s2)', fontSize: 'var(--t-xs)', color: 'rgb(var(--fg-subtle))' }}>
+                  <span>1 {monthLabelShort}</span>
+                  <span style={{ color: 'rgb(var(--fg))', fontWeight: 600 }} data-testid="budget-pace-caption">
+                    today — you should be at {formatMYR(shouldBeAt)}
+                  </span>
+                  <span>{lastDayLabel}</span>
+                </div>
+              </>
+            ) : (
+              // FEAT-066 AC: a trailing window has no "day N of the period" to
+              // project a pace from — plain fill, no notch, no caption.
+              <div className="budget-track" style={{ height: 10, marginTop: 'var(--s5)' }}>
+                <div className="budget-fill" style={{ width: `${monthPct}%`, background: fillColor }} />
+              </div>
+            )}
+          </section>
+
+          {/* Per category */}
+          <section className="card card-pad c12">
+            <div className="card-head">
+              <div className="card-title">By category</div>
+              {isMonthMode && (
+                <div className="card-sub" style={{ marginLeft: 'auto' }}>The line marks where each should be on day {day}</div>
+              )}
+            </div>
+
+            <div className="lhead" style={{ gridTemplateColumns: TABLE_COLUMNS }}>
+              <span>Category</span><span>Pace</span><span className="num">Spent</span><span className="num">Left</span><span className="num">Status</span><span />
+            </div>
+
+            {budgets.map((budget) => {
+              const category = categories.find((c) => c.id === budget.categoryId)
+              const limit = effectiveLimit(budget, spendingHistory, currentMonth, historyReady)
+              const spent = activeSpending.get(budget.categoryId) ?? 0
+              const left = limit - spent
+              const ratio = limit > 0 ? spent / limit : 0
+              const pct = Math.min(ratio * 100, 100)
+              const status = budgetStatus(spent, limit, statusElapsed)
+              const { label, chipClass } = BUDGET_STATUS_DISPLAY[status]
+
+              return (
+                <div key={budget.id} data-testid="budget-row" className="lrow" style={{ gridTemplateColumns: TABLE_COLUMNS }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', minWidth: 0 }}>
+                    <span className="cat-dot" style={{ background: category?.color ?? 'rgb(var(--fg-faint))' }} />
+                    <span style={{ minWidth: 0 }}>
+                      <span className="tname" style={{ fontSize: 'var(--t-sm)', display: 'block' }}>{category?.name ?? 'Unknown'}</span>
+                      <span className="tsub" style={{ display: 'block' }}>{formatMYR(budget.limitAmount)} limit</span>
+                    </span>
+                  </div>
+                  <div
+                    data-testid="budget-progress"
+                    className="budget-track"
+                    style={{ margin: 0 }}
+                    role="img"
+                    aria-label={
+                      `${category?.name ?? 'This category'}: ${Math.round(ratio * 100)}% of budget used` +
+                      (isMonthMode ? `, ${Math.round(elapsed * 100)}% of the month elapsed` : '') +
+                      ` — ${label.toLowerCase()}.`
+                    }
+                  >
+                    <div className="budget-fill" style={{ width: `${pct}%`, background: STATUS_TRACK_COLOR[status] }} />
+                    {isMonthMode && (
+                      <div data-testid="budget-pace-notch" className="budget-mark" style={{ left: `${Math.min(99.5, elapsed * 100)}%` }} />
+                    )}
+                  </div>
+                  <div className="num money" style={{ fontWeight: 600 }}>{formatMYR(spent)}</div>
+                  <div className="num money">{formatMYR(left)}</div>
+                  <div className="num"><span className={cn('chip', chipClass)} data-testid="budget-status-chip">{label}</span></div>
+                  {/* opacity:1 override — `.lrow .trow-actions` defaults to hover-reveal
+                      (B6, data.css), but a budget limit is edited/deleted far less
+                      often per visit than a transaction row, and this page's old
+                      design always showed these icons; hover-only would be a quiet
+                      regression, not a style update. */}
+                  <div className="trow-actions" style={{ justifyContent: 'flex-end', opacity: 1 }}>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -390,13 +514,21 @@ export function BudgetsPage() {
                     </Button>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-          </div>
+              )
+            })}
+          </section>
 
-          <BudgetVsActualChart points={budgetVsActual} className="mt-4" />
-        </>
+          <BudgetVsActualChart points={budgetVsActual} className="c7" />
+
+          <BudgetSuggestions
+            suggestions={suggestions}
+            overspendShare={overspendShare}
+            onReallocate={handleReallocate}
+            onRightSize={handleRightSize}
+            onCreateMissing={handleCreateMissing}
+            onRollForward={handleRollForward}
+          />
+        </div>
       )}
 
       {/* Add / Edit modal */}
