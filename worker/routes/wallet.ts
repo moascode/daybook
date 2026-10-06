@@ -3215,6 +3215,8 @@ const GOAL_COLS: Record<string, string> = {
   name: 'name',
   targetAmount: 'target_amount',
   accountId: 'account_id',
+  targetDate: 'target_date',
+  note: 'note',
 }
 
 wallet.get('/goals', async (c) => {
@@ -3226,6 +3228,84 @@ wallet.get('/goals', async (c) => {
   return c.json(results)
 })
 
+// FEAT-067: targetDate is a nullable ISO date (On track / Behind / Ahead
+// status + "needs $X/mo"); note is a nullable, trimmed, <= 80 char card
+// subtitle. Both optional on create, both clearable to null on edit.
+function goalTargetDateError(b: Record<string, unknown>): string | null {
+  if (!('targetDate' in b) || b.targetDate === null) return null
+  return isoDateError(b.targetDate, 'targetDate')
+}
+
+/** Trims `note`, caps at 80 chars, and turns '' into null. Mutates nothing — returns the normalised value. */
+function normalizeGoalNote(v: unknown): string | null {
+  if (v === null || v === undefined) return null
+  const trimmed = String(v).trim()
+  return trimmed === '' ? null : trimmed.slice(0, 80)
+}
+
+function goalNoteError(b: Record<string, unknown>): string | null {
+  if (!('note' in b) || b.note === null) return null
+  if (typeof b.note !== 'string') return 'note must be a string or null'
+  if (b.note.trim().length > 80) return 'note must be 80 characters or fewer'
+  return null
+}
+
+// FEAT-067 — registered BEFORE /goals/:id so it is never swallowed by that
+// param route. Returns, per goal-linked account visible to the user, the
+// monthly net inflow (income − expense − transfer-out + transfer-in,
+// is_non_cash = 0 excluded — the same arms GET /accounts/balances sums) for
+// every month with activity. Drives the funding rate, paused state, "Added
+// this month," and the Total saved trajectory chart on the client.
+wallet.get('/goals/flows', async (c) => {
+  const userId = c.get('userId')
+  const visible = await visibleAccountIds(c.env.DB, userId)
+  if (visible.length === 0) return c.json([])
+
+  const { results: goalRows } = await c.env.DB.prepare(
+    'SELECT DISTINCT account_id FROM goals WHERE user_id = ?',
+  )
+    .bind(userId)
+    .all<{ account_id: string }>()
+
+  const linked = goalRows
+    .map((r) => r.account_id)
+    .filter((id) => visible.includes(id))
+  if (linked.length === 0) return c.json([])
+
+  const placeholders = linked.map(() => '?').join(', ')
+  // D1's low SQLITE_MAX_COMPOUND_SELECT rejects many UNION ALL terms — this
+  // stays at two (out-legs, in-legs), wrapped in an outer GROUP BY so the two
+  // arms merge into one row per (account, month) instead of leaving the
+  // caller to sum duplicates.
+  const { results } = await c.env.DB.prepare(
+    `SELECT accountId, month, SUM(net) AS net FROM (
+       SELECT account_id AS accountId, substr(date, 1, 7) AS month,
+              SUM(CASE type
+                    WHEN 'income' THEN amount
+                    WHEN 'expense' THEN -amount
+                    WHEN 'transfer' THEN -amount
+                    ELSE 0 END) AS net
+       FROM transactions
+       WHERE is_non_cash = 0 AND account_id IN (${placeholders})
+       GROUP BY account_id, substr(date, 1, 7)
+
+       UNION ALL
+
+       SELECT destination_account_id AS accountId, substr(date, 1, 7) AS month,
+              SUM(amount) AS net
+       FROM transactions
+       WHERE is_non_cash = 0 AND type = 'transfer' AND destination_account_id IN (${placeholders})
+       GROUP BY destination_account_id, substr(date, 1, 7)
+     )
+     GROUP BY accountId, month
+     ORDER BY accountId, month`,
+  )
+    .bind(...linked, ...linked)
+    .all()
+
+  return c.json(results)
+})
+
 wallet.post('/goals', async (c) => {
   const b = await body(c)
   if (!b.name || typeof b.name !== 'string' || !b.name.trim()) {
@@ -3233,16 +3313,27 @@ wallet.post('/goals', async (c) => {
   }
   const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
   if (amtErr) return c.json({ error: amtErr }, 400)
+  const dateErr = goalTargetDateError(b)
+  if (dateErr) return c.json({ error: dateErr }, 400)
+  const noteErr = goalNoteError(b)
+  if (noteErr) return c.json({ error: noteErr }, 400)
   if (!(await ownsAllRefs(c.env.DB, c.get('userId'), [['accounts', b.accountId]]))) {
     return c.json({ error: 'invalid account reference' }, 400)
   }
 
   const row = await c.env.DB.prepare(
-    `INSERT INTO goals (id, user_id, name, target_amount, account_id, created_at, updated_at)
-     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, datetime('now'), datetime('now'))
+    `INSERT INTO goals (id, user_id, name, target_amount, account_id, target_date, note, created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
      RETURNING *`,
   )
-    .bind(c.get('userId'), b.name, normalizeBind(b.targetAmount), b.accountId)
+    .bind(
+      c.get('userId'),
+      b.name,
+      normalizeBind(b.targetAmount),
+      b.accountId,
+      normalizeBind(b.targetDate ?? null),
+      normalizeGoalNote(b.note),
+    )
     .first()
   return c.json(row, 201)
 })
@@ -3253,6 +3344,11 @@ wallet.patch('/goals/:id', async (c) => {
     const amtErr = positiveAmountError(b.targetAmount, 'targetAmount')
     if (amtErr) return c.json({ error: amtErr }, 400)
   }
+  const dateErr = goalTargetDateError(b)
+  if (dateErr) return c.json({ error: dateErr }, 400)
+  const noteErr = goalNoteError(b)
+  if (noteErr) return c.json({ error: noteErr }, 400)
+  if ('note' in b) b.note = normalizeGoalNote(b.note)
   if (
     'accountId' in b &&
     !(await ownsAllRefs(c.env.DB, c.get('userId'), [['accounts', b.accountId]]))

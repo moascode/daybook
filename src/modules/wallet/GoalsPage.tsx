@@ -1,74 +1,161 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Target, Plus, Pencil, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Modal } from '@/components/ui/Modal'
-import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
-import { Input } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Plus, PlusCircle, Target } from 'lucide-react'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { useWallet } from '@/hooks/useWallet'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
+import { Button } from '@/components/ui/Button'
+import { useWallet, countableAmount, mapTransaction, type TransactionRow } from '@/hooks/useWallet'
+import { api } from '@/lib/api'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { useToastStore } from '@/stores/toast.store'
-import { formatMYR, errorMessage } from '@/lib/utils'
-import type { Goal } from '@/types/wallet.types'
+import { formatMYR, errorMessage, todayISO } from '@/lib/utils'
+import { monthKey, dayOfMonth, daysInMonth } from '@/modules/wallet/dashboard/insights'
+import { TransactionForm, type TransactionFormData } from '@/modules/wallet/TransactionForm'
+import { GoalsBand, type GoalComputed } from '@/modules/wallet/goals/GoalsBand'
+import { GoalCard } from '@/modules/wallet/goals/GoalCard'
+import { GoalFormModal, type GoalFormData } from '@/modules/wallet/goals/GoalFormModal'
+import { GoalsTrajectoryChart } from '@/modules/wallet/goals/GoalsTrajectoryChart'
+import { GoalsMilestones } from '@/modules/wallet/goals/GoalsMilestones'
+import {
+  goalSaved, fundingRate, addedThisMonth as goalAddedThisMonth, goalStatus, nextMilestones, knockOn, roomForMore,
+  type GoalStatus,
+} from '@/modules/wallet/goals/projection'
+import type { Goal, GoalFlow } from '@/types/wallet.types'
 
-interface GoalFormData {
-  name: string
-  targetAmount: string
-  accountId: string
+/** The ETA ('YYYY-MM') carried by a status kind that has one, else null — used to pick the "soonest finishing" goal for Room-for-more's target. */
+function statusEta(status: GoalStatus | 'unknown'): string | null {
+  if (status === 'unknown') return null
+  if (status.kind === 'ahead' || status.kind === 'onTrack' || status.kind === 'undated') return status.eta
+  return null
 }
 
 export function GoalsPage() {
   const {
-    goals,
-    accounts,
-    loadGoals,
-    loadAccounts,
-    addGoal,
-    updateGoal,
-    deleteGoal,
-    getAccountBalances,
+    goals, accounts, categories, tags,
+    loadGoals, loadAccounts, loadCategories, loadTags,
+    addGoal, updateGoal, deleteGoal, getAccountBalances, loadGoalFlows, addTransaction,
   } = useWallet()
   const { addToast } = useToastStore()
 
   const crud = useCrudModal<Goal>()
   const [balances, setBalances] = useState<Record<string, number>>({})
-  const [form, setForm] = useState<GoalFormData>({ name: '', targetAmount: '', accountId: '' })
+  const [flows, setFlows] = useState<GoalFlow[] | null>(null)
+  const [monthIncome, setMonthIncome] = useState(0)
+  const [monthExpense, setMonthExpense] = useState(0)
+  const [form, setForm] = useState<GoalFormData>({ name: '', targetAmount: '', accountId: '', targetDate: '', note: '' })
   const [formError, setFormError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [addMoneyOpen, setAddMoneyOpen] = useState(false)
+  const [addMoneyDraft, setAddMoneyDraft] = useState<Partial<TransactionFormData> | undefined>(undefined)
+
+  const today = todayISO()
+  const currentMonth = monthKey(today)
+
+  // `POST /goals` rejects a shared-in account (a goal's linked account must
+  // be one this user actually owns), so the New/Edit Goal form's Account
+  // select only ever offers these — same `ownAccounts` filter Dashboard.tsx
+  // and AccountsPage.tsx use for the money traps in §3.
+  const ownAccounts = useMemo(() => accounts.filter((a) => !a.isShared), [accounts])
+
+  const reloadBalances = useCallback(() => {
+    getAccountBalances()
+      .then(setBalances)
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load account balances — figures may be stale.'), duration: 4000 }))
+  }, [getAccountBalances, addToast])
+
+  const reloadFlows = useCallback(() => {
+    loadGoalFlows()
+      .then(setFlows)
+      .catch((err) => {
+        setFlows(null)
+        addToast({ message: errorMessage(err, 'Could not load goal funding history — rates show as "—".'), duration: 4000 })
+      })
+  }, [loadGoalFlows, addToast])
+
+  // Fetched directly via `api.get`, NOT `useWallet().loadTransactions` — that
+  // helper writes its result into the shared wallet.store transaction list,
+  // which every other wallet page reads from. This is a page-local figure
+  // ("Room for another"), so it stays in page-local state instead of
+  // clobbering whatever filtered list Transactions/Dashboard currently hold.
+  // Filtered to the viewer's OWN accounts (mirrors Dashboard.tsx/AccountsPage.tsx's
+  // `ownAccounts = accounts.filter(a => !a.isShared)`) rather than `view:
+  // ['mine']` — "mine" is who CREATED the row, not which account it moved
+  // money in, and §3's money trap is specifically about shared accounts.
+  const reloadMonthTxns = useCallback(() => {
+    const qs = new URLSearchParams({ dateFrom: `${currentMonth}-01`, dateTo: today })
+    api.get<TransactionRow[]>(`/transactions?${qs.toString()}`)
+      .then((rows) => {
+        const ownAccountIds = new Set(accounts.filter((a) => !a.isShared).map((a) => a.id))
+        let income = 0
+        let expense = 0
+        for (const row of rows) {
+          const t = mapTransaction(row)
+          if (!ownAccountIds.has(t.accountId)) continue
+          const amt = countableAmount(t)
+          if (t.type === 'income') income += amt
+          else if (t.type === 'expense') expense += amt
+        }
+        setMonthIncome(income)
+        setMonthExpense(expense)
+      })
+      .catch((err) => addToast({ message: errorMessage(err, 'Could not load this month\'s activity — "Room for another" may be unavailable.'), duration: 4000 }))
+  }, [accounts, currentMonth, today, addToast])
 
   useEffect(() => {
-    // §1.4: one batched balances call instead of a per-account fan-out.
     loadAccounts()
+    loadCategories()
+    loadTags()
     loadGoals()
-    getAccountBalances().then(setBalances)
-  }, [loadGoals, loadAccounts, getAccountBalances])
+    reloadBalances()
+    reloadFlows()
+  }, [loadAccounts, loadCategories, loadTags, loadGoals, reloadBalances, reloadFlows])
+
+  // Separate effect: `reloadMonthTxns` depends on `accounts` (to filter to
+  // the viewer's own), so it must re-run once `loadAccounts` above resolves
+  // and `accounts` goes from `[]` to the real list — folding it into the
+  // effect above would re-trigger loadAccounts/loadCategories/loadTags/loadGoals
+  // every time `accounts` changes, since `reloadMonthTxns`'s own identity
+  // would then be a dependency of that effect too.
+  useEffect(() => {
+    reloadMonthTxns()
+  }, [reloadMonthTxns])
 
   const openCreate = useCallback(() => {
-    setForm({ name: '', targetAmount: '', accountId: accounts[0]?.id ?? '' })
+    setForm({ name: '', targetAmount: '', accountId: ownAccounts[0]?.id ?? '', targetDate: '', note: '' })
     setFormError(null)
     crud.openCreate()
-  }, [accounts, crud])
+  }, [ownAccounts, crud])
 
   const openEdit = useCallback((goal: Goal) => {
-    setForm({ name: goal.name, targetAmount: String(goal.targetAmount), accountId: goal.accountId })
+    setForm({
+      name: goal.name,
+      targetAmount: String(goal.targetAmount),
+      accountId: goal.accountId,
+      targetDate: goal.targetDate ?? '',
+      note: goal.note ?? '',
+    })
     setFormError(null)
     crud.openEdit(goal)
   }, [crud])
 
   const handleSubmit = useCallback(async () => {
     const targetAmount = parseFloat(form.targetAmount)
-    // U-04: explain the blocker rather than silently ignoring the click.
     if (!form.name.trim()) { setFormError('Give the goal a name.'); return }
     if (isNaN(targetAmount) || targetAmount <= 0) { setFormError('Enter a target greater than 0.'); return }
     if (!form.accountId) { setFormError('Choose an account.'); return }
     setFormError(null)
     setSaving(true)
     try {
+      const payload = {
+        name: form.name.trim(),
+        targetAmount,
+        accountId: form.accountId,
+        targetDate: form.targetDate || null,
+        note: form.note.trim() ? form.note.trim().slice(0, 80) : null,
+      }
       if (crud.editingItem) {
-        await updateGoal(crud.editingItem.id, { name: form.name.trim(), targetAmount, accountId: form.accountId })
+        await updateGoal(crud.editingItem.id, payload)
       } else {
-        await addGoal({ name: form.name.trim(), targetAmount, accountId: form.accountId })
+        await addGoal(payload)
       }
       crud.closeForm(false)
     } catch (err) {
@@ -87,26 +174,119 @@ export function GoalsPage() {
     }
   }, [deleteGoal, crud, addToast])
 
-  // Summary-band figures: reduces over the same `goals`/`balances` data every
-  // card below already renders, using the identical per-goal clamp each card
-  // computes for its own progress bar — no new fetch, no new aggregation.
-  const goalSaved = (goal: Goal) => Math.max(0, Math.min(balances[goal.accountId] ?? 0, goal.targetAmount))
-  const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0)
-  const totalSaved = goals.reduce((sum, g) => sum + goalSaved(g), 0)
-  const goalsPct = totalTarget > 0 ? Math.min((totalSaved / totalTarget) * 100, 100) : 0
-  const completedCount = goals.filter((g) => goalSaved(g) >= g.targetAmount).length
+  const flowsReady = flows !== null
+  const effFlows = useMemo(() => flows ?? [], [flows])
+
+  const computed: GoalComputed[] = useMemo(() => goals.map((goal) => {
+    const saved = goalSaved(goal, balances)
+    const rate = flowsReady ? fundingRate(effFlows, goal.accountId, today) : 0
+    const status: GoalStatus | 'unknown' = flowsReady ? goalStatus(goal, saved, rate, effFlows, today) : 'unknown'
+    return { goal, saved, rate, status }
+  }), [goals, balances, flowsReady, effFlows, today])
+
+  const totalTarget = computed.reduce((sum, c) => sum + c.goal.targetAmount, 0)
+  const totalSaved = computed.reduce((sum, c) => sum + c.saved, 0)
+  const totalRate = flowsReady ? computed.reduce((sum, c) => sum + c.rate, 0) : 0
+  // Deduped by accountId for the dollar figure — two goals sharing one
+  // linked account must not double-count that account's inflow — but `k` in
+  // "across {k} goals" below counts GOALS (every goal whose account got a
+  // positive inflow this month counts once, even if its account is shared).
+  const uniqueGoalAccountIds = useMemo(() => [...new Set(goals.map((g) => g.accountId))], [goals])
+  const addedThisMonthTotal = flowsReady
+    ? uniqueGoalAccountIds.reduce((sum, accountId) => sum + goalAddedThisMonth(effFlows, accountId, today), 0)
+    : 0
+  const contributingGoalCount = flowsReady
+    ? goals.filter((g) => goalAddedThisMonth(effFlows, g.accountId, today) > 0).length
+    : 0
+  const activeCount = computed.filter((c) => c.saved < c.goal.targetAmount).length
+
+  const savedMap = useMemo(() => Object.fromEntries(computed.map((c) => [c.goal.id, c.saved])), [computed])
+  const rateMap = useMemo(() => Object.fromEntries(computed.map((c) => [c.goal.id, c.rate])), [computed])
+  const statusMap = useMemo(
+    () => Object.fromEntries(
+      computed.filter((c): c is GoalComputed & { status: GoalStatus } => c.status !== 'unknown').map((c) => [c.goal.id, c.status]),
+    ),
+    [computed],
+  )
+
+  const milestones = flowsReady ? nextMilestones(goals, savedMap, rateMap, statusMap, today) : []
+
+  const knockOnResult = flowsReady
+    ? knockOn(
+        computed.filter((c): c is GoalComputed & { status: GoalStatus } => c.status !== 'unknown').map((c) => ({ goal: c.goal, status: c.status })),
+        today,
+      )
+    : null
+
+  const elapsedFraction = dayOfMonth(today) / daysInMonth(currentMonth)
+  const room = flowsReady
+    ? roomForMore({ incomeMtd: monthIncome, expenseMtd: monthExpense, elapsedFraction, addedThisMonth: addedThisMonthTotal })
+    : null
+  const kept = monthIncome - monthExpense
+
+  const roomTargetGoal = useMemo(() => {
+    // "Most behind" includes `overdue` alongside `behind` — a goal whose
+    // target date has already passed has no `needed`/`rate` to rank it by,
+    // so it's given an effectively-infinite shortfall and always wins.
+    const shortfallOf = (status: GoalStatus | 'unknown'): number => {
+      if (status === 'unknown') return -Infinity
+      if (status.kind === 'overdue') return Infinity
+      if (status.kind === 'behind') return status.needed - status.rate
+      return -Infinity
+    }
+    const behind = computed
+      .filter((c) => c.status !== 'unknown' && (c.status.kind === 'behind' || c.status.kind === 'overdue'))
+      .sort((a, b) => shortfallOf(b.status) - shortfallOf(a.status))
+    if (behind.length > 0) return behind[0].goal
+    const soonest = computed
+      .filter((c) => statusEta(c.status) !== null)
+      .sort((a, b) => statusEta(a.status)!.localeCompare(statusEta(b.status)!))
+    return soonest[0]?.goal ?? null
+  }, [computed])
+
+  const firstIncompleteGoal = computed.find((c) => c.saved < c.goal.targetAmount)?.goal ?? null
+
+  const openAddMoney = useCallback((goal: Goal | null, amount?: number) => {
+    const destinationAccountId = goal?.accountId ?? ''
+    const sourceCandidate = accounts.find((a) => a.id !== destinationAccountId)
+    setAddMoneyDraft({
+      type: 'transfer',
+      accountId: sourceCandidate?.id ?? accounts[0]?.id ?? '',
+      destinationAccountId,
+      amount: amount ?? 0,
+    })
+    setAddMoneyOpen(true)
+  }, [accounts])
+
+  const handleAddMoneySubmit = useCallback(async (data: TransactionFormData) => {
+    try {
+      await addTransaction(data)
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save the transfer — please try again.'), duration: 4000 })
+      throw err
+    }
+    reloadBalances()
+    reloadFlows()
+    reloadMonthTxns()
+  }, [addTransaction, addToast, reloadBalances, reloadFlows, reloadMonthTxns])
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-fg">Goals</h2>
-          <p className="text-xs text-fg-subtle mt-0.5">Track your savings targets</p>
+    <div className="mx-auto max-w-5xl">
+      <div className="page-head">
+        <h2 className="page-title">Goals</h2>
+        <span className="page-sub hide-mobile" data-testid="goals-subtitle">
+          {activeCount} active · {formatMYR(totalSaved)} saved
+        </span>
+        <div className="page-actions">
+          <Button variant="secondary" size="sm" onClick={() => openAddMoney(firstIncompleteGoal)} disabled={!firstIncompleteGoal}>
+            <PlusCircle className="h-3.5 w-3.5" />
+            Add money
+          </Button>
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="h-3.5 w-3.5" />
+            New goal
+          </Button>
         </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="h-3.5 w-3.5" />
-          Add Goal
-        </Button>
       </div>
 
       {goals.length === 0 ? (
@@ -117,148 +297,85 @@ export function GoalsPage() {
           action={<Button size="sm" onClick={openCreate}>Add your first goal</Button>}
         />
       ) : (
-        <>
-          {/* Summary band — mirrors the Budgets band above the row list. */}
-          <div className="card card-pad mb-4">
-            <div className="band">
-              <div className="band-main">
-                <div className="band-fig">
-                  <span className="v">{formatMYR(totalSaved)}</span>
-                  <span className="k">of {formatMYR(totalTarget)} target</span>
-                </div>
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-hover">
-                  <div
-                    className="h-full rounded-full bg-brand-500 transition-all"
-                    style={{ width: `${goalsPct}%` }}
-                  />
-                </div>
-              </div>
-              <div className="band-stats">
-                <div className="band-stat">
-                  <p className="k">Goals</p>
-                  <p className="v">{goals.length}</p>
-                </div>
-                <div className="band-stat">
-                  <p className="k">Completed</p>
-                  <p className="v">{completedCount}</p>
-                </div>
-                <div className="band-stat">
-                  <p className="k">Remaining</p>
-                  <p className="v">{formatMYR(totalTarget - totalSaved)}</p>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="dash">
+          <GoalsBand
+            computed={computed}
+            totalTarget={totalTarget}
+            totalSaved={totalSaved}
+            totalRate={totalRate}
+            flowsReady={flowsReady}
+            addedThisMonth={addedThisMonthTotal}
+            contributingGoalCount={contributingGoalCount}
+          />
 
-          <div className="flex flex-col gap-3">
-          {goals.map((goal) => {
-            const balance = balances[goal.accountId] ?? 0
-            const saved = Math.max(0, Math.min(balance, goal.targetAmount))
-            const percent = goal.targetAmount > 0 ? (saved / goal.targetAmount) * 100 : 0
-            const account = accounts.find((a) => a.id === goal.accountId)
-
+          {computed.map((c, i) => {
+            const account = accounts.find((a) => a.id === c.goal.accountId)
             return (
-              <div
-                key={goal.id}
-                data-testid="goal-card"
-                className="card card-pad hover:bg-surface-hover transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <div>
-                    <p className="font-medium text-fg text-sm">{goal.name}</p>
-                    {account && <p className="text-xs text-fg-subtle mt-0.5">{account.name}</p>}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => openEdit(goal)}
-                      aria-label={`Edit ${goal.name}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-fg-subtle hover:text-red-600"
-                      onClick={() => crud.openDelete(goal.id)}
-                      aria-label={`Delete ${goal.name}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-fg-subtle mb-1.5">
-                  <span>{formatMYR(saved)} saved</span>
-                  <span>Target: {formatMYR(goal.targetAmount)}</span>
-                </div>
-
-                <div
-                  data-testid="goal-progress"
-                  className="h-2.5 w-full rounded-full bg-surface-hover overflow-hidden"
-                >
-                  <div
-                    className="h-full rounded-full bg-brand-500 transition-all duration-300"
-                    style={{ width: `${Math.min(100, percent).toFixed(1)}%` }}
-                  />
-                </div>
-
-                <p className="mt-1 text-right text-xs text-fg-faint">{percent.toFixed(0)}%</p>
-              </div>
+              <section key={c.goal.id} className="card card-pad c6">
+                <GoalCard
+                  goal={c.goal}
+                  account={account}
+                  colorIndex={i}
+                  saved={c.saved}
+                  status={c.status}
+                  onEdit={() => openEdit(c.goal)}
+                  onDelete={() => crud.openDelete(c.goal.id)}
+                />
+              </section>
             )
           })}
-          </div>
-        </>
+
+          <GoalsTrajectoryChart
+            goals={goals}
+            balances={balances}
+            flows={effFlows}
+            flowsReady={flowsReady}
+            totalSaved={totalSaved}
+            totalTarget={totalTarget}
+            totalRate={totalRate}
+            today={today}
+          />
+
+          <GoalsMilestones
+            milestones={milestones}
+            knockOn={knockOnResult}
+            room={room}
+            kept={kept}
+            roomTargetGoalName={roomTargetGoal?.name ?? null}
+            onAddToRoomTarget={() => openAddMoney(roomTargetGoal, room ?? 0)}
+          />
+        </div>
       )}
 
-      {/* Create / Edit modal */}
-      <Modal
+      <GoalFormModal
         open={crud.formOpen}
         onOpenChange={crud.closeForm}
-        title={crud.editingItem ? 'Edit Goal' : 'New Goal'}
-      >
-        <div className="flex flex-col gap-4">
-          <Input
-            label="Goal name"
-            id="goal-name"
-            placeholder="e.g. Emergency Fund"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Input
-            label="Target amount"
-            id="target-amount"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={form.targetAmount}
-            onChange={(e) => setForm((f) => ({ ...f, targetAmount: e.target.value }))}
-          />
-          <Select
-            label="Account"
-            id="account"
-            options={accounts.map((a) => ({ value: a.id, label: a.name }))}
-            placeholder="Select account"
-            value={form.accountId}
-            onChange={(e) => setForm((f) => ({ ...f, accountId: e.target.value }))}
-          />
-          {formError && <p className="-mt-1 text-xs text-red-600">{formError}</p>}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="secondary" size="sm" onClick={() => crud.closeForm(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleSubmit} loading={saving}>{crud.editingItem ? 'Save Changes' : 'Create Goal'}</Button>
-          </div>
-        </div>
-      </Modal>
+        isEdit={!!crud.editingItem}
+        form={form}
+        setForm={setForm}
+        accounts={ownAccounts}
+        formError={formError}
+        saving={saving}
+        onSubmit={handleSubmit}
+      />
 
-      {/* Delete confirm modal */}
       <ConfirmDeleteModal
         open={!!crud.confirmDeleteId}
         onOpenChange={(open) => { if (!open) crud.closeDelete() }}
-        title="Delete goal?"
+        title={`Delete ${goals.find((g) => g.id === crud.confirmDeleteId)?.name ?? 'goal'}?`}
         description="This will remove the goal. Your account and transactions are not affected."
+        confirmLabel="Delete"
         onConfirm={() => crud.confirmDeleteId && handleDelete(crud.confirmDeleteId)}
+      />
+
+      <TransactionForm
+        open={addMoneyOpen}
+        onOpenChange={setAddMoneyOpen}
+        accounts={accounts}
+        categories={categories}
+        availableTags={tags}
+        initialDraft={addMoneyDraft}
+        onSubmit={handleAddMoneySubmit}
       />
     </div>
   )

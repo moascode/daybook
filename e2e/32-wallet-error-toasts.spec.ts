@@ -95,7 +95,7 @@ test('failed goal save shows an error toast and keeps the form open', async () =
   await page.goto('/wallet/goals')
   await force500Once(page, `${API}/goals`, 'POST', 'goal save exploded')
 
-  await page.getByRole('button', { name: 'Add Goal' }).click()
+  await page.getByRole('button', { name: 'New goal' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Goal name').fill('Failing Goal')
   await dialog.getByLabel('Target amount').fill('1000')

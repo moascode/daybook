@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useWalletStore } from '@/stores/wallet.store'
 import { todayISO } from '@/lib/utils'
-import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal } from '@/types/wallet.types'
+import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal, GoalFlow } from '@/types/wallet.types'
 
 function parseTags(raw: string | null | undefined): string[] {
   if (!raw) return []
@@ -252,6 +252,8 @@ interface GoalInput {
   name: string
   targetAmount: number
   accountId: string
+  targetDate?: string | null
+  note?: string | null
 }
 
 interface GoalRow {
@@ -259,8 +261,16 @@ interface GoalRow {
   name: string
   target_amount: number
   account_id: string
+  target_date: string | null
+  note: string | null
   created_at: string
   updated_at: string
+}
+
+interface GoalFlowRow {
+  accountId: string
+  month: string
+  net: number
 }
 
 function mapGoal(row: GoalRow): Goal {
@@ -269,6 +279,8 @@ function mapGoal(row: GoalRow): Goal {
     name: row.name,
     targetAmount: row.target_amount,
     accountId: row.account_id,
+    targetDate: row.target_date,
+    note: row.note,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -622,6 +634,15 @@ export function useWallet() {
     useWalletStore.getState().updateGoal(id, mapGoal(row))
   }, [])
 
+  // FEAT-067: monthly net inflow per goal-linked account, driving the funding
+  // rate, paused state, "Added this month," and the trajectory chart. No
+  // store slice — callers (GoalsPage) hold it locally and re-fetch on demand.
+  // Throws on failure; the caller is responsible for toasting (CLAUDE.md §2
+  // rule 10) and falling back to '—' rather than zeros.
+  const loadGoalFlows = useCallback(async (): Promise<GoalFlow[]> => {
+    return api.get<GoalFlowRow[]>('/goals/flows')
+  }, [])
+
   const deleteGoal = useCallback(async (id: string): Promise<void> => {
     await api.delete(`/goals/${id}`)
     useWalletStore.getState().removeGoal(id)
@@ -769,6 +790,7 @@ export function useWallet() {
     addGoal,
     updateGoal,
     deleteGoal,
+    loadGoalFlows,
 
     // Category CRUD
     addCategory,
