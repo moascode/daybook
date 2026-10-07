@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { formatMYR } from '@/lib/utils'
+import { useIsMobile } from '@/modules/wallet/reports/useIsMobile'
 import type { CategoryTrendRow, TrendMeasure } from '@/modules/wallet/reports/insights'
 
 interface CategoryTrendsProps {
@@ -12,26 +12,6 @@ interface CategoryTrendsProps {
 }
 
 const ROW_COLUMNS = '180px 1fr 100px 100px 100px'
-// Below this, data.css's own `@media (max-width: 680px) { .lhead { display:
-// none } }` already hides the header — the same established pattern
-// Recurring's table uses on mobile, so we don't fight it. We only need to
-// know the breakpoint ourselves to drop the sparkline/Average cells and
-// collapse `.lrow` to 3 columns; `.lhead` keeps its desktop-only columns
-// since it's invisible below this width regardless.
-const MOBILE_QUERY = '(max-width: 680px)'
-
-/** Local to this file — there is no shared "is mobile" hook (CLAUDE.md §4 "check before creating" didn't turn one up either). */
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.matchMedia(MOBILE_QUERY).matches : false))
-  useEffect(() => {
-    const mql = window.matchMedia(MOBILE_QUERY)
-    const onChange = () => setIsMobile(mql.matches)
-    mql.addEventListener('change', onChange)
-    return () => mql.removeEventListener('change', onChange)
-  }, [])
-  return isMobile
-}
-
 export function CategoryTrends({ hasEnoughHistory, rows, measure, onMeasureChange, windowLabel, monthCount }: CategoryTrendsProps) {
   const isMobile = useIsMobile()
   const rowColumns = isMobile ? 'minmax(0,1fr) auto auto' : ROW_COLUMNS

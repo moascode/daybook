@@ -167,6 +167,9 @@ Every figure below follows the §3 money traps:
   - Footer: "{n}-month total kept" — n is the window's month count, and the
     sum covers the **whole** window, not just the 6 rows.
   - **Full ledger** links to `/wallet/transactions`.
+  - On phones (≤ 680px) the In column is hidden so Out and Kept fit
+    without sideways scrolling (owner call, 2026-10-07). Category trends
+    likewise drops the sparkline and Average there.
 - **Category trends** shows one row per expense category with spend in the
   window or the baseline, sorted by baseline descending.
   - Columns: dot and name · sparkline over the window's months · Average
