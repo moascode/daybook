@@ -2156,12 +2156,14 @@ wallet.get('/transactions/splits/mine', async (c) => {
             ${CLAIM_STATE_SQL} AS claim_state,
             ${OPEN_CLAIM} AS settlement_id,
             t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
-            t.category_id, u.username AS owner_username, t.user_id AS owner_id,
+            t.category_id, cat.icon AS category_icon, cat.color AS category_color,
+            u.username AS owner_username, t.user_id AS owner_id,
             du.username AS debtor_username, ts.user_id AS debtor_id
      FROM transaction_splits ts
      JOIN transactions t ON t.id = ts.transaction_id
      JOIN users u ON u.id = t.user_id
      JOIN users du ON du.id = ts.user_id
+     LEFT JOIN categories cat ON cat.id = t.category_id
      WHERE ${conditions.join(' AND ')}
      ORDER BY t.date DESC, ts.created_at DESC`,
   )

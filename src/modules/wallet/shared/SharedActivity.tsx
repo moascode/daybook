@@ -9,6 +9,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { useToastStore } from '@/stores/toast.store'
 import { approveSplit, approveSplits, cancelSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
+import { CategoryIcon, categoryTint, resolveCategoryIconKey } from '@/lib/categoryIcon'
 import { SplitDetailModal } from './SplitDetailModal'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 import type { ClaimState, SplitClaim } from '@/types/household.types'
@@ -308,6 +309,7 @@ export function SharedActivity({
           const title = row.merchant || row.description || '(no merchant)'
           const paletteIdx = memberOptions.findIndex((m) => m.value === row.counterpartyId)
           const palette = AVATAR_PALETTE[Math.max(0, paletteIdx) % AVATAR_PALETTE.length]
+          const category = row.categoryId ? categories.find((c) => c.id === row.categoryId) : null
 
           return (
             <div
@@ -328,9 +330,7 @@ export function SharedActivity({
                     aria-label={`Select ${title}`}
                   />
                 )}
-                <div className="tavatar" style={{ background: `rgb(${palette.bg})`, color: `rgb(${palette.fg})` }}>
-                  <Receipt className="h-4 w-4" />
-                </div>
+                <ActivityAvatar row={row} category={category} palette={palette} />
                 <div style={{ minWidth: 0 }}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     <span className="tname min-w-0" data-testid="split-row-link">{title}</span>
@@ -518,6 +518,50 @@ export function SharedActivity({
         onClose={() => setDetailRow(null)}
       />
     </section>
+  )
+}
+
+/**
+ * A claim's leading glyph, in priority order:
+ *
+ * 1. `row.categoryIcon`/`row.categoryColor` — carried on the claim itself
+ *    (GET /transactions/splits/mine LEFT JOINs categories on the underlying
+ *    transaction's own category, worker/routes/wallet.ts). Resolves on
+ *    EITHER side of a claim, because it's the transaction owner's category
+ *    regardless of who is viewing.
+ * 2. The local `categories` lookup (`category` below) — GET /categories is
+ *    scoped to the caller's own rows, so this only resolves when the viewer
+ *    owns that category (typically the creditor side). Kept as a fallback
+ *    for a cached/older claim shape that predates `categoryIcon`/`Color`.
+ * 3. The existing counterparty-palette `Receipt` glyph — never a blank
+ *    avatar (CLAUDE.md §2 rule 10).
+ *
+ * `data-category-icon` stamps the RESOLVED icon key, not a raw `icon`
+ * string.
+ */
+function ActivityAvatar({
+  row,
+  category,
+  palette,
+}: {
+  row: Pick<SplitClaim, 'categoryIcon' | 'categoryColor'>
+  category: Category | null | undefined
+  palette: { bg: string; fg: string }
+}) {
+  const icon = row.categoryIcon ?? category?.icon ?? null
+  const color = row.categoryColor ?? category?.color ?? null
+  const tint = color ? categoryTint(color) : undefined
+  const style = tint ?? { background: `rgb(${palette.bg})`, color: `rgb(${palette.fg})` }
+  return (
+    <div
+      className="tavatar"
+      style={style}
+      aria-hidden="true"
+      data-testid="activity-avatar"
+      data-category-icon={icon ? resolveCategoryIconKey(icon) : 'none'}
+    >
+      {icon ? <CategoryIcon name={icon} className="h-4 w-4" /> : <Receipt className="h-4 w-4" />}
+    </div>
   )
 }
 
