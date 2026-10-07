@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Revised:** 2026-10-04 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-07 · **Filed:** 2026-10-02 · **Revised:** 2026-10-04 · **Shipped:** 2026-10-06 (PR #246) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-066 — Budgets: exact mock parity
 
@@ -182,4 +182,4 @@ No change to `BudgetVsActualChart.tsx`'s existing SVG-free bar-chart
 implementation (already functionally equivalent to the mock's SVG version —
 same information, same over/under colour cue, already verified).
 
-**Still needed?** Open.
+**Still needed?** No — shipped. [PR #246](https://github.com/moascode/daybook/pull/246), merged 2026-10-06.

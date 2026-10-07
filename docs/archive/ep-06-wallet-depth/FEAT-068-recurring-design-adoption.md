@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Revised:** 2026-10-06 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-07 · **Filed:** 2026-10-02 · **Revised:** 2026-10-06 · **Shipped:** 2026-10-07 (PR #248) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-068 — Recurring: exact mock parity
 
@@ -272,4 +272,4 @@ The composer (owner rule). Usage tracking and any "Unused" claim.
 Per-rule splits ("shared 3 ways"). Month navigation on the calendar (the
 mock has none). Linking posted transactions to their rule.
 
-**Still needed?** Open.
+**Still needed?** No — shipped. [PR #248](https://github.com/moascode/daybook/pull/248), merged 2026-10-07.

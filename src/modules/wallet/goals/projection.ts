@@ -1,5 +1,5 @@
 /**
- * FEAT-067 (docs/backlog/EP-06-wallet-depth/FEAT-067-goals-design-adoption.md)
+ * FEAT-067 (docs/archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md)
  * — the funding-rate/ETA/status math absorbed from FEAT-019. Pure functions
  * only: no React, no fetching, nothing touches `new Date()`. Every function
  * that needs "now" takes `today` ('YYYY-MM-DD') as a parameter so callers —

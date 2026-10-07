@@ -8,7 +8,7 @@ test.describe.configure({ mode: 'serial' })
 
 /**
  * FEAT-067 (EP-06) — the funding-rate/ETA/status/trajectory/milestone math
- * absorbed from FEAT-019 (docs/backlog/EP-06-wallet-depth/FEAT-067-goals-design-adoption.md,
+ * absorbed from FEAT-019 (docs/archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md,
  * src/modules/wallet/goals/projection.ts). e2e/16 covers basic goal CRUD and
  * the ⋯ menu; this file exercises the rate computation end to end through
  * seeded transaction history.

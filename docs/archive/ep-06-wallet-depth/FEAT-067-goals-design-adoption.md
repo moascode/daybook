@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Revised:** 2026-10-06 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-07 · **Filed:** 2026-10-02 · **Revised:** 2026-10-06 · **Shipped:** 2026-10-06 (PR #247) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-067 — Goals: exact mock parity
 
@@ -190,4 +190,4 @@ The composer (owner rule). Interest, trip linking, the automatic/top-up
 split (dropped above). Any change to how a goal's "saved" is defined
 (linked-account balance) or to shared-account double counting.
 
-**Still needed?** Open.
+**Still needed?** No — shipped. [PR #247](https://github.com/moascode/daybook/pull/247), merged 2026-10-06.

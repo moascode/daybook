@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-09-16
+> **Status:** Live · **Last verified:** 2026-10-07
 
 # Backlog
 
@@ -41,7 +41,7 @@ every item under it still needed?* Both are answered in the epic's own file.
 | [EP-03](EP-03-consistency-remainder/README.md) | Consistency remainder | 4 | Open |
 | [EP-04](EP-04-money-figure-correctness/README.md) | Money-figure correctness | 2 | Open |
 | [EP-05](EP-05-production-hardening/README.md) | Production hardening | 2 | Open |
-| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 14 | Open |
+| [EP-06](EP-06-wallet-depth/README.md) | Wallet depth | 6 | Open |
 | [EP-07](EP-07-tasks-depth/README.md) | Tasks depth | 2 | Open |
 | [EP-08](EP-08-trips-module/README.md) | Trips module | 8 | **Needs decision** |
 | [EP-09](EP-09-day-module/README.md) | Day module | 6 | Open |
@@ -88,28 +88,18 @@ this backlog exists to answer.
 
 ### [EP-06](EP-06-wallet-depth/README.md) — Wallet depth
 
-FEAT-015, FEAT-016, FEAT-017 and FEAT-018 all shipped — see the epic's own
-[Shipped table](EP-06-wallet-depth/README.md#shipped) (FEAT-018's doc said
-"Still needed: Yes" with all 3 of its own PRs already merged; corrected
-2026-10-04).
+FEAT-015 through FEAT-023, FEAT-066, FEAT-067, FEAT-068 and FEAT-070 have all
+shipped — see the epic's own
+[Shipped table](EP-06-wallet-depth/README.md#shipped) for how each one landed.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | No — superseded by FEAT-067 |
-| [FEAT-020](EP-06-wallet-depth/FEAT-020-recurring-calendar.md) | Feature | Recurring: month calendar and annual cost | No — superseded by FEAT-068 |
-| [FEAT-021](EP-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Feature | Recurring: "Worth a look" anomalies | No — superseded by FEAT-068 |
-| [FEAT-022](EP-06-wallet-depth/FEAT-022-reports-what-changed.md) | Feature | Reports: paired columns, savings gap and "What changed" | No — superseded by FEAT-070 |
-| [FEAT-023](EP-06-wallet-depth/FEAT-023-reports-category-trends.md) | Feature | Reports: category sparkline trends | No — superseded by FEAT-070 |
 | [FEAT-024](EP-06-wallet-depth/FEAT-024-shared-minimum-transfers.md) | Feature | Shared: group-wide minimum-transfer set | Yes — R9. Touches settlement maths — see the §3 CAS trap before starting. |
 | [FEAT-025](EP-06-wallet-depth/FEAT-025-shared-split-rules.md) | Feature | Shared: split rules with staleness | Yes — R9, unstarted |
 | [FEAT-063](EP-06-wallet-depth/FEAT-063-transactions-category-avatar.md) | Feature | Transactions: category-coloured row avatar | Yes — filed 2026-10-02 |
 | [FEAT-064](EP-06-wallet-depth/FEAT-064-dashboard-settle-up-header.md) | Feature | Dashboard: page-header "Settle up" quick action | Yes — filed 2026-10-02 |
 | [FEAT-065](EP-06-wallet-depth/FEAT-065-accounts-composer.md) | Feature | Accounts: mount the transaction composer | Yes — filed 2026-10-02 |
-| [FEAT-066](EP-06-wallet-depth/FEAT-066-budgets-design-adoption.md) | Feature | Budgets: exact mock parity (no composer) | Yes — revised 2026-10-04, in progress |
-| [FEAT-067](EP-06-wallet-depth/FEAT-067-goals-design-adoption.md) | Feature | Goals: exact mock parity, incl. FEAT-019 (no composer) | Yes — revised 2026-10-06 |
-| [FEAT-068](EP-06-wallet-depth/FEAT-068-recurring-design-adoption.md) | Feature | Recurring: exact mock parity, incl. FEAT-020/021 (no composer) | Yes — revised 2026-10-06 |
 | [FEAT-069](EP-06-wallet-depth/FEAT-069-shared-composer-and-activity-icons.md) | Feature | Shared: mount the transaction composer; category-coloured activity icons | Yes — filed 2026-10-02 |
-| [FEAT-070](EP-06-wallet-depth/FEAT-070-reports-design-adoption.md) | Feature | Reports: exact mock parity, incl. FEAT-022/023 (no composer) | Yes — filed 2026-10-07 |
 
 ### [EP-07](EP-07-tasks-depth/README.md) — Tasks depth
 
