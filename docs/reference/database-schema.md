@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-06
+> **Status:** Live · **Last verified:** 2026-10-07
 
 # Database schema
 
@@ -364,6 +364,29 @@ ALTER TABLE goals ADD COLUMN note        TEXT;  -- nullable card subtitle, trimm
   and `is_non_cash = 0` filter as `GET /accounts/balances`, bucketed by
   `substr(date, 1, 7)`.
 
+### Recurring pause + price tracking (migration `0027_recurring_pause_price.sql` / `0026_recurring_pause_price.sql` on the server, FEAT-068)
+
+```sql
+ALTER TABLE recurring_transactions ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE recurring_transactions ADD COLUMN previous_amount REAL;      -- nullable, the amount before the last edit that changed it
+ALTER TABLE recurring_transactions ADD COLUMN amount_changed_at TEXT;    -- nullable ISO date (YYYY-MM-DD) of that edit
+```
+
+- `paused` rules post nothing (`POST /recurring-transactions/process` adds
+  `AND paused = 0`), notify nothing (`worker/lib/notifications.ts` bills-due
+  query does the same) and count in no dashboard total
+  (`src/modules/wallet/dashboard/insights.ts`'s `committedSplitCore` and
+  `safeToSpend`, `Dashboard.tsx`'s Upcoming bills,
+  `useNotificationBadges.ts`'s bills-due badge). `POST
+  /recurring-transactions/:id/post` ("Post now") returns 409 on a paused rule.
+  Resume keeps `next_due_date` as stored; an overdue date is caught up by the
+  next boot sweep like any other rule.
+- `previous_amount`/`amount_changed_at` are **not client-writable**. `PATCH
+  /recurring-transactions/:id` stamps them server-side only when the request
+  actually changes `amount` (old value, today's date) — this is price-rise
+  source (b); source (a) matches a real charge against the rule and never
+  touches these columns.
+
 ---
 
 ## 7. TypeScript Types
@@ -434,6 +457,25 @@ export interface DailyGroup {
   totalIncome: number
   totalExpense: number
   // Note: transfer transactions are excluded from totalIncome and totalExpense
+}
+
+export type RecurrenceFrequency = 'weekly' | 'monthly'
+
+// ── FEAT-068 ─────────────────────────────────────────
+export interface RecurringTransaction {
+  id: string
+  accountId: string
+  amount: number
+  merchant: string
+  type: TransactionType
+  categoryId: string | null
+  frequency: RecurrenceFrequency
+  nextDueDate: string
+  paused: boolean               // post/notify/count nothing while true
+  previousAmount: number | null // amount before the last edit that changed it, server-set
+  amountChangedAt: string | null // YYYY-MM-DD of that edit, server-set
+  createdAt: string
+  updatedAt: string
 }
 
 // ── FEAT-067 ─────────────────────────────────────────

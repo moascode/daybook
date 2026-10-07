@@ -71,6 +71,33 @@ test.post('/test/backdate-settlement', async (c) => {
   return c.json({ status: 'backdated', days })
 })
 
+// Age a recurring rule's created_at by N days, mirroring backdate-settlement
+// above. FEAT-068's costliest-subscription nudge only considers a rule whose
+// created_at is more than 6 months ago, and created_at is written server-side
+// by datetime('now') on insert — there is no request that can produce an
+// old rule, so the "older than 6 months" branch needs this to be testable.
+test.post('/test/backdate-recurring', async (c) => {
+  const userId = await readSession(c)
+  if (!userId) return c.json({ error: 'not authenticated' }, 401)
+
+  const b: { id?: string; days?: number } =
+    await c.req.json<{ id?: string; days?: number }>().catch(() => ({}))
+  const days = Number(b.days)
+  if (!b.id || !Number.isInteger(days) || days < 0) {
+    return c.json({ error: 'id and a non-negative integer days are required' }, 400)
+  }
+
+  const res = await c.env.DB.prepare(
+    `UPDATE recurring_transactions SET created_at = datetime('now', ?)
+      WHERE id = ? AND user_id = ?`,
+  )
+    .bind(`-${days} days`, b.id, userId)
+    .run()
+  if (!res.meta.changes) return c.json({ error: 'recurring transaction not found' }, 404)
+
+  return c.json({ status: 'backdated', days })
+})
+
 // Inject a legacy transaction with tag='' for the requesting user's first
 // account. Simulates rows created before multi-tag support, where the SQLite
 // column default ('') was used — json_each() throws on those, which is what

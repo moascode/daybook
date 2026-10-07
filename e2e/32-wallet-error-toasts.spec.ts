@@ -129,7 +129,9 @@ test('failed recurring rule delete shows an error toast and keeps the row', asyn
   await expect(row).toBeVisible()
 
   await force500Once(page, `${API}/recurring-transactions/*`, 'DELETE', 'recurring delete exploded')
-  await row.getByRole('button', { name: 'Delete' }).click()
+  // FEAT-068: row actions moved behind the "⋯" menu (RecurringRowMenu).
+  await row.getByRole('button', { name: 'More actions for Toast Subscription' }).click()
+  await page.getByRole('menuitem', { name: 'Delete Toast Subscription' }).click()
   await page.getByRole('button', { name: 'Confirm' }).click()
 
   await expect(page.getByTestId('toast')).toContainText('recurring delete exploded')

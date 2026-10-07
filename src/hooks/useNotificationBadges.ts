@@ -80,6 +80,7 @@ export function useNotificationBadges(): void {
             const count = useWalletStore
               .getState()
               .recurringTransactions.filter((r) => {
+                if (r.paused) return false // FEAT-068: paused rules don't badge
                 if (dismissed.has(r.id)) return false
                 return differenceInDays(parseISO(r.nextDueDate), today) <= 7
               }).length

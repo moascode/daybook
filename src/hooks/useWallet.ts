@@ -167,6 +167,9 @@ interface RecurringRow {
   category_id: string | null
   frequency: string
   next_due_date: string
+  paused: number
+  previous_amount: number | null
+  amount_changed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -192,6 +195,9 @@ function mapRecurring(row: RecurringRow): RecurringTransaction {
     categoryId: row.category_id,
     frequency: row.frequency as RecurrenceFrequency,
     nextDueDate: row.next_due_date,
+    paused: !!row.paused,
+    previousAmount: row.previous_amount,
+    amountChangedAt: row.amount_changed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -246,6 +252,8 @@ interface RecurringInput {
   categoryId?: string | null
   frequency: RecurrenceFrequency
   nextDueDate: string
+  /** FEAT-068: only ever set via PATCH (pause/resume) — never on create. */
+  paused?: boolean
 }
 
 interface GoalInput {

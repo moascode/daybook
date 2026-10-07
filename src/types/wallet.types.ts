@@ -80,6 +80,12 @@ export interface RecurringTransaction {
   categoryId: string | null
   frequency: RecurrenceFrequency
   nextDueDate: string
+  /** FEAT-068: paused rules post nothing, notify nothing and count in no total. */
+  paused: boolean
+  /** FEAT-068: the amount before the most recent edit that changed it, or null if never edited. */
+  previousAmount: number | null
+  /** FEAT-068: YYYY-MM-DD the amount was last changed via PATCH, or null if never edited. */
+  amountChangedAt: string | null
   createdAt: string
   updatedAt: string
 }
