@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { AccountCard } from '@/modules/wallet/AccountCard'
 import { AccountForm } from '@/modules/wallet/AccountForm'
+import { PageComposer } from '@/modules/wallet/composer/PageComposer'
 import { BalanceSummary } from '@/modules/wallet/accounts/BalanceSummary'
 import { NetWorthHistoryChart } from '@/modules/wallet/accounts/NetWorthHistoryChart'
 import {
@@ -22,7 +23,7 @@ import type { AccountFormData } from '@/modules/wallet/AccountForm'
 import type { Account, Transaction } from '@/types/wallet.types'
 
 export function AccountsPage() {
-  const { accounts, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalances, loadTransactions } = useWallet()
+  const { accounts, categories, loadAccounts, addAccount, updateAccount, deleteAccount, getAccountBalances, loadTransactions } = useWallet()
   const { addToast } = useToastStore()
 
   const crud = useCrudModal<Account>()
@@ -171,6 +172,18 @@ export function AccountsPage() {
 
   const deleteTargetAccount = accounts.find((a) => a.id === crud.confirmDeleteId) ?? null
 
+  // FEAT-065: refreshes this page's own account list/balances (and the
+  // all-time transactions feeding the sparklines/net-worth history) so a new
+  // transaction's effect on balances is visible without a manual reload.
+  const handleTransactionCreated = useCallback(async () => {
+    const [b, t] = await Promise.all([
+      getAccountBalances(),
+      loadTransactions({ dateFrom: '', dateTo: '' }),
+    ])
+    setBalances(b)
+    setAllTxns(t)
+  }, [getAccountBalances, loadTransactions])
+
   return (
     <div className="mx-auto max-w-5xl">
       <div className="page-head">
@@ -185,6 +198,15 @@ export function AccountsPage() {
           </Button>
         </div>
       </div>
+
+      {accounts.length > 0 && (
+        <PageComposer
+          accounts={accounts}
+          categories={categories}
+          defaultAccountId={featuredAccountId}
+          onCreated={handleTransactionCreated}
+        />
+      )}
 
       {accounts.length === 0 ? (
         <EmptyState
