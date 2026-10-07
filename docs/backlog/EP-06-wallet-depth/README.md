@@ -42,8 +42,8 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | No — superseded by FEAT-067 |
 | [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | No — superseded by FEAT-068 |
 | [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | No — superseded by FEAT-068 |
-| [FEAT-022](FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | Yes |
-| [FEAT-023](FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | Yes |
+| [FEAT-022](FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | No — superseded by FEAT-070 |
+| [FEAT-023](FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | No — superseded by FEAT-070 |
 | [FEAT-024](FEAT-024-shared-minimum-transfers.md) | Shared: group-wide minimum-transfer set | Yes — read the settlement CAS trap first |
 | [FEAT-025](FEAT-025-shared-split-rules.md) | Shared: split rules with staleness | Yes |
 | [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | Yes |
@@ -53,6 +53,7 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-067](FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | Yes |
 | [FEAT-068](FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 (no composer — a Plan page) | Yes |
 | [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
+| [FEAT-070](FEAT-070-reports-design-adoption.md) | Reports: exact mock parity, incl. FEAT-022/023 (no composer — read-only) | Yes |
 
 **FEAT-063–FEAT-069, filed 2026-10-02**, are a second-pass design-adoption
 audit (same pipeline as the Tasks module's FEAT-054–062): the real running
@@ -70,4 +71,5 @@ columns (`goals.target_date`, `goals.note`) on owner sign-off. **FEAT-068
 revised 2026-10-06** the same way for Recurring, and absorbs FEAT-020 and
 FEAT-021 whole. It adds three nullable/defaulted columns to
 `recurring_transactions` (`paused`, `previous_amount`, `amount_changed_at`)
-on owner sign-off.
+on owner sign-off. **FEAT-070 filed 2026-10-07** for Reports the same way;
+it absorbs FEAT-022 and FEAT-023 whole and needs no schema change.

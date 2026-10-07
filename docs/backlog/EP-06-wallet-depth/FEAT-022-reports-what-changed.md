@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md)
+> **Status:** Open — superseded by [FEAT-070](FEAT-070-reports-design-adoption.md) · **Filed:** 2026-09-16 · **Last verified:** 2026-10-07 · **Epic:** [EP-06](README.md)
 
 # FEAT-022 — Reports: paired columns, savings gap and "What changed"
 
@@ -8,4 +8,4 @@
 
 **Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** Yes — R9, unstarted
+**Still needed?** No — superseded. [FEAT-070](FEAT-070-reports-design-adoption.md) (filed 2026-10-07 for exact mock parity) builds this whole item — paired income/spending columns, the savings gap and its "gap closes in N months" sentence, and "What changed" against your own 12-month average — with the stated rules and owner decisions recorded there. Close this when FEAT-070 ships.

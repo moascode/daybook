@@ -98,8 +98,8 @@ FEAT-015, FEAT-016, FEAT-017 and FEAT-018 all shipped — see the epic's own
 | [FEAT-019](EP-06-wallet-depth/FEAT-019-goals-trajectory.md) | Feature | Goals: rings, funding rate and honest ETA | No — superseded by FEAT-067 |
 | [FEAT-020](EP-06-wallet-depth/FEAT-020-recurring-calendar.md) | Feature | Recurring: month calendar and annual cost | No — superseded by FEAT-068 |
 | [FEAT-021](EP-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Feature | Recurring: "Worth a look" anomalies | No — superseded by FEAT-068 |
-| [FEAT-022](EP-06-wallet-depth/FEAT-022-reports-what-changed.md) | Feature | Reports: paired columns, savings gap and "What changed" | Yes — R9, unstarted |
-| [FEAT-023](EP-06-wallet-depth/FEAT-023-reports-category-trends.md) | Feature | Reports: category sparkline trends | Yes — R9, unstarted |
+| [FEAT-022](EP-06-wallet-depth/FEAT-022-reports-what-changed.md) | Feature | Reports: paired columns, savings gap and "What changed" | No — superseded by FEAT-070 |
+| [FEAT-023](EP-06-wallet-depth/FEAT-023-reports-category-trends.md) | Feature | Reports: category sparkline trends | No — superseded by FEAT-070 |
 | [FEAT-024](EP-06-wallet-depth/FEAT-024-shared-minimum-transfers.md) | Feature | Shared: group-wide minimum-transfer set | Yes — R9. Touches settlement maths — see the §3 CAS trap before starting. |
 | [FEAT-025](EP-06-wallet-depth/FEAT-025-shared-split-rules.md) | Feature | Shared: split rules with staleness | Yes — R9, unstarted |
 | [FEAT-063](EP-06-wallet-depth/FEAT-063-transactions-category-avatar.md) | Feature | Transactions: category-coloured row avatar | Yes — filed 2026-10-02 |
@@ -109,6 +109,7 @@ FEAT-015, FEAT-016, FEAT-017 and FEAT-018 all shipped — see the epic's own
 | [FEAT-067](EP-06-wallet-depth/FEAT-067-goals-design-adoption.md) | Feature | Goals: exact mock parity, incl. FEAT-019 (no composer) | Yes — revised 2026-10-06 |
 | [FEAT-068](EP-06-wallet-depth/FEAT-068-recurring-design-adoption.md) | Feature | Recurring: exact mock parity, incl. FEAT-020/021 (no composer) | Yes — revised 2026-10-06 |
 | [FEAT-069](EP-06-wallet-depth/FEAT-069-shared-composer-and-activity-icons.md) | Feature | Shared: mount the transaction composer; category-coloured activity icons | Yes — filed 2026-10-02 |
+| [FEAT-070](EP-06-wallet-depth/FEAT-070-reports-design-adoption.md) | Feature | Reports: exact mock parity, incl. FEAT-022/023 (no composer) | Yes — filed 2026-10-07 |
 
 ### [EP-07](EP-07-tasks-depth/README.md) — Tasks depth
 
