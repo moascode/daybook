@@ -1,42 +1,25 @@
 /**
- * Wallet: advanced reports — Tier 3 feature.
- * Year-on-year spend comparison and fully custom date ranges.
+ * Wallet: Reports navigation.
  *
- * ALL TESTS IN THIS FILE ARE EXPECTED TO FAIL until the feature is implemented.
+ * The Year-on-year comparison and custom-date-range cards this file used to
+ * cover were dropped by FEAT-070 (EP-06) — the mock's 3m/6m/12m/All segment
+ * and Export replace them, and Transactions already has its own date filter.
+ * The replacement coverage (stat cards, income-vs-spending, savings rate,
+ * what changed, cash flow, category trends, Export) lives in
+ * e2e/104-reports-design-adoption.spec.ts. This file keeps only the
+ * navigation checks that never depended on the old cards.
  */
 
 import { test, expect } from '@playwright/test'
 import type { Browser, Page } from '@playwright/test'
-import { newAppPage, fillAccountForm, fillTransactionForm, navItem , openBlankTransactionForm } from './helpers'
+import { newAppPage, navItem } from './helpers'
 
 test.describe.configure({ mode: 'serial' })
 
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/wallet/accounts')
-  // Create account and seed two transactions in different months for report data
-  await page.getByRole('button', { name: 'Add Account' }).first().click()
-  await fillAccountForm(page, { name: 'Reports Account', type: 'bank' })
-
-  await page.goto('/wallet')
-  await openBlankTransactionForm(page)
-  await fillTransactionForm(page, {
-    type: 'Expense',
-    amount: '300',
-    account: 'Reports Account',
-    merchant: 'Jan Expense',
-    date: '2026-01-15',
-  })
-
-  await openBlankTransactionForm(page)
-  await fillTransactionForm(page, {
-    type: 'Expense',
-    amount: '450',
-    account: 'Reports Account',
-    merchant: 'Mar Expense',
-    date: '2026-03-20',
-  })
+  page = await newAppPage(browser, '/wallet/dashboard')
 })
 
 test.afterAll(async () => {
@@ -56,60 +39,4 @@ test('navigating to /wallet/reports shows the Reports page', async () => {
   await page.goto('/wallet/reports')
   await expect(page).toHaveURL(/\/wallet\/reports$/)
   await expect(page.locator('main').getByRole('heading', { name: /Reports/i })).toBeVisible()
-})
-
-// ── Year-on-year comparison ────────────────────────────────────────────
-
-test('reports page has a year-on-year comparison section', async () => {
-  await expect(page.getByText(/Year.on.year|Year over year|YoY/i)).toBeVisible()
-})
-
-test('year-on-year section contains a chart element', async () => {
-  await expect(page.getByTestId('yoy-chart')).toBeVisible()
-})
-
-test('year-on-year section shows two year labels', async () => {
-  const yoySection = page.getByTestId('yoy-chart')
-  // Should show at least one calendar year label
-  const count = await yoySection.getByText(/20\d\d/).count()
-  expect(count).toBeGreaterThanOrEqual(1)
-})
-
-// ── Custom date range ──────────────────────────────────────────────────
-
-test('custom date range selector is present on the reports page', async () => {
-  await expect(page.getByTestId('custom-date-range')).toBeVisible()
-})
-
-test('custom date range has From and To date inputs', async () => {
-  const picker = page.getByTestId('custom-date-range')
-  await expect(picker.getByTestId('filter-from')).toBeVisible()
-  await expect(picker.getByTestId('filter-to')).toBeVisible()
-})
-
-test('applying a custom date range updates the report to show that period', async () => {
-  const picker = page.getByTestId('custom-date-range')
-  await picker.getByTestId('filter-from').fill('2026-01-01')
-  await picker.getByTestId('filter-to').fill('2026-01-31')
-  await page.getByRole('button', { name: /Apply|Update/i }).click()
-  // Report should now reflect January data only
-  await expect(page.getByText(/Jan 2026|January 2026/i)).toBeVisible()
-})
-
-test('custom range report shows only transactions within the selected window', async () => {
-  // Jan expense (300) should appear; Mar expense (450) should not.
-  // Scoped to the custom-range card: the YoY chart above now renders
-  // plain-number axis ticks (e.g. "300") that a page-wide getByText matches.
-  const picker = page.getByTestId('custom-date-range')
-  await expect(picker.getByText(/300|RM 300/)).toBeVisible()
-  await expect(picker.getByText(/450|RM 450/)).not.toBeVisible()
-})
-
-test('changing date range to Q1 shows both transactions', async () => {
-  const picker = page.getByTestId('custom-date-range')
-  await picker.getByTestId('filter-from').fill('2026-01-01')
-  await picker.getByTestId('filter-to').fill('2026-03-31')
-  await page.getByRole('button', { name: /Apply|Update/i }).click()
-  await expect(picker.getByText(/300|RM 300/)).toBeVisible()
-  await expect(picker.getByText(/450|RM 450/)).toBeVisible()
 })

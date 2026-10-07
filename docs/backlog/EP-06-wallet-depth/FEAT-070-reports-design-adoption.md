@@ -101,10 +101,12 @@ Every figure below follows the §3 money traps:
 
 - **Trend** = an ordinary least-squares line over the window's monthly values
   (x = 0…n−1). Growth % = `fit(n−1) ÷ fit(0) − 1`, shown with 1 decimal.
-  It is undefined (no chip, no sentence) when n < 3 or `fit(0) ≤ 0`.
+  It is undefined (no chip, no sentence) when n < 3, `fit(0) ≤ 0` or
+  `fit(n−1) < 0` — a fitted line below zero would read as "down 120%".
 - **Gap sentence** (under Income vs spending): "Income is {up|down} {a}% over
   the {window}, spending {up|down} {b}%." Then one of:
-  - "If both hold, the gap closes in about {N} months." — when the spending
+  - "If both hold, the gap closes in about {N} months." (N ≥ 1, singular
+    at 1) — when the spending
     slope exceeds the income slope, the fitted spending at n−1 is below the
     fitted income, and they cross within 120 months after the anchor
     (N rounded);
@@ -121,17 +123,20 @@ Every figure below follows the §3 money traps:
 **Charts**
 
 - **Income vs spending chart** = paired columns per window month (income
-  `--pos`, spending `--info`), and an axis in round MYR steps (4 gridlines,
-  top = the nice ceiling of the max). The anchor month's label is bold `--fg`.
+  `--pos`, spending `--info`), and an axis in round MYR steps (4 gridlines;
+  step = max ÷ 3 rounded up to 1/2/2.5/5 × 10ᵏ, top = 3 × step). The anchor month's label is bold `--fg`.
   With more than 12 months ("All"), it shows the last 12 columns. The chart
   has an `aria-label` summarising both series.
 - **Savings rate card** shows three things:
   - the anchor month's rate, with a "this month" chip — `chip-pos` if ≥ the
     window rate, else `chip-warn`;
   - a line of the monthly rates, with the window rate as a dashed "avg {x}%"
-    line. The axis runs 0 → max(60, ceil10(max rate)), and min(0, floor10(min
-    rate)) when a month went negative;
+    line. The axis runs 0 → max(60, ceil10(max rate)), and down to
+    min(0, floor10(min rate)) when a month went negative. The bounds include
+    the avg rate, and the floor never goes below −100% — a lower month draws
+    clamped at the bottom edge;
   - the sentence "{M1} and {M2} were the weakest months of the {window}."
+    Months are named in calendar order, with the year added if two share a name.
     (one month if the window has < 4 months). When the same expense category
     has the largest positive delta over its baseline in every named month,
     it adds "Both had {category} above its usual." (or "It had …"). No causal
@@ -147,14 +152,14 @@ Every figure below follows the §3 money traps:
 - **What changed** = per expense category (uncategorised → "Uncategorised"),
   `delta = anchor spend − baseline`. It shows the 6 largest by |delta|, with
   |delta| < RM1 dropped. The order is positives (descending), then negatives
-  (ascending by value, i.e. the largest decrease last).
+  (by size, the largest decrease last — as in the mock).
   - Bars are `left:50%` red (`--neg`) for increases and `right:50%` green
     (`--pos`) for decreases. Width = |delta| ÷ max|delta| × 45%.
   - Values are signed, coloured `--neg-fg` / `--pos-fg`.
   - Footer: "Net effect: {±net} versus a typical month", where net = Σ delta
-    over **all** categories.
+    over **all** categories, rounded to cents (|net| < 0.005 is 0).
   - It adds "{category} alone explains most of it." when that category's
-    delta has the net's sign and is ≥ 50% of |net|.
+    delta has the net's sign and is ≥ 50% of |net|, and net ≠ 0.
   - With no rows: "This month was in line with your average."
 - **Cash flow** = the window's months, newest first, capped at 6 rows:
   Month (full name) · In · Out · Kept.
@@ -172,10 +177,17 @@ Every figure below follows the §3 money traps:
     gives "New" (`chip-warn`).
   - **Share** shows each figure as % of that month's total spend, and
     Change in percentage points ("+3.2 pts", same chip bands on |pts| with
-    5/15 cut-offs).
+    5/15 cut-offs). The share average uses the same baseline months as
+    Amount (months with no spend at all are skipped), and the row order stays
+    the Amount baseline order.
   - Colour = the category's own `color`; uncategorised = `rgb(var(--fg-subtle))`.
 - **Export** opens the existing `ExportModal` with the window's own-account
-  transactions, wired to `useWallet().exportTransactions`.
+  transactions — transfers included, since this is an export, not a total —
+  wired to `useWallet().exportTransactions`.
+- **Net worth and opening balances.** An account created mid-window counts
+  as 0 before its `createdAt`, so its opening balance shows up as net worth
+  gained in that window. This is the same reconstruction the Accounts
+  net-worth chart uses, kept deliberately so the two pages agree.
 
 ## Acceptance criteria
 
