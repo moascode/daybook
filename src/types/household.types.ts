@@ -83,6 +83,14 @@ export interface SplitClaim {
   description: string
   transactionAmount: number
   categoryId: string | null
+  // The underlying transaction's own category icon/colour, from the owner's
+  // category (GET /transactions/splits/mine LEFT JOINs categories on the
+  // transaction's category_id) — present regardless of which side (debtor or
+  // creditor) is reading the claim, unlike a `categories` prop lookup, which
+  // is scoped to the viewer's own categories and so only resolves on the
+  // creditor side. Optional/nullable: no category, or an older cached shape.
+  categoryIcon?: string | null
+  categoryColor?: string | null
   ownerId: string              // the payer — the one owed
   ownerUsername: string
   debtorId: string             // the one who owes

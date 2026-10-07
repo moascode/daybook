@@ -31,6 +31,8 @@ export function mapSplitClaim(r: Raw): SplitClaim {
     description: String(r.description ?? ''),
     transactionAmount: Number(r.transaction_amount ?? 0),
     categoryId: r.category_id ? String(r.category_id) : null,
+    categoryIcon: r.category_icon ? String(r.category_icon) : null,
+    categoryColor: r.category_color ? String(r.category_color) : null,
     ownerId: String(r.owner_id ?? ''),
     ownerUsername: String(r.owner_username ?? ''),
     debtorId: String(r.debtor_id ?? ''),

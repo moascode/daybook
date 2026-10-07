@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Trash2, ArrowRightLeft, Pencil, Scissors, Users, MoreHorizontal } from 'lucide-react'
+import { Trash2, ArrowRightLeft, CircleDashed, Pencil, Scissors, Users, MoreHorizontal } from 'lucide-react'
 import { cn, formatMYR } from '@/lib/utils'
+import { CategoryIcon, categoryTint, resolveCategoryIconKey } from '@/lib/categoryIcon'
 import { countableAmount } from '@/hooks/useWallet'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -188,24 +189,7 @@ function TransactionRow({
             aria-label={`Select ${transaction.merchant || transaction.description || 'transaction'}`}
           />
         )}
-        <div
-          className={cn(
-            'tavatar flex-shrink-0',
-            transaction.type === 'income'
-              ? 'bg-positive-50 text-positive-600'
-              : transaction.type === 'expense'
-                ? 'bg-red-50 text-red-600'
-                : 'bg-blue-50 text-blue-600'
-          )}
-        >
-          {transaction.type === 'transfer' ? (
-            <ArrowRightLeft className="h-3.5 w-3.5" />
-          ) : transaction.type === 'income' ? (
-            '+'
-          ) : (
-            '-'
-          )}
-        </div>
+        <CategoryAvatar transactionType={transaction.type} category={category} />
 
         {/* Name + secondary details */}
         <div className="min-w-0 flex-1">
@@ -428,6 +412,51 @@ export function TransactionList({
           </Fragment>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * The row's leading glyph. Transfers keep the existing blue swap icon (no
+ * category applies). Otherwise renders the category's own icon on its own
+ * colour tint; an uncategorised or unresolved category falls back to a
+ * neutral glyph rather than a blank avatar (CLAUDE.md §2 rule 10).
+ *
+ * `data-category-icon` stamps the RESOLVED icon key, not the category's raw
+ * `icon` string — a custom category's free-text icon name that isn't in
+ * `categoryIcon.tsx`'s map still renders (and should test as) `tag`.
+ */
+function CategoryAvatar({
+  transactionType,
+  category,
+}: {
+  transactionType: Transaction['type']
+  category: Category | null | undefined
+}) {
+  if (transactionType === 'transfer') {
+    return (
+      <div className="tavatar flex-shrink-0 bg-blue-50 text-blue-600" aria-hidden="true" data-testid="tx-avatar" data-category-icon="transfer">
+        <ArrowRightLeft className="h-3.5 w-3.5" />
+      </div>
+    )
+  }
+  if (category) {
+    const tint = category.color ? categoryTint(category.color) : undefined
+    return (
+      <div
+        className={cn('tavatar flex-shrink-0', !tint && 'bg-surface-sunken text-fg-faint')}
+        style={tint}
+        aria-hidden="true"
+        data-testid="tx-avatar"
+        data-category-icon={resolveCategoryIconKey(category.icon)}
+      >
+        <CategoryIcon name={category.icon} className="h-3.5 w-3.5" />
+      </div>
+    )
+  }
+  return (
+    <div className="tavatar flex-shrink-0 bg-surface-sunken text-fg-faint" aria-hidden="true" data-testid="tx-avatar" data-category-icon="none">
+      <CircleDashed className="h-3.5 w-3.5" />
     </div>
   )
 }
