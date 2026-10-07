@@ -1,4 +1,4 @@
-> **Status:** Shipped · **Filed:** 2026-09-16 · **Last verified:** 2026-10-04 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-07 · **Filed:** 2026-09-16 · **Shipped:** 2026-09-19 (PR #214/#215/#216) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-018 — Budgets: suggestions engine
 
@@ -6,10 +6,10 @@
 
 **Why now.** The most-used judgement in budgeting is "this number is wrong" — the data to say so already exists.
 
-**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](../../backlog/EP-06-wallet-depth/design.md) — the design work is already done; this item tracks *whether* to build it, not how.
 
-**Still needed?** No — shipped. This doc said "Still needed: Yes" while all
-three of its own PRs were already merged — the exact stale-doc trap
+**Still needed?** No — shipped and archived. This doc said "Still needed: Yes"
+while all three of its own PRs were already merged — the exact stale-doc trap
 `docs/backlog/README.md` warns about. Corrected 2026-10-04 while filing
 [FEAT-066](FEAT-066-budgets-design-adoption.md), which restyles these rows
 to the mockup's `.sug` pattern and adds a 4th suggestion type

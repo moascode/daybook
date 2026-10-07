@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Roadmap:** R8–R9
+> **Status:** Open · **Filed:** 2026-09-16 · **Last verified:** 2026-10-07 · **Roadmap:** R8–R9
 
 # EP-06 — Wallet depth
 
@@ -14,10 +14,11 @@ backlog. Wallet is the module both users actually use daily, the data is already
 in D1, and every item is a read over existing rows — no schema changes, no
 one-way doors.
 
-**Sequencing note.** [FEAT-021](FEAT-021-recurring-anomalies.md)
-(recurring anomalies, now built as part of [FEAT-068](FEAT-068-recurring-design-adoption.md)) and [FEAT-018](FEAT-018-budgets-suggestions.md)
-(budget suggestions) are the two that change behaviour rather than just
-displaying it. If only part of this epic gets built, build those.
+**Sequencing note.** [FEAT-021](../../archive/ep-06-wallet-depth/FEAT-021-recurring-anomalies.md)
+(recurring anomalies, built as part of [FEAT-068](../../archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md)) and [FEAT-018](../../archive/ep-06-wallet-depth/FEAT-018-budgets-suggestions.md)
+(budget suggestions) were the two that changed behaviour rather than just
+displaying it — both have now shipped, along with the rest of this epic's
+design-adoption wave (see Shipped below).
 
 ## Shipped
 
@@ -33,27 +34,33 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-015](../../archive/ep-06-wallet-depth/FEAT-015-accounts-composition.md) | Accounts: composition breakdown and sparklines | `BalanceSummary.tsx`, `AccountCard.tsx`, `insights.ts` |
 | [FEAT-016](../../archive/ep-06-wallet-depth/FEAT-016-accounts-networth-chart.md) | Accounts: credit utilisation, 12-month net worth | `AccountCard.tsx`, `NetWorthHistoryChart.tsx` |
 | [FEAT-017](../../archive/ep-06-wallet-depth/FEAT-017-budgets-summary-band.md) | Budgets: summary band and pace marker | [PR #213](https://github.com/moascode/daybook/pull/213), 2026-09-19 |
-| [FEAT-018](FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | [PR #214](https://github.com/moascode/daybook/pull/214)/[#215](https://github.com/moascode/daybook/pull/215)/[#216](https://github.com/moascode/daybook/pull/216) — doc corrected 2026-10-04, was stale |
+| [FEAT-018](../../archive/ep-06-wallet-depth/FEAT-018-budgets-suggestions.md) | Budgets: suggestions engine | [PR #214](https://github.com/moascode/daybook/pull/214)/[#215](https://github.com/moascode/daybook/pull/215)/[#216](https://github.com/moascode/daybook/pull/216) — doc corrected 2026-10-04, was stale |
+| [FEAT-019](../../archive/ep-06-wallet-depth/FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | Shipped 2026-10-06 as part of [FEAT-067](../../archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md), [PR #247](https://github.com/moascode/daybook/pull/247) |
+| [FEAT-020](../../archive/ep-06-wallet-depth/FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | Shipped 2026-10-07 as part of [FEAT-068](../../archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md), [PR #248](https://github.com/moascode/daybook/pull/248) |
+| [FEAT-021](../../archive/ep-06-wallet-depth/FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | Shipped 2026-10-07 as part of [FEAT-068](../../archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md), [PR #248](https://github.com/moascode/daybook/pull/248) |
+| [FEAT-022](../../archive/ep-06-wallet-depth/FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | Shipped 2026-10-07 as part of [FEAT-070](../../archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md), [PR #249](https://github.com/moascode/daybook/pull/249) |
+| [FEAT-023](../../archive/ep-06-wallet-depth/FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | Shipped 2026-10-07 as part of [FEAT-070](../../archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md), [PR #249](https://github.com/moascode/daybook/pull/249) |
+| [FEAT-066](../../archive/ep-06-wallet-depth/FEAT-066-budgets-design-adoption.md) | Budgets: exact mock parity (no composer — a Plan page) | [PR #246](https://github.com/moascode/daybook/pull/246), 2026-10-06 |
+| [FEAT-067](../../archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | [PR #247](https://github.com/moascode/daybook/pull/247), 2026-10-06 |
+| [FEAT-068](../../archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 (no composer — a Plan page) | [PR #248](https://github.com/moascode/daybook/pull/248), 2026-10-07 |
+| [FEAT-070](../../archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md) | Reports: exact mock parity, incl. FEAT-022/023 (no composer — read-only) | [PR #249](https://github.com/moascode/daybook/pull/249), 2026-10-07 |
+
+**2026-10-07.** FEAT-066 (Budgets), FEAT-067 (Goals), FEAT-068 (Recurring) and
+FEAT-070 (Reports) shipped — PRs #246–#249 — each to exact mock parity. In
+shipping, FEAT-067 absorbed and shipped FEAT-019 whole, FEAT-068 absorbed
+and shipped FEAT-020 and FEAT-021 whole, and FEAT-070 absorbed and shipped
+FEAT-022 and FEAT-023 whole. All ten item docs are archived above.
 
 ## Items
 
 | ID | Title | Still needed? |
 |---|---|---|
-| [FEAT-019](FEAT-019-goals-trajectory.md) | Goals: rings, funding rate, honest ETA | No — superseded by FEAT-067 |
-| [FEAT-020](FEAT-020-recurring-calendar.md) | Recurring: month calendar and annual cost | No — superseded by FEAT-068 |
-| [FEAT-021](FEAT-021-recurring-anomalies.md) | Recurring: "Worth a look" anomalies | No — superseded by FEAT-068 |
-| [FEAT-022](FEAT-022-reports-what-changed.md) | Reports: paired columns, savings gap, What changed | No — superseded by FEAT-070 |
-| [FEAT-023](FEAT-023-reports-category-trends.md) | Reports: category sparkline trends | No — superseded by FEAT-070 |
 | [FEAT-024](FEAT-024-shared-minimum-transfers.md) | Shared: group-wide minimum-transfer set | Yes — read the settlement CAS trap first |
 | [FEAT-025](FEAT-025-shared-split-rules.md) | Shared: split rules with staleness | Yes |
 | [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | Yes |
 | [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | Yes |
 | [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
-| [FEAT-066](FEAT-066-budgets-design-adoption.md) | Budgets: exact mock parity (no composer — a Plan page) | Yes |
-| [FEAT-067](FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | Yes |
-| [FEAT-068](FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 (no composer — a Plan page) | Yes |
 | [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
-| [FEAT-070](FEAT-070-reports-design-adoption.md) | Reports: exact mock parity, incl. FEAT-022/023 (no composer — read-only) | Yes |
 
 **FEAT-063–FEAT-069, filed 2026-10-02**, are a second-pass design-adoption
 audit (same pipeline as the Tasks module's FEAT-054–062): the real running

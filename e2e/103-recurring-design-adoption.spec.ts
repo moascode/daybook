@@ -10,7 +10,7 @@ test.describe.configure({ mode: 'serial' })
  * FEAT-068 (EP-06) — exact mock parity for the Recurring page: the "Locked in
  * every month" band, "Worth a look" (price rises / collision / nudge), the
  * month calendar, the "All recurring" table (with its "⋯" menu), pause/resume,
- * and "Detect from history". docs/backlog/EP-06-wallet-depth/FEAT-068-recurring-design-adoption.md
+ * and "Detect from history". docs/archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md
  * "Stated rules" has the exact arithmetic this fixture is built against.
  *
  * Fixture design — every rule's `nextDueDate` is set one month AFTER a

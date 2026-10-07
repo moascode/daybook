@@ -8,7 +8,7 @@ const API = '/api'
  * FEAT-070 (EP-06) — exact mock parity for Reports: the header (window sub +
  * 3m/6m/12m/All segment + Export), the four stat cards, Income vs spending,
  * Savings rate, What changed, Cash flow and Category trends.
- * docs/backlog/EP-06-wallet-depth/FEAT-070-reports-design-adoption.md
+ * docs/archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md
  * "Stated rules" has the exact arithmetic this fixture is built against.
  *
  * Every figure here follows the §3 money traps the stated rules call out:

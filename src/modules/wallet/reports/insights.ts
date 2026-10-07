@@ -1,5 +1,5 @@
 /**
- * FEAT-070 (docs/backlog/EP-06-wallet-depth/FEAT-070-reports-design-adoption.md)
+ * FEAT-070 (docs/archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md)
  * — Reports' maths. Pure functions only: no React, no fetching, nothing
  * touches `new Date()` directly — date math goes through `monthKey`/
  * `shiftMonth` (src/modules/wallet/dashboard/insights.ts), same as Goals/

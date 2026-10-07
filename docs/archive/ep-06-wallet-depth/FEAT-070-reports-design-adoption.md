@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-07 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-07 · **Filed:** 2026-10-07 · **Shipped:** 2026-10-07 (PR #249) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-070 — Reports: exact mock parity
 
@@ -251,4 +251,4 @@ The composer. Causal explanations ("unbudgeted travel"). A custom date range
 (Transactions has one). Click-through from a chart column to that month's
 transactions.
 
-**Still needed?** Yes — filed 2026-10-07, in progress.
+**Still needed?** No — shipped. [PR #249](https://github.com/moascode/daybook/pull/249), merged 2026-10-07.

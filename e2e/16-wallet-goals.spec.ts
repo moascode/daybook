@@ -2,7 +2,7 @@
  * Wallet: goals & savings tracker — Tier 3 feature.
  * Set a target amount, link a dedicated account, track progress over time.
  *
- * Updated for FEAT-067 (docs/backlog/EP-06-wallet-depth/FEAT-067-goals-design-adoption.md):
+ * Updated for FEAT-067 (docs/archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md):
  * exact mock parity — ring cards, a ⋯ actions menu replacing the old inline
  * Edit/Delete icons, "New goal" replacing "Add Goal", and the Target
  * date/Note fields on the goal form. The funding-rate/ETA/status/trajectory/
