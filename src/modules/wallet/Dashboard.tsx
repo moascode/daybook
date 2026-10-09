@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard } from 'lucide-react'
+import { LayoutDashboard, HandCoins } from 'lucide-react'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import { useWallet } from '@/hooks/useWallet'
 import { useWalletStore } from '@/stores/wallet.store'
+import { useHouseholdStore } from '@/stores/household.store'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
+import { api } from '@/lib/api'
 import { useCrudModal } from '@/hooks/useCrudModal'
 import { formatMYR, monthRange, trailingRange, todayISO, dateRangePreset, errorMessage } from '@/lib/utils'
 import type { DateRangeValue } from '@/components/ui/DateRangeControl'
@@ -103,6 +105,27 @@ export function Dashboard() {
   const crud = useCrudModal<Transaction>()
   const composerInputRef = useRef<HTMLInputElement>(null)
   const [composerDraft, setComposerDraft] = useState<Partial<TransactionFormData> | null>(null)
+
+  // FEAT-064: the header "Settle up" quick action is hidden only for a solo
+  // user who has never joined a group and has no pending claim — NOT the
+  // same condition as SharedSummary's own guard, which hides for a group
+  // member too once every balance nets to ~0 and nothing is pending
+  // (pairings.length === 0 && pendingClaimCount === 0; `pairings` comes from
+  // that card's own balances fetch, not group membership). This button stays
+  // visible for any group member even with everything settled — parity with
+  // the sidebar's own badge-less "Shared" nav item, per FEAT-064's own
+  // acceptance criteria. `hasGroups` mirrors WalletPage's existing `/groups`
+  // membership check rather than reading household.store's `groups` field
+  // (populated only by Settings → Sharing, not kept live here).
+  const pendingClaimCount = useHouseholdStore((s) => s.pendingClaimCount)
+  const [hasGroups, setHasGroups] = useState(false)
+  useEffect(() => {
+    api.get<unknown[]>('/groups')
+      .then((groups) => setHasGroups(groups.length > 0))
+      .catch((err: unknown) => {
+        addToast({ message: errorMessage(err, "Couldn't check sharing status — try again.") })
+      })
+  }, [addToast])
 
   // Unified import modal (CSV only today — see ImportModal.tsx). Mirrors
   // WalletPage.tsx's wiring; the Overview composer carries the same shortcut.
@@ -387,9 +410,18 @@ export function Dashboard() {
       await addTransaction(data)
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not save transaction — please try again.'), duration: 4000 })
-      throw err
+      throw err // the write itself failed — keep the form open so the user can retry
     }
-    await getAccountBalances().then(setBalances)
+    // The write already succeeded by this point. A failure here is only the
+    // balances refresh, not the save — rethrowing would leave TransactionForm's
+    // handleSubmit (no catch of its own) skipping onOpenChange(false), so the
+    // form stays open looking like the save failed and inviting a duplicate
+    // resubmit of money that already landed. Toast and close normally instead.
+    try {
+      await getAccountBalances().then(setBalances)
+    } catch (err) {
+      addToast({ message: errorMessage(err, "Saved, but couldn't refresh — reload the page."), duration: 4000 })
+    }
   }, [addTransaction, addToast, getAccountBalances])
 
   const openComposerForm = useCallback((initialDraft?: Partial<TransactionFormData>) => {
@@ -448,6 +480,28 @@ export function Dashboard() {
               Year
             </button>
           </div>
+          {/* FEAT-064: global shortcut to the Shared page, independent of
+              scrolling down to the SharedSummary card — mirrors that card's
+              own "Settle up" navigation (same destination, no dialog, no
+              duplicate settlement fetch). Hidden entirely for a solo user
+              with nothing outstanding; SharedSummary's own in-card link is
+              untouched, so both coexist exactly as the mockup shows. */}
+          {(hasGroups || pendingClaimCount > 0) && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              data-testid="dashboard-settle-up"
+              onClick={() => navigate('/wallet/shared')}
+            >
+              <HandCoins className="icon-sm" aria-hidden="true" />
+              Settle up
+              {pendingClaimCount > 0 && (
+                <span className="chip chip-mute" data-testid="settle-up-badge" style={{ marginLeft: 2 }}>
+                  {pendingClaimCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 

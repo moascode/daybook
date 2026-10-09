@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { SettleUpDialog } from './SettleUpDialog'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
+import { PageComposer } from '@/modules/wallet/composer/PageComposer'
 import { SharedBalances, type Pairing } from './shared/SharedBalances'
 import { SharedActivity } from './shared/SharedActivity'
 import { MarkAllSettledDialog } from './shared/MarkAllSettledDialog'
@@ -247,6 +248,17 @@ export function SharedPage() {
           </Link>
         </div>
       </div>
+
+      {/* FEAT-069: same composer wiring as WalletPage/Dashboard, mounted
+          above the Balances/Settle-up card — gated on having at least one
+          account, same guard those pages use. */}
+      {accounts.length > 0 && (
+        <PageComposer
+          accounts={accounts}
+          categories={categories}
+          onCreated={loadAll}
+        />
+      )}
 
       <div className="dash">
         <div className="card card-pad c12 flex flex-wrap gap-4" data-testid="shared-headline">
