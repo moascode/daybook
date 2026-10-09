@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Last verified:** 2026-10-07 · **Roadmap:** R8–R9
+> **Status:** Open · **Filed:** 2026-09-16 · **Last verified:** 2026-10-10 · **Roadmap:** R8–R9
 
 # EP-06 — Wallet depth
 
@@ -44,6 +44,10 @@ rendering specifically) closed by `e2e/87-wallet-accounts-depth.spec.ts`.
 | [FEAT-067](../../archive/ep-06-wallet-depth/FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 (no composer — a Plan page) | [PR #247](https://github.com/moascode/daybook/pull/247), 2026-10-06 |
 | [FEAT-068](../../archive/ep-06-wallet-depth/FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 (no composer — a Plan page) | [PR #248](https://github.com/moascode/daybook/pull/248), 2026-10-07 |
 | [FEAT-070](../../archive/ep-06-wallet-depth/FEAT-070-reports-design-adoption.md) | Reports: exact mock parity, incl. FEAT-022/023 (no composer — read-only) | [PR #249](https://github.com/moascode/daybook/pull/249), 2026-10-07 |
+| [FEAT-063](../../archive/ep-06-wallet-depth/FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | [PR #251](https://github.com/moascode/daybook/pull/251), 2026-10-07 — `categoryIcon.tsx`, `TransactionList.tsx` |
+| [FEAT-064](../../archive/ep-06-wallet-depth/FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `Dashboard.tsx` |
+| [FEAT-065](../../archive/ep-06-wallet-depth/FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `PageComposer.tsx`, `AccountsPage.tsx` |
+| [FEAT-069](../../archive/ep-06-wallet-depth/FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Icons [PR #251](https://github.com/moascode/daybook/pull/251), 2026-10-07; composer [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `SharedActivity.tsx`, `SharedPage.tsx` |
 
 **2026-10-07.** FEAT-066 (Budgets), FEAT-067 (Goals), FEAT-068 (Recurring) and
 FEAT-070 (Reports) shipped — PRs #246–#249 — each to exact mock parity. In
@@ -51,16 +55,14 @@ shipping, FEAT-067 absorbed and shipped FEAT-019 whole, FEAT-068 absorbed
 and shipped FEAT-020 and FEAT-021 whole, and FEAT-070 absorbed and shipped
 FEAT-022 and FEAT-023 whole. All ten item docs are archived above.
 
+**2026-10-10.** FEAT-063 (category-coloured row avatars, [PR #251](https://github.com/moascode/daybook/pull/251)), FEAT-064 (Dashboard "Settle up" header action), FEAT-065 (Accounts composer) and FEAT-069 (Shared composer + activity icons; icons in #251, composer in [PR #252](https://github.com/moascode/daybook/pull/252)) shipped. With them, Wallet matches the v2 mockup; what remains open here (FEAT-024, FEAT-025) is unbuilt computation, not design parity.
+
 ## Items
 
 | ID | Title | Still needed? |
 |---|---|---|
 | [FEAT-024](FEAT-024-shared-minimum-transfers.md) | Shared: group-wide minimum-transfer set | Yes — read the settlement CAS trap first |
 | [FEAT-025](FEAT-025-shared-split-rules.md) | Shared: split rules with staleness | Yes |
-| [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | Yes |
-| [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | Yes |
-| [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | Yes |
-| [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Yes |
 
 **FEAT-063–FEAT-069, filed 2026-10-02**, are a second-pass design-adoption
 audit (same pipeline as the Tasks module's FEAT-054–062): the real running

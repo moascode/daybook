@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-10 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-09 (PRs #251, #252) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-069 — Shared: mount the transaction composer; category-coloured activity icons
 
@@ -64,9 +64,9 @@ only the background palette colour (`SharedActivity.tsx:331`,
 
 ## Out of scope
 
-Everything in [FEAT-024](FEAT-024-shared-minimum-transfers.md) (group-wide
-minimum-transfer set) and [FEAT-025](FEAT-025-shared-split-rules.md)
+Everything in [FEAT-024](../../backlog/EP-06-wallet-depth/FEAT-024-shared-minimum-transfers.md) (group-wide
+minimum-transfer set) and [FEAT-025](../../backlog/EP-06-wallet-depth/FEAT-025-shared-split-rules.md)
 (editable split rules) — both already tracked, both genuinely unbuilt
 computation, not restyle.
 
-**Still needed?** Open.
+**Still needed?** No — shipped 2026-10-09 (PRs #251, #252).
