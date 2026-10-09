@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-10 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-07 (PR #251) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-063 — Transactions: category-coloured row avatar
 
@@ -74,4 +74,4 @@ Redesigning the category icon picker in `CategoryManager.tsx`, or expanding
 the set of selectable icons — this item only wires up icons that already
 exist on every category today.
 
-**Still needed?** Open.
+**Still needed?** No — shipped 2026-10-07 (PR #251).

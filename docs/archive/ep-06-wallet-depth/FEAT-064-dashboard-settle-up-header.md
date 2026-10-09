@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-10 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-09 (PR #252) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-064 — Dashboard: page-header "Settle up" quick action
 
@@ -72,4 +72,4 @@ Rebuilding `SettleUpDialog` to open inline from the Dashboard — the button
 navigates, exactly like every other existing "Settle up" entry point in the
 app today.
 
-**Still needed?** Open.
+**Still needed?** No — shipped 2026-10-09 (PR #252).

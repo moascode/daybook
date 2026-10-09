@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-10-02 · **Epic:** [EP-06](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-10 · **Filed:** 2026-10-02 · **Shipped:** 2026-10-09 (PR #252) · **Epic:** [EP-06](../../backlog/EP-06-wallet-depth/README.md)
 
 # FEAT-065 — Accounts: mount the transaction composer
 
@@ -59,4 +59,4 @@ on `accounts.html`, `budgets.html`, `goals.html`, `recurring.html`,
 Any change to the composer's own parsing, shortcuts, or styling — this item
 only mounts the existing component on a page that doesn't have it yet.
 
-**Still needed?** Open.
+**Still needed?** No — shipped 2026-10-09 (PR #252).

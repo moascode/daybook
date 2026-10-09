@@ -1,4 +1,4 @@
-> **Status:** Archived · **Last verified:** 2026-10-07
+> **Status:** Archived · **Last verified:** 2026-10-10
 
 # EP-06 — Wallet depth (partial archive)
 
@@ -24,6 +24,10 @@ in the backlog.
 | [FEAT-067](FEAT-067-goals-design-adoption.md) | Goals: exact mock parity, incl. FEAT-019 | [PR #247](https://github.com/moascode/daybook/pull/247), 2026-10-06 |
 | [FEAT-068](FEAT-068-recurring-design-adoption.md) | Recurring: exact mock parity, incl. FEAT-020/021 | [PR #248](https://github.com/moascode/daybook/pull/248), 2026-10-07 |
 | [FEAT-070](FEAT-070-reports-design-adoption.md) | Reports: exact mock parity, incl. FEAT-022/023 | [PR #249](https://github.com/moascode/daybook/pull/249), 2026-10-07 |
+| [FEAT-063](FEAT-063-transactions-category-avatar.md) | Transactions: category-coloured row avatar | [PR #251](https://github.com/moascode/daybook/pull/251), 2026-10-07 — `categoryIcon.tsx`, `TransactionList.tsx` |
+| [FEAT-064](FEAT-064-dashboard-settle-up-header.md) | Dashboard: page-header "Settle up" quick action | [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `Dashboard.tsx` |
+| [FEAT-065](FEAT-065-accounts-composer.md) | Accounts: mount the transaction composer | [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `PageComposer.tsx`, `AccountsPage.tsx` |
+| [FEAT-069](FEAT-069-shared-composer-and-activity-icons.md) | Shared: mount the transaction composer; category-coloured activity icons | Icons [PR #251](https://github.com/moascode/daybook/pull/251), 2026-10-07; composer [PR #252](https://github.com/moascode/daybook/pull/252), 2026-10-09 — `SharedActivity.tsx`, `SharedPage.tsx` |
 
 FEAT-015/016 were filed to the backlog 2026-09-16 as "unstarted", ten days
 after they had already landed — the exact stale-conversion trap
