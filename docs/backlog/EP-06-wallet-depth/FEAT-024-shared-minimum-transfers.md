@@ -6,6 +6,6 @@
 
 **Why now.** With three or more people, pairwise settling produces more transfers than necessary.
 
-**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how.
+**Design.** [design.md](design.md) — the design work is already done; this item tracks *whether* to build it, not how. The algorithm/API/schema detail is in [FEAT-024-design.md](FEAT-024-design.md).
 
 **Still needed?** Yes — R9. Touches settlement maths — see the §3 CAS trap before starting.
