@@ -3,6 +3,7 @@ import type { AppEnv } from '../types.ts'
 import { isGroupMember, isGroupOwner } from '../lib/sharing.ts'
 import { newId } from '../lib.ts'
 import { minTransfers, netPositions } from '../lib/min-transfers.ts'
+import { payableEdgesCents } from '../lib/settle-edges.ts'
 
 // Port of server/routes/groups.ts. Mounted behind requireAuth.
 export const groups = new Hono<AppEnv>()
@@ -507,50 +508,7 @@ groups.get('/groups/:id/settle-plan', async (c) => {
     return c.json({ error: 'group not found' }, 404)
   }
 
-  const { results: rows } = await c.env.DB.prepare(
-    `SELECT ts.user_id AS debtor_id, t.user_id AS creditor_id,
-            SUM(ts.share_amount - ts.settled_amount) AS total_owed
-     FROM transaction_splits ts
-     JOIN transactions t ON t.id = ts.transaction_id
-     JOIN group_members gm_d ON gm_d.user_id = ts.user_id AND gm_d.group_id = ?
-     JOIN group_members gm_c ON gm_c.user_id = t.user_id AND gm_c.group_id = ?
-     WHERE ts.settled_at IS NULL AND ts.user_id != t.user_id
-       AND ts.status IN ('pending', 'approved')
-       AND ts.id NOT IN (
-         SELECT l.share_id FROM settlement_split_lines l
-         JOIN settlements sx ON sx.id = l.settlement_id
-         WHERE sx.status = 'awaiting_confirmation'
-       )
-     GROUP BY ts.user_id, t.user_id`,
-  )
-    .bind(id, id)
-    .all<{ debtor_id: string; creditor_id: string; total_owed: number }>()
-
-  // Net bilaterally into a single directed edge per pair, in integer cents.
-  const raw = new Map<string, number>()
-  for (const row of rows) {
-    const cents = Math.round(row.total_owed * 100)
-    if (cents === 0) continue
-    const fwd = `${row.debtor_id}:${row.creditor_id}`
-    const rev = `${row.creditor_id}:${row.debtor_id}`
-    if (raw.has(rev)) {
-      raw.set(rev, (raw.get(rev) ?? 0) - cents)
-    } else {
-      raw.set(fwd, (raw.get(fwd) ?? 0) + cents)
-    }
-  }
-  const edges = new Map<string, number>()
-  for (const [key, cents] of raw) {
-    if (cents === 0) continue
-    if (cents > 0) {
-      edges.set(key, cents)
-    } else {
-      const sep = key.indexOf(':')
-      const debtorId = key.slice(0, sep)
-      const creditorId = key.slice(sep + 1)
-      edges.set(`${creditorId}:${debtorId}`, -cents)
-    }
-  }
+  const edges = await payableEdgesCents(c.env.DB, id)
 
   const plan = minTransfers(netPositions(edges), edges)
 
