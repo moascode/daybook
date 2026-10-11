@@ -12,13 +12,14 @@ import { PageComposer } from '@/modules/wallet/composer/PageComposer'
 import { SharedBalances, type Pairing } from './shared/SharedBalances'
 import { SharedActivity } from './shared/SharedActivity'
 import { MarkAllSettledDialog } from './shared/MarkAllSettledDialog'
+import { SettleGroupPlan } from './shared/SettleGroupPlan'
 import { useAppStore } from '@/stores/app.store'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
-import type { Group, GroupBalance, GroupMember, Settlement, SplitClaim } from '@/types/household.types'
+import type { Group, GroupBalance, GroupMember, Settlement, SettlePlan, SettleTransfer, SplitClaim } from '@/types/household.types'
 import type { TransactionFormData } from './TransactionForm'
 
 /**
@@ -42,6 +43,8 @@ export function SharedPage() {
   const [pairings, setPairings] = useState<Pairing[]>([])
   const [historyByGroup, setHistoryByGroup] = useState<Record<string, Settlement[]>>({})
   const [memberCountByGroup, setMemberCountByGroup] = useState<Record<string, number>>({})
+  const [settlePlanByGroup, setSettlePlanByGroup] = useState<Record<string, SettlePlan | null>>({})
+  const [settlePlanErrorByGroup, setSettlePlanErrorByGroup] = useState<Record<string, boolean>>({})
   const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
   const [claimsIOwe, setClaimsIOwe] = useState<SplitClaim[]>([])
   const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
@@ -78,7 +81,25 @@ export function SharedPage() {
             api.get<Record<string, unknown>[]>(`/settlements?groupId=${g.id}`),
             api.get<Record<string, unknown>[]>(`/groups/${g.id}/members`),
           ])
-          return { group: g, balances: bal, history: hist.map(mapSettlement), members: members.map(mapMember) }
+          // Its own try/catch: a failed settle-plan fetch must not take down the
+          // whole page (the outer catch below sets loadError for everything) —
+          // it surfaces as that group's own card showing an inline error instead
+          // (CLAUDE.md rule 10).
+          let settlePlan: SettlePlan | null = null
+          let settlePlanError = false
+          try {
+            settlePlan = await api.get<SettlePlan>(`/groups/${g.id}/settle-plan`)
+          } catch {
+            settlePlanError = true
+          }
+          return {
+            group: g,
+            balances: bal,
+            history: hist.map(mapSettlement),
+            members: members.map(mapMember),
+            settlePlan,
+            settlePlanError,
+          }
         }),
       )
 
@@ -110,6 +131,8 @@ export function SharedPage() {
       setClaimsOwedToMe(claimsIHold)
       setHistoryByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.history])))
       setMemberCountByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.members.length])))
+      setSettlePlanByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.settlePlan])))
+      setSettlePlanErrorByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.settlePlanError])))
       setTotals({
         owedToMe: allBalances.filter((b) => b.toUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
         iOwe: allBalances.filter((b) => b.fromUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
@@ -133,6 +156,25 @@ export function SharedPage() {
       throw err
     }
   }, [updateTransaction, loadAll, addToast])
+
+  // Opens the SAME SettleUpDialog the Balances card's settle action uses,
+  // prefilled from the plan's transfer rather than a balances row — only
+  // valid for `direct` transfers, where the debtor already owes the
+  // creditor enough on today's bilateral graph for the existing endpoint to
+  // clear it.
+  const handleSettleDirect = (groupId: string, transfer: SettleTransfer) => {
+    setSettleTarget({
+      groupId,
+      balance: {
+        fromUserId: transfer.fromUserId,
+        fromUsername: transfer.fromUsername,
+        toUserId: transfer.toUserId,
+        toUsername: transfer.toUsername,
+        amount: transfer.amount,
+      },
+      range: { dateFrom: '', dateTo: '' },
+    })
+  }
 
   const handleUndoSettlement = async (id: string) => {
     setUndoError(null)
@@ -325,6 +367,18 @@ export function SharedPage() {
           onReviewPayment={(s) => setConfirmTarget(s)}
           onMarkAll={() => setMarkAllOpen(true)}
         />
+
+        {groups.map((group) => (
+          <SettleGroupPlan
+            key={group.id}
+            groupId={group.id}
+            groupName={groups.length > 1 ? group.name : undefined}
+            plan={settlePlanByGroup[group.id] ?? null}
+            error={!!settlePlanErrorByGroup[group.id]}
+            currentUserId={currentUserId}
+            onSettleDirect={handleSettleDirect}
+          />
+        ))}
 
         {pairings.length > 0 && (
           <SharedActivity

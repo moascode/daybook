@@ -111,6 +111,24 @@ export interface GroupBalance {
   unreviewedAmount?: number
 }
 
+// GET /groups/:id/settle-plan (FEAT-024 PR B) — the minimum-transfer plan for
+// a whole group. `direct` transfers execute through the existing, unchanged
+// POST /settlements; non-direct ones need the three-party settlement in
+// FEAT-024 §3 (PR C, not yet built).
+export interface SettleTransfer {
+  fromUserId: string
+  fromUsername: string
+  toUserId: string
+  toUsername: string
+  amount: number
+  direct: boolean
+}
+
+export interface SettlePlan {
+  transfers: SettleTransfer[]
+  pairwiseCount: number
+}
+
 export interface Settlement {
   id: string
   groupId: string
