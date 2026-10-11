@@ -21,6 +21,7 @@ import {
 import { canonicalMerchant, canonicalizeMerchantForDisplay, correctionKey, buildDuplicateKey } from '../lib/merchant.ts'
 import { builtinCategory } from '../lib/merchant-map.ts'
 import { overRateLimit } from '../lib/rate-limit.ts'
+import { isValidIsoDate } from '../lib/iso-date.ts'
 import { insertTransactionStmt } from '../lib/insert-transaction.ts'
 import {
   suggestCategoriesWithAI,
@@ -520,11 +521,7 @@ function transactionInputError(
     if (!Number.isFinite(amt) || amt <= 0) return 'amount must be a positive number'
   }
   if (!partial || has('date')) {
-    if (
-      typeof b.date !== 'string' ||
-      !ISO_DATE_RE.test(b.date) ||
-      Number.isNaN(Date.parse(b.date))
-    ) {
+    if (!isValidIsoDate(b.date)) {
       return 'date must be an ISO date (YYYY-MM-DD)'
     }
   }
@@ -2965,7 +2962,7 @@ const RECURRING_FREQS = new Set(['monthly', 'weekly'])
 // transactions on every boot via /recurring-transactions/process, so both are
 // validated like transactions (C2) — not left to the client-side form guard.
 function isoDateError(v: unknown, field: string): string | null {
-  if (typeof v !== 'string' || !ISO_DATE_RE.test(v) || Number.isNaN(Date.parse(v))) {
+  if (!isValidIsoDate(v)) {
     return `${field} must be an ISO date (YYYY-MM-DD)`
   }
   return null
