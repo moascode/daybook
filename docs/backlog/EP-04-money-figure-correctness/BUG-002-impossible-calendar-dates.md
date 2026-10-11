@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-04](README.md) · **Severity:** medium
+> **Status:** Fixed · **Filed:** 2026-09-16 · **Epic:** [EP-04](README.md) · **Severity:** medium
 
 # BUG-002 — ISO date validation accepts impossible calendar dates
 
@@ -22,4 +22,13 @@ input.
 
 **Out of scope.** Any other validation rework.
 
-**Still needed?** **Yes** — silently relocates a transaction
+**Fixed.** `worker/lib/iso-date.ts` adds `isValidIsoDate()`, which round-trips
+the input through `Date.UTC` and rejects it unless the re-serialised date
+matches byte-for-byte. Both `transactionInputError` and `isoDateError` in
+`worker/routes/wallet.ts` now call it instead of the `ISO_DATE_RE.test(v) &&
+!Number.isNaN(Date.parse(v))` check. Covered by `worker/lib/iso-date.test.ts`
+(unit) and `e2e/107-iso-date-validation.spec.ts` (API-level, both
+`/transactions` and `/recurring-transactions`). Branch:
+`fix/bug-002-iso-validation`.
+
+**Still needed?** No — fixed.
