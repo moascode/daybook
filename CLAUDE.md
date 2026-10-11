@@ -393,7 +393,7 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.13.0`** (2026-09-21). The full table with dates and contents
+**Latest tag: `v3.15.0`** (2026-10-12). The full table with dates and contents
 is in [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
@@ -474,7 +474,6 @@ File new ones with the `intake` skill.
 | | |
 |---|---|
 | [BUG-001](docs/backlog/EP-05-production-hardening/BUG-001-no-rate-limiting.md) | No rate limiting on the public URL — the oldest open risk on a live money app |
-| [BUG-002](docs/backlog/EP-04-money-figure-correctness/BUG-002-impossible-calendar-dates.md) | ISO validation accepts Feb 30 / Apr 31 |
 | [BUG-004](docs/backlog/EP-05-production-hardening/BUG-004-e2e-account-residue.md) | `e2e_*` account residue on the retired Mac |
 
 Not a bug, and not to be "fixed": `manifest.json`'s `background_color` cannot
@@ -488,9 +487,9 @@ follow the theme. The launch *image* does, since v3 P5. See
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
 3. **Ready to build, no sign-off needed:**
-   [EP-04](docs/backlog/EP-04-money-figure-correctness/README.md) (two money-figure bugs),
-   and [EP-06](docs/backlog/EP-06-wallet-depth/README.md) (Wallet depth — all reads
-   over existing rows, no schema). The old deferred F1–F3 waves **already shipped**;
+   [EP-06](docs/backlog/EP-06-wallet-depth/README.md)'s remaining FEAT-025 (split rules).
+   EP-04's two money-figure bugs and FEAT-024 (three-way settlement) shipped in
+   `v3.15.0`. The old deferred F1–F3 waves **already shipped**;
    [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) carries the evidence.
    EP-02 (Wallet UX remainder) **shipped 2026-09-18** — PRs #209–#211, see
    [`docs/archive/ep-02-wallet-ux-remainder/`](docs/archive/ep-02-wallet-ux-remainder/README.md).

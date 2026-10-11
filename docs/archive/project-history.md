@@ -22,7 +22,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-09-21. Regenerate with:
+Reconciled against `git tag` on 2026-10-12. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -30,6 +30,8 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.15.0 | 2026-10-12 | FEAT-024 three-way settlement + minimum-transfer plan; BUG-002 impossible dates rejected; BUG-003 day headers pinned; Tasks + Wallet design parity (FEAT-054–070); Today refetch race (#236–#260) |
+| v3.14.0 | 2026-09-22 | Task detail modal, Tasks composer fixes, BUG-013 grid fix (#231–#235) |
 | v3.13.0 | 2026-09-21 | EP-07 Tasks depth: recurrence, habits, completed analytics, wallet chips, inline row editing, list management (#223–#230) |
 | v3.12.2 | 2026-09-13 | Capture endpoint accepts currency-formatted amounts (#198) |
 | v3.12.1 | 2026-09-08 | Three R17 phone regressions + `release.yml` manual-dispatch path (#196, #197) |
@@ -999,3 +1001,12 @@ in PR #230, along with three lower-severity findings from the same pass
 (a habit's current streak reading 0 all day until ticked; `POST /tasks`
 skipping validation `PATCH /tasks/:id` already had; undo-restore dropping a
 deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
+
+## 2026-10-12 — FEAT-024 + EP-04, shipped as v3.15.0 (PRs #254–#260)
+
+- **BUG-002** (#254): dates are validated by round-trip, so Feb 30 / Apr 31 are rejected instead of silently relocated.
+- **BUG-003** (#255): audited — day headers already used `countableAmount` since v2.0.0; a regression spec now pins it. Settling on the *same* day as the expense cannot catch the bug (the two errors cancel), so the spec settles on a later day.
+- **FEAT-024** (#256 algorithm, #257 plan card, #260 three-way settlement): the minimum-transfer plan, and chains where A pays C to clear A→B and B→C. Every party confirms. Additive migration `0028_settlement_chains`. Review before PR found and fixed four concurrency bugs (reject vs final confirm, resurrection on compensation, concurrent-confirm deadlock, over-settlement via the legacy share-settle route).
+- **CI** (#258, #259): `main` had been red since #252 — a Today-page refetch race that dropped a new task's date, a spec that failed every Sunday, and a dashboard spec that counted cards before they rendered.
+- `v3.14.0` had been tagged and deployed on 2026-09-22 but was missing from the release table and from CLAUDE.md §8; both reconciled here.
+- Follow-ups: the nav claim badge doesn't count chains awaiting the viewer; bilateral `/settlements/:id/confirm` shares the over-settlement gap (filed as a separate task).

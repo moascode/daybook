@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md)
+> **Status:** Fixed · **Filed:** 2026-09-16 · **Epic:** [EP-06](README.md)
 
 # FEAT-024 — Shared: group-wide minimum-transfer set
 
