@@ -33,6 +33,7 @@ run "typecheck (client)"  npx tsc -b
 run "typecheck (server)"  npm run typecheck:server
 run "typecheck (worker)"  npm run typecheck:worker
 run "lint"                npm run lint
+run "unit tests"          npm run test:unit
 run "doc links"           npm run check:doc-links
 run "backlog index"       npm run check:backlog
 run "contrast (WCAG AA)"  npm run check:contrast

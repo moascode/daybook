@@ -82,12 +82,32 @@ export function TasksTodayPage() {
     }
   }, [shouldFocusComposer, handledFocusKey, location, navigate, loading])
 
+  // `useTasks()`/`useTaskLists()` re-derive `loadTasks`/`loadTaskLists`/
+  // `addToast` on every render of ANY subscriber to the tasks store,
+  // including this page's own store mutations (e.g. `addTask` inside
+  // `handleCreateTask`). Depending on those identities directly re-fires the
+  // mount effect below every time a task is added — the resulting refetch
+  // can land between `addTask`'s POST and `handleCreateTask`'s follow-up
+  // PATCH and overwrite the just-created task with its pre-PATCH (no due
+  // date) snapshot, so a composer-created task silently vanishes from every
+  // group on this page even though it did save. Refs keep the effect's
+  // dependency array empty (TasksUpcomingPage.tsx/TasksAllPage.tsx have the
+  // same pattern/comment).
+  const loadTasksRef = useRef(loadTasks)
+  const loadTaskListsRef = useRef(loadTaskLists)
+  const addToastRef = useRef(addToast)
+  useEffect(() => {
+    loadTasksRef.current = loadTasks
+    loadTaskListsRef.current = loadTaskLists
+    addToastRef.current = addToast
+  })
+
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      loadTasks('all'),
-      loadTasks('completed'),
-      loadTaskLists(),
+      loadTasksRef.current('all'),
+      loadTasksRef.current('completed'),
+      loadTaskListsRef.current(),
       api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
     ])
       .then(([open, done, , memberRows]) => {
@@ -98,7 +118,7 @@ export function TasksTodayPage() {
       })
       .catch((err) => {
         if (cancelled) return
-        addToast({ message: errorMessage(err, 'Could not load your tasks.') })
+        addToastRef.current({ message: errorMessage(err, 'Could not load your tasks.') })
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -106,7 +126,7 @@ export function TasksTodayPage() {
     return () => {
       cancelled = true
     }
-  }, [loadTasks, loadTaskLists, addToast])
+  }, [])
 
   const today = todayISO()
   const todayLabel = format(parseISO(today), 'EEEE d MMMM')

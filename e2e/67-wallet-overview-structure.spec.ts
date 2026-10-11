@@ -403,6 +403,10 @@ test.describe('wallet overview structure (R3 PR-2)', () => {
     await waitForApp(page)
 
     const containers = page.locator('[data-testid="featured-account"], [data-testid="recent-activity"]')
+    // count() is a snapshot, not a wait: read before the dashboard's data
+    // lands and it returns 0 (failed 5/10 locally). Wait for both first.
+    await expect(page.getByTestId('featured-account')).toBeVisible()
+    await expect(page.getByTestId('recent-activity')).toBeVisible()
     const containerCount = await containers.count()
     expect(containerCount).toBeGreaterThan(0)
     const viewport = page.viewportSize()!
