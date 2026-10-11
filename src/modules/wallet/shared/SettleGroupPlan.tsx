@@ -55,19 +55,19 @@ export function SettleGroupPlan({ groupId, groupName, plan, error, currentUserId
           const isPayee = t.toUserId === currentUserId
           return (
             <div className="prow" key={`${t.fromUserId}:${t.toUserId}`} data-testid="settle-plan-row">
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="pname">{t.fromUsername} pays {t.toUsername}</div>
+              <div className="min-w-0 flex-1">
+                <div className="pname truncate">{t.fromUsername} pays {t.toUsername}</div>
+                {!t.direct && (
+                  <div className="text-xs text-fg-subtle">Needs a three-way settlement — not available yet</div>
+                )}
               </div>
-              <div className="pamt">{formatMYR(t.amount)}</div>
+              <div className="pamt whitespace-nowrap">{formatMYR(t.amount)}</div>
               {t.direct ? (
                 (isPayer || isPayee) && (
                   <Button size="sm" onClick={() => onSettleDirect(groupId, t)}>Settle</Button>
                 )
               ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-fg-subtle">Needs a three-way settlement — not available yet</span>
-                  <Button size="sm" variant="secondary" disabled>Settle</Button>
-                </div>
+                <Button size="sm" variant="secondary" disabled>Settle</Button>
               )}
             </div>
           )
