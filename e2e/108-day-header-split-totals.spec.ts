@@ -11,7 +11,7 @@ test.describe.configure({ mode: 'serial' })
 // countableAmount() since 42c1a1c (v2.0.0), so this pins that behaviour rather
 // than fixing it; see BUG-003's resolution note for why the bug's original
 // "should show half right after splitting" repro was wrong.
-test.describe('107 — Day header totals follow splits', () => {
+test.describe('108 — Day header totals follow splits', () => {
   test('an unsettled split still shows the full expense (§9.1)', async ({ browser }) => {
     const aliceCtx = await browser.newContext()
     const bobCtx = await browser.newContext()

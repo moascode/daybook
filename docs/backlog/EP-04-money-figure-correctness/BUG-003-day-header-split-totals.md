@@ -30,7 +30,7 @@ the dashboard now does.
 **Still needed?** Fixed — `TransactionList.tsx`'s `groupByDay()` was already
 routing day totals through `countableAmount()` as of 42c1a1c (v2.0.0), before
 this item was filed; the fix shipped, the audit just hadn't caught up. This PR
-adds the missing regression coverage (`e2e/107-day-header-split-totals.spec.ts`)
+adds the missing regression coverage (`e2e/108-day-header-split-totals.spec.ts`)
 rather than touching the logic.
 
 The repro above ("header should show half right after splitting") contradicts
