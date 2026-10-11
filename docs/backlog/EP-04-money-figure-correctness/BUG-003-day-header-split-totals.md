@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-16 · **Epic:** [EP-04](README.md) · **Severity:** medium
+> **Status:** Fixed · **Filed:** 2026-09-16 · **Epic:** [EP-04](README.md) · **Severity:** medium
 
 # BUG-003 — Transaction-list day headers may double-count splits
 
@@ -27,4 +27,23 @@ the dashboard now does.
 
 **Out of scope.** Re-auditing the dashboard — PR #106 covered it.
 
-**Still needed?** **Yes** — first step is confirming it is real
+**Still needed?** Fixed — `TransactionList.tsx`'s `groupByDay()` was already
+routing day totals through `countableAmount()` as of 42c1a1c (v2.0.0), before
+this item was filed; the fix shipped, the audit just hadn't caught up. This PR
+adds the missing regression coverage (`e2e/108-day-header-split-totals.spec.ts`)
+rather than touching the logic.
+
+The repro above ("header should show half right after splitting") contradicts
+decision §9.1: an unsettled split leaves the FULL amount on the payer, so there
+is nothing to disagree with the dashboard about at that point — both read the
+same gross-equals-effective figure. The new spec instead pins the two shapes
+that actually exercise `countableAmount()`'s branches: an unsettled split
+(still full, documenting §9.1) and a split settled on a LATER date than the
+expense. Settling on the SAME day the expense was booked cannot distinguish
+the bug from the fix — the settlement's balance-only income leg and the
+expense's reduced effective amount cancel out to the identical net either way
+(`settledAmount - grossAmount`, whether you get there via `effectiveAmount`
+minus a zeroed balance-only leg, or via raw `t.amount` minus an uncredited one).
+Only a different-day settlement exposes the divergence, which is what the
+added spec builds. Verified to fail against `t.amount` (the pre-fix read) and
+pass against `countableAmount(t)`.

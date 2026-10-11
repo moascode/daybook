@@ -16,7 +16,7 @@ that survives indefinitely because no one is looking.
 | ID | Title | Still needed? |
 |---|---|---|
 | [BUG-002](BUG-002-impossible-calendar-dates.md) | ISO validation accepts Feb 30 / Apr 31 | **Yes** — silently relocates a transaction to another day |
-| [BUG-003](BUG-003-day-header-split-totals.md) | Day headers may double-count splits | **Yes** — and the first step is confirming whether it's real |
+| [BUG-003](BUG-003-day-header-split-totals.md) | Day headers may double-count splits | Fixed — regression spec added, no logic change needed |
 
 > Both are also listed in the design-adoption plan as things a public `v4.0.0`
 > should not ship without ([EP-10](../EP-10-cross-cutting/README.md)). They are tracked
