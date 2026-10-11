@@ -82,8 +82,7 @@ open once you already knew to look.
 - **Never read `t.amount` for anything a user compares.** A split transaction's
   effective figure is not its gross. A split RM100 expense once read RM50 in a
   tile and RM100 in the chart directly beneath it. Route everything through
-  `countableAmount`. ⚠️ `TransactionList.tsx` day headers are **still unaudited**
-  for this — see §8.
+  `countableAmount`.
 - **`POST /settlements` is hand-built for concurrency. Do not "simplify" it.**
   D1 has no interactive transactions, so it hoists every read, computes the
   write set in JS, then issues one `batch()` whose split updates are
@@ -476,7 +475,6 @@ File new ones with the `intake` skill.
 |---|---|
 | [BUG-001](docs/backlog/EP-05-production-hardening/BUG-001-no-rate-limiting.md) | No rate limiting on the public URL — the oldest open risk on a live money app |
 | [BUG-002](docs/backlog/EP-04-money-figure-correctness/BUG-002-impossible-calendar-dates.md) | ISO validation accepts Feb 30 / Apr 31 |
-| [BUG-003](docs/backlog/EP-04-money-figure-correctness/BUG-003-day-header-split-totals.md) | Day headers may double-count splits (§3 trap) |
 | [BUG-004](docs/backlog/EP-05-production-hardening/BUG-004-e2e-account-residue.md) | `e2e_*` account residue on the retired Mac |
 
 Not a bug, and not to be "fixed": `manifest.json`'s `background_color` cannot
