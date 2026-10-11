@@ -426,79 +426,46 @@ settlementChains.get('/settlement-chains', async (c) => {
 })
 
 /**
- * POST /settlement-chains/:id/confirm — a non-payer party confirms, picking
- * their own account. The LAST unconfirmed party's confirmation is what
- * actually executes the write set (CLAUDE.md §3 discipline): hoist every
- * read, compute the whole write set in JS, one batch(), inspect
- * meta.changes on every guarded statement, compensate on any miss.
+ * Finalizes a chain once every party has confirmed: hoists EVERY read fresh
+ * from the DB — never from the calling request — because by the time this
+ * runs any party's account_id (including the caller's own) has already been
+ * stored by the guarded party UPDATE in the route handler below. Computes
+ * the whole write set in JS, issues ONE batch() guarded by a `confirmedAt`
+ * value minted just for this attempt, and compensates on any miss.
+ *
+ * FINDING 2: a losing concurrent attempt's own chain-guard UPDATE affects 0
+ * rows, but by the time ITS hop-row UPDATEs run (later in that same losing
+ * batch) `settlement_chains.status` already reads 'confirmed' — set by
+ * whichever attempt actually won, in an already-committed batch. A plain
+ * `status = 'confirmed'` EXISTS check cannot tell "I won" from "someone else
+ * won", so the hop-row guard instead checks `confirmed_at = <this attempt's
+ * own value>` — a value only the winning attempt could have written.
+ *
+ * FINDING 3: returns 'confirmed' (this call finalized it), 'already'
+ * (someone else's concurrent call won, or the chain was already confirmed by
+ * the time this was checked), or 'conflict' (a split moved out from under
+ * this chain; nothing was applied, the chain is left exactly as it stood,
+ * and the caller should surface 409 — retryable, since no party's own
+ * confirmation is undone by this failure, see the route handler).
  */
-settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
-  const callerId = c.get('userId')
-  const db = c.env.DB
-  const id = c.req.param('id')
-  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
-  const accountId = String(b.accountId ?? '')
+async function finalizeChain(
+  db: D1Database,
+  chainId: string,
+): Promise<'confirmed' | 'already' | 'conflict'> {
+  const statusRow = await db
+    .prepare('SELECT status FROM settlement_chains WHERE id = ?')
+    .bind(chainId)
+    .first<{ status: string }>()
+  if (!statusRow) return 'conflict'
+  if (statusRow.status === 'confirmed') return 'already'
+  if (statusRow.status !== 'awaiting_confirmation') return 'conflict'
 
   const row = await db
-    .prepare(
-      `SELECT sc.id, sc.group_id, sc.payer_id, sc.payee_id, sc.amount, sc.status,
-              scp.confirmed_at AS my_confirmed_at
-         FROM settlement_chains sc
-         JOIN settlement_chain_parties scp ON scp.chain_id = sc.id AND scp.user_id = ?
-        WHERE sc.id = ?`,
-    )
-    .bind(callerId, id)
-    .first<{
-      id: string
-      group_id: string
-      payer_id: string
-      payee_id: string
-      amount: number
-      status: string
-      my_confirmed_at: string | null
-    }>()
-  // 404 for anyone who is not a party — a chain id must not be probeable, and
-  // a group member who isn't on this chain gets the same answer.
-  if (!row) return c.json({ error: 'settlement chain not found' }, 404)
-  if (row.status !== 'awaiting_confirmation') {
-    return c.json({ error: `this settlement is already ${row.status}` }, 409)
-  }
-  if (row.my_confirmed_at) {
-    return c.json({ error: 'you have already confirmed this settlement' }, 409)
-  }
-  if (!accountId) return c.json({ error: 'accountId is required' }, 400)
-  if (!(await canWriteAccount(db, callerId, accountId))) {
-    return c.json({ error: 'you do not have write access to the selected account' }, 400)
-  }
-  const acct = await db
-    .prepare('SELECT user_id FROM accounts WHERE id = ?')
-    .bind(accountId)
-    .first<{ user_id: string }>()
-  if (!acct) return c.json({ error: 'account not found' }, 400)
+    .prepare('SELECT payer_id, payee_id, amount FROM settlement_chains WHERE id = ?')
+    .bind(chainId)
+    .first<{ payer_id: string; payee_id: string; amount: number }>()
+  if (!row) return 'conflict'
 
-  const { results: unconfirmed } = await db
-    .prepare(
-      `SELECT user_id FROM settlement_chain_parties WHERE chain_id = ? AND confirmed_at IS NULL`,
-    )
-    .bind(id)
-    .all<{ user_id: string }>()
-  const isLast = unconfirmed.length === 1 && unconfirmed[0].user_id === callerId
-
-  if (!isLast) {
-    const res = await db
-      .prepare(
-        `UPDATE settlement_chain_parties SET confirmed_at = datetime('now'), account_id = ?
-          WHERE chain_id = ? AND user_id = ? AND confirmed_at IS NULL`,
-      )
-      .bind(accountId, id, callerId)
-      .run()
-    if (!res.meta.changes) {
-      return c.json({ error: 'this settlement changed while confirming it; please retry' }, 409)
-    }
-    return c.json({ status: 'awaiting_confirmation' })
-  }
-
-  // ── Last confirmation: hoist every read ──────────────────────
   const { results: lines } = await db
     .prepare(
       `SELECT l.settlement_id, l.share_id, l.amount, l.offset_amount,
@@ -509,7 +476,7 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
          JOIN transactions t ON t.id = ts.transaction_id
         WHERE s.chain_id = ?`,
     )
-    .bind(id)
+    .bind(chainId)
     .all<{
       settlement_id: string
       share_id: string
@@ -534,16 +501,17 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
 
   const { results: hopRows } = await db
     .prepare(`SELECT id, from_user, to_user FROM settlements WHERE chain_id = ?`)
-    .bind(id)
+    .bind(chainId)
     .all<{ id: string; from_user: string; to_user: string }>()
 
   const { results: partyRows } = await db
     .prepare(`SELECT user_id, account_id FROM settlement_chain_parties WHERE chain_id = ?`)
-    .bind(id)
+    .bind(chainId)
     .all<{ user_id: string; account_id: string | null }>()
-  const accountOf = new Map<string, string>(
-    partyRows.map((p) => [p.user_id, p.user_id === callerId ? accountId : (p.account_id ?? '')]),
-  )
+  // Every party's account — all read fresh from the DB, including the party
+  // that triggered this finalize: their own account_id was already stored by
+  // the route handler's guarded UPDATE before finalizeChain was ever called.
+  const accountOf = new Map<string, string>(partyRows.map((p) => [p.user_id, p.account_id ?? '']))
 
   const names = await usernamesOf(db, [row.payer_id, row.payee_id])
 
@@ -556,10 +524,9 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
     return { shareId, previous, next: cents(previous + delta), offset: offsetDelta }
   })
 
-  // Every account chosen by any party (caller's just-submitted one, or the
-  // ones already stored from earlier confirms), resolved to its actual
-  // owner in one query — each leg is booked on the account its owner
-  // actually owns, same as the bilateral path's callerAccountOwner lookups.
+  // Every account chosen by any party, resolved to its actual owner in one
+  // query — each leg is booked on the account its owner actually owns, same
+  // as the bilateral path's callerAccountOwner lookups.
   const acctIds = [...new Set([...accountOf.values()].filter((v) => v))]
   const ownerOfAccount = new Map<string, string>()
   if (acctIds.length) {
@@ -599,7 +566,21 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
   const payeeTxnId = row.amount > 0.005 ? newId() : null
   const firstPayeeHopId = hopRows.find((x) => x.to_user === row.payee_id)?.id ?? null
 
+  // Minted once and reused on every statement below instead of calling
+  // datetime('now') inline — the single value this specific attempt "owns",
+  // which is what lets the hop-row guard (FINDING 2) and this attempt's own
+  // identity be checked later in the same batch.
+  const confirmedAt = (await db.prepare(`SELECT datetime('now') AS t`).first<{ t: string }>())!.t
+
   const writes = [
+    // FINDING 4: the legacy POST /transaction-shares/:id/settle can move
+    // settled_amount (and settled_at) on a split this chain also touches,
+    // without changing status — so `status IN (...) AND settled_amount = ?`
+    // alone can still match (this hoisted read simply sees the legacy write
+    // as "current") while this write would still push the split past its
+    // share_amount. `settled_at IS NULL` catches the legacy write directly;
+    // the share_amount cap catches it even if some other path ever clears
+    // settled_at without resetting the amount.
     ...applied.map((a) =>
       db
         .prepare(
@@ -607,22 +588,17 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
               SET settled_amount = ?,
                   offset_amount = ROUND(offset_amount + ?, 2),
                   status = CASE WHEN ? >= share_amount THEN 'settled' ELSE 'approved' END,
-                  settled_at = CASE WHEN ? >= share_amount THEN datetime('now') ELSE NULL END
-            WHERE id = ? AND status IN ('pending', 'approved') AND settled_amount = ?`,
+                  settled_at = CASE WHEN ? >= share_amount THEN ? ELSE NULL END
+            WHERE id = ? AND status IN ('pending', 'approved') AND settled_amount = ?
+              AND settled_at IS NULL AND ? <= share_amount + 0.005`,
         )
-        .bind(a.next, a.offset, a.next, a.next, a.shareId, a.previous),
+        .bind(a.next, a.offset, a.next, a.next, confirmedAt, a.shareId, a.previous, a.next),
     ),
     db
       .prepare(
-        `UPDATE settlement_chains SET status = 'confirmed', confirmed_at = datetime('now') WHERE id = ? AND status = 'awaiting_confirmation'`,
+        `UPDATE settlement_chains SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'awaiting_confirmation'`,
       )
-      .bind(id),
-    db
-      .prepare(
-        `UPDATE settlement_chain_parties SET confirmed_at = datetime('now'), account_id = ?
-          WHERE chain_id = ? AND user_id = ? AND confirmed_at IS NULL`,
-      )
-      .bind(accountId, id, callerId),
+      .bind(confirmedAt, chainId),
     ...[...intermediaryLegs.entries()].map(([uid, leg]) =>
       insertTxn(
         db, leg.txnId, ownerOfUser(uid), accountOf.get(uid) ?? '',
@@ -639,6 +615,10 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
           ),
         ]
       : []),
+    // FINDING 2: guarded so these only take effect when THIS attempt's own
+    // chain-guard write above is the one that won — see the function
+    // comment for why a plain status check cannot tell that apart from a
+    // concurrent winner's already-committed write.
     ...hopRows.map((h) => {
       const leg = intermediaryLegs.get(h.from_user)
       const isPayeeHop = h.to_user === row.payee_id && h.id === firstPayeeHopId
@@ -647,9 +627,15 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
           `UPDATE settlements SET status = 'confirmed',
                   offset_from_transaction_id = CASE WHEN ? = 1 THEN ? ELSE offset_from_transaction_id END,
                   to_transaction_id = CASE WHEN ? = 1 THEN ? ELSE to_transaction_id END
-            WHERE id = ?`,
+            WHERE id = ? AND status = 'awaiting_confirmation'
+              AND EXISTS (
+                SELECT 1 FROM settlement_chains WHERE id = ? AND status = 'confirmed' AND confirmed_at = ?
+              )`,
         )
-        .bind(leg ? 1 : 0, leg?.txnId ?? null, isPayeeHop ? 1 : 0, isPayeeHop ? payeeTxnId : null, h.id)
+        .bind(
+          leg ? 1 : 0, leg?.txnId ?? null, isPayeeHop ? 1 : 0, isPayeeHop ? payeeTxnId : null,
+          h.id, chainId, confirmedAt,
+        )
     }),
   ]
 
@@ -665,24 +651,33 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
     ]
     await db.batch([
       ...insertedTxnIds.map((txnId) => db.prepare('DELETE FROM transactions WHERE id = ?').bind(txnId)),
-      db
-        .prepare(
-          `UPDATE settlement_chains SET status = 'awaiting_confirmation', confirmed_at = NULL WHERE id = ?`,
-        )
-        .bind(id),
-      db
-        .prepare(
-          `UPDATE settlement_chain_parties SET confirmed_at = NULL, account_id = NULL
-            WHERE chain_id = ? AND user_id = ?`,
-        )
-        .bind(id, callerId),
-      db
-        .prepare(
-          `UPDATE settlements SET status = 'awaiting_confirmation',
-                  offset_from_transaction_id = NULL, to_transaction_id = NULL
-            WHERE chain_id = ?`,
-        )
-        .bind(id),
+      // Only this attempt's own win is this attempt's to unwind. When the
+      // chain guard itself missed, nothing chain-shaped was touched by this
+      // attempt (the EXISTS-guarded hop writes above are a no-op in that
+      // case too, by construction), so there is nothing to restore here —
+      // doing so unconditionally is exactly what used to resurrect a chain a
+      // concurrent reject had already won (FINDING 2).
+      ...(chainGuardOk
+        ? [
+            db
+              .prepare(
+                `UPDATE settlement_chains SET status = 'awaiting_confirmation', confirmed_at = NULL
+                  WHERE id = ? AND status = 'confirmed'`,
+              )
+              .bind(chainId),
+            db
+              .prepare(
+                `UPDATE settlements SET status = 'awaiting_confirmation',
+                        offset_from_transaction_id = NULL, to_transaction_id = NULL
+                  WHERE chain_id = ? AND status = 'confirmed'`,
+              )
+              .bind(chainId),
+          ]
+        : []),
+      // Note: no party_chain_parties restore here. Party confirmation is
+      // written by the route handler as its own immediate, guarded statement
+      // BEFORE finalizeChain is ever called, and it is deliberately never
+      // undone by a failed finalize — see FINDING 3's comment on the route.
       ...survivors.map((a) =>
         db
           .prepare(
@@ -695,11 +690,111 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
       ),
     ])
     console.warn(
-      `settlement chain ${id} confirm rolled back: chain guard ${chainGuardOk}, ${splitGuardsLost.length}/${applied.length} split guards lost a race`,
+      `settlement chain ${chainId} confirm rolled back: chain guard ${chainGuardOk}, ${splitGuardsLost.length}/${applied.length} split guards lost a race`,
     )
-    return c.json({ error: 'this settlement changed while confirming it; please retry' }, 409)
+    if (!chainGuardOk) {
+      // Distinguish "a concurrent finalize already won" (the chain is really
+      // confirmed — report success) from "the chain was rejected/cancelled
+      // out from under us" (report conflict).
+      const after = await db
+        .prepare('SELECT status FROM settlement_chains WHERE id = ?')
+        .bind(chainId)
+        .first<{ status: string }>()
+      return after?.status === 'confirmed' ? 'already' : 'conflict'
+    }
+    return 'conflict'
   }
 
+  return 'confirmed'
+}
+
+/**
+ * POST /settlement-chains/:id/confirm — a non-payer party confirms, picking
+ * their own account.
+ *
+ * FINDING 3: this used to decide "am I the last unconfirmed party" from a
+ * snapshot taken before any write, then bundle that party's own confirmation
+ * into the SAME batch as finalization. If two parties both still appeared
+ * unconfirmed to each other at that snapshot (a genuine concurrent confirm),
+ * BOTH took the non-last path and nobody ever finalized — a deadlock. The
+ * party-row write below is now its own immediate, guarded statement, always
+ * sticking whatever happens next; finalization is driven off a FRESH
+ * re-count of who is still unconfirmed, taken right after that write. And
+ * because the party write and finalizeChain are no longer one unit, a failed
+ * finalize (FINDING 2) never has to undo this party's own confirmation —
+ * which is what makes the retry below possible at all.
+ */
+settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
+  const callerId = c.get('userId')
+  const db = c.env.DB
+  const id = c.req.param('id')
+  const b = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  const accountId = String(b.accountId ?? '')
+
+  const row = await db
+    .prepare(
+      `SELECT sc.id, sc.status, scp.confirmed_at AS my_confirmed_at
+         FROM settlement_chains sc
+         JOIN settlement_chain_parties scp ON scp.chain_id = sc.id AND scp.user_id = ?
+        WHERE sc.id = ?`,
+    )
+    .bind(callerId, id)
+    .first<{ id: string; status: string; my_confirmed_at: string | null }>()
+  // 404 for anyone who is not a party — a chain id must not be probeable, and
+  // a group member who isn't on this chain gets the same answer.
+  if (!row) return c.json({ error: 'settlement chain not found' }, 404)
+  if (row.status !== 'awaiting_confirmation') {
+    return c.json({ error: `this settlement is already ${row.status}` }, 409)
+  }
+  if (!accountId) return c.json({ error: 'accountId is required' }, 400)
+  if (!(await canWriteAccount(db, callerId, accountId))) {
+    return c.json({ error: 'you do not have write access to the selected account' }, 400)
+  }
+  const acct = await db
+    .prepare('SELECT user_id FROM accounts WHERE id = ?')
+    .bind(accountId)
+    .first<{ user_id: string }>()
+  if (!acct) return c.json({ error: 'account not found' }, 400)
+
+  if (row.my_confirmed_at) {
+    // Already confirmed by this party on an earlier call. If anyone else is
+    // still outstanding this is the ordinary "already confirmed" response;
+    // if nobody is, the chain is stuck awaiting — a previous finalize
+    // attempt (by this party or another) must have lost a split-guard race
+    // — and this retry is the only way to drive it forward. Any party,
+    // including one who already confirmed, may trigger finalizeChain here.
+    const { results: unconfirmed } = await db
+      .prepare(`SELECT user_id FROM settlement_chain_parties WHERE chain_id = ? AND confirmed_at IS NULL`)
+      .bind(id)
+      .all<{ user_id: string }>()
+    if (unconfirmed.length > 0) {
+      return c.json({ error: 'you have already confirmed this settlement' }, 409)
+    }
+  } else {
+    const res = await db
+      .prepare(
+        `UPDATE settlement_chain_parties SET confirmed_at = datetime('now'), account_id = ?
+          WHERE chain_id = ? AND user_id = ? AND confirmed_at IS NULL`,
+      )
+      .bind(accountId, id, callerId)
+      .run()
+    if (!res.meta.changes) {
+      // Lost to a concurrent confirm from this same party (a double-submit).
+      return c.json({ error: 'you have already confirmed this settlement' }, 409)
+    }
+    const { results: unconfirmed } = await db
+      .prepare(`SELECT user_id FROM settlement_chain_parties WHERE chain_id = ? AND confirmed_at IS NULL`)
+      .bind(id)
+      .all<{ user_id: string }>()
+    if (unconfirmed.length > 0) {
+      return c.json({ status: 'awaiting_confirmation' })
+    }
+  }
+
+  const result = await finalizeChain(db, id)
+  if (result === 'conflict') {
+    return c.json({ error: 'this settlement changed while confirming it; please retry' }, 409)
+  }
   return c.json({ id, status: 'confirmed' })
 })
 
@@ -708,6 +803,15 @@ settlementChains.post('/settlement-chains/:id/confirm', async (c) => {
  * the chain is still awaiting confirmation. Splits were never moved (only a
  * no-op probe ran at creation), so nothing needs reversing — just the
  * payer's cash leg and the rows.
+ *
+ * FINDING 1: the final confirm can commit between this handler's read of
+ * `row.status` and this batch — both reject and a last confirm act on the
+ * same awaiting chain, and only one may win. Unguarded, reject would delete
+ * the payer's cash leg and mark the chain rejected while every split a
+ * winning confirm just settled stays settled. So the chain row is the FIRST
+ * write (guarded on 'awaiting_confirmation'), and every later write is
+ * additionally self-guarded on that same chain now actually being
+ * 'rejected' — which only this statement, if it won, could have set.
  */
 settlementChains.post('/settlement-chains/:id/reject', async (c) => {
   const callerId = c.get('userId')
@@ -739,19 +843,39 @@ settlementChains.post('/settlement-chains/:id/reject', async (c) => {
     .all<{ id: string; from_transaction_id: string | null }>()
   const cashTxnId = hops.map((h) => h.from_transaction_id).find((x): x is string => !!x) ?? null
 
-  await db.batch([
+  const results = await db.batch([
+    db
+      .prepare(
+        `UPDATE settlement_chains SET status = 'rejected', rejected_reason = ?
+          WHERE id = ? AND status = 'awaiting_confirmation'`,
+      )
+      .bind(reason, id),
     ...(cashTxnId
-      ? [db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').bind(cashTxnId, row.payer_id)]
+      ? [
+          db
+            .prepare(
+              `DELETE FROM transactions WHERE id = ? AND user_id = ?
+                 AND EXISTS (SELECT 1 FROM settlement_chains WHERE id = ? AND status = 'rejected')`,
+            )
+            .bind(cashTxnId, row.payer_id, id),
+        ]
       : []),
     db
       .prepare(
-        `UPDATE settlements SET status = 'rejected', from_transaction_id = NULL WHERE chain_id = ?`,
+        `UPDATE settlements SET status = 'rejected', from_transaction_id = NULL
+          WHERE chain_id = ? AND status = 'awaiting_confirmation'
+            AND EXISTS (SELECT 1 FROM settlement_chains WHERE id = ? AND status = 'rejected')`,
       )
-      .bind(id),
-    db
-      .prepare(`UPDATE settlement_chains SET status = 'rejected', rejected_reason = ? WHERE id = ?`)
-      .bind(reason, id),
+      .bind(id, id),
   ])
+
+  if ((results[0]?.meta?.changes ?? 0) !== 1) {
+    const current = await db
+      .prepare('SELECT status FROM settlement_chains WHERE id = ?')
+      .bind(id)
+      .first<{ status: string }>()
+    return c.json({ error: `this settlement is already ${current?.status ?? 'confirmed'}` }, 409)
+  }
 
   return c.json({ id, status: 'rejected' })
 })
@@ -787,13 +911,35 @@ settlementChains.delete('/settlement-chains/:id', async (c) => {
       .bind(id)
       .all<{ from_transaction_id: string | null }>()
     const cashTxnId = hops.map((h) => h.from_transaction_id).find((x): x is string => !!x) ?? null
-    await db.batch([
+    // FINDING 1 (same shape as reject): a final confirm can commit between
+    // the read above and this batch. The chain delete is guarded on its own
+    // status; the cash-leg delete and the settlements delete are each
+    // self-guarded on the hop rows still being 'awaiting_confirmation' —
+    // confirm flips both the chain AND the settlements rows to 'confirmed'
+    // together in one winning batch, so if confirm won, every guard here
+    // misses and this cancel becomes a no-op instead of unwinding a
+    // settlement that already completed.
+    const results = await db.batch([
+      db.prepare(`DELETE FROM settlement_chains WHERE id = ? AND status = 'awaiting_confirmation'`).bind(id),
       ...(cashTxnId
-        ? [db.prepare('DELETE FROM transactions WHERE id = ? AND user_id = ?').bind(cashTxnId, row.payer_id)]
+        ? [
+            db
+              .prepare(
+                `DELETE FROM transactions WHERE id = ? AND user_id = ?
+                   AND EXISTS (SELECT 1 FROM settlements WHERE chain_id = ? AND status = 'awaiting_confirmation')`,
+              )
+              .bind(cashTxnId, row.payer_id, id),
+          ]
         : []),
-      db.prepare('DELETE FROM settlements WHERE chain_id = ?').bind(id),
-      db.prepare('DELETE FROM settlement_chains WHERE id = ?').bind(id),
+      db.prepare(`DELETE FROM settlements WHERE chain_id = ? AND status = 'awaiting_confirmation'`).bind(id),
     ])
+    if ((results[0]?.meta?.changes ?? 0) !== 1) {
+      const current = await db
+        .prepare('SELECT status FROM settlement_chains WHERE id = ?')
+        .bind(id)
+        .first<{ status: string }>()
+      return c.json({ error: `this settlement is already ${current?.status ?? 'confirmed'}` }, 409)
+    }
     return c.body(null, 204)
   }
 

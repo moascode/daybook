@@ -383,13 +383,159 @@ test.describe('110 — chain settlement', () => {
     expect(aSplit).toBeTruthy()
     expect(aSplit.settled_amount).toBeCloseTo(0, 2)
 
-    // Chain still awaiting, C still unconfirmed.
+    // Chain still awaiting. C's OWN confirmation is stored and stays stored
+    // even though finalization failed (FINDING 3): C did confirm, and a
+    // failed finalize must never undo that, or there would be no way for
+    // anyone to retry without C resubmitting. Only finalization's own
+    // effects (legs, splits, chain status) are rolled back.
     const chainsAfter = await f.c.page.request
       .get(`${API}/settlement-chains?groupId=${f.groupId}`)
       .then((r) => r.json()) as { id: string; status: string; parties: { userId: string; confirmed: boolean }[] }[]
     const chainRow = chainsAfter.find((c) => c.id === chainId)!
     expect(chainRow.status).toBe('awaiting_confirmation')
-    expect(chainRow.parties.find((p) => p.userId === f.c.id)!.confirmed).toBe(false)
+    expect(chainRow.parties.find((p) => p.userId === f.c.id)!.confirmed).toBe(true)
+
+    await closeTrio(f)
+  })
+
+  test('case 7: concurrent confirms — B and C confirm at the same time', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'concurrent')
+    const chainId = await startChain(f)
+
+    const [bRes, cRes] = await Promise.all([confirmChain(f.b, chainId), confirmChain(f.c, chainId)])
+    const statuses = [bRes.status(), cRes.status()].sort()
+    // Both requests must succeed in the HTTP sense — the old deadlock made
+    // both of them come back 'awaiting_confirmation' forever. Either one may
+    // be the one that actually finalizes (200 {status:'confirmed'}) and the
+    // other may see 'awaiting' if it lands first, but the chain must end up
+    // confirmed exactly once either way.
+    expect(statuses, `B=${await bRes.text()} C=${await cRes.text()}`).toEqual([200, 200])
+
+    const chains = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string; status: string }[]
+    expect(chains.find((c) => c.id === chainId)!.status).toBe('confirmed')
+
+    // Exactly one intermediary leg for B, one payee leg for C.
+    const bTxns = await transactionsOf(f.b)
+    expect(bTxns.filter((t) => t.description.startsWith('Settled by three-way settlement'))).toHaveLength(1)
+    const cTxns = await transactionsOf(f.c)
+    expect(cTxns.filter((t) => t.description.startsWith('Settlement from'))).toHaveLength(1)
+
+    // Splits settled exactly once, not double.
+    const bClaims = await creditorSettledSplits(f.b)
+    const cClaims = await creditorSettledSplits(f.c)
+    expect(bClaims).toHaveLength(1)
+    expect(bClaims[0]).toMatchObject({ status: 'settled', settled_amount: 40, share_amount: 40 })
+    expect(cClaims).toHaveLength(1)
+    expect(cClaims[0]).toMatchObject({ status: 'settled', settled_amount: 40, share_amount: 40 })
+
+    expect(await balances(f.a, f.groupId)).toEqual([])
+
+    await closeTrio(f)
+  })
+
+  test('case 8: retry after a split conflict stores the confirmation and does not deadlock', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'retry')
+    const chainId = await startChain(f)
+    await confirmChain(f.b, chainId)
+
+    const bOwesC = await f.b.page.request
+      .get(`${API}/transactions/splits/mine?state=awaiting_confirmation`)
+      .then((r) => r.json()) as { id: string; share_amount: number }[]
+    const victim = bOwesC.find((s) => s.share_amount === 40)!
+    await f.b.page.request.post(`${API}/test/force-settle-split`, { data: { splitId: victim.id } })
+
+    const first = await confirmChain(f.c, chainId)
+    expect(first.status(), await first.text()).toBe(409)
+
+    // C's confirmation is stored despite the conflict — the chain is NOT
+    // stuck with "already confirmed, no way forward": calling confirm again
+    // (from any party, including C) must drive finalizeChain again rather
+    // than hitting the old hard 409 "already confirmed" wall.
+    const afterFirst = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string; status: string; parties: { userId: string; confirmed: boolean }[] }[]
+    const rowAfterFirst = afterFirst.find((c) => c.id === chainId)!
+    expect(rowAfterFirst.status).toBe('awaiting_confirmation')
+    expect(rowAfterFirst.parties.find((p) => p.userId === f.c.id)!.confirmed).toBe(true)
+
+    // Retry: the split is still moved, so this is still a conflict — but it
+    // must be a real conflict response, never "already confirmed" with
+    // nothing left to do.
+    const retry = await confirmChain(f.c, chainId)
+    expect(retry.status(), await retry.text()).toBe(409)
+    expect(await retry.json()).not.toMatchObject({ error: 'you have already confirmed this settlement' })
+
+    const stillAwaiting = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string; status: string }[]
+    expect(stillAwaiting.find((c) => c.id === chainId)!.status).toBe('awaiting_confirmation')
+
+    await closeTrio(f)
+  })
+
+  test('case 9: reject after confirm is refused and changes nothing', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'reject-after-confirm')
+    const chainId = await startChain(f)
+    await confirmChain(f.b, chainId)
+    const cConfirm = await confirmChain(f.c, chainId)
+    expect(cConfirm.status(), await cConfirm.text()).toBe(200)
+
+    const reject = await f.b.page.request.post(`${API}/settlement-chains/${chainId}/reject`, {
+      data: { reason: 'too late' },
+    })
+    expect(reject.status(), await reject.text()).toBe(409)
+
+    // Nothing changed: payer leg still exists, splits still settled, chain
+    // still confirmed.
+    const aTxns = await transactionsOf(f.a)
+    expect(aTxns.find((t) => t.description.startsWith('Settlement to'))).toBeTruthy()
+    const bClaims = await creditorSettledSplits(f.b)
+    const cClaims = await creditorSettledSplits(f.c)
+    expect(bClaims).toHaveLength(1)
+    expect(bClaims[0]).toMatchObject({ status: 'settled', settled_amount: 40, share_amount: 40 })
+    expect(cClaims).toHaveLength(1)
+    expect(cClaims[0]).toMatchObject({ status: 'settled', settled_amount: 40, share_amount: 40 })
+
+    const chains = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string; status: string }[]
+    expect(chains.find((c) => c.id === chainId)!.status).toBe('confirmed')
+
+    await closeTrio(f)
+  })
+
+  test('case 10: over-settlement via the legacy settle route is refused by the chain CAS', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'over-settle')
+    const chainId = await startChain(f)
+    await confirmChain(f.b, chainId)
+
+    // The split B->C discharges (B owes C 40). The legacy route's ownership
+    // rule is `user_id = caller` on transaction_splits, i.e. the debtor —
+    // here, B.
+    const bOwesC = await f.b.page.request
+      .get(`${API}/transactions/splits/mine?state=awaiting_confirmation`)
+      .then((r) => r.json()) as { id: string; share_amount: number; settled_amount: number }[]
+    const victim = bOwesC.find((s) => s.share_amount === 40)!
+
+    const legacySettle = await f.b.page.request.post(`${API}/transaction-shares/${victim.id}/settle`)
+    expect(legacySettle.status(), await legacySettle.text()).toBe(200)
+
+    const cConfirm = await confirmChain(f.c, chainId)
+    expect(cConfirm.status(), await cConfirm.text()).toBe(409)
+
+    // The legacy route only ever moves settled_amount/settled_at, never
+    // status — so this split's derived claim_state stays
+    // 'awaiting_confirmation' (still locked to the chain's own hop
+    // settlement), not 'settled'. Fetch it there.
+    const after = await f.b.page.request
+      .get(`${API}/transactions/splits/mine?state=awaiting_confirmation`)
+      .then((r) => r.json()) as { id: string; settled_amount: number; share_amount: number }[]
+    const victimAfter = after.find((s) => s.id === victim.id)!
+    expect(victimAfter).toBeTruthy()
+    expect(victimAfter.settled_amount).toBeCloseTo(victimAfter.share_amount, 2)
+    expect(victimAfter.settled_amount).not.toBeGreaterThan(victimAfter.share_amount + 0.005)
 
     await closeTrio(f)
   })
