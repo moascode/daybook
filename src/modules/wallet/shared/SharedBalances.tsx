@@ -18,6 +18,8 @@ interface SharedBalancesProps {
   countByCounterparty: Record<string, number>
   /** counterpartyId -> their most recent awaiting_confirmation settlement with me, either direction. */
   pendingSettlementByCounterparty: Record<string, Settlement>
+  /** counterpartyIds whose debts with me are reserved by an awaiting three-way settlement. */
+  inChainWithCounterparty: Record<string, true>
   currentUserId: string
   onSettleOne: (pairing: Pairing) => void
   onReviewPayment: (settlement: Settlement) => void
@@ -91,6 +93,7 @@ export function SharedBalances({
   pairings,
   countByCounterparty,
   pendingSettlementByCounterparty,
+  inChainWithCounterparty,
   currentUserId,
   onSettleOne,
   onReviewPayment,
@@ -99,7 +102,9 @@ export function SharedBalances({
   const withBalance = pairings.filter((p) => p.balance && p.balance.amount > 0.005)
   // Only pairings with nothing already pending can go through "Mark all" — one
   // that already has an unconfirmed settlement needs Review, not a second one.
-  const markAllEligible = withBalance.filter((p) => !pendingSettlementByCounterparty[p.counterpartyId])
+  const markAllEligible = withBalance.filter(
+    (p) => !pendingSettlementByCounterparty[p.counterpartyId] && !inChainWithCounterparty[p.counterpartyId],
+  )
 
   if (pairings.length === 0) return null
 
@@ -115,6 +120,7 @@ export function SharedBalances({
           const count = countByCounterparty[p.counterpartyId] ?? 0
           const pending = pendingSettlementByCounterparty[p.counterpartyId]
           const iInitiatedPending = pending && pending.fromUserId === currentUserId
+          const inChain = !!inChainWithCounterparty[p.counterpartyId]
 
           return (
             <div className="acct" key={`${p.groupId}:${p.counterpartyId}`} data-testid="bal-row">
@@ -133,6 +139,11 @@ export function SharedBalances({
               <div className="acct-foot">
                 {settled ? (
                   <span>Settled up</span>
+                ) : inChain ? (
+                  <span className="flex items-center gap-1.5" data-testid="bal-in-chain">
+                    <Clock className="h-3.5 w-3.5" />
+                    In a three-way settlement
+                  </span>
                 ) : pending ? (
                   iInitiatedPending ? (
                     <span className="flex items-center gap-1.5">
@@ -145,7 +156,7 @@ export function SharedBalances({
                 ) : (
                   <span>{iAmCreditor ? 'They owe you' : 'You owe them'}</span>
                 )}
-                {!settled && (
+                {!settled && !inChain && (
                   pending ? (
                     !iInitiatedPending && (
                       <SettleIconButton label="Review" emphasis="quiet" onClick={() => onReviewPayment(pending)} />

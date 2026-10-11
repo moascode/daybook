@@ -134,6 +134,8 @@ export interface SettlePlan {
 // bilateral debt graph; every party (payer, every intermediary, payee) must
 // confirm before any ledger leg is written.
 export interface ChainHop {
+  /** The hop's `settlements` row id. */
+  id: string
   fromUserId: string
   toUserId: string
   amount: number

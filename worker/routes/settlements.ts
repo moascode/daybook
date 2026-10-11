@@ -997,7 +997,12 @@ settlements.get('/settlements', async (c) => {
     FROM settlements s
     JOIN users uf ON uf.id = s.from_user
     JOIN users ut ON ut.id = s.to_user
-    WHERE (s.from_user = ? OR s.to_user = ?)`
+    WHERE (s.from_user = ? OR s.to_user = ?)
+      -- A three-way settlement's per-hop rows are not bilateral settlements:
+      -- listed here they read as "A paid B" when A paid C, offer an Undo the
+      -- chain_id guard refuses, and count as claims to confirm through a flow
+      -- that cannot confirm them. Chains have their own endpoint and card.
+      AND s.chain_id IS NULL`
   const binds: unknown[] = [userId, userId]
 
   if (groupId) {

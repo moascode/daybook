@@ -248,7 +248,19 @@ export function SharedPage() {
     pendingSettlementByCounterparty[otherId] = s
   }
 
-  const settleablePairings = pairings.filter((p): p is Pairing & { balance: GroupBalance } => !!p.balance && p.balance.amount > 0.005 && !pendingSettlementByCounterparty[p.counterpartyId])
+  // Counterparties whose debts with me are locked in an awaiting three-way
+  // settlement. Those splits are reserved, so the bilateral flow would refuse
+  // them — the row shows where the debt is instead of offering Settle Up.
+  const inChainWithCounterparty: Record<string, true> = {}
+  for (const chain of Object.values(chainsByGroup).flat()) {
+    if (chain.status !== 'awaiting_confirmation') continue
+    for (const hop of chain.hops) {
+      if (hop.fromUserId === currentUserId) inChainWithCounterparty[hop.toUserId] = true
+      else if (hop.toUserId === currentUserId) inChainWithCounterparty[hop.fromUserId] = true
+    }
+  }
+
+  const settleablePairings = pairings.filter((p): p is Pairing & { balance: GroupBalance } => !!p.balance && p.balance.amount > 0.005 && !pendingSettlementByCounterparty[p.counterpartyId] && !inChainWithCounterparty[p.counterpartyId])
 
   // SettleUpDialog/ConfirmReceiptDialog's SettleAccount type predates useWallet's
   // typed Account (sharedByUsername: string | null) — normalize null to undefined
@@ -387,6 +399,7 @@ export function SharedPage() {
           pairings={pairings}
           countByCounterparty={countByCounterparty}
           pendingSettlementByCounterparty={pendingSettlementByCounterparty}
+          inChainWithCounterparty={inChainWithCounterparty}
           currentUserId={currentUserId}
           onSettleOne={(p) => p.balance && setSettleTarget({ groupId: p.groupId, balance: p.balance, range: { dateFrom: '', dateTo: '' } })}
           onReviewPayment={(s) => setConfirmTarget(s)}

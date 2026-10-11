@@ -388,12 +388,12 @@ settlementChains.get('/settlement-chains', async (c) => {
       .all<{ user_id: string; username: string; confirmed_at: string | null }>()
     const { results: hops } = await db
       .prepare(
-        `SELECT from_user AS from_user_id, to_user AS to_user_id,
+        `SELECT id, from_user AS from_user_id, to_user AS to_user_id,
                 CASE WHEN from_user = ? THEN amount ELSE offset_total END AS amount
            FROM settlements WHERE chain_id = ?`,
       )
       .bind(chain.payer_id, chain.id)
-      .all<{ from_user_id: string; to_user_id: string; amount: number }>()
+      .all<{ id: string; from_user_id: string; to_user_id: string; amount: number }>()
 
     const hopTotalFor = (userId: string) =>
       cents(hops.filter((h) => h.from_user_id === userId).reduce((sum, h) => sum + h.amount, 0))
@@ -419,7 +419,7 @@ settlementChains.get('/settlement-chains', async (c) => {
             : hopTotalFor(p.user_id),
         confirmed: !!p.confirmed_at,
       })),
-      hops: hops.map((h) => ({ fromUserId: h.from_user_id, toUserId: h.to_user_id, amount: h.amount })),
+      hops: hops.map((h) => ({ id: h.id, fromUserId: h.from_user_id, toUserId: h.to_user_id, amount: h.amount })),
     })
   }
   return c.json(out)
@@ -912,26 +912,28 @@ settlementChains.delete('/settlement-chains/:id', async (c) => {
       .all<{ from_transaction_id: string | null }>()
     const cashTxnId = hops.map((h) => h.from_transaction_id).find((x): x is string => !!x) ?? null
     // FINDING 1 (same shape as reject): a final confirm can commit between
-    // the read above and this batch. The chain delete is guarded on its own
-    // status; the cash-leg delete and the settlements delete are each
-    // self-guarded on the hop rows still being 'awaiting_confirmation' —
-    // confirm flips both the chain AND the settlements rows to 'confirmed'
-    // together in one winning batch, so if confirm won, every guard here
-    // misses and this cancel becomes a no-op instead of unwinding a
-    // settlement that already completed.
+    // the read above and this batch. The first statement claims the chain by
+    // moving it out of 'awaiting_confirmation' — if confirm won, it misses and
+    // every later statement, each guarded on the claim, is a no-op instead of
+    // unwinding a settlement that already completed.
+    //
+    // The chain row is deleted LAST: `settlements.chain_id` references it
+    // without ON DELETE CASCADE, so deleting it first is a foreign-key error.
+    const claimed = `EXISTS (SELECT 1 FROM settlement_chains WHERE id = ? AND status = 'cancelling')`
     const results = await db.batch([
-      db.prepare(`DELETE FROM settlement_chains WHERE id = ? AND status = 'awaiting_confirmation'`).bind(id),
+      db
+        .prepare(`UPDATE settlement_chains SET status = 'cancelling' WHERE id = ? AND status = 'awaiting_confirmation'`)
+        .bind(id),
       ...(cashTxnId
         ? [
             db
-              .prepare(
-                `DELETE FROM transactions WHERE id = ? AND user_id = ?
-                   AND EXISTS (SELECT 1 FROM settlements WHERE chain_id = ? AND status = 'awaiting_confirmation')`,
-              )
+              .prepare(`DELETE FROM transactions WHERE id = ? AND user_id = ? AND ${claimed}`)
               .bind(cashTxnId, row.payer_id, id),
           ]
         : []),
-      db.prepare(`DELETE FROM settlements WHERE chain_id = ? AND status = 'awaiting_confirmation'`).bind(id),
+      // settlement_split_lines cascade from settlements; parties from the chain.
+      db.prepare(`DELETE FROM settlements WHERE chain_id = ? AND ${claimed}`).bind(id, id),
+      db.prepare(`DELETE FROM settlement_chains WHERE id = ? AND status = 'cancelling'`).bind(id),
     ])
     if ((results[0]?.meta?.changes ?? 0) !== 1) {
       const current = await db

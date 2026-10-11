@@ -202,27 +202,22 @@ test.describe('110 — chain settlement', () => {
     await closeTrio(f)
   })
 
-  // KNOWN BACKEND BUG (found by the client-side e2e pass, not fixed here —
-  // worker code is out of scope for this PR per the hand-off spec): the
-  // awaiting-cancel branch of `DELETE /settlement-chains/:id` deletes the
-  // `settlement_chains` row BEFORE the `settlements` rows that reference it
-  // via `chain_id`. `settlements.chain_id` has no `ON DELETE CASCADE`
-  // (migration 0028), so SQLite enforces the FK immediately and the first
-  // DELETE in that batch throws `SQLITE_CONSTRAINT_FOREIGNKEY`, surfacing to
-  // the caller as a bare 500 `{"error":"internal server error"}` — not the
-  // 409 the rest of this file exercises. The confirmed-undo branch a few
-  // lines below gets the order right (settlements, then chain), which is why
-  // case 4 above passes. Fix: delete `settlements` (and the cash leg) before
-  // `settlement_chains` in the awaiting branch too.
-  test('BUG: payer cancelling an awaiting chain 500s (FK order) instead of 204', async ({ browser }) => {
-    const f = await seedChainFixture(browser, 'cancel-fk-bug')
+  // Regression: the awaiting-cancel branch once deleted the chain row before
+  // the `settlements` rows referencing it (`chain_id` has no ON DELETE
+  // CASCADE), so every cancel was a foreign-key 500.
+  test('payer cancelling an awaiting chain removes it and releases the splits', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'cancel')
     const chainId = await startChain(f)
     const res = await f.a.page.request.delete(`${API}/settlement-chains/${chainId}`)
-    // This SHOULD be 204 (payer cancelling an awaiting chain is documented
-    // and valid) — asserting the bug's current, wrong shape so this test
-    // flips red the moment the backend is fixed, as a reminder to also
-    // un-skip the UI cancel test below.
-    expect(res.status(), await res.text()).toBe(500)
+    expect(res.status(), await res.text()).toBe(204)
+
+    const aTxns = await transactionsOf(f.a)
+    expect(aTxns.find((t) => t.description.startsWith('Settlement to'))).toBeFalsy()
+    const list = await f.a.page.request.get(`${API}/settlement-chains?groupId=${f.groupId}`)
+    expect((await list.json()) as unknown[]).toEqual([])
+
+    // The splits are payable again: a fresh chain can be started over them.
+    await startChain(f)
     await closeTrio(f)
   })
 
@@ -236,6 +231,14 @@ test.describe('110 — chain settlement', () => {
     // Balances unchanged — A still owes (via the edges) and nothing executed.
     const bal = await balances(f.a, f.groupId)
     expect(bal).not.toEqual([])
+
+    // Chain hop rows never surface as bilateral settlements: listed there they
+    // read "A paid B", offer an Undo the chain guard refuses, and count as
+    // claims B would be asked to confirm through the wrong flow.
+    for (const p of [f.a, f.b, f.c]) {
+      const list = await p.page.request.get(`${API}/settlements?groupId=${f.groupId}`)
+      expect((await list.json()) as unknown[]).toEqual([])
+    }
 
     const bTxns = await transactionsOf(f.b)
     expect(bTxns.find((t) => t.description.startsWith('Settled by three-way settlement'))).toBeFalsy()
@@ -320,14 +323,16 @@ test.describe('110 — chain settlement', () => {
     // specifically as the A->B hop (to_user = B) so /confirm and /reject,
     // which both require the caller to be that hop's to_user, have a row to
     // act on at all before hitting the chain_id guard.
-    const hopsRes = await f.b.page.request.get(`${API}/settlements?groupId=${f.groupId}`)
-    const hops = (await hopsRes.json()) as {
-      id: string; chain_id: string | null; from_user: string; to_user: string
+    // GET /settlements deliberately hides chain rows, so take the hop id from
+    // the chain itself.
+    const chainsRes = await f.b.page.request.get(`${API}/settlement-chains?groupId=${f.groupId}`)
+    const chains = (await chainsRes.json()) as {
+      id: string; hops: { id: string; fromUserId: string; toUserId: string }[]
     }[]
-    const chainedHop = hops.find(
-      (h) => h.chain_id === chainId && h.from_user === f.a.id && h.to_user === f.b.id,
-    )!
-    expect(chainedHop).toBeTruthy()
+    const chainedHop = chains
+      .find((ch) => ch.id === chainId)
+      ?.hops.find((h) => h.fromUserId === f.a.id && h.toUserId === f.b.id)
+    if (!chainedHop) throw new Error('the chain has no A->B hop')
 
     const bilateralConfirm = await f.b.page.request.post(`${API}/settlements/${chainedHop.id}/confirm`, {
       data: { accountId: f.b.accountId },
@@ -591,6 +596,12 @@ test.describe('110 — chain settlement', () => {
     await expect(f.b.page.locator('main')).toBeVisible({ timeout: 20_000 })
     const bRow = f.b.page.getByTestId('chain-settlement-row').filter({ hasText: f.c.name })
     await expect(bRow).toBeVisible({ timeout: 10_000 })
+    // B's balance rows say where the debt is instead of offering a bilateral
+    // settle the server would refuse (the splits are reserved by the chain),
+    // and no bilateral claim is waiting for B to review.
+    await expect(f.b.page.getByTestId('bal-in-chain')).toHaveCount(2)
+    await expect(f.b.page.getByTestId('mark-all-settled')).toHaveCount(0)
+    await expect(f.b.page.getByText('waiting for your confirmation')).toHaveCount(0)
     await bRow.getByLabel('Confirm into (your account)').selectOption(`${f.b.name} card`)
     await bRow.getByRole('button', { name: 'Confirm three-way settlement' }).click()
     await expect(bRow.getByRole('button', { name: 'Confirm three-way settlement' })).toHaveCount(0, { timeout: 10_000 })
@@ -639,13 +650,6 @@ test.describe('110 — chain settlement', () => {
   })
 
   test('UI case: A cancels an awaiting chain from the Shared page', async ({ browser }) => {
-    // Blocked on the backend bug documented above (DELETE /settlement-chains/:id's
-    // awaiting-cancel branch 500s on an FK order issue in worker code, which
-    // is out of scope for this PR) — the client-side Cancel button and its
-    // wiring are implemented and correct; this test exercises them and will
-    // pass once that backend fix lands. Un-skip together with the BUG test
-    // above.
-    test.fixme(true, 'backend 500 on cancel — see "BUG: payer cancelling an awaiting chain" above')
     const f = await seedChainFixture(browser, 'ui-cancel')
     const chainId = await startChain(f)
 
