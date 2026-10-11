@@ -13,13 +13,15 @@ import { SharedBalances, type Pairing } from './shared/SharedBalances'
 import { SharedActivity } from './shared/SharedActivity'
 import { MarkAllSettledDialog } from './shared/MarkAllSettledDialog'
 import { SettleGroupPlan } from './shared/SettleGroupPlan'
+import { ChainSettleDialog } from './shared/ChainSettleDialog'
+import { ChainSettlements } from './shared/ChainSettlements'
 import { useAppStore } from '@/stores/app.store'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { mapGroup, mapMember, mapSettlement, mapSplitClaim } from '@/lib/household.mappers'
-import type { Group, GroupBalance, GroupMember, Settlement, SettlePlan, SettleTransfer, SplitClaim } from '@/types/household.types'
+import type { Group, GroupBalance, GroupMember, Settlement, SettlementChain, SettlePlan, SettleTransfer, SplitClaim } from '@/types/household.types'
 import type { TransactionFormData } from './TransactionForm'
 
 /**
@@ -45,6 +47,9 @@ export function SharedPage() {
   const [memberCountByGroup, setMemberCountByGroup] = useState<Record<string, number>>({})
   const [settlePlanByGroup, setSettlePlanByGroup] = useState<Record<string, SettlePlan | null>>({})
   const [settlePlanErrorByGroup, setSettlePlanErrorByGroup] = useState<Record<string, boolean>>({})
+  const [chainsByGroup, setChainsByGroup] = useState<Record<string, SettlementChain[]>>({})
+  const [chainsErrorByGroup, setChainsErrorByGroup] = useState<Record<string, boolean>>({})
+  const [chainTarget, setChainTarget] = useState<{ groupId: string; transfer: SettleTransfer } | null>(null)
   const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
   const [claimsIOwe, setClaimsIOwe] = useState<SplitClaim[]>([])
   const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
@@ -92,6 +97,16 @@ export function SharedPage() {
           } catch {
             settlePlanError = true
           }
+          // Own try/catch for the same reason as settle-plan above: a failed
+          // chain fetch surfaces as this group's own inline error (CLAUDE.md
+          // rule 10), not a page-wide failure.
+          let chains: SettlementChain[] = []
+          let chainsError = false
+          try {
+            chains = await api.get<SettlementChain[]>(`/settlement-chains?groupId=${g.id}`)
+          } catch {
+            chainsError = true
+          }
           return {
             group: g,
             balances: bal,
@@ -99,6 +114,8 @@ export function SharedPage() {
             members: members.map(mapMember),
             settlePlan,
             settlePlanError,
+            chains,
+            chainsError,
           }
         }),
       )
@@ -133,6 +150,8 @@ export function SharedPage() {
       setMemberCountByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.members.length])))
       setSettlePlanByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.settlePlan])))
       setSettlePlanErrorByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.settlePlanError])))
+      setChainsByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.chains])))
+      setChainsErrorByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.chainsError])))
       setTotals({
         owedToMe: allBalances.filter((b) => b.toUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
         iOwe: allBalances.filter((b) => b.fromUserId === currentUserId).reduce((s, b) => s + b.amount, 0),
@@ -174,6 +193,12 @@ export function SharedPage() {
       },
       range: { dateFrom: '', dateTo: '' },
     })
+  }
+
+  // Opens ChainSettleDialog for a non-direct transfer — SettleGroupPlan only
+  // wires this up for the payer, so the viewer here is always the payer.
+  const handleStartChain = (groupId: string, transfer: SettleTransfer) => {
+    setChainTarget({ groupId, transfer })
   }
 
   const handleUndoSettlement = async (id: string) => {
@@ -377,6 +402,19 @@ export function SharedPage() {
             error={!!settlePlanErrorByGroup[group.id]}
             currentUserId={currentUserId}
             onSettleDirect={handleSettleDirect}
+            onStartChain={handleStartChain}
+          />
+        ))}
+
+        {groups.map((group) => (
+          <ChainSettlements
+            key={group.id}
+            groupName={groups.length > 1 ? group.name : undefined}
+            chains={chainsByGroup[group.id] ?? []}
+            error={!!chainsErrorByGroup[group.id]}
+            currentUserId={currentUserId}
+            accounts={settleAccounts}
+            onChanged={loadAll}
           />
         ))}
 
@@ -461,6 +499,18 @@ export function SharedPage() {
           </div>
         </div>
       </Modal>
+
+      <ChainSettleDialog
+        groupId={chainTarget?.groupId ?? ''}
+        transfer={chainTarget?.transfer ?? null}
+        accounts={settleAccounts}
+        onClose={() => setChainTarget(null)}
+        onStarted={() => {
+          setChainTarget(null)
+          loadAll()
+          addToast({ message: 'Three-way settlement started — waiting on everyone to confirm', duration: 4000 })
+        }}
+      />
 
       <SettleUpDialog
         groupId={settleTarget?.groupId ?? ''}

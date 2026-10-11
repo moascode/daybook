@@ -202,6 +202,30 @@ test.describe('110 — chain settlement', () => {
     await closeTrio(f)
   })
 
+  // KNOWN BACKEND BUG (found by the client-side e2e pass, not fixed here —
+  // worker code is out of scope for this PR per the hand-off spec): the
+  // awaiting-cancel branch of `DELETE /settlement-chains/:id` deletes the
+  // `settlement_chains` row BEFORE the `settlements` rows that reference it
+  // via `chain_id`. `settlements.chain_id` has no `ON DELETE CASCADE`
+  // (migration 0028), so SQLite enforces the FK immediately and the first
+  // DELETE in that batch throws `SQLITE_CONSTRAINT_FOREIGNKEY`, surfacing to
+  // the caller as a bare 500 `{"error":"internal server error"}` — not the
+  // 409 the rest of this file exercises. The confirmed-undo branch a few
+  // lines below gets the order right (settlements, then chain), which is why
+  // case 4 above passes. Fix: delete `settlements` (and the cash leg) before
+  // `settlement_chains` in the awaiting branch too.
+  test('BUG: payer cancelling an awaiting chain 500s (FK order) instead of 204', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'cancel-fk-bug')
+    const chainId = await startChain(f)
+    const res = await f.a.page.request.delete(`${API}/settlement-chains/${chainId}`)
+    // This SHOULD be 204 (payer cancelling an awaiting chain is documented
+    // and valid) — asserting the bug's current, wrong shape so this test
+    // flips red the moment the backend is fixed, as a reminder to also
+    // un-skip the UI cancel test below.
+    expect(res.status(), await res.text()).toBe(500)
+    await closeTrio(f)
+  })
+
   test('case 2: partial confirmation does nothing', async ({ browser }) => {
     const f = await seedChainFixture(browser, 'partial')
     const chainId = await startChain(f)
@@ -536,6 +560,112 @@ test.describe('110 — chain settlement', () => {
     expect(victimAfter).toBeTruthy()
     expect(victimAfter.settled_amount).toBeCloseTo(victimAfter.share_amount, 2)
     expect(victimAfter.settled_amount).not.toBeGreaterThan(victimAfter.share_amount + 0.005)
+
+    await closeTrio(f)
+  })
+
+  // UI-driven variant of case 1: A starts the chain from the "Start
+  // three-way settle" button on SettleGroupPlan's card, B and C each confirm
+  // from ChainSettlements on their own Shared page. Everything else (the
+  // route-finding, the accounting, the CAS discipline) is already covered by
+  // the API-only cases above — this is purely a client-wiring check.
+  test('UI case: A starts, B confirms, C confirms, all via the Shared page', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'ui-happy')
+
+    await f.a.page.goto('/wallet/shared')
+    await expect(f.a.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    const planRow = f.a.page.getByTestId('settle-plan-row').filter({ hasText: f.c.name })
+    await expect(planRow).toBeVisible({ timeout: 10_000 })
+    await planRow.getByRole('button', { name: 'Start three-way settle' }).click()
+
+    const startDialog = f.a.page.getByRole('dialog', { name: 'Start three-way settle' })
+    await expect(startDialog).toBeVisible()
+    await expect(startDialog.getByTestId('chain-preview')).toContainText('Clears:', { timeout: 10_000 })
+    await expect(startDialog.getByTestId('chain-preview')).toContainText(`${f.b.name} → ${f.c.name}`)
+    await startDialog.getByLabel('Pay from (your account)').selectOption(`${f.a.name} card`)
+    await startDialog.getByRole('button', { name: 'Start settlement' }).click()
+    await expect(startDialog).toBeHidden()
+
+    // B confirms from the Shared page.
+    await f.b.page.goto('/wallet/shared')
+    await expect(f.b.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    const bRow = f.b.page.getByTestId('chain-settlement-row').filter({ hasText: f.c.name })
+    await expect(bRow).toBeVisible({ timeout: 10_000 })
+    await bRow.getByLabel('Confirm into (your account)').selectOption(`${f.b.name} card`)
+    await bRow.getByRole('button', { name: 'Confirm three-way settlement' }).click()
+    await expect(bRow.getByRole('button', { name: 'Confirm three-way settlement' })).toHaveCount(0, { timeout: 10_000 })
+
+    // C confirms from the Shared page — this is the finalizing confirm.
+    await f.c.page.goto('/wallet/shared')
+    await expect(f.c.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    const cRow = f.c.page.getByTestId('chain-settlement-row').filter({ hasText: f.a.name })
+    await expect(cRow).toBeVisible({ timeout: 10_000 })
+    await cRow.getByLabel('Confirm into (your account)').selectOption(`${f.c.name} card`)
+    await cRow.getByRole('button', { name: 'Confirm three-way settlement' }).click()
+    await expect(f.c.page.getByTestId('chain-settlement-confirmed-row')).toBeVisible({ timeout: 10_000 })
+
+    // Balances clear and the settle-plan card disappears.
+    await expect(await balances(f.a, f.groupId)).toEqual([])
+    await f.a.page.goto('/wallet/shared')
+    await expect(f.a.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.a.page.getByTestId('settle-plan')).toHaveCount(0, { timeout: 10_000 })
+
+    await closeTrio(f)
+  })
+
+  test('UI case: C rejects a chain from the Shared page', async ({ browser }) => {
+    const f = await seedChainFixture(browser, 'ui-reject')
+    const chainId = await startChain(f)
+    await confirmChain(f.b, chainId)
+
+    await f.c.page.goto('/wallet/shared')
+    await expect(f.c.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    const cRow = f.c.page.getByTestId('chain-settlement-row').filter({ hasText: f.a.name })
+    await expect(cRow).toBeVisible({ timeout: 10_000 })
+    await cRow.getByTestId('chain-reject-open').click()
+    await cRow.getByRole('button', { name: 'Reject three-way settlement' }).click()
+    await expect(f.c.page.getByTestId('chain-settlement-row')).toHaveCount(0, { timeout: 10_000 })
+
+    // A's cash leg is gone and the chain is rejected (same assertions as the
+    // API-only reject case).
+    const aTxns = await transactionsOf(f.a)
+    expect(aTxns.find((t) => t.description.startsWith('Settlement to'))).toBeFalsy()
+    const chains = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string; status: string }[]
+    expect(chains.find((c) => c.id === chainId)!.status).toBe('rejected')
+
+    await closeTrio(f)
+  })
+
+  test('UI case: A cancels an awaiting chain from the Shared page', async ({ browser }) => {
+    // Blocked on the backend bug documented above (DELETE /settlement-chains/:id's
+    // awaiting-cancel branch 500s on an FK order issue in worker code, which
+    // is out of scope for this PR) — the client-side Cancel button and its
+    // wiring are implemented and correct; this test exercises them and will
+    // pass once that backend fix lands. Un-skip together with the BUG test
+    // above.
+    test.fixme(true, 'backend 500 on cancel — see "BUG: payer cancelling an awaiting chain" above')
+    const f = await seedChainFixture(browser, 'ui-cancel')
+    const chainId = await startChain(f)
+
+    await f.a.page.goto('/wallet/shared')
+    await expect(f.a.page.locator('main')).toBeVisible({ timeout: 20_000 })
+    const aRow = f.a.page.getByTestId('chain-settlement-row').filter({ hasText: f.c.name })
+    await expect(aRow).toBeVisible({ timeout: 10_000 })
+    await aRow.getByRole('button', { name: 'Cancel three-way settlement' }).click()
+    await expect(f.a.page.getByTestId('chain-settlement-row')).toHaveCount(0, { timeout: 10_000 })
+
+    const aTxns = await transactionsOf(f.a)
+    expect(aTxns.find((t) => t.description.startsWith('Settlement to'))).toBeFalsy()
+    const chains = await f.a.page.request
+      .get(`${API}/settlement-chains?groupId=${f.groupId}`)
+      .then((r) => r.json()) as { id: string }[]
+    expect(chains.find((c) => c.id === chainId)).toBeFalsy()
+
+    // A fresh chain can be started after the cancel.
+    const newChainId = await startChain(f)
+    expect(newChainId).not.toBe(chainId)
 
     await closeTrio(f)
   })

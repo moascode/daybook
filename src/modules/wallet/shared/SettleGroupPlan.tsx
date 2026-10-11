@@ -11,10 +11,12 @@ interface SettleGroupPlanProps {
   error: boolean
   currentUserId: string
   onSettleDirect: (groupId: string, transfer: SettleTransfer) => void
+  /** Non-direct transfer, viewer is the payer: opens ChainSettleDialog (FEAT-024 PR C). */
+  onStartChain: (groupId: string, transfer: SettleTransfer) => void
 }
 
 /**
- * FEAT-024 PR B — "Settle the group" card. Shows the minimum-transfer plan
+ * FEAT-024 PR B/C — "Settle the group" card. Shows the minimum-transfer plan
  * for a group only when it is SHORTER than the current pairwise balance
  * list, which is exactly the condition under which it tells the household
  * anything the per-pair Balances card above doesn't already say — for two
@@ -24,10 +26,11 @@ interface SettleGroupPlanProps {
  * A `direct` transfer (the debtor already owes the creditor enough to cover
  * it on today's bilateral graph) settles through the existing, unchanged
  * SettleUpDialog. A non-direct transfer — the off-graph case design.md §3
- * describes (PR C, not yet built) — gets a disabled button with its reason
- * stated inline rather than a button that does nothing (CLAUDE.md rule 10).
+ * describes — routes through one or more intermediaries and needs every
+ * party's confirmation, so only the payer can start it (ChainSettleDialog);
+ * everyone else just sees who can.
  */
-export function SettleGroupPlan({ groupId, groupName, plan, error, currentUserId, onSettleDirect }: SettleGroupPlanProps) {
+export function SettleGroupPlan({ groupId, groupName, plan, error, currentUserId, onSettleDirect, onStartChain }: SettleGroupPlanProps) {
   if (!error && (!plan || !(plan.transfers.length > 0 && plan.transfers.length < plan.pairwiseCount))) {
     return null
   }
@@ -57,8 +60,8 @@ export function SettleGroupPlan({ groupId, groupName, plan, error, currentUserId
             <div className="prow" key={`${t.fromUserId}:${t.toUserId}`} data-testid="settle-plan-row">
               <div className="min-w-0 flex-1">
                 <div className="pname truncate">{t.fromUsername} pays {t.toUsername}</div>
-                {!t.direct && (
-                  <div className="text-xs text-fg-subtle">Needs a three-way settlement — not available yet</div>
+                {!t.direct && !isPayer && (
+                  <div className="text-xs text-fg-subtle">{t.fromUsername} can start this</div>
                 )}
               </div>
               <div className="pamt whitespace-nowrap">{formatMYR(t.amount)}</div>
@@ -67,7 +70,9 @@ export function SettleGroupPlan({ groupId, groupName, plan, error, currentUserId
                   <Button size="sm" onClick={() => onSettleDirect(groupId, t)}>Settle</Button>
                 )
               ) : (
-                <Button size="sm" variant="secondary" disabled>Settle</Button>
+                isPayer && (
+                  <Button size="sm" onClick={() => onStartChain(groupId, t)}>Start three-way settle</Button>
+                )
               )}
             </div>
           )
