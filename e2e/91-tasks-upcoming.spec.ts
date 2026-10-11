@@ -260,16 +260,27 @@ test.describe('91 — Tasks upcoming week board', () => {
   })
 
   test('FEAT-057: composer task with a parsed date lands in the correct day column', async ({ browser }) => {
+    // Deliberately uses "today", not "tomorrow": the board is the CURRENT
+    // Mon→Sun week (by design, see TasksUpcomingPage.tsx's header comment),
+    // so "tomorrow" only lands in a visible column on six days out of seven
+    // — on a Sunday it resolves to next Monday, outside this week's board
+    // entirely, which made this test fail every Sunday (not a flake: it
+    // reproduced locally on 2026-10-11, a Sunday). "today" always falls
+    // inside the displayed week by construction, and the date-word parser
+    // itself (including "tomorrow"'s +1-day arithmetic) is already pinned
+    // deterministically in parseTaskComposerInput.test.ts — this e2e test's
+    // job is only to prove the parsed date lands in the matching day
+    // column, which "today" exercises just as well.
     const page = await newAppPage(browser, '/tasks')
     await page.goto('/tasks/upcoming')
 
     const composer = page.getByRole('textbox', { name: 'Add a task', exact: true })
-    await composer.fill('Call the plumber tomorrow')
+    await composer.fill('Call the plumber today')
     await composer.press('Enter')
     await expect(composer).toHaveValue('')
 
-    const tomorrow = addDaysIso(businessToday(), 1)
-    await expect(page.getByTestId(`upcoming-day-column-${tomorrow}`)).toContainText('Call the plumber')
+    const today = businessToday()
+    await expect(page.getByTestId(`upcoming-day-column-${today}`)).toContainText('Call the plumber')
   })
 
   test('FEAT-057: summary line shows correct scheduled/waiting counts', async ({ browser }) => {
