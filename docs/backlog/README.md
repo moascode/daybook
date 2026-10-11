@@ -76,7 +76,7 @@ this backlog exists to answer.
 
 | ID | Type | Title | Still needed? |
 |---|---|---|---|
-| [BUG-002](EP-04-money-figure-correctness/BUG-002-impossible-calendar-dates.md) | Bug | ISO date validation accepts impossible calendar dates | **Yes** — silently relocates a transaction |
+| [BUG-002](EP-04-money-figure-correctness/BUG-002-impossible-calendar-dates.md) | Bug | ISO date validation accepts impossible calendar dates | Fixed — branch `fix/bug-002-iso-validation` |
 | [BUG-003](EP-04-money-figure-correctness/BUG-003-day-header-split-totals.md) | Bug | Transaction-list day headers may double-count splits | **Yes** — first step is confirming it is real |
 
 ### [EP-05](EP-05-production-hardening/README.md) — Production hardening
