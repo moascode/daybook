@@ -30,6 +30,7 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.16.0 | 2026-10-12 | All tasks page adopts the mockup with every control live; quick add opens the New task modal; self-assign; drag from Waiting for a date (#261–#262) |
 | v3.15.0 | 2026-10-12 | FEAT-024 three-way settlement + minimum-transfer plan; BUG-002 impossible dates rejected; BUG-003 day headers pinned; Tasks + Wallet design parity (FEAT-054–070); Today refetch race (#236–#260) |
 | v3.14.0 | 2026-09-22 | Task detail modal, Tasks composer fixes, BUG-013 grid fix (#231–#235) |
 | v3.13.0 | 2026-09-21 | EP-07 Tasks depth: recurrence, habits, completed analytics, wallet chips, inline row editing, list management (#223–#230) |
@@ -1010,3 +1011,10 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
 - **CI** (#258, #259): `main` had been red since #252 — a Today-page refetch race that dropped a new task's date, a spec that failed every Sunday, and a dashboard spec that counted cards before they rendered.
 - `v3.14.0` had been tagged and deployed on 2026-09-22 but was missing from the release table and from CLAUDE.md §8; both reconciled here.
 - Follow-ups: the nav claim badge doesn't count chains awaiting the viewer; bilateral `/settlements/:id/confirm` shares the over-settlement gap (filed as a separate task).
+
+## 2026-10-12 — Tasks fixes + All tasks redesign, shipped as v3.16.0 (PRs #261–#262)
+
+- **#261**, three owner-reported bugs. Quick add → Task now opens the New task modal (BUG-005's composer focus still read as "nothing happened"). Every assignee picker offers "Me" via `useAssignees()`, because `/groups/members` excludes the caller. Upcoming's "Waiting for a date" rows can be dragged onto a day; collision detection moved off `closestCenter`, which always picks *some* column.
+- **#262**, `/tasks/all` rebuilt to `proposal-v2/tasks-all.html`, with every control live: Open/Done/All, Group by list, a sort menu, Load more (25 rows), the mockup row (`AllTasksRow.tsx`, actions in a kebab), and the Completion and "Where tasks go to die" cards as hand-drawn SVG. The age card's Review applies an "Older than three months" filter. `TaskListRow` now serves only Assigned to me and list detail.
+- The deploy took three attempts of release run 38251648743. Wrangler's Deploy step hit Cloudflare API errors twice: a malformed 200 on `…/deployments`, then a 504 on `…/secrets`, during a Cloudflare partial outage. Each time production stayed on v3.15.0. `gh run rerun` with no re-tag was enough.
+- Lesson: `npx tsc --noEmit -p .` checks nothing here. The root `tsconfig.json` is references-only, so use `tsc -b`.
