@@ -317,6 +317,21 @@ export function TaskDetailModal({
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <label htmlFor="task-detail-due-time" className="text-sm font-medium text-fg-muted">
+            Due time
+          </label>
+          <input
+            id="task-detail-due-time"
+            type="time"
+            data-testid="task-detail-due-time"
+            value={current.dueTime ?? ''}
+            onChange={(e) => saveDueTime(e.target.value)}
+            disabled={!current.dueDate}
+            className={cn(fieldInputClass, 'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-faint')}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <label htmlFor="task-detail-priority" className="text-sm font-medium text-fg-muted">
             Priority
           </label>
@@ -333,6 +348,41 @@ export function TaskDetailModal({
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="task-detail-recurrence" className="text-sm font-medium text-fg-muted">
+            Repeat
+          </label>
+          <div className="flex items-center gap-2">
+            <select
+              id="task-detail-recurrence"
+              data-testid="task-detail-recurrence"
+              value={current.recurrence ?? ''}
+              onChange={(e) => void saveRecurrence(e.target.value as TaskRecurrenceFrequency | '', recurrenceInterval)}
+              className={fieldInputClass}
+            >
+              {RECURRENCE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            {current.recurrence && (
+              <label className="flex flex-shrink-0 items-center gap-1.5 text-sm text-fg-muted">
+                every
+                <input
+                  type="number"
+                  min={1}
+                  data-testid="task-detail-recurrence-interval"
+                  aria-label="Repeat interval"
+                  value={recurrenceInterval}
+                  onChange={(e) => void saveRecurrence(current.recurrence!, Number(e.target.value) || 1)}
+                  className={cn(fieldInputClass, 'w-16 px-2 text-center')}
+                />
+              </label>
+            )}
+          </div>
         </div>
 
         {coMembers && (
@@ -370,6 +420,21 @@ export function TaskDetailModal({
             rows={4}
             className={fieldInputClass}
           />
+        </div>
+
+        {/* CD-20: undo-toast, never a confirm dialog — see handleDelete above. */}
+        <div className="flex justify-end border-t border-line-subtle pt-4">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="task-detail-delete"
+            className="text-red-600 hover:bg-red-50"
+            onClick={() => void handleDelete()}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete task
+          </Button>
         </div>
       </div>
     </Modal>

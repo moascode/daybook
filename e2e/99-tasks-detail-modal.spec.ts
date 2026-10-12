@@ -202,4 +202,75 @@ test.describe('99 — Task detail modal', () => {
     await page.getByRole('menuitem', { name: 'Edit details' }).click()
     await expect(page.getByTestId('task-detail-assignee').locator('option:checked')).toHaveText('Me')
   })
+
+  test('due time and recurrence save and reopen correctly', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+
+    const taskRes = await page.request.post(`${API}/tasks`, {
+      data: { content: 'Water the ferns', dueDate: businessDatePlus(0) },
+    })
+    const task = await taskRes.json()
+    await page.reload()
+
+    const row = page.getByTestId('today-task-row').filter({ hasText: 'Water the ferns' })
+    await row.getByTestId(`today-task-row-options-${task.id}`).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
+
+    const modal = page.getByTestId('task-detail-modal')
+    await expect(modal).toBeVisible()
+
+    // Due time is enabled once a due date exists (seeded above).
+    const dueTime = page.getByTestId('task-detail-due-time')
+    await expect(dueTime).toBeEnabled()
+    await dueTime.fill('18:30')
+    await dueTime.blur()
+    await expect.poll(async () => (await (await page.request.get(`${API}/tasks?view=all`)).json())
+      .find((t: { id: string }) => t.id === task.id)?.due_time).toBe('18:30')
+
+    // Recurrence: Weekly, every 2 weeks.
+    await page.getByTestId('task-detail-recurrence').selectOption('weekly')
+    await expect(page.getByTestId('task-detail-recurrence-interval')).toBeVisible()
+    await page.getByTestId('task-detail-recurrence-interval').fill('2')
+    await page.getByTestId('task-detail-recurrence-interval').blur()
+    await expect.poll(async () => {
+      const row2 = (await (await page.request.get(`${API}/tasks?view=all`)).json()).find(
+        (t: { id: string }) => t.id === task.id,
+      )
+      return row2?.recurrence
+    }).toBe('weekly')
+
+    // Close and reopen — both fields read back from the server, not a stale local draft.
+    await page.keyboard.press('Escape')
+    await expect(modal).toBeHidden()
+    await row.getByTestId(`today-task-row-options-${task.id}`).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
+    await expect(page.getByTestId('task-detail-due-time')).toHaveValue('18:30')
+    await expect(page.getByTestId('task-detail-recurrence')).toHaveValue('weekly')
+    await expect(page.getByTestId('task-detail-recurrence-interval')).toHaveValue('2')
+  })
+
+  test('deleting a task from the detail modal shows an undo toast that restores it', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+
+    const taskRes = await page.request.post(`${API}/tasks`, {
+      data: { content: 'Cancel the gym membership', dueDate: businessDatePlus(0) },
+    })
+    const task = await taskRes.json()
+    await page.reload()
+
+    const row = page.getByTestId('today-task-row').filter({ hasText: 'Cancel the gym membership' })
+    await row.getByTestId(`today-task-row-options-${task.id}`).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
+    await expect(page.getByTestId('task-detail-modal')).toBeVisible()
+
+    await page.getByTestId('task-detail-delete').click()
+    await expect(page.getByTestId('task-detail-modal')).toBeHidden()
+    await expect(page.getByTestId('today-task-row').filter({ hasText: 'Cancel the gym membership' })).not.toBeVisible()
+
+    const toast = page.getByTestId('toast').filter({ hasText: 'Task deleted' })
+    await expect(toast).toBeVisible()
+    await toast.getByRole('button', { name: 'Undo' }).click()
+
+    await expect(page.getByTestId('today-task-row').filter({ hasText: 'Cancel the gym membership' })).toBeVisible()
+  })
 })

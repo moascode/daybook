@@ -7,7 +7,7 @@ import { avatarClass } from '@/lib/avatar'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
-import { todayDueColumns, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
+import { todayDueColumns, recurrenceLabel, MENU_ITEM, MENU_CONTENT } from '@/modules/tasks/taskRowFormat'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -272,27 +272,17 @@ export function TaskRow({
           </DropdownMenu.Trigger>
 
           <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95"
-              sideOffset={4}
-              align="end"
-            >
-              <DropdownMenu.Item
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
-                onSelect={() => onOpenDetail(task)}
-              >
+            <DropdownMenu.Content className={MENU_CONTENT} sideOffset={4} align="end">
+              <DropdownMenu.Item className={MENU_ITEM} onSelect={() => onOpenDetail(task)}>
                 <Pencil className="h-3.5 w-3.5 text-fg-faint" />
                 Edit details
               </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
-                onSelect={() => setShowDatePicker(true)}
-              >
+              <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setShowDatePicker(true)}>
                 <CalendarClock className="h-3.5 w-3.5 text-fg-faint" />
                 Reschedule
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"
+                className={cn(MENU_ITEM, 'text-red-600 hover:bg-red-50 focus:bg-red-50')}
                 onSelect={() => onDelete?.(task)}
               >
                 <Trash2 className="h-3.5 w-3.5" />
