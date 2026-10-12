@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { differenceInHours, parseISO } from 'date-fns'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
@@ -7,7 +8,9 @@ import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
-import { cn, errorMessage } from '@/lib/utils'
+import { cn, errorMessage, todayISO } from '@/lib/utils'
+import { avatarClass } from '@/lib/avatar'
+import { dayDiff, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
@@ -28,6 +31,48 @@ const NEVER_PICKED_UP_DAYS = 30
 
 type AssignedAudience = 'to-me' | 'from-me'
 
+/** Days since a reference timestamp (assignedAt, falling back to
+ *  createdAt), using real `Date` math — not a date-string diff, since this
+ *  is "how long ago", not "which calendar day" (same convention
+ *  `neverPickedUp`, further down, already uses). */
+function daysSince(referenceAt: string): number {
+  return Math.floor(differenceInHours(new Date(), parseISO(referenceAt.replace(' ', 'T'))) / 24)
+}
+
+/** "Waiting on you" row chip (FEAT-027/tasks-lists-parity): how long ago the
+ *  owner asked, since the row's own due-date columns are relative to the
+ *  due date, not the ask. */
+function askedAgoLabel(task: Task): string {
+  const days = daysSince(task.assignedAt ?? task.createdAt)
+  if (days <= 0) return 'Asked today'
+  if (days === 1) return 'Asked yesterday'
+  return `Asked ${days} days ago`
+}
+
+/** "You assigned out" compact row status line — the mockup's `.psub`. */
+function handedOutStatusLine(task: Task): string {
+  const recurrence = recurrenceLabel(task)
+  if (recurrence) return recurrence
+  if (!task.dueDate) {
+    const weeks = Math.floor(daysSince(task.assignedAt ?? task.createdAt) / 7)
+    return weeks <= 0 ? 'No date · asked recently' : `No date · asked ${weeks} week${weeks === 1 ? '' : 's'} ago`
+  }
+  const diff = dayDiff(todayISO(), task.dueDate)
+  if (diff < 0) return `Overdue by ${-diff} day${-diff === 1 ? '' : 's'}`
+  if (diff === 0) return 'Due today · on time so far'
+  if (diff === 1) return 'Due tomorrow'
+  return `Due in ${diff} days`
+}
+
+/** "You assigned out" compact row chip — Today for a task due today, Stale
+ *  (neg) for one handed out undated more than a week ago. Everything else
+ *  gets no chip, matching the mockup (most rows have none). */
+function handedOutChip(task: Task): { label: string; neg?: boolean } | null {
+  if (task.dueDate && dayDiff(todayISO(), task.dueDate) === 0) return { label: 'Today' }
+  if (!task.dueDate && daysSince(task.assignedAt ?? task.createdAt) > 7) return { label: 'Stale', neg: true }
+  return null
+}
+
 /**
  * Assigned to me — `/tasks/assigned` (FEAT-027,
  * docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md). A two-way
@@ -44,7 +89,7 @@ type AssignedAudience = 'to-me' | 'from-me'
  * section rather than reading from the store.
  */
 export function TasksAssignedPage() {
-  const { loadTasks, addTask } = useTasks()
+  const { loadTasks, addTask, completeTask } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
@@ -57,6 +102,9 @@ export function TasksAssignedPage() {
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [audience, setAudience] = useState<AssignedAudience>('to-me')
+  const [showAddDates, setShowAddDates] = useState(false)
+  const [addDatesValue, setAddDatesValue] = useState('')
+  const [addingDates, setAddingDates] = useState(false)
   // FEAT-057's shared "New task" modal, wired the same way Upcoming/Today
   // open it from the composer's "Task"/"Assign" shortcuts.
   const [taskFormOpen, setTaskFormOpen] = useState(false)
@@ -104,17 +152,7 @@ export function TasksAssignedPage() {
 
   const resolveName = (userId: string): string => usernameById.get(userId) ?? 'Someone'
 
-  // Keeps `allOpen` (and so `handedOut`, derived from it) in step with a
-  // successful assignee change made through this page's own picker — without
-  // this, the card's "Assigned to X" caption and the picker's own value would
-  // disagree until the next reload (the picker updates its own local draft
-  // immediately, but nothing else on this page reads that draft).
-  const handleAssigneeChange = (taskId: string, assigneeId: string | null) => {
-    setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, assigneeId } : t)))
-  }
-
-  // FEAT-052 / BUG-006: same staleness story as `handleAssigneeChange` above
-  // — TaskListRow persists the edit itself, but its display renders straight
+  // FEAT-052 / BUG-006: TaskListRow persists the edit itself, but its display renders straight
   // from THIS page's own arrays, and a task can appear in either
   // `waitingOnYou` (Section 1) or `allOpen` (Section 2's `handedOut`).
   const handleContentChange = (taskId: string, content: string) => {
@@ -140,16 +178,29 @@ export function TasksAssignedPage() {
     setDetailTask(updated)
   }
 
-  const handleToggleComplete = () => {
-    // Both sections this page renders (Waiting on you / the handed-out rail)
-    // are read-mostly ledgers, not an outliner — completion here would need
-    // the same optimistic-move bookkeeping TasksAllPage.tsx already does, and
-    // FEAT-027's own spec never asked for a complete affordance from this
-    // page. Left as a documented no-op rather than silently wiring nothing to
-    // a checkbox that would otherwise look actionable — TaskListRow's
-    // checkbox does render on this page since it can't be hidden per-page,
-    // so this exists to at least explain itself instead of throwing.
-    addToast({ message: 'Complete this task from All tasks or the outliner.' })
+  // Tasks-lists-parity: the checkbox is now a real completion, not a
+  // documented no-op — TaskListRow's checkbox otherwise looks actionable
+  // but did nothing (CLAUDE.md §2 rule 10). A task can appear in either
+  // `waitingOnYou` (Section 1) or `allOpen` (Section 2's `handedOut`), so
+  // both get patched the same way TasksAllPage.tsx's own
+  // `handleToggleComplete` does.
+  const handleToggleComplete = async (id: string) => {
+    try {
+      const updated = await completeTask(id)
+      if (updated.isCompleted) {
+        setWaitingOnYou((prev) => prev.filter((t) => t.id !== id))
+        setAllOpen((prev) => prev.filter((t) => t.id !== id))
+        setCompleted((prev) => [updated, ...prev])
+      } else {
+        // Un-completing from here is rare, but the row can still do it —
+        // append the server's fresh row back rather than let it vanish.
+        setAllOpen((prev) => [...prev, updated])
+        if (updated.assigneeId === currentUserId) setWaitingOnYou((prev) => [...prev, updated])
+        setCompleted((prev) => prev.filter((t) => t.id !== id))
+      }
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not update that task — please try again.') })
+    }
   }
 
   // Composer wiring (FEAT-059), mirroring TasksUpcomingPage.tsx's
@@ -259,9 +310,18 @@ export function TasksAssignedPage() {
   // are EXCLUDED, not treated as an instant (zero-day) turnaround — an
   // explicit design decision (see the PR brief); every assignment made before
   // this column shipped would otherwise silently understate every average.
+  // Also excludes a task the viewer assigned to THEMSELVES (`assigneeId ===
+  // currentUserId`) — turnaround is about how long OTHER people take to
+  // close something handed to them; a self-assignment has no delegation to
+  // measure and would otherwise drag every person's average toward however
+  // fast the viewer closes their own tasks.
   const turnaroundByAssignee = useMemo(() => {
     const eligible = completed.filter(
-      (t) => t.ownerId === currentUserId && t.assigneeId !== null && t.assignedAt !== null,
+      (t) =>
+        t.ownerId === currentUserId &&
+        t.assigneeId !== null &&
+        t.assignedAt !== null &&
+        t.assigneeId !== currentUserId,
     )
     const byAssignee = new Map<string, number[]>()
     for (const t of eligible) {
@@ -369,19 +429,55 @@ export function TasksAssignedPage() {
           ? 'older than a month'
           : `all ${neverPickedUp.length} older than a month`
 
+  // "Add dates" — the mockup's `.sug` suggestion row under "You assigned
+  // out": a one-click bulk reschedule for every never-picked-up task, via
+  // the existing (already-shipped, never-called-from-the-client)
+  // `POST /tasks/reschedule`. Scoped server-side to the caller's OWN tasks
+  // (worker/routes/tasks.ts) — every id here already is one (handedOut
+  // only contains tasks `t.ownerId === currentUserId`) — but the result is
+  // still checked against the request, not assumed, and any gap is
+  // reported as "skipped" rather than silently treated as success
+  // (CLAUDE.md §2 rule 10).
+  const handleAddDates = async () => {
+    if (!addDatesValue || neverPickedUp.length === 0) return
+    const ids = neverPickedUp.map(({ task }) => task.id)
+    setAddingDates(true)
+    try {
+      const rows = await api.post<Record<string, unknown>[]>('/tasks/reschedule', { ids, dueDate: addDatesValue })
+      const updatedIds = new Set(rows.map((r) => r.id as string))
+      setAllOpen((prev) => prev.map((t) => (updatedIds.has(t.id) ? { ...t, dueDate: addDatesValue } : t)))
+      const skipped = ids.length - rows.length
+      addToast({
+        message: `${rows.length} task${rows.length === 1 ? '' : 's'} rescheduled${
+          skipped > 0 ? `, ${skipped} skipped` : ''
+        }.`,
+      })
+      setShowAddDates(false)
+      setAddDatesValue('')
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not reschedule those tasks — please try again.') })
+    } finally {
+      setAddingDates(false)
+    }
+  }
+
   return (
     <div className="content">
       <div className="page-head">
         <div>
           <h1 className="page-title">Assigned to me</h1>
-          <p className="page-sub">A two-way ledger — what's waiting on you, and what you're waiting on others for.</p>
+          <p className="page-sub" data-testid="assigned-page-sub">
+            {waitingOnYouCount} from others · {handedOut.length} you gave away
+          </p>
         </div>
         <div className="page-actions items-center">
           <div className="segment" role="tablist" aria-label="Show tasks for">
             <button
               type="button"
               role="tab"
+              id="assigned-tab-to-me"
               aria-selected={audience === 'to-me'}
+              aria-controls="assigned-panel-to-me"
               onClick={() => setAudience('to-me')}
               data-testid="assigned-audience-to-me"
             >
@@ -390,7 +486,9 @@ export function TasksAssignedPage() {
             <button
               type="button"
               role="tab"
+              id="assigned-tab-from-me"
               aria-selected={audience === 'from-me'}
+              aria-controls="assigned-panel-from-me"
               onClick={() => setAudience('from-me')}
               data-testid="assigned-audience-from-me"
             >
@@ -457,8 +555,12 @@ export function TasksAssignedPage() {
           </section>
 
           {audience === 'to-me' && (
-            /* Section 1 — Waiting on you */
-            <div className="mb-6" data-testid="assigned-waiting-section">
+            /* Section 1 — Waiting on you, grouped by who asked (the
+               mockup's c8 "Waiting on you" card). Avatar shows the ASKER
+               (the owner), not the assignee — every row here is already
+               assigned to the viewer, so the assignee avatar would just be
+               the viewer's own on every row. */
+            <div className="mb-6" id="assigned-panel-to-me" role="tabpanel" aria-labelledby="assigned-tab-to-me" data-testid="assigned-waiting-section">
               <div className="tgroup-head">
                 <span className="tg-date">Waiting on you</span>
               </div>
@@ -470,7 +572,7 @@ export function TasksAssignedPage() {
                 waitingByOwner.map((group) => (
                   <div key={group.ownerId}>
                     <div className="tgroup" data-testid="assigned-waiting-owner-header">
-                      <span>Waiting on {group.ownerName}</span>
+                      <span>From {group.ownerName}</span>
                       <span className="n">{group.tasks.length}</span>
                       <span className="line" />
                     </div>
@@ -485,6 +587,8 @@ export function TasksAssignedPage() {
                         availableLists={taskLists}
                         onListChange={handleListChange}
                         onOpenDetail={openDetail}
+                        avatarUserId={group.ownerId}
+                        extraChip={askedAgoLabel(t)}
                       />
                     ))}
                   </div>
@@ -494,8 +598,12 @@ export function TasksAssignedPage() {
           )}
 
           {audience === 'from-me' && (
-            <>
-              {/* Section 2 — What you've handed out */}
+            <div id="assigned-panel-from-me" role="tabpanel" aria-labelledby="assigned-tab-from-me">
+              {/* Section 2 — What you've handed out (the mockup's c4 "You
+                  assigned out" rail): compact rows, not full TaskListRows —
+                  this is a status-at-a-glance rail, not an editing surface
+                  (edit from Assigned's own kebab isn't offered here; use All
+                  tasks or the outliner for that, same as before FEAT-027). */}
               <div className="mb-6" data-testid="assigned-handed-out-section">
                 <div className="tgroup-head">
                   <span className="tg-date">What you've handed out</span>
@@ -505,42 +613,88 @@ export function TasksAssignedPage() {
                     You haven't assigned anything to anyone else yet.
                   </p>
                 ) : (
-                  <div className="stack">
-                    {handedOut.map(({ task, assigneeName, goneQuiet }) => (
-                      <div key={task.id} className="card card-pad">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="card card-pad">
+                    {handedOut.map(({ task, assigneeName }) => {
+                      const chip = handedOutChip(task)
+                      return (
+                        <div key={task.id} className="prow" data-testid={`assigned-handed-out-row-${task.id}`}>
+                          <button
+                            type="button"
+                            className={cn('tcheck', task.priority === 'high' && 'pri-high', task.priority === 'med' && 'pri-med')}
+                            aria-label="Mark complete"
+                            onClick={() => handleToggleComplete(task.id)}
+                          >
+                            <Check />
+                          </button>
+                          <span
+                            className={cn('avatar', task.assigneeId ? avatarClass(task.assigneeId) : undefined)}
+                            title={assigneeName}
+                          >
+                            {assigneeName.charAt(0).toUpperCase()}
+                          </span>
                           <div className="min-w-0 flex-1">
-                            <p className="task-title">{task.content || 'Untitled task'}</p>
-                            <p className="text-xs text-fg-subtle">Assigned to {assigneeName}</p>
+                            <div className="pname">{task.content || 'Untitled task'}</div>
+                            <div className="psub">{handedOutStatusLine(task)}</div>
                           </div>
-                          {goneQuiet && (
+                          {chip && (
                             <span
-                              className="chip chip-warn"
+                              className={cn('chip', chip.neg ? 'chip-neg' : 'chip-mute')}
                               data-testid={`assigned-gone-quiet-${task.id}`}
                             >
-                              Gone quiet — assigned without a date
+                              {chip.label}
                             </span>
                           )}
                         </div>
-                        <div className="mt-2">
-                          <TaskListRow
-                            task={task}
-                            list={task.listId ? listById.get(task.listId) : undefined}
-                            onToggleComplete={handleToggleComplete}
-                            coMembers={coMembers}
-                            onAssigneeChange={handleAssigneeChange}
-                            onContentChange={handleContentChange}
-                            onDueDateChange={handleDueDateChange}
-                            availableLists={taskLists}
-                            onListChange={handleListChange}
-                            onOpenDetail={openDetail}
-                          />
+                      )
+                    })}
+                    {neverPickedUp.length > 0 && (
+                      <>
+                        <div className="divider" style={{ marginTop: 'var(--s2)' }} />
+                        <div className="sug" style={{ paddingBottom: 0 }}>
+                          <div className="sug-main">
+                            <div className="sug-title">
+                              {neverPickedUp.length} gone quiet
+                            </div>
+                            <div className="sug-sub">Assigned without a date</div>
+                          </div>
+                          {showAddDates ? (
+                            <span className="inline-flex items-center gap-1">
+                              <input
+                                type="date"
+                                autoFocus
+                                aria-label="New due date for the never-picked-up tasks"
+                                value={addDatesValue}
+                                onChange={(e) => setAddDatesValue(e.target.value)}
+                                data-testid="assigned-add-dates-input"
+                                className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={handleAddDates}
+                                disabled={!addDatesValue || addingDates}
+                                data-testid="assigned-add-dates-confirm"
+                              >
+                                Set
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => setShowAddDates(true)}
+                              data-testid="assigned-add-dates-btn"
+                            >
+                              Add dates
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
+
 
               {/* Section 3 — Turnaround per person. Kept as its own card
                   (rather than folded away now that the band card carries the
@@ -581,7 +735,7 @@ export function TasksAssignedPage() {
                   </ul>
                 )}
               </div>
-            </>
+            </div>
           )}
         </>
       )}
