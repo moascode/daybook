@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, TrendingDown, TrendingUp, ArrowRightLeft, CheckSquare, Upload } from 'lucide-react'
+import { Plus, TrendingDown, TrendingUp, ArrowRightLeft, CheckSquare, Repeat, Upload } from 'lucide-react'
 
 interface Action {
   key: string
@@ -73,6 +73,16 @@ export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
       // TasksTodayPage.tsx) opens the "New task" TaskFormModal, including
       // when already on /tasks.
       go: () => { navigate('/tasks', { state: { openTaskForm: true } }); close() },
+    },
+    {
+      key: 'habit',
+      label: 'Habit',
+      icon: Repeat,
+      // Mirrors the 'task' action above — the Habits page reads
+      // `openCreateHabit` from nav state and opens its own create modal
+      // (same one-shot nav-state pattern TaskComposer.tsx's own "Habit"
+      // composer action already uses).
+      go: () => { navigate('/tasks/habits', { state: { openCreateHabit: true } }); close() },
     },
     { key: 'import', label: 'Import transactions', icon: Upload, go: () => goWallet({ openImport: true }) },
   ]

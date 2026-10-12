@@ -321,9 +321,21 @@ export function useTodayTasks() {
     await handleCreateTask(draft)
   }
 
+  // Upsert, not a plain map: TaskDetailModal.tsx's own delete+undo ("Delete
+  // task") also reports its restore through this callback, and a restored
+  // task is no longer present in either array for a map to match against —
+  // it needs to be appended back, not silently dropped on the floor.
+  const upsertOrAppend = (prev: Task[], updated: Task): Task[] =>
+    prev.some((t) => t.id === updated.id) ? prev.map((t) => (t.id === updated.id ? updated : t)) : [...prev, updated]
+
   const handleSaved = (updated: Task) => {
-    setOpenTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
-    setCompletedTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    if (updated.isCompleted) {
+      setOpenTasks((prev) => prev.filter((t) => t.id !== updated.id))
+      setCompletedTasks((prev) => upsertOrAppend(prev, updated))
+    } else {
+      setCompletedTasks((prev) => prev.filter((t) => t.id !== updated.id))
+      setOpenTasks((prev) => upsertOrAppend(prev, updated))
+    }
   }
 
   const handleDeletedFromModal = (taskId: string) => {

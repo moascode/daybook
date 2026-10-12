@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { DatePicker } from '@/components/ui/DatePicker'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/Button'
+import { cn, errorMessage } from '@/lib/utils'
+import { api } from '@/lib/api'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
+import { useToastStore } from '@/stores/toast.store'
 import type { TaskList } from '@/hooks/useTaskLists'
-import type { Task, TaskPriority } from '@/types/tasks.types'
+import type { Task, TaskPriority, TaskRecurrenceFrequency } from '@/types/tasks.types'
 
 export interface TaskDetailModalProps {
   task: Task | null
@@ -14,6 +18,8 @@ export interface TaskDetailModalProps {
   availableLists: TaskList[]
   coMembers?: { userId: string; username: string }[]
   onSaved?: (updated: Task) => void
+  /** Notify-only callback after a successful "Delete task" (CD-20: undo-toast, not a confirm dialog) — lets the parent's own local task arrays drop it. */
+  onDeleted?: (taskId: string) => void
 }
 
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
@@ -21,6 +27,14 @@ const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: 'low', label: 'Low' },
   { value: 'med', label: 'Medium' },
   { value: 'high', label: 'High' },
+]
+
+const RECURRENCE_OPTIONS: { value: TaskRecurrenceFrequency | ''; label: string }[] = [
+  { value: '', label: 'None' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
 ]
 
 const fieldInputClass = cn(
@@ -43,7 +57,11 @@ export function TaskDetailModal({
   availableLists,
   coMembers,
   onSaved,
+  onDeleted,
 }: TaskDetailModalProps) {
+  const addToast = useToastStore((s) => s.addToast)
+  const removeToast = useToastStore((s) => s.removeToast)
+  const undoToastIdRef = useRef<string | null>(null)
   // `current` is this modal's own up-to-date copy of the task, re-synced
   // from the `task` prop whenever a DIFFERENT task opens, or the SAME task
   // reopens (open flips false→true) — the latter matters because a row's
@@ -72,8 +90,16 @@ export function TaskDetailModal({
   }
   if (open !== syncedOpen) setSyncedOpen(open)
 
-  const { updateTaskContent, updateTaskNote, updateTaskList, updateTaskDueDate, updateTaskPriority, assignTask } =
-    useTasks()
+  const {
+    updateTaskContent,
+    updateTaskNote,
+    updateTaskList,
+    updateTaskDueDate,
+    updateTaskDueTime,
+    updateTaskPriority,
+    assignTask,
+    deleteTaskById,
+  } = useTasks()
   const assignees = useAssignees(coMembers ?? [])
 
   if (!task || !current) {
@@ -143,6 +169,99 @@ export function TaskDetailModal({
         setNoteDraft(current.note)
       })
   }
+
+  // `updateTaskDueTime` (useTasks.ts) returns void, not the updated row, so
+  // this merges the field locally rather than waiting on a round trip that
+  // wouldn't tell us anything the optimistic merge doesn't already know —
+  // same "commit what we asked for" shape `commit` uses everywhere else here.
+  const saveDueTime = (value: string) => {
+    const dueTime = value || null
+    updateTaskDueTime(current.id, dueTime)
+      .then(() => commit({ ...current, dueTime }))
+      .catch(() => {
+        // updateTaskDueTime already surfaced the error (toast).
+      })
+  }
+
+  // Recurrence has no guard-free helper on useTasks.ts (unlike the other
+  // fields here) — a direct PATCH, same guard-free story as
+  // `updateTaskContent`/`updateTaskDueDate` (this modal's `current` task can
+  // be one `loadTasks(view)` fetched, bypassing the outliner store, so the
+  // store-backed `updateTask` would silently no-op). The worker clears
+  // `recurrence_data` for us when `recurrence` is nulled without it
+  // (worker/routes/tasks.ts), so clearing just sends `recurrence: null`.
+  const saveRecurrence = async (frequency: TaskRecurrenceFrequency | '', interval: number) => {
+    const recurrence = frequency || null
+    const recurrenceData = recurrence ? { interval: Math.max(1, interval) } : null
+    try {
+      await api.patch(`/tasks/${current.id}`, { recurrence, recurrenceData })
+      commit({ ...current, recurrence, recurrenceData })
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save that repeat schedule — please try again.') })
+    }
+  }
+
+  /**
+   * "Delete task" — undo-toast, never a confirm dialog (CD-20). Restores via
+   * a direct POST (the same shape `TasksListDetailPage.tsx`'s `undoDelete`
+   * and `useTasks.ts`'s own `restoreDeleted` use) rather than routing
+   * through the outliner store, since this modal's caller keeps its own
+   * local task arrays.
+   */
+  const handleDelete = async () => {
+    const snapshot = current
+    onOpenChange(false)
+    let deletedIds: string[]
+    try {
+      deletedIds = await deleteTaskById(snapshot.id)
+    } catch {
+      // deleteTaskById already surfaced the failure (reportAndReconcile).
+      return
+    }
+    for (const id of deletedIds) onDeleted?.(id)
+
+    if (undoToastIdRef.current) removeToast(undoToastIdRef.current)
+    undoToastIdRef.current = addToast({
+      message: 'Task deleted',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          void (async () => {
+            try {
+              await api.post('/tasks', {
+                id: snapshot.id,
+                parentId: snapshot.parentId,
+                content: snapshot.content,
+                note: snapshot.note,
+                isCompleted: snapshot.isCompleted,
+                isCollapsed: snapshot.isCollapsed,
+                sortOrder: snapshot.sortOrder,
+                dueDate: snapshot.dueDate ?? null,
+                listId: snapshot.listId ?? null,
+                priority: snapshot.priority,
+                dueTime: snapshot.dueTime ?? null,
+                assigneeId: snapshot.assigneeId ?? null,
+                assignedAt: snapshot.assignedAt ?? null,
+                recurrence: snapshot.recurrence ?? null,
+                recurrenceData: snapshot.recurrenceData ?? null,
+                recurrenceParentId: snapshot.recurrenceParentId ?? null,
+                walletRef: snapshot.walletRef ?? null,
+                createdAt: snapshot.createdAt,
+                updatedAt: snapshot.updatedAt,
+              })
+              onSaved?.(snapshot)
+            } catch (err) {
+              addToast({ message: errorMessage(err, 'Could not undo that delete — please try again.') })
+            }
+          })()
+          undoToastIdRef.current = null
+        },
+      },
+      duration: 5000,
+    })
+  }
+
+  const recurrenceInterval = current.recurrenceData?.interval ?? 1
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="Task details" className="max-w-md">

@@ -1,6 +1,8 @@
-import { forwardRef, useRef, useState } from 'react'
-import { Send, Loader2, CheckSquare, Flame, AtSign } from 'lucide-react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
+import { Send, Loader2, CheckSquare, Repeat, Users } from 'lucide-react'
 import { useAppStore } from '@/stores/app.store'
+import { useToastStore } from '@/stores/toast.store'
+import { errorMessage } from '@/lib/utils'
 import { parseTaskComposerInput, type TaskComposerList, type ParsedTaskDraft } from './parseTaskComposerInput'
 
 export type { TaskComposerList }
@@ -48,6 +50,7 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
   ref,
 ) {
   const username = useAppStore((s) => s.user?.username ?? '')
+  const addToast = useToastStore((s) => s.addToast)
   const [text, setText] = useState('')
   const [submitting, setSubmitting] = useState(false)
   // A ref, not just `submitting` state — two Enter keydowns landing before
@@ -61,6 +64,24 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
     if (typeof ref === 'function') ref(node)
     else if (ref) ref.current = node
   }
+
+  // "N" (mockup: the composer's own `.kbd` hint) focuses this composer from
+  // anywhere on the page — ignored while the user is already typing
+  // somewhere else, or holding a modifier (which would otherwise steal a
+  // browser/OS shortcut like Cmd+N).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== 'n') return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   async function handleSubmit() {
     const trimmed = text.trim()
@@ -84,6 +105,12 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
         dueTime: parsed.dueTime,
       })
       setText('')
+    } catch (err) {
+      // onCreateTask (TasksTodayPage.tsx's handleCreateTask) already toasts
+      // its own failures — this catch exists only so a defect in a FUTURE
+      // caller can't silently eat the typed text (CLAUDE.md §2 rule 10): the
+      // draft stays in the input either way, instead of vanishing.
+      addToast({ message: errorMessage(err, 'Could not add that task — please try again.') })
     } finally {
       submittingRef.current = false
       setSubmitting(false)
@@ -143,14 +170,14 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
             setText('')
           }}
         >
-          <span className="cdot bg-info-bg text-info-fg">
+          <span className="cdot bg-accent-bg text-accent-fg">
             <CheckSquare className="icon-sm" aria-hidden="true" />
           </span>
           Task
         </button>
         <button type="button" className="composer-act" onClick={onOpenHabitModal}>
-          <span className="cdot bg-alt-bg text-alt-fg">
-            <Flame className="icon-sm" aria-hidden="true" />
+          <span className="cdot bg-calm-bg text-calm-fg">
+            <Repeat className="icon-sm" aria-hidden="true" />
           </span>
           Habit
         </button>
@@ -162,8 +189,8 @@ export const TaskComposer = forwardRef<HTMLInputElement, TaskComposerProps>(func
             setText('')
           }}
         >
-          <span className="cdot bg-pos-bg text-pos-fg">
-            <AtSign className="icon-sm" aria-hidden="true" />
+          <span className="cdot bg-info-bg text-info-fg">
+            <Users className="icon-sm" aria-hidden="true" />
           </span>
           Assign
         </button>
