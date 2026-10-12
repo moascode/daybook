@@ -1,5 +1,4 @@
 import { AlertTriangle, Flame, Sparkles } from 'lucide-react'
-import { errorMessage } from '@/lib/utils'
 import { useToastStore } from '@/stores/toast.store'
 import { isDueOn, keptAndDue, keptRate28 } from './habitMath'
 import type { Habit } from '@/types/habits.types'
@@ -49,8 +48,8 @@ export function WorthKnowingCard({
                   try {
                     await onLowerTarget(weakest.habit)
                     addToast({ message: `Lowered "${weakest.habit.name}" to ${weakest.habit.targetPerWeek - 1} times/week.` })
-                  } catch (err) {
-                    addToast({ message: errorMessage(err, 'Could not lower that target — please try again.') })
+                  } catch {
+                    // onLowerTarget (updateHabit) already toasted the failure.
                   }
                 },
               }
