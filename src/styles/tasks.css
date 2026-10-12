@@ -114,6 +114,7 @@
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 104px 28px 32px; }
   .task--cols .col-exact { display: none; }
   .task--cols .task-when-edit { grid-column: 3 / 5; }
+  .task--cols:has(.task-when-edit) .trow-actions { display: none; }
   .task--cols .trow-actions { grid-column: 5; }
 }
 /* Phones: no hover, so the actions stay visible; the avatar gives way to the
@@ -122,6 +123,7 @@
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 84px 32px; }
   .task--cols .col-avatar { display: none; }
   .task--cols .task-when-edit { grid-column: 3 / 5; }
+  .task--cols:has(.task-when-edit) .trow-actions { display: none; }
   .task--cols .trow-actions { grid-column: 4; opacity: 1; }
 }
 /* No hover on touch screens (tablets included, whatever their width), so
