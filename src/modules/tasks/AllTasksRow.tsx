@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, X } from 'lucide-react'
+import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, Trash2, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
@@ -25,6 +25,11 @@ interface AllTasksRowProps {
   onContentChange: (taskId: string, content: string) => void
   onDueDateChange: (taskId: string, dueDate: string | null) => void
   onListChange: (taskId: string, listId: string | null) => void
+  /** Notify-only, like the other callbacks: the row deletes via `deleteTaskById`
+   *  itself, then hands the page the task and every id the server actually
+   *  removed (cascaded descendants included) so it can patch its local
+   *  arrays and offer the undo toast (CD-20). */
+  onDelete: (task: Task, deletedIds: string[]) => void
 }
 
 const MENU_ITEM =
@@ -104,8 +109,9 @@ export function AllTasksRow({
   onContentChange,
   onDueDateChange,
   onListChange,
+  onDelete,
 }: AllTasksRowProps) {
-  const { updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
+  const { updateTaskContent, updateTaskDueDate, updateTaskList, deleteTaskById } = useTasks()
   const self = useAppStore((s) => s.user)
 
   // Click-to-edit content — same render-time re-sync as TaskListRow.tsx, since
@@ -368,6 +374,21 @@ export function AllTasksRow({
                   </DropdownMenu.SubContent>
                 </DropdownMenu.Portal>
               </DropdownMenu.Sub>
+              <DropdownMenu.Item
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"
+                data-testid={`all-tasks-row-delete-${task.id}`}
+                onSelect={() => {
+                  deleteTaskById(task.id)
+                    .then((deletedIds) => onDelete(task, deletedIds))
+                    .catch(() => {
+                      // deleteTaskById already surfaces the failure (reportAndReconcile) —
+                      // nothing more for this row to do.
+                    })
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete task
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
