@@ -189,9 +189,14 @@ test.describe('100 — Tasks habits design adoption', () => {
     await page.keyboard.press('Escape')
     await expect(menu).not.toBeVisible()
 
-    // Delete still works from behind the popover.
+    // Delete still works from behind the popover — it opens a
+    // ConfirmDeleteModal (CLAUDE.md §6 delete-confirmation policy; a habit
+    // delete is high-consequence/irreversible, so this isn't an undo-toast
+    // delete) rather than deleting immediately.
     await trigger.click()
     await card.getByRole('menuitem', { name: 'Delete' }).click()
+    await expect(page.getByRole('heading', { name: 'Delete habit?' })).toBeVisible()
+    await page.getByTestId('habit-delete-confirm-btn').click()
     await expect(page.getByTestId('habit-card').filter({ hasText: 'Read' })).not.toBeVisible()
   })
 

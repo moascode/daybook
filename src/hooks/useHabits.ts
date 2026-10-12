@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage } from '@/lib/utils'
@@ -51,9 +51,23 @@ function rowToHabit(row: HabitRow): Habit {
   }
 }
 
+/** Toggle-in-flight key — one per habit+date, since two different dates on
+ * the same habit (or the same date on two habits) are independent races. */
+function toggleKey(id: string, date: string | undefined): string {
+  return `${id}:${date ?? 'today'}`
+}
+
 export function useHabits() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [loaded, setLoaded] = useState(false)
+  // Habit+date keys with a toggle currently in flight — HabitCard reads this
+  // to aria-disable a dot and ignore further clicks on it while waiting.
+  const [pendingToggles, setPendingToggles] = useState<Set<string>>(new Set())
+  // Per-key monotonic request counter, so a slow, now-stale response can
+  // never clobber the state a newer request for the SAME habit+date already
+  // wrote. Ref, not state: it's bookkeeping read/written synchronously
+  // around each request, never rendered.
+  const toggleGenRef = useRef<Map<string, number>>(new Map())
 
   const loadHabits = useCallback(async (includeArchived = false): Promise<Habit[]> => {
     const rows = await api.get<HabitRow[]>(`/habits${includeArchived ? '?archived=1' : ''}`)
@@ -111,10 +125,17 @@ export function useHabits() {
         row = await api.patch<HabitRow>(`/habits/${id}`, updates)
       } catch (err) {
         useToastStore.getState().addToast({ message: errorMessage(err, 'Could not save your change — please try again.') })
-        return
+        throw err
       }
       const habit = rowToHabit(row)
-      setHabits((prev) => (updates.archived ? prev.filter((h) => h.id !== id) : prev.map((h) => (h.id === id ? habit : h))))
+      // Always update the row in place rather than dropping it from state on
+      // archive. Dropping it meant an already-open "Archived" section (which
+      // reads this same `habits` array, filtered by `.archived`) lost the
+      // habit it should have just gained, and had to be reopened/refetched
+      // to show it. Mapping in place keeps both the active list and the
+      // archived list correct from a single response, for both directions
+      // (archive AND restore).
+      setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)))
     },
     [],
   )
@@ -127,21 +148,58 @@ export function useHabits() {
     } catch (err) {
       setHabits(previous)
       useToastStore.getState().addToast({ message: errorMessage(err, 'Could not delete that habit — please try again.') })
+      throw err
     }
   }, [habits])
 
-  /** Toggle a manually-tracked habit's entry for `date` (defaults to today, server-derived). */
+  /** Toggle a manually-tracked habit's entry for `date` (defaults to today,
+   * server-derived). Race-safe: while a toggle for this exact habit+date is
+   * in flight, `pendingToggles` carries its key so the caller can ignore
+   * further clicks, and if a second toggle is issued anyway (e.g. a toggle
+   * fired just before this guard existed), only the response to the LATEST
+   * request for that key is ever applied — an older, now-stale response
+   * arriving after a newer one can't overwrite it. */
   const toggleHabitEntry = useCallback(async (id: string, date?: string): Promise<void> => {
-    let row: HabitRow
+    const key = toggleKey(id, date)
+    const gen = (toggleGenRef.current.get(key) ?? 0) + 1
+    toggleGenRef.current.set(key, gen)
+    setPendingToggles((prev) => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
     try {
-      row = await api.post<HabitRow>(`/habits/${id}/toggle`, date ? { date } : {})
+      const row = await api.post<HabitRow>(`/habits/${id}/toggle`, date ? { date } : {})
+      if (toggleGenRef.current.get(key) === gen) {
+        const habit = rowToHabit(row)
+        setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)))
+      }
     } catch (err) {
       useToastStore.getState().addToast({ message: errorMessage(err, 'Could not save that — please try again.') })
-      return
+    } finally {
+      // Only this request's own completion may clear the pending flag for
+      // `key` — if a newer request for the same key is still outstanding,
+      // clearing here would re-enable the dot while that newer request is
+      // still in flight.
+      if (toggleGenRef.current.get(key) === gen) {
+        setPendingToggles((prev) => {
+          const next = new Set(prev)
+          next.delete(key)
+          return next
+        })
+      }
     }
-    const habit = rowToHabit(row)
-    setHabits((prev) => prev.map((h) => (h.id === id ? habit : h)))
   }, [])
 
-  return { habits, loaded, loadHabits, loadJointStats, createHabit, updateHabit, deleteHabit, toggleHabitEntry }
+  return {
+    habits,
+    loaded,
+    pendingToggles,
+    loadHabits,
+    loadJointStats,
+    createHabit,
+    updateHabit,
+    deleteHabit,
+    toggleHabitEntry,
+  }
 }
