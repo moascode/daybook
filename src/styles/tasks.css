@@ -284,6 +284,25 @@
   .habit-main { flex-basis: auto; }
 }
 
+/* Habits parity pass — today's dot, due but not yet decided, is neither
+   "kept" (.on, filled accent) nor "missed" (.miss, faint red): the day isn't
+   over, so painting it as a miss would read as a judgement that hasn't
+   happened yet. Outline-only, same track colour as an undue day's ring, so
+   it reads as "waiting", not "failed". */
+.dots i.today-pending {
+  background: rgb(var(--surface));
+  border: 2px solid rgb(var(--accent) / .5);
+  box-sizing: border-box;
+}
+.dots i.today-pending:hover { transform: scale(1.25); }
+
+/* Archived habits — collapsible section at the foot of the board. The
+   toggle row reuses `.card-title` for its label so it matches every other
+   card header's weight/size without inventing a new text style. */
+.habits-archived-toggle { cursor: pointer; }
+.habit-archived-row { transition: background var(--dur-fast) var(--ease); }
+.habit-archived-row:hover { background: rgb(var(--surface-hover)); }
+
 /* =====================================================================
    COMPOSER — the module's primary action, at the top, impossible to miss
    ===================================================================== */
