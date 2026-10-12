@@ -118,7 +118,8 @@ test.describe('99 — Task detail modal', () => {
 
     const row = page.getByTestId('all-tasks-row').filter({ hasText: 'Ship the report' })
     await expect(row).toBeVisible()
-    await row.getByTestId(/^task-row-detail-/).click()
+    await row.getByTestId(/^all-tasks-row-options-/).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
 
     const modal = page.getByTestId('task-detail-modal')
     await expect(modal).toBeVisible()

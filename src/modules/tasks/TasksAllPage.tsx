@@ -1,19 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, startOfWeek } from 'date-fns'
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { AlertTriangle, CalendarClock, CheckCircle2, Filter, Inbox, SlidersHorizontal, X } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  Filter,
+  Inbox,
+  ListFilter,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
+import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
-import { useChartTheme } from '@/hooks/useChartTheme'
-import { useDashboardChartColors } from '@/modules/wallet/dashboard/chartColors'
 import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { cn, errorMessage, todayISO } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
-import { TaskListRow } from '@/modules/tasks/TaskListRow'
+import { AllTasksRow } from '@/modules/tasks/AllTasksRow'
+import { CompletionCard } from '@/modules/tasks/all/CompletionCard'
+import { TaskAgeCard } from '@/modules/tasks/all/TaskAgeCard'
+import {
+  OLD_TASK_DAYS,
+  SORT_LABELS,
+  groupTasks,
+  taskAgeDays,
+  type TaskGrouping,
+  type TaskSort,
+  type TaskStatus,
+} from '@/modules/tasks/all/groupTasks'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
 import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
@@ -34,6 +54,15 @@ function isoDatePlus(days: number): string {
 
 type AssigneeFilter = 'all' | 'me' | 'unassigned'
 
+/** Rows per "Load more" step (tasks-all.html: "Showing 10 of 39"). */
+const PAGE_SIZE = 25
+
+const STATUS_TABS: { value: TaskStatus; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'done', label: 'Done' },
+  { value: 'all', label: 'All' },
+]
+
 const PRIORITY_OPTIONS = [
   { value: '', label: 'All priorities' },
   { value: 'high', label: 'High' },
@@ -44,10 +73,10 @@ const PRIORITY_OPTIONS = [
 
 /**
  * All tasks — the Tasks module's flat, filterable, everything-view page
- * (R5 PR-2, docs/archive/design-adoption/tasks-design-adoption.md §All tasks). Stat cards,
- * a filter bar with removable chips (mirrors WalletPage.tsx's pattern),
- * date-grouped rows including a "No due date" bucket, a twelve-week
- * completions chart, and an age-breakdown sentence.
+ * (R5 PR-2, adopted to proposal-v2/tasks-all.html). Stat cards, a filter bar
+ * with a sort menu and an Open/Done/All switch, removable chips (mirrors
+ * WalletPage.tsx's pattern), rows grouped by when they're due or by list,
+ * paged with Load more, then the Completion chart and the open-task age card.
  *
  * Two fetches total: `loadTasks('all')` (every open task) and
  * `loadTasks('completed')` (every completed task, for the chart) — every
@@ -59,8 +88,7 @@ export function TasksAllPage() {
   const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
-  const chart = useChartTheme()
-  const colors = useDashboardChartColors()
+  const { ensureLoaded: ensureWalletChips, resolveChip } = useWalletRefChips()
   const navigate = useNavigate()
 
   const [openTasks, setOpenTasks] = useState<Task[]>([])
@@ -73,6 +101,12 @@ export function TasksAllPage() {
   const [priority, setPriority] = useState<TaskPriority | ''>('')
   const [assignee, setAssignee] = useState<AssigneeFilter>('all')
   const [listId, setListId] = useState<string>('')
+  const [oldOnly, setOldOnly] = useState(false)
+  const [status, setStatus] = useState<TaskStatus>('open')
+  const [grouping, setGrouping] = useState<TaskGrouping>('date')
+  const [sort, setSort] = useState<TaskSort>('due')
+  const [limit, setLimit] = useState(PAGE_SIZE)
+  const listRef = useRef<HTMLElement>(null)
 
   // FEAT-058: same shared "New task" modal FEAT-054/FEAT-057 wire up on
   // Today/Upcoming, opened from the composer's "Task"/"Assign" shortcuts.
@@ -131,6 +165,16 @@ export function TasksAllPage() {
       cancelled = true
     }
   }, [])
+
+  // Wallet-linked chips: resolved once for the page, and only fetched when a
+  // loaded task actually links to Wallet.
+  const anyWalletRef = openTasks.some((t) => t.walletRef) || completedTasks.some((t) => t.walletRef)
+  useEffect(() => {
+    if (!anyWalletRef) return
+    ensureWalletChips().catch((err: unknown) => {
+      addToastRef.current({ message: errorMessage(err, 'Could not load the Wallet links on these tasks.') })
+    })
+  }, [anyWalletRef, ensureWalletChips])
 
   const today = todayISO()
 
@@ -214,18 +258,23 @@ export function TasksAllPage() {
 
   // ── Filtering (criterion 3) ─────────────────────────────────────────
   const q = searchDraft.trim().toLowerCase()
+  const statusTasks = useMemo(
+    () => (status === 'open' ? openTasks : status === 'done' ? completedTasks : [...openTasks, ...completedTasks]),
+    [status, openTasks, completedTasks],
+  )
   const filteredTasks = useMemo(() => {
-    return openTasks.filter((t) => {
+    return statusTasks.filter((t) => {
       if (priority && t.priority !== priority) return false
       if (assignee === 'me' && t.assigneeId !== currentUserId) return false
       if (assignee === 'unassigned' && t.assigneeId !== null) return false
       if (listId && t.listId !== listId) return false
+      if (oldOnly && taskAgeDays(t) < OLD_TASK_DAYS) return false
       if (q && !t.content.toLowerCase().includes(q)) return false
       return true
     })
-  }, [openTasks, priority, assignee, listId, q, currentUserId])
+  }, [statusTasks, priority, assignee, listId, oldOnly, q, currentUserId])
 
-  const activeFilterCount = [priority !== '', assignee !== 'all', listId !== ''].filter(Boolean).length
+  const activeFilterCount = [priority !== '', assignee !== 'all', listId !== '', oldOnly].filter(Boolean).length
   const anyFilterActive = activeFilterCount > 0 || q !== ''
 
   const clearAllFilters = () => {
@@ -233,6 +282,29 @@ export function TasksAllPage() {
     setPriority('')
     setAssignee('all')
     setListId('')
+    setOldOnly(false)
+  }
+
+  // Any change to what the list shows starts paging over from the top — same
+  // render-time reset pattern as the row drafts, so no effect round-trip.
+  const viewKey = [status, grouping, sort, priority, assignee, listId, oldOnly, q].join('|')
+  const [pagedViewKey, setPagedViewKey] = useState(viewKey)
+  if (viewKey !== pagedViewKey) {
+    setPagedViewKey(viewKey)
+    setLimit(PAGE_SIZE)
+  }
+
+  const groups = useMemo(
+    () => groupTasks(filteredTasks, { status, grouping, sort, limit, today, lists: taskLists }),
+    [filteredTasks, status, grouping, sort, limit, today, taskLists],
+  )
+  const shownCount = groups.reduce((n, g) => n + g.visible.length, 0)
+  const undatedOpen = filteredTasks.filter((t) => !t.isCompleted && t.dueDate === null)
+
+  const reviewOldTasks = () => {
+    setStatus('open')
+    setOldOnly(true)
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   // U-10 pattern (WalletPage.tsx): removable chips for the occasional
@@ -255,53 +327,11 @@ export function TasksAllPage() {
       const name = listById.get(listId)?.name ?? 'List'
       chips.push({ key: 'list', label: `List: ${name}`, onClear: () => setListId('') })
     }
+    if (oldOnly) {
+      chips.push({ key: 'age', label: 'Older than three months', onClear: () => setOldOnly(false) })
+    }
     return chips
-  }, [priority, assignee, listId, listById])
-
-  // ── Date grouping (criterion 4) — matches TransactionList.tsx's
-  // groupByDay convention: soonest/newest first, undated tasks in their own
-  // trailing "No due date" group.
-  const dateGroups = useMemo(() => {
-    const grouped = new Map<string, Task[]>()
-    const undated: Task[] = []
-    for (const t of filteredTasks) {
-      if (t.dueDate === null) {
-        undated.push(t)
-        continue
-      }
-      const existing = grouped.get(t.dueDate)
-      if (existing) existing.push(t)
-      else grouped.set(t.dueDate, [t])
-    }
-    const groups = Array.from(grouped.entries())
-      .map(([date, tasks]) => ({ date, tasks }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-    return { groups, undated }
-  }, [filteredTasks])
-
-  // ── Age breakdown (criterion 7) ─────────────────────────────────────
-  const ninetyDaysAgo = isoDatePlus(-90)
-  const oldOpenCount = openTasks.filter((t) => t.createdAt.slice(0, 10) < ninetyDaysAgo).length
-
-  // ── Twelve weeks of completions (criterion 6) ───────────────────────
-  const completionWeeks = useMemo(() => {
-    const weekStart = (dateStr: string) =>
-      format(startOfWeek(parseISO(dateStr.slice(0, 10)), { weekStartsOn: 1 }), 'yyyy-MM-dd')
-
-    const buckets: { weekStart: string; label: string; count: number }[] = []
-    for (let i = 11; i >= 0; i--) {
-      const ws = weekStart(isoDatePlus(-7 * i))
-      buckets.push({ weekStart: ws, label: format(parseISO(ws), 'd MMM'), count: 0 })
-    }
-    const byWeek = new Map(buckets.map((b) => [b.weekStart, b]))
-    for (const t of completedTasks) {
-      if (!t.completedAt) continue
-      const ws = weekStart(t.completedAt)
-      const bucket = byWeek.get(ws)
-      if (bucket) bucket.count += 1
-    }
-    return buckets
-  }, [completedTasks])
+  }, [priority, assignee, listId, oldOnly, listById])
 
   const handleToggleComplete = async (id: string) => {
     try {
@@ -318,23 +348,18 @@ export function TasksAllPage() {
     }
   }
 
-  // FEAT-052 / BUG-006: TaskListRow persists the edit itself (guard-free
-  // hook functions — see its own doc comments); these only keep this page's
-  // local `openTasks` array in sync so the row moves between due-date
-  // groups (dateGroups is derived from openTasks) instead of showing a
-  // stale bucket until the next reload.
-  const handleContentChange = (id: string, content: string) => {
-    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, content } : t)))
+  // FEAT-052 / BUG-006 / FEAT-051: AllTasksRow persists each edit itself;
+  // these only keep this page's local arrays in step, so a row moves to its
+  // new group (or out of a filtered view) without waiting for a reload. The
+  // Done and All tabs show completed tasks too, so both arrays are patched —
+  // the id that isn't present is a no-op.
+  const patchTask = (id: string, patch: Partial<Task>) => {
+    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+    setCompletedTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
-  const handleDueDateChange = (id: string, dueDate: string | null) => {
-    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, dueDate } : t)))
-  }
-  // FEAT-051: same staleness story — filteredTasks/dateGroups derive from
-  // openTasks, and a `listId` filter is active on this page, so a task
-  // moved out of the filtered list must actually disappear from view.
-  const handleListChange = (id: string, listId: string | null) => {
-    setOpenTasks((prev) => prev.map((t) => (t.id === id ? { ...t, listId } : t)))
-  }
+  const handleContentChange = (id: string, content: string) => patchTask(id, { content })
+  const handleDueDateChange = (id: string, dueDate: string | null) => patchTask(id, { dueDate })
+  const handleListChange = (id: string, listId: string | null) => patchTask(id, { listId })
 
   // BUG-011: TaskDetailModal saves the field itself; this only keeps this
   // page's local arrays in sync, same staleness story as the handlers above.
@@ -347,7 +372,7 @@ export function TasksAllPage() {
   }
 
   const handleScheduleUndated = async () => {
-    const ids = dateGroups.undated.map((t) => t.id)
+    const ids = undatedOpen.map((t) => t.id)
     if (ids.length === 0) return
     try {
       const updated = await rescheduleTasks(ids, today)
@@ -430,9 +455,23 @@ export function TasksAllPage() {
   return (
     <div className="content">
       <div className="page-head">
-        <div>
-          <h1 className="page-title">All tasks</h1>
-          <p className="page-sub">Every open task, filterable and grouped by when it's due.</p>
+        <h1 className="page-title">All tasks</h1>
+        {!loading && (
+          <span className="page-sub hide-mobile" data-testid="all-tasks-counts">
+            {openTasks.length} open · {completedTasks.length} completed
+          </span>
+        )}
+        <div className="page-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            aria-pressed={grouping === 'list'}
+            onClick={() => setGrouping((g) => (g === 'list' ? 'date' : 'list'))}
+            data-testid="all-tasks-group-toggle"
+          >
+            <ListFilter className="icon-sm h-4 w-4" aria-hidden="true" />
+            {grouping === 'list' ? 'Group by date' : 'Group by list'}
+          </button>
         </div>
       </div>
 
@@ -508,225 +547,246 @@ export function TasksAllPage() {
             </div>
           </div>
 
-          {/* Filter bar (criterion 3) — visibly distinct from the global AppBar
-              search: labelled by what it filters, placed inside its own card,
-              not a second copy of `.search`. */}
-          <div className="card card-pad mb-4">
-            <div className="filters">
-              <div className="filter-field">
-                <Filter className="h-3.5 w-3.5" />
-                <input
-                  id="all-tasks-filter"
-                  type="search"
-                  aria-label="Filter tasks"
-                  data-testid="all-tasks-filter-input"
-                  placeholder={`Filter these ${openTasks.length} tasks…`}
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setFiltersOpen((o) => !o)}
-                data-testid="all-tasks-filter-toggle"
-                aria-expanded={filtersOpen}
-                className={cn(
-                  'filter-btn',
-                  filtersOpen || activeFilterCount > 0
-                    ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
-                    : 'hover:bg-surface-hover hover:text-fg',
-                )}
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="count" data-testid="all-tasks-filter-count">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </button>
-              {anyFilterActive && (
+          {/* Filter bar — bare, as in the mockup: search, the Filters panel
+              toggle, the sort menu, and the Open/Done/All switch. */}
+          <div className="filters mb-3">
+            <div className="filter-field">
+              <Filter className="h-3.5 w-3.5" />
+              <input
+                id="all-tasks-filter"
+                type="search"
+                aria-label="Filter tasks"
+                data-testid="all-tasks-filter-input"
+                placeholder={`Filter these ${statusTasks.length} tasks…`}
+                value={searchDraft}
+                onChange={(e) => setSearchDraft(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              data-testid="all-tasks-filter-toggle"
+              aria-expanded={filtersOpen}
+              className={cn(
+                'filter-btn',
+                filtersOpen || activeFilterCount > 0
+                  ? 'border-brand-300 bg-brand-50 text-brand-700 hover:bg-brand-100'
+                  : 'hover:bg-surface-hover hover:text-fg',
+              )}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="count" data-testid="all-tasks-filter-count">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
-                  onClick={clearAllFilters}
-                  data-testid="all-tasks-filter-clear-all"
-                  className="btn btn-quiet"
+                  className="filter-btn hide-mobile hover:bg-surface-hover hover:text-fg"
+                  aria-label={`Sort by ${SORT_LABELS[sort]}`}
+                  data-testid="all-tasks-sort"
                 >
-                  <X className="h-3.5 w-3.5" />
-                  Clear
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  {SORT_LABELS[sort]}
                 </button>
-              )}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  className="z-50 min-w-[180px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60"
+                  sideOffset={4}
+                  align="start"
+                >
+                  <DropdownMenu.RadioGroup value={sort} onValueChange={(v) => setSort(v as TaskSort)}>
+                    {(Object.keys(SORT_LABELS) as TaskSort[]).map((key) => (
+                      <DropdownMenu.RadioItem
+                        key={key}
+                        value={key}
+                        data-testid={`all-tasks-sort-${key}`}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken"
+                      >
+                        <span className="w-3.5">
+                          <DropdownMenu.ItemIndicator>
+                            <Check className="h-3.5 w-3.5" />
+                          </DropdownMenu.ItemIndicator>
+                        </span>
+                        {SORT_LABELS[key]}
+                      </DropdownMenu.RadioItem>
+                    ))}
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            <div className="segment ml-auto" role="tablist" aria-label="Task status" data-testid="all-tasks-status">
+              {STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={status === tab.value}
+                  onClick={() => setStatus(tab.value)}
+                  data-testid={`all-tasks-status-${tab.value}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-
-            {filterChips.length > 0 && (
-              <div className="mt-3 flex flex-wrap items-center gap-1.5" data-testid="all-tasks-filter-chips">
-                {filterChips.map((chip) => (
-                  <span key={chip.key} data-testid="all-tasks-filter-chip" className="chip chip-mute">
-                    {chip.label}
-                    <button
-                      type="button"
-                      onClick={chip.onClear}
-                      aria-label="Remove filter"
-                      title={`Remove ${chip.label}`}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {filtersOpen && (
-              <div data-testid="all-tasks-filter-panel" className="mt-3 border-t border-line-subtle pt-3">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  <Select
-                    label="Priority"
-                    data-testid="all-tasks-filter-priority"
-                    options={PRIORITY_OPTIONS.filter((o) => o.value !== '')}
-                    placeholder="All priorities"
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value as TaskPriority | '')}
-                  />
-                  <Select
-                    label="List"
-                    data-testid="all-tasks-filter-list"
-                    options={taskLists.map((l) => ({ value: l.id, label: l.name }))}
-                    placeholder="All lists"
-                    value={listId}
-                    onChange={(e) => setListId(e.target.value)}
-                  />
-                  {hasAssignments && (
-                    <Select
-                      label="Assignee"
-                      data-testid="all-tasks-filter-assignee"
-                      options={[
-                        { value: 'all', label: 'Everyone' },
-                        { value: 'me', label: 'Me' },
-                        { value: 'unassigned', label: 'Unassigned' },
-                      ]}
-                      value={assignee}
-                      onChange={(e) => setAssignee(e.target.value as AssigneeFilter)}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Age breakdown (criterion 7) */}
-          {oldOpenCount > 0 && (
-            <p className="mb-4 text-sm text-fg-subtle" data-testid="age-breakdown">
-              {oldOpenCount} open task{oldOpenCount === 1 ? ' is' : 's are'} older than three months.
-            </p>
+          {(filterChips.length > 0 || anyFilterActive) && (
+            <div className="filters mb-4" data-testid="all-tasks-filter-chips">
+              {filterChips.map((chip) => (
+                <span key={chip.key} data-testid="all-tasks-filter-chip" className="chip chip-mute">
+                  {chip.label}
+                  <button
+                    type="button"
+                    onClick={chip.onClear}
+                    aria-label="Remove filter"
+                    title={`Remove ${chip.label}`}
+                    className="ml-0.5 rounded-full p-0.5 hover:bg-surface-hover"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                data-testid="all-tasks-filter-clear-all"
+                className="btn btn-quiet"
+                style={{ height: 26, fontSize: 'var(--t-xs)' }}
+              >
+                Clear
+              </button>
+            </div>
           )}
 
-          {/* Date-grouped list (criterion 4) */}
-          {filteredTasks.length === 0 ? (
-            <p className="py-3 text-sm text-fg-subtle" data-testid="all-tasks-empty">
-              No tasks match these filters.
-            </p>
-          ) : (
-            <div className="mb-6">
-              {dateGroups.groups.map((group) => {
-                const d = parseISO(group.date)
-                return (
-                  <div key={group.date}>
-                    <div className="tgroup-head" data-testid="all-tasks-day-header">
-                      <span className="tg-date">
-                        <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
-                      </span>
+          {filtersOpen && (
+            <div data-testid="all-tasks-filter-panel" className="card card-pad mb-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Select
+                  label="Priority"
+                  data-testid="all-tasks-filter-priority"
+                  options={PRIORITY_OPTIONS.filter((o) => o.value !== '')}
+                  placeholder="All priorities"
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as TaskPriority | '')}
+                />
+                <Select
+                  label="List"
+                  data-testid="all-tasks-filter-list"
+                  options={taskLists.map((l) => ({ value: l.id, label: l.name }))}
+                  placeholder="All lists"
+                  value={listId}
+                  onChange={(e) => setListId(e.target.value)}
+                />
+                {hasAssignments && (
+                  <Select
+                    label="Assignee"
+                    data-testid="all-tasks-filter-assignee"
+                    options={[
+                      { value: 'all', label: 'Everyone' },
+                      { value: 'me', label: 'Me' },
+                      { value: 'unassigned', label: 'Unassigned' },
+                    ]}
+                    value={assignee}
+                    onChange={(e) => setAssignee(e.target.value as AssigneeFilter)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* The task list — one card, grouped by when it's due (or by list),
+              paged with Load more. */}
+          <section ref={listRef} className="card card-pad mb-4 scroll-mt-4" data-testid="all-tasks-list">
+            {filteredTasks.length === 0 ? (
+              <p className="py-3 text-sm text-fg-subtle" data-testid="all-tasks-empty">
+                {anyFilterActive
+                  ? 'No tasks match these filters.'
+                  : status === 'done'
+                    ? 'Nothing completed yet.'
+                    : 'Nothing open — add a task above.'}
+              </p>
+            ) : (
+              <>
+                {groups.map((group) => (
+                  <div key={group.key}>
+                    <div
+                      className="tgroup"
+                      data-testid={
+                        group.key === 'none'
+                          ? 'all-tasks-no-due-date-group'
+                          : ['overdue', 'today', 'tomorrow', 'week', 'later'].includes(group.key)
+                            ? 'all-tasks-day-header'
+                            : 'all-tasks-group-header'
+                      }
+                    >
+                      {group.color && (
+                        <i
+                          className="inline-block h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: group.color }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span className={cn(group.tone === 'neg' && 'text-neg-fg')}>{group.label}</span>
+                      <span className="n">{group.tasks.length}</span>
+                      <span className="line" />
+                      {group.key === 'none' && (
+                        <button
+                          type="button"
+                          className="btn btn-quiet btn-sm"
+                          onClick={handleScheduleUndated}
+                          data-testid="schedule-undated-btn"
+                        >
+                          Schedule these
+                        </button>
+                      )}
                     </div>
-                    {group.tasks.map((t) => (
-                      <TaskListRow
+                    {group.visible.map((t) => (
+                      <AllTasksRow
                         key={t.id}
                         task={t}
                         list={t.listId ? listById.get(t.listId) : undefined}
+                        availableLists={taskLists}
+                        coMembers={coMembers}
+                        walletChip={resolveChip(t.walletRef)}
                         onToggleComplete={handleToggleComplete}
+                        onOpenDetail={openDetail}
                         onContentChange={handleContentChange}
                         onDueDateChange={handleDueDateChange}
-                        availableLists={taskLists}
                         onListChange={handleListChange}
-                        onOpenDetail={openDetail}
                       />
                     ))}
                   </div>
-                )
-              })}
+                ))}
 
-              {dateGroups.undated.length > 0 && (
-                <div>
-                  <div className="tgroup" data-testid="all-tasks-no-due-date-group">
-                    <span>No due date</span>
-                    <span className="n">{dateGroups.undated.length}</span>
-                    <span className="line" />
+                <div className="divider" />
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-fg-subtle" data-testid="all-tasks-showing">
+                    Showing {shownCount} of {filteredTasks.length}
+                  </span>
+                  {shownCount < filteredTasks.length && (
                     <button
                       type="button"
-                      className="section-action"
-                      onClick={handleScheduleUndated}
-                      data-testid="schedule-undated-btn"
+                      className="btn btn-secondary ml-auto"
+                      onClick={() => setLimit((n) => n + PAGE_SIZE)}
+                      data-testid="all-tasks-load-more"
                     >
-                      Schedule these
+                      Load more
                     </button>
-                  </div>
-                  {dateGroups.undated.map((t) => (
-                    <TaskListRow
-                      key={t.id}
-                      task={t}
-                      list={t.listId ? listById.get(t.listId) : undefined}
-                      onToggleComplete={handleToggleComplete}
-                      onContentChange={handleContentChange}
-                      onDueDateChange={handleDueDateChange}
-                      availableLists={taskLists}
-                      onListChange={handleListChange}
-                      onOpenDetail={openDetail}
-                    />
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+              </>
+            )}
+          </section>
 
-          {/* Twelve weeks of completions (criterion 6) */}
-          <div className="card card-pad">
-            <div className="card-head">
-              <span className="card-title">Completed, last 12 weeks</span>
-            </div>
-            <div
-              role="img"
-              aria-label={`Tasks completed per week over the last twelve weeks, totalling ${completedTasks.length} tasks completed ever.`}
-            >
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={completionWeeks} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    stroke={chart.axis}
-                    tick={{ fill: chart.axis }}
-                    fontSize={11}
-                    tickLine={false}
-                    interval="preserveStartEnd"
-                    minTickGap={16}
-                  />
-                  <YAxis
-                    stroke={chart.axis}
-                    tick={{ fill: chart.axis }}
-                    fontSize={11}
-                    tickLine={false}
-                    width={28}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={chart.tooltip.contentStyle}
-                    labelStyle={chart.tooltip.labelStyle}
-                    itemStyle={chart.tooltip.itemStyle}
-                    labelFormatter={(label: string) => `Week of ${label}`}
-                    formatter={(value: number) => [`${value} completed`, '']}
-                  />
-                  <Bar dataKey="count" name="Completed" fill={colors.magnitude} radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <div className="dash">
+            <CompletionCard completedTasks={completedTasks} />
+            <TaskAgeCard openTasks={openTasks} listById={listById} onReview={reviewOldTasks} />
           </div>
         </>
       )}
