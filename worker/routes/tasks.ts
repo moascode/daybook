@@ -49,6 +49,29 @@ const TASK_COLS: Record<string, string> = {
 
 const RECURRENCE_FREQS = new Set(['daily', 'weekly', 'monthly', 'yearly', 'custom'])
 
+/**
+ * True unless `recurrenceData` is a `custom` recurrence's data with an empty
+ * (or missing) `weekdays` array. Without this check, `{ recurrence: 'custom',
+ * recurrenceData: { weekdays: [] } }` silently becomes "repeats on today's
+ * weekday" the first time advanceTaskDate() falls back to `[dt.getUTCDay()]`
+ * — a behaviour the caller never asked for and has no way to see coming.
+ * Accepts either a parsed object or the JSON string form, since POST/PATCH
+ * each call this before recurrenceData is stringified.
+ */
+function hasCustomWeekdays(recurrenceData: unknown): boolean {
+  let data: unknown = recurrenceData
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      return false
+    }
+  }
+  if (data == null || typeof data !== 'object') return false
+  const weekdays = (data as { weekdays?: unknown }).weekdays
+  return Array.isArray(weekdays) && weekdays.length > 0
+}
+
 const WALLET_REF_TABLES: Record<string, string> = {
   recurring: 'recurring_transactions',
   goal: 'goals',
@@ -58,6 +81,29 @@ const WALLET_REF_TABLES: Record<string, string> = {
 function walletRefTable(ref: string): string | null {
   const [kind] = ref.split(':', 1)
   return WALLET_REF_TABLES[kind] ?? null
+}
+
+// ── Access ───────────────────────────────────────────
+
+/**
+ * The ONE predicate for "may this caller act on this task" (D-15): its
+ * owner, its assignee, or a member with write access on its list. Originally
+ * duplicated inline in POST /tasks/:id/complete and DELETE /tasks/:id;
+ * extracted so PATCH /tasks/:id and POST /tasks/reschedule can share it
+ * rather than drifting from it. `writable` is passed in (not fetched here)
+ * so a caller acting on several ids in one request — reschedule's bulk
+ * move — pays for writableListIds() once, not once per id.
+ */
+function canActOnTask(
+  task: { user_id: string; assignee_id: string | null; list_id: string | null },
+  userId: string,
+  writable: Set<string>,
+): boolean {
+  return (
+    task.user_id === userId ||
+    task.assignee_id === userId ||
+    (task.list_id !== null && writable.has(task.list_id))
+  )
 }
 
 // ── Tasks ────────────────────────────────────────────
@@ -100,12 +146,20 @@ tasks.get('/tasks', async (c) => {
   // matches the access POST /tasks/:id/complete already grants an assignee,
   // so the field is discoverable via view=assigned and not just actionable
   // by id), plus tasks in any list shared into a group they belong to.
+  // An undated, unassigned subtask is part of its parent's checklist — it is
+  // surfaced via the parent's subtask_total/subtask_done, not as a standalone
+  // row in a flat view. Without this, a checklist item like "Outline" under
+  // "Draft the Q3 handover doc" leaks into Upcoming's "Waiting for a date",
+  // All tasks, etc. A subtask that gained its own due date or assignee is
+  // real scheduled work and stays visible here. The unfiltered (no `view`)
+  // outliner fetch above is untouched — this only applies to the named views.
   const conditions: string[] = [
     `(t.user_id = ? OR t.assignee_id = ? OR t.list_id IN (
        SELECT tls.list_id FROM task_list_shares tls
        JOIN group_members gm ON gm.group_id = tls.group_id
        WHERE gm.user_id = ?
      ))`,
+    'NOT (t.parent_id IS NOT NULL AND t.due_date IS NULL AND t.assignee_id IS NULL)',
   ]
   const whereParams: unknown[] = [userId, userId, userId]
 
@@ -181,7 +235,7 @@ tasks.get('/tasks', async (c) => {
       END AS due_state
     FROM tasks t
     WHERE ${conditions.join(' AND ')}
-    ORDER BY t.due_date IS NULL, t.due_date ASC, t.sort_order ASC
+    ORDER BY ${view === 'completed' ? 't.completed_at DESC' : 't.due_date IS NULL, t.due_date ASC, t.sort_order ASC'}
   `
   const { results } = await c.env.DB.prepare(sql)
     .bind(today, today, ...whereParams)
@@ -221,6 +275,9 @@ tasks.post('/tasks', async (c) => {
   }
   if (b.recurrence != null && !RECURRENCE_FREQS.has(String(b.recurrence))) {
     return c.json({ error: 'recurrence must be daily, weekly, monthly, yearly, or custom' }, 400)
+  }
+  if (String(b.recurrence) === 'custom' && !hasCustomWeekdays(b.recurrenceData)) {
+    return c.json({ error: 'recurrence: custom requires at least one weekday' }, 400)
   }
 
   const row = await c.env.DB.prepare(
@@ -282,14 +339,32 @@ tasks.post('/tasks', async (c) => {
 
 tasks.patch('/tasks/:id', async (c) => {
   const userId = c.get('userId')
+  const id = c.req.param('id')
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+
+  // D-15: same access predicate as POST /tasks/:id/complete and
+  // DELETE /tasks/:id (canActOnTask above) — the owner, the assignee, or a
+  // member with write access on the task's list. Without this, an assignee
+  // editing a task in the detail modal got a 404, because the old
+  // `updateRow(... userId ...)` call below scoped its UPDATE to
+  // `WHERE id = ? AND user_id = ?`, owner-only.
+  const task = await c.env.DB.prepare(
+    'SELECT id, user_id, assignee_id, list_id FROM tasks WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; assignee_id: string | null; list_id: string | null }>()
+  if (!task) return c.json({ error: 'task not found' }, 404)
+
+  const writableForAccess = await writableListIds(c.env.DB, userId)
+  if (!canActOnTask(task, userId, writableForAccess)) {
+    return c.json({ error: 'task not found' }, 404)
+  }
 
   // Same write-scoping guard as POST /tasks — moving an existing (owned) task
   // into a list the caller can't write to is the same bypass as creating one
   // there directly. Clearing listId (null/'') is always allowed.
   if ('listId' in body && body.listId) {
-    const writable = await writableListIds(c.env.DB, userId)
-    if (!writable.has(String(body.listId))) return c.json({ error: 'list not found' }, 404)
+    if (!writableForAccess.has(String(body.listId))) return c.json({ error: 'list not found' }, 404)
   }
 
   // Deriving assigned_at here, not accepting it from the client, mirrors how
@@ -326,11 +401,19 @@ tasks.patch('/tasks/:id', async (c) => {
     if (!RECURRENCE_FREQS.has(String(body.recurrence))) {
       return c.json({ error: 'recurrence must be daily, weekly, monthly, yearly, or custom' }, 400)
     }
+    if (String(body.recurrence) === 'custom' && !hasCustomWeekdays(body.recurrenceData)) {
+      return c.json({ error: 'recurrence: custom requires at least one weekday' }, 400)
+    }
     const dueDate = 'dueDate' in body
       ? body.dueDate
+      // Access to this task is already established above (canActOnTask) —
+      // this lookup is scoped by id alone, not owner, so an assignee or
+      // shared-list writer PATCHing a bare `{ recurrence }` (no dueDate in
+      // the same request) sees the task's real due date rather than a
+      // false "not found" that would wrongly read as "no due date".
       : (
-          await c.env.DB.prepare('SELECT due_date FROM tasks WHERE id = ? AND user_id = ?')
-            .bind(c.req.param('id'), userId)
+          await c.env.DB.prepare('SELECT due_date FROM tasks WHERE id = ?')
+            .bind(id)
             .first<{ due_date: string | null }>()
         )?.due_date
     if (!dueDate) return c.json({ error: 'a task must have a due date to repeat' }, 400)
@@ -345,7 +428,11 @@ tasks.patch('/tasks/:id', async (c) => {
     body.recurrenceData = JSON.stringify(body.recurrenceData)
   }
 
-  const row = await updateRow(c.env.DB, 'tasks', c.req.param('id'), userId, TASK_COLS, body)
+  // scopeToOwner: false — access was already established above via
+  // canActOnTask, which allows more than ownership (D-15). user_id itself is
+  // not in TASK_COLS, so there is no column through which this update could
+  // reassign a task to a different owner.
+  const row = await updateRow(c.env.DB, 'tasks', id, userId, TASK_COLS, body, { scopeToOwner: false })
   if (!row) return c.json({ error: 'task not found' }, 404)
   return c.json(row)
 })
@@ -372,11 +459,7 @@ tasks.post('/tasks/:id/complete', async (c) => {
   if (!task) return c.json({ error: 'task not found' }, 404)
 
   const writable = await writableListIds(c.env.DB, userId)
-  const allowed =
-    task.user_id === userId ||
-    task.assignee_id === userId ||
-    (task.list_id !== null && writable.has(task.list_id))
-  if (!allowed) return c.json({ error: 'task not found' }, 404)
+  if (!canActOnTask(task, userId, writable)) return c.json({ error: 'task not found' }, 404)
 
   const next = task.is_completed ? 0 : 1
   // completed_at must land on the business timezone's "today" (nowStr), not
@@ -396,8 +479,13 @@ tasks.post('/tasks/:id/complete', async (c) => {
 })
 
 // Bulk due-date move for the overdue header's one-click action
-// (docs/archive/design-adoption/tasks-data-model.md §4). Scoped to the caller's own tasks only —
-// not sharing-aware, since a shared task's due date is the owner's call.
+// (docs/archive/design-adoption/tasks-data-model.md §4) and All tasks' "Schedule
+// these". D-15 access (canActOnTask above) — the owner, the assignee, or a
+// member with write access on the task's list — not owner-only: Today's
+// "Reschedule all" and All tasks' "Schedule these" both send ids the caller
+// can see but doesn't own (assigned to them, or in a group-shared writable
+// list), and the original `WHERE user_id = ?` silently skipped every one of
+// those, so the client believed it had moved tasks it hadn't touched.
 //
 // Registered before /tasks/:id so a literal "reschedule" path segment can
 // never be captured as an :id — harmless here since no other route shares
@@ -411,12 +499,23 @@ tasks.post('/tasks/reschedule', async (c) => {
   if (typeof dueDate !== 'string' || !dueDate) return c.json({ error: 'dueDate is required' }, 400)
 
   const placeholders = ids.map(() => '?').join(',')
+  const { results: candidates } = await c.env.DB.prepare(
+    `SELECT id, user_id, assignee_id, list_id FROM tasks WHERE id IN (${placeholders})`,
+  )
+    .bind(...ids)
+    .all<{ id: string; user_id: string; assignee_id: string | null; list_id: string | null }>()
+
+  const writable = await writableListIds(c.env.DB, userId)
+  const allowedIds = candidates.filter((t) => canActOnTask(t, userId, writable)).map((t) => t.id)
+  if (allowedIds.length === 0) return c.json([])
+
+  const allowedPlaceholders = allowedIds.map(() => '?').join(',')
   const { results } = await c.env.DB.prepare(
     `UPDATE tasks SET due_date = ?, updated_at = datetime('now')
-     WHERE user_id = ? AND id IN (${placeholders})
+     WHERE id IN (${allowedPlaceholders})
      RETURNING *`,
   )
-    .bind(dueDate, userId, ...ids)
+    .bind(dueDate, ...allowedIds)
     .all()
   return c.json(results)
 })
@@ -675,11 +774,7 @@ tasks.delete('/tasks/:id', async (c) => {
   if (!task) return c.json({ error: 'task not found' }, 404)
 
   const writable = await writableListIds(c.env.DB, userId)
-  const allowed =
-    task.user_id === userId ||
-    task.assignee_id === userId ||
-    (task.list_id !== null && writable.has(task.list_id))
-  if (!allowed) return c.json({ error: 'task not found' }, 404)
+  if (!canActOnTask(task, userId, writable)) return c.json({ error: 'task not found' }, 404)
 
   const { results: descendants } = await c.env.DB.prepare(
     `WITH RECURSIVE sub(id) AS (
