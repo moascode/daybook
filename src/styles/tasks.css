@@ -96,6 +96,35 @@
 .task.done .task-title { text-decoration: line-through; color: rgb(var(--fg-subtle)); text-decoration-color: rgb(var(--fg-faint)); }
 .task.done .task-sub, .task.done .task-when { opacity: .7; }
 
+/* The mockup's own task grid (proposal-v2/theme.css `.task`), used by
+   AllTasksRow.tsx: fixed tracks for checkbox / name / exact date / relative
+   date / avatar / actions, so every column lines up on every row whatever
+   it holds. The name wraps onto as many lines as it needs instead of being
+   cut off — it is the only flexible track, so wrapping never moves a column.
+   Narrower screens drop columns, as the mockup does, rather than reflowing
+   the row into a second line. */
+.task--cols { grid-template-columns: 20px minmax(0, 1fr) 128px 108px 28px 32px; }
+.task--cols .task-title { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.task--cols .task-when { text-align: right; }
+.task--cols .task-when-edit { grid-column: 3 / 6; justify-self: end; display: inline-flex; align-items: center; gap: var(--s1); }
+.task--cols .trow-actions { grid-column: 6; justify-self: end; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.task--cols:hover .trow-actions, .task--cols:focus-within .trow-actions,
+.task--cols .trow-actions:has([data-state="open"]) { opacity: 1; }
+@media (max-width: 1080px) {
+  .task--cols { grid-template-columns: 20px minmax(0, 1fr) 104px 28px 32px; }
+  .task--cols .col-exact { display: none; }
+  .task--cols .task-when-edit { grid-column: 3 / 5; }
+  .task--cols .trow-actions { grid-column: 5; }
+}
+/* Phones: no hover, so the actions stay visible; the avatar gives way to the
+   relative date, which is the column worth keeping. */
+@media (max-width: 680px) {
+  .task--cols { grid-template-columns: 20px minmax(0, 1fr) 84px 32px; }
+  .task--cols .col-avatar { display: none; }
+  .task--cols .task-when-edit { grid-column: 3 / 4; }
+  .task--cols .trow-actions { grid-column: 4; opacity: 1; }
+}
+
 /* list chip — a task's list, coloured like a category */
 .lchip { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-xs); font-weight: 500; color: rgb(var(--fg-muted)); }
 .lchip i { width: 7px; height: 7px; border-radius: 2px; flex-shrink: 0; }
