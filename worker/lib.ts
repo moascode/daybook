@@ -28,7 +28,7 @@ export async function updateRow<T = Record<string, unknown>>(
   userId: string,
   columnMap: Record<string, string>,
   body: Record<string, unknown>,
-  opts: { touchUpdatedAt?: boolean } = {},
+  opts: { touchUpdatedAt?: boolean; scopeToOwner?: boolean } = {},
 ): Promise<T | undefined> {
   const row = await updateRowStmt(db, table, id, userId, columnMap, body, opts).first<T>()
   return row ?? undefined
@@ -46,6 +46,15 @@ export async function updateRow<T = Record<string, unknown>>(
  *
  * When no column in `columnMap` is present in `body` this is a plain SELECT, so
  * the "nothing to update" case still returns the current row.
+ *
+ * `opts.scopeToOwner` (default true) controls the WHERE clause's reach. Most
+ * tables (task_lists, habits, accounts, …) are owner-only, so the default
+ * `WHERE id = ? AND user_id = ?` is right. A table whose access is wider than
+ * ownership — tasks, via D-15's owner/assignee/shared-list-writer predicate
+ * — passes `scopeToOwner: false` after checking that predicate itself
+ * (worker/routes/tasks.ts's `canActOnTask`), narrowing to `WHERE id = ?`
+ * alone. `userId` is still required in that case (unused in the WHERE) to
+ * keep one call signature for every caller.
  */
 export function updateRowStmt(
   db: D1Database,
@@ -54,11 +63,11 @@ export function updateRowStmt(
   userId: string,
   columnMap: Record<string, string>,
   body: Record<string, unknown>,
-  opts: { touchUpdatedAt?: boolean } = {},
+  opts: { touchUpdatedAt?: boolean; scopeToOwner?: boolean } = {},
 ): D1PreparedStatement {
   const sets: string[] = []
   // Bind order must match the order placeholders appear in the final SQL:
-  // every SET value first, then the two WHERE values.
+  // every SET value first, then the WHERE value(s).
   const values: unknown[] = []
 
   for (const [key, col] of Object.entries(columnMap)) {
@@ -68,8 +77,11 @@ export function updateRowStmt(
     }
   }
 
-  // Scope by user_id so one user can never update another's rows.
-  const where = 'WHERE id = ? AND user_id = ?'
+  // Scope by user_id so one user can never update another's rows — unless
+  // the caller has already established a wider access right of its own.
+  const scopeToOwner = opts.scopeToOwner !== false
+  const where = scopeToOwner ? 'WHERE id = ? AND user_id = ?' : 'WHERE id = ?'
+  const whereValues = scopeToOwner ? [id, userId] : [id]
 
   if (opts.touchUpdatedAt !== false) {
     // No placeholder — datetime('now') is evaluated by SQLite, not bound.
@@ -77,12 +89,12 @@ export function updateRowStmt(
   }
 
   if (sets.length === 0) {
-    return db.prepare(`SELECT * FROM ${table} ${where}`).bind(id, userId)
+    return db.prepare(`SELECT * FROM ${table} ${where}`).bind(...whereValues)
   }
 
   return db
     .prepare(`UPDATE ${table} SET ${sets.join(', ')} ${where} RETURNING *`)
-    .bind(...values, id, userId)
+    .bind(...values, ...whereValues)
 }
 
 /**
