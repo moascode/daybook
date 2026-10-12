@@ -144,7 +144,9 @@ test.describe('99 — Task detail modal', () => {
     const task = (await created.json()) as { id: string }
     await page.goto('/tasks/upcoming')
 
-    await page.getByTestId(`upcoming-card-open-${task.id}`).click()
+    // FEAT-057 mockup parity: the whole `.bcard` is the click target now
+    // (no checkbox, no separate inner "open" span) — see WeekBoard.tsx.
+    await page.getByTestId(`upcoming-card-${task.id}`).click()
     const modal = page.getByTestId('task-detail-modal')
     await expect(modal).toBeVisible()
     await expect(page.getByTestId('task-detail-name')).toHaveValue('Team sync notes')

@@ -113,7 +113,12 @@ function WaitingRow({ task, list, assignee, onComplete, onOpenDetail, onSetDate 
       ) : (
         <>
           <span className="task-when col-exact">—</span>
-          <button type="button" onClick={() => setShowDatePicker(true)} className="btn btn-quiet btn-sm">
+          <button
+            type="button"
+            data-testid={`upcoming-schedule-trigger-${task.id}`}
+            onClick={() => setShowDatePicker(true)}
+            className="btn btn-quiet btn-sm"
+          >
             Schedule
           </button>
           <span className="col-avatar flex justify-center">

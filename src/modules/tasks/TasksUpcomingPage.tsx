@@ -238,7 +238,10 @@ export function TasksUpcomingPage() {
   // failure (CLAUDE.md rule 10), so a failure here still surfaces to the
   // user even though this page's own local list won't self-correct until
   // the next load.
-  const moveTaskToDate = async (taskId: string, dueDate: string) => {
+  // Returns whether the move actually persisted, so a batch caller
+  // (handleAutoSchedule) can tally successes without re-deriving the same
+  // ownership check — the toast on failure still fires here, once, either way.
+  const moveTaskToDate = async (taskId: string, dueDate: string): Promise<boolean> => {
     const previousDate = tasks.find((t) => t.id === taskId)?.dueDate ?? null
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
     try {
@@ -251,9 +254,12 @@ export function TasksUpcomingPage() {
       if (updated.length === 0) {
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate: previousDate } : t)))
         addToast({ message: "Couldn't move that task — you can only reschedule tasks you own." })
+        return false
       }
+      return true
     } catch {
       // rescheduleTasks already surfaced the error and reconciled the store.
+      return false
     }
   }
 
@@ -276,11 +282,13 @@ export function TasksUpcomingPage() {
     }
   }
 
-  // "Auto-schedule into the gaps" (FEAT-057): plan client-side, then persist
-  // grouped by target date (one rescheduleTasks call per day, not one per
-  // task) and report exactly what happened — including a day with no
-  // eligible slot and a day whose owner-scoped write didn't apply (CLAUDE.md
-  // rule 10: never resolve silently).
+  // "Auto-schedule into the gaps" (FEAT-057): plan client-side (least-loaded
+  // eligible day, ties to the earliest), then persist each assignment
+  // through the same `moveTaskToDate` every other move on this page already
+  // goes through — so the per-task ownership-failure toast ("you can only
+  // reschedule tasks you own") is already handled there; this only adds the
+  // batch-level summary and reports a day with no eligible slot at all
+  // (CLAUDE.md rule 10: never resolve silently).
   const handleAutoSchedule = async () => {
     const currentCounts = new Map(week.map((d) => [d, tasksByDay.get(d)?.length ?? 0]))
     const { assignments, skipped } = planAutoSchedule(undated, week, today, currentCounts)
@@ -295,42 +303,20 @@ export function TasksUpcomingPage() {
     }
 
     setAutoScheduling(true)
-    const byDate = new Map<string, string[]>()
-    for (const a of assignments) {
-      byDate.set(a.date, [...(byDate.get(a.date) ?? []), a.taskId])
-    }
-
-    let movedCount = 0
-    let failedCount = 0
-    const movedAssignments: { taskId: string; date: string }[] = []
+    const moved: typeof assignments = []
     try {
-      for (const [date, ids] of byDate) {
-        try {
-          const updated = await rescheduleTasks(ids, date)
-          const updatedIds = new Set(updated.map((t) => t.id))
-          setTasks((prev) => prev.map((t) => (updatedIds.has(t.id) ? { ...t, dueDate: date } : t)))
-          movedCount += updated.length
-          failedCount += ids.length - updated.length
-          for (const t of updated) movedAssignments.push({ taskId: t.id, date })
-        } catch {
-          // rescheduleTasks already surfaced this batch's error; count the
-          // whole group as failed so the summary toast below stays honest.
-          failedCount += ids.length
-        }
+      for (const a of assignments) {
+        const ok = await moveTaskToDate(a.taskId, a.date)
+        if (ok) moved.push(a)
       }
     } finally {
       setAutoScheduling(false)
     }
 
-    if (movedCount > 0) {
-      const span = describeAssignedDays(movedAssignments)
+    if (moved.length > 0) {
+      const span = describeAssignedDays(moved)
       addToast({
-        message: `Scheduled ${movedCount} task${movedCount === 1 ? '' : 's'} ${span.includes('–') ? 'across' : 'on'} ${span}.`,
-      })
-    }
-    if (failedCount > 0) {
-      addToast({
-        message: `Couldn't schedule ${failedCount} task${failedCount === 1 ? '' : 's'} — you can only reschedule tasks you own.`,
+        message: `Scheduled ${moved.length} task${moved.length === 1 ? '' : 's'} ${span.includes('–') ? 'across' : 'on'} ${span}.`,
       })
     }
     if (skipped > 0) {
