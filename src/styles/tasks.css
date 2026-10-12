@@ -121,8 +121,13 @@
 @media (max-width: 680px) {
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 84px 32px; }
   .task--cols .col-avatar { display: none; }
-  .task--cols .task-when-edit { grid-column: 3 / 4; }
+  .task--cols .task-when-edit { grid-column: 3 / 5; }
   .task--cols .trow-actions { grid-column: 4; opacity: 1; }
+}
+/* No hover on touch screens (tablets included, whatever their width), so
+   the row menu must never hide behind :hover there. */
+@media (hover: none) {
+  .task--cols .trow-actions { opacity: 1; }
 }
 
 /* list chip — a task's list, coloured like a category */
