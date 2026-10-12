@@ -10,9 +10,9 @@ import { businessDateOf, daysBetween, newId, todayStr } from '../lib.ts'
 export const settlements = new Hono<AppEnv>()
 
 /** Round to cents the same way the server does, so amounts stay comparable. */
-const cents = (n: number) => Math.round(n * 100) / 100
+export const cents = (n: number) => Math.round(n * 100) / 100
 
-interface OutstandingSplit {
+export interface OutstandingSplit {
   id: string
   share_amount: number
   settled_amount: number
@@ -33,7 +33,7 @@ interface OutstandingSplit {
  * must not be claimed again. Both resting states are payable: agreeing to a debt
  * is an acknowledgement, not a precondition.
  */
-async function outstandingSplitsFor(
+export async function outstandingSplitsFor(
   db: D1Database,
   groupId: string,
   debtorId: string,
@@ -140,7 +140,7 @@ async function computeNetting(
  * same fifteen. No match, no category — an uncategorised expense is honest,
  * a foreign one is not.
  */
-async function ownCategoryLike(
+export async function ownCategoryLike(
   db: D1Database,
   categoryId: string | null,
   ownerId: string,
@@ -197,7 +197,7 @@ export interface Allocation {
  * Pure, so the preview can show exactly what the commit will do without
  * touching the database.
  */
-function allocate(splits: OutstandingSplit[], amount: number): Allocation[] {
+export function allocate(splits: OutstandingSplit[], amount: number): Allocation[] {
   let remaining = amount
   const applied: Allocation[] = []
   for (const split of splits) {
@@ -726,9 +726,15 @@ settlements.post('/settlements/:id/confirm', async (c) => {
       note: string
       status: string
       offset_total: number
+      chain_id: string | null
     }>()
   // 404 for anyone but the creditor — a settlement id must not be probeable.
   if (!st) return c.json({ error: 'settlement not found' }, 404)
+  // A chained hop is confirmed only as part of its whole chain — see
+  // POST /settlement-chains/:id/confirm. One link cannot be dismantled alone.
+  if (st.chain_id) {
+    return c.json({ error: 'this settlement is part of a three-way settlement' }, 409)
+  }
   if (st.status !== 'awaiting_confirmation') {
     return c.json({ error: `this settlement is already ${st.status}` }, 409)
   }
@@ -933,8 +939,12 @@ settlements.post('/settlements/:id/reject', async (c) => {
       offset_from_transaction_id: string | null
       from_user: string
       status: string
+      chain_id: string | null
     }>()
   if (!st) return c.json({ error: 'settlement not found' }, 404)
+  if (st.chain_id) {
+    return c.json({ error: 'this settlement is part of a three-way settlement' }, 409)
+  }
   if (st.status !== 'awaiting_confirmation') {
     return c.json({ error: `this settlement is already ${st.status}` }, 409)
   }
@@ -987,7 +997,12 @@ settlements.get('/settlements', async (c) => {
     FROM settlements s
     JOIN users uf ON uf.id = s.from_user
     JOIN users ut ON ut.id = s.to_user
-    WHERE (s.from_user = ? OR s.to_user = ?)`
+    WHERE (s.from_user = ? OR s.to_user = ?)
+      -- A three-way settlement's per-hop rows are not bilateral settlements:
+      -- listed here they read as "A paid B" when A paid C, offer an Undo the
+      -- chain_id guard refuses, and count as claims to confirm through a flow
+      -- that cannot confirm them. Chains have their own endpoint and card.
+      AND s.chain_id IS NULL`
   const binds: unknown[] = [userId, userId]
 
   if (groupId) {
@@ -1012,7 +1027,7 @@ settlements.get('/settlements', async (c) => {
  * same-day rule had, just wider. A named constant because the number appears in
  * the error message the user reads.
  */
-const UNDO_WINDOW_DAYS = 7
+export const UNDO_WINDOW_DAYS = 7
 
 // DELETE /api/settlements/:id — undo settlement (within UNDO_WINDOW_DAYS).
 settlements.delete('/settlements/:id', async (c) => {
@@ -1034,9 +1049,13 @@ settlements.delete('/settlements/:id', async (c) => {
       from_user: string
       to_user: string
       status: string
+      chain_id: string | null
     }>()
 
   if (!settlement) return c.json({ error: 'settlement not found' }, 404)
+  if (settlement.chain_id) {
+    return c.json({ error: 'this settlement is part of a three-way settlement' }, 409)
+  }
 
   // Only allow undo within UNDO_WINDOW_DAYS, in the business timezone.
   //

@@ -8,6 +8,7 @@ import { habits } from './routes/habits.ts'
 import { settings } from './routes/settings.ts'
 import { groups } from './routes/groups.ts'
 import { settlements } from './routes/settlements.ts'
+import { settlementChains } from './routes/settlement-chains.ts'
 import { wallet } from './routes/wallet.ts'
 import { capture } from './routes/capture.ts'
 import { captureTokens } from './routes/capture-tokens.ts'
@@ -107,6 +108,7 @@ protectedApi.route('/', habits)
 protectedApi.route('/', settings)
 protectedApi.route('/', groups)
 protectedApi.route('/', settlements)
+protectedApi.route('/', settlementChains)
 protectedApi.route('/', wallet)
 // Managing capture tokens is the OWNER's job, done in the browser — so it is
 // cookie-authenticated like everything else here. A capture token can never

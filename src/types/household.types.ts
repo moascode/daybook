@@ -129,6 +129,55 @@ export interface SettlePlan {
   pairwiseCount: number
 }
 
+// FEAT-024 PR C — three-party ("chain") settlement. A chain routes one
+// payer -> payee transfer through one or more intermediary edges on the
+// bilateral debt graph; every party (payer, every intermediary, payee) must
+// confirm before any ledger leg is written.
+export interface ChainHop {
+  /** The hop's `settlements` row id. */
+  id: string
+  fromUserId: string
+  toUserId: string
+  amount: number
+}
+
+// POST /settlement-chains/preview response.
+export interface ChainPreviewHop {
+  fromUserId: string
+  fromUsername: string
+  toUserId: string
+  toUsername: string
+  amount: number
+}
+
+export interface ChainParty {
+  userId: string
+  username: string
+  role: 'payer' | 'intermediary' | 'payee'
+  amount: number
+  confirmed: boolean
+}
+
+export interface ChainPreview {
+  hops: ChainPreviewHop[]
+  parties: { userId: string; username: string; role: 'payer' | 'intermediary' | 'payee' }[]
+}
+
+export interface SettlementChain {
+  id: string
+  groupId: string
+  payerId: string
+  payeeId: string
+  amount: number
+  note: string
+  status: 'awaiting_confirmation' | 'confirmed' | 'rejected'
+  rejectedReason: string | null
+  createdAt: string
+  confirmedAt: string | null
+  parties: ChainParty[]
+  hops: ChainHop[]
+}
+
 export interface Settlement {
   id: string
   groupId: string

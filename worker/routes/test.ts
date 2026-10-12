@@ -17,7 +17,9 @@ export const test = new Hono<AppEnv>()
 // and independent of which cascades happen to be declared.
 const WIPE_ORDER = [
   'settlement_split_lines',
+  'settlement_chain_parties',
   'settlements',
+  'settlement_chains',
   'transaction_splits',
   'absorbed_import_hashes',
   'account_shares',
@@ -119,6 +121,41 @@ test.post('/test/inject-legacy-tag-row', async (c) => {
     .run()
 
   return c.json({ status: 'injected' })
+})
+
+// Simulates an independent settlement landing on a split "underneath" an
+// in-flight settlement/chain, between its creation-time probe and its final
+// confirm — fault injection for the CAS discipline (CLAUDE.md §3). The guard
+// every confirming write uses is `status IN ('pending', 'approved') AND
+// settled_amount = <the value read>`: a plain re-read of settled_amount alone
+// cannot be defeated by a sequential (not truly concurrent) test, because the
+// confirming request's own hoisted read would simply see whatever is there by
+// then and guard against that. What the CAS structurally defends against is
+// the split's status having moved to 'settled' (or `settled_at` having been
+// set) by something else — exactly what finishing a real settlement does —
+// so this hook does that: it fully settles the split as an unrelated party
+// would, which is what makes the confirming request's guarded UPDATE match
+// zero rows and forces it to compensate and return 409 with nothing moved.
+// No other test route reaches into transaction_splits like this, so it is
+// kept narrowly scoped to exactly this one simulated effect and gated the
+// same way as every other /test/* route (DAYBOOK_TEST only, see worker/index.ts).
+test.post('/test/force-settle-split', async (c) => {
+  const userId = await readSession(c)
+  if (!userId) return c.json({ error: 'not authenticated' }, 401)
+
+  const b: { splitId?: string } = await c.req.json<{ splitId?: string }>().catch(() => ({}))
+  if (!b.splitId) return c.json({ error: 'splitId is required' }, 400)
+
+  const res = await c.env.DB.prepare(
+    `UPDATE transaction_splits
+        SET settled_amount = share_amount, status = 'settled', settled_at = datetime('now')
+      WHERE id = ?`,
+  )
+    .bind(b.splitId)
+    .run()
+  if (!res.meta.changes) return c.json({ error: 'split not found' }, 404)
+
+  return c.json({ status: 'forced' })
 })
 
 // Stashes a canned Claude response body for the requesting user, consumed by

@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-07
+> **Status:** Live · **Last verified:** 2026-10-12
 
 # Database schema
 
@@ -277,6 +277,56 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 > `POST /transactions/splits/status`, and the transaction response field
 > `hasSplits`. (The separate `account_shares` table — account-level sharing — is
 > unrelated and keeps its name.)
+
+### Three-party ("chain") settlement (migration `0028_settlement_chains.sql` / `0027_` on the server, FEAT-024 PR C)
+
+```sql
+CREATE TABLE settlement_chains (
+  id          TEXT PRIMARY KEY,
+  group_id    TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  created_by  TEXT NOT NULL REFERENCES users(id),
+  payer_id    TEXT NOT NULL REFERENCES users(id),
+  payee_id    TEXT NOT NULL REFERENCES users(id),
+  amount      REAL NOT NULL,
+  note        TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'awaiting_confirmation', -- | 'confirmed' | 'rejected'
+  rejected_reason TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  confirmed_at TEXT
+);
+CREATE TABLE settlement_chain_parties (
+  chain_id     TEXT NOT NULL REFERENCES settlement_chains(id) ON DELETE CASCADE,
+  user_id      TEXT NOT NULL REFERENCES users(id),
+  account_id   TEXT REFERENCES accounts(id) ON DELETE SET NULL,
+  confirmed_at TEXT,
+  PRIMARY KEY (chain_id, user_id)
+);
+ALTER TABLE settlements ADD COLUMN chain_id TEXT REFERENCES settlement_chains(id);
+CREATE INDEX IF NOT EXISTS idx_settlements_chain ON settlements(chain_id);
+```
+
+A minimum-transfer plan (`GET /groups/:id/settle-plan`, `worker/lib/min-transfers.ts`)
+routinely proposes a payment between two people who share no splits — the money
+has to discharge two or more bilateral edges at once, and an intermediary's
+books move although they neither paid nor received anything. `worker/routes/settlement-chains.ts`
+executes that atomically:
+
+- **One `settlements` row per hop**, grouped by `chain_id`, so every existing
+  reader (history, undo, the Shared activity feed) keeps working on pairs. The
+  payer's hop(s) carry the real cash leg; an intermediary's hop carries a
+  non-cash netted leg (`is_non_cash`); the payee's receipt is `is_balance_only`
+  — the same three leg shapes the bilateral path already writes, nothing new.
+- **Consent: every party on the chain confirms**, each picking their own
+  account. Before the last confirmation, only a no-op probe CAS has run against
+  the splits it will discharge — the same shape `POST /settlements` uses while
+  `awaiting_confirmation`. Any party's reject releases the whole chain.
+- **`POST /settlements/:id/{confirm,reject}` and `DELETE /settlements/:id`
+  refuse (409) when the row's `chain_id IS NOT NULL`** — a chain can never be
+  dismantled one link at a time; `DELETE /settlement-chains/:id` is the only
+  undo path for a chained row.
+- Same CAS discipline as the bilateral path throughout (CLAUDE.md §3): hoist
+  every read, compute the whole write set in JS, one `batch()`, inspect
+  `meta.changes` on every guard, compensate every survivor on any miss, 409.
 
 ### CSV transfer linking additions (migration `0008_absorbed_import_hashes.sql`, PR #61)
 

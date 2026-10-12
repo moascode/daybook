@@ -138,8 +138,10 @@ test.describe('109 — settle-plan: the chain collapses, off-graph stays disable
     await expect(rows).toHaveCount(1)
     await expect(rows.first()).toContainText(`${f.a.name} pays ${f.c.name}`)
     await expect(rows.first()).toContainText('RM 40.00')
-    await expect(rows.first()).toContainText('three-way settlement')
-    await expect(rows.first().getByRole('button', { name: 'Settle' })).toBeDisabled()
+    // A is the payer on this non-direct transfer, so FEAT-024 PR C's client
+    // half gives them an enabled "Start three-way settle" button rather than
+    // the old disabled "Settle" placeholder.
+    await expect(rows.first().getByRole('button', { name: 'Start three-way settle' })).toBeEnabled()
 
     await closeTrio(f)
   })
