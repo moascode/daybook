@@ -133,8 +133,8 @@ function recurrenceLabel(task: Task): string | null {
 }
 
 /**
- * One task row for the All tasks page (R5 PR-2,
- * docs/archive/design-adoption/tasks-design-adoption.md §All tasks). Unlike `TaskRow.tsx`
+ * One task row for Assigned to me and a list's detail page (born on the All
+ * tasks page in R5 PR-2, which now uses `AllTasksRow.tsx`). Unlike `TaskRow.tsx`
  * (Today's grouping-aware row, which assumes overdue/today/done-today
  * context and has no list chip/subtask progress), this row is due-date
  * agnostic and always shows the task's list colour chip and subtask

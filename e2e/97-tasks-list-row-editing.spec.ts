@@ -69,7 +69,7 @@ test.describe('97 — Task row inline editing', () => {
 
     await expect(page.getByTestId('all-tasks-no-due-date-group')).not.toBeVisible()
     const dayHeaders = page.getByTestId('all-tasks-day-header')
-    await expect(dayHeaders.filter({ hasText: today.slice(8, 10) })).toBeVisible()
+    await expect(dayHeaders.filter({ hasText: 'Today ·' })).toBeVisible()
     await expect(row).toBeVisible()
 
     // Change it to tomorrow via the now-visible due-date badge.
@@ -78,7 +78,7 @@ test.describe('97 — Task row inline editing', () => {
     await dateInput2.fill(tomorrow)
     await dateInput2.press('Enter')
 
-    await expect(dayHeaders.filter({ hasText: tomorrow.slice(8, 10) })).toBeVisible()
+    await expect(dayHeaders.filter({ hasText: 'Tomorrow ·' })).toBeVisible()
 
     // Clear it — the row returns to the undated group.
     await row.locator('button.task-when').click()

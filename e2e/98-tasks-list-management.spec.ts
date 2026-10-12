@@ -32,11 +32,10 @@ test.describe('98 — Tasks list management', () => {
     await expect(navLink).toBeVisible()
   })
 
-  test('assigning a task to a list from the All tasks row picker persists after reload', async ({ browser }) => {
+  test('assigning a task to a list from the All tasks row menu persists after reload', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
-    const listRes = await page.request.post(`${API}/task-lists`, { data: { name: 'Work', color: '#3b82f6' } })
-    const list = await listRes.json()
+    await page.request.post(`${API}/task-lists`, { data: { name: 'Client work', color: '#3b82f6' } })
     const taskRes = await page.request.post(`${API}/tasks`, { data: { content: 'Send invoice' } })
     const task = await taskRes.json()
 
@@ -44,14 +43,16 @@ test.describe('98 — Tasks list management', () => {
     const row = page.locator(`[data-task-id="${task.id}"]`)
     await expect(row.getByTestId('all-tasks-row-list-chip')).toHaveAttribute('title', 'Unsorted')
 
-    await row.getByTestId(`task-row-list-${task.id}`).selectOption(list.id)
+    // The list move lives in the row's kebab ("Move to list"), as tasks-all.html puts row actions.
+    await row.getByTestId(`all-tasks-row-options-${task.id}`).click()
+    await page.getByTestId(`task-row-move-${task.id}`).hover()
+    await page.getByRole('menuitemradio', { name: 'Client work', exact: true }).click()
 
-    await expect(row.getByTestId('all-tasks-row-list-chip')).toHaveAttribute('title', 'Work')
+    await expect(row.getByTestId('all-tasks-row-list-chip')).toHaveAttribute('title', 'Client work')
 
     await page.reload()
     const rowAfter = page.locator(`[data-task-id="${task.id}"]`)
-    await expect(rowAfter.getByTestId('all-tasks-row-list-chip')).toHaveAttribute('title', 'Work')
-    await expect(rowAfter.getByTestId(`task-row-list-${task.id}`)).toHaveValue(list.id)
+    await expect(rowAfter.getByTestId('all-tasks-row-list-chip')).toHaveAttribute('title', 'Client work')
   })
 
   test('the outliner’s "Move to list…" dialog assigns a task to a list', async ({ browser }) => {

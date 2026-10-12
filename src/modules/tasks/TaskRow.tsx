@@ -4,6 +4,7 @@ import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, Trash2, X } from 
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
+import { avatarClass } from '@/lib/avatar'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { Button } from '@/components/ui/Button'
 import type { TaskList } from '@/hooks/useTaskLists'
@@ -23,14 +24,6 @@ export interface TaskRowProps {
   onDueDateChange?: (taskId: string, dueDate: string | null) => void
   /** Notify-only callback after a successful delete (the row calls `useTasks().deleteTaskById` itself — the guard-free variant, since TasksTodayPage.tsx keeps its own local task list rather than the outliner store), so the parent can remove it. */
   onDelete?: (taskId: string) => void
-}
-
-const AVATAR_BG = ['bg-alt-bg text-alt-fg', 'bg-info-bg text-info-fg', 'bg-calm-bg text-calm-fg', 'bg-warn-bg text-warn-fg']
-
-function avatarClass(userId: string): string {
-  let hash = 0
-  for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) | 0
-  return AVATAR_BG[Math.abs(hash) % AVATAR_BG.length]
 }
 
 /** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
