@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
+import { Search } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
 import { useCompletedAnalytics } from '@/hooks/useCompletedAnalytics'
 import { useToastStore } from '@/stores/toast.store'
 import { errorMessage, todayISO, dateMinusDays } from '@/lib/utils'
+import { dayDiff } from '@/modules/tasks/taskRowFormat'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
 import { CompletedAnalytics, CompletedByListCards } from '@/modules/tasks/CompletedAnalytics'
 import type { Task } from '@/types/tasks.types'
@@ -16,6 +18,15 @@ function rangeStart(range: CompletedRange, today: string): string | null {
   if (range === '30d') return dateMinusDays(today, 29)
   if (range === '6m') return dateMinusDays(today, 182)
   return null
+}
+
+/** Day-group header text — "Today" / "Yesterday · Sat 11 Oct" / "Fri 10 Oct". */
+function dayGroupLabel(dateStr: string): string {
+  const d = parseISO(dateStr)
+  const diff = dayDiff(dateStr, todayISO())
+  if (diff === 0) return 'Today'
+  if (diff === 1) return `Yesterday · ${format(d, 'EEE d MMM')}`
+  return format(d, 'EEE d MMM')
 }
 
 /**
@@ -85,6 +96,18 @@ export function TasksCompletedPage() {
   const [completedTasks, setCompletedTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState<CompletedRange>('6m')
+  // "Filter completed…" (tasks-lists-parity) — client-side only, same as
+  // every other client-side filter in this app (e.g. TasksPage.tsx's own
+  // search); the completed list is already fully loaded for the heatmap/
+  // by-list cards, so there's no server round trip to make.
+  const [filterQuery, setFilterQuery] = useState('')
+  // Client paging (tasks-lists-parity): 25 rows per page, "Load more" adds
+  // another 25. Naturally caps at however many rows actually exist
+  // (`pagedDayGroups` below stops once it runs out) — a narrower range or
+  // filter, or a row leaving via un-complete, just shows fewer rows under
+  // whatever budget "Load more" has already raised, rather than needing a
+  // separate reset.
+  const [visibleCount, setVisibleCount] = useState(25)
 
   useEffect(() => {
     let cancelled = false
@@ -117,14 +140,24 @@ export function TasksCompletedPage() {
     return completedTasks.filter((t) => !!t.completedAt && t.completedAt.slice(0, 10) >= start)
   }, [completedTasks, range])
 
+  // "Filter completed…" narrows the day-grouped list (and the Export CSV,
+  // same "export whatever is currently showing" convention the range
+  // toggle already follows) by content, case-insensitively.
+  const filteredTasks = useMemo(() => {
+    const q = filterQuery.trim().toLowerCase()
+    if (!q) return rangeFilteredTasks
+    return rangeFilteredTasks.filter((t) => t.content.toLowerCase().includes(q))
+  }, [rangeFilteredTasks, filterQuery])
+
   // Group by day from `completedAt`, already a business-timezone value (PR-1's
   // `nowStr()` fix) — `.slice(0, 10)` only, never `toISOString()` (CLAUDE.md
   // §16 trap 1). Newest day first, matching the plan's "newest day first"
   // ordering (the opposite of TasksAllPage's due-date groups, which sort
-  // soonest-first).
+  // soonest-first); most-recent-first WITHIN a day too, by the full
+  // `completedAt` timestamp, not insertion order.
   const dayGroups = useMemo(() => {
     const grouped = new Map<string, Task[]>()
-    for (const t of rangeFilteredTasks) {
+    for (const t of filteredTasks) {
       if (!t.completedAt) continue
       const day = t.completedAt.slice(0, 10)
       const existing = grouped.get(day)
@@ -132,9 +165,28 @@ export function TasksCompletedPage() {
       else grouped.set(day, [t])
     }
     return Array.from(grouped.entries())
-      .map(([date, tasks]) => ({ date, tasks }))
+      .map(([date, tasks]) => ({ date, tasks: [...tasks].sort((a, b) => b.completedAt!.localeCompare(a.completedAt!)) }))
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [rangeFilteredTasks])
+  }, [filteredTasks])
+
+  // Client paging: 25 rows per page across the whole day-grouped list, cut
+  // at a row boundary rather than a day boundary — a day's own header
+  // always shows its TRUE total (`tasks.length`), even when the page cuts
+  // off partway through its rows (same as the mockup's own worked example).
+  const pagedDayGroups = useMemo(() => {
+    let remaining = visibleCount
+    const out: { date: string; tasks: Task[]; totalInDay: number }[] = []
+    for (const group of dayGroups) {
+      if (remaining <= 0) break
+      const visible = group.tasks.slice(0, remaining)
+      if (visible.length === 0) break
+      out.push({ date: group.date, tasks: visible, totalInDay: group.tasks.length })
+      remaining -= visible.length
+    }
+    return out
+  }, [dayGroups, visibleCount])
+
+  const shownCount = pagedDayGroups.reduce((sum, g) => sum + g.tasks.length, 0)
 
   const pageSub =
     range === '30d'
@@ -148,6 +200,14 @@ export function TasksCompletedPage() {
       const updated = await completeTask(id)
       if (!updated.isCompleted) {
         setCompletedTasks((prev) => prev.filter((t) => t.id !== id))
+        // Tasks-lists-parity: un-completing removes a row from this page's
+        // whole dataset, which changes the heatmap/streak/by-list analytics
+        // too (they're server-aggregated from the same `completed_at`
+        // column) — reload them so the cards above don't keep counting a
+        // task that's no longer completed.
+        loadAnalytics().catch((err) => {
+          addToast({ message: errorMessage(err, 'Updated, but the analytics above could not refresh.') })
+        })
       }
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not update that task — please try again.') })
@@ -207,8 +267,8 @@ export function TasksCompletedPage() {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => downloadCompletedCsv(rangeFilteredTasks, listById, addToast)}
-            disabled={rangeFilteredTasks.length === 0}
+            onClick={() => downloadCompletedCsv(filteredTasks, listById, addToast)}
+            disabled={filteredTasks.length === 0}
             data-testid="completed-export-btn"
           >
             Export
@@ -225,6 +285,19 @@ export function TasksCompletedPage() {
           <section className="card card-pad c8">
             <div className="card-head">
               <span className="card-title">Recently finished</span>
+              <div className="filters" style={{ marginLeft: 'auto' }}>
+                <label className="filter-field" style={{ maxWidth: 220 }}>
+                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                  <input
+                    type="search"
+                    placeholder="Filter completed…"
+                    aria-label="Filter completed tasks"
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    data-testid="completed-filter-input"
+                  />
+                </label>
+              </div>
             </div>
             {dayGroups.length === 0 && completedTasks.length === 0 ? (
               <p className="py-3 text-sm text-fg-subtle" data-testid="completed-empty">
@@ -232,38 +305,53 @@ export function TasksCompletedPage() {
               </p>
             ) : dayGroups.length === 0 ? (
               <p className="py-3 text-sm text-fg-subtle" data-testid="completed-empty-range">
-                {range === '30d'
-                  ? 'Nothing completed in the last 30 days — try a wider range.'
-                  : range === '6m'
-                    ? 'Nothing completed in the last 6 months — try a wider range.'
-                    : 'Nothing completed in this range — try a wider range.'}
+                {filterQuery.trim()
+                  ? `Nothing completed matches "${filterQuery.trim()}".`
+                  : range === '30d'
+                    ? 'Nothing completed in the last 30 days — try a wider range.'
+                    : range === '6m'
+                      ? 'Nothing completed in the last 6 months — try a wider range.'
+                      : 'Nothing completed in this range — try a wider range.'}
               </p>
             ) : (
               <div>
-                {dayGroups.map((group) => {
-                  const d = parseISO(group.date)
-                  return (
-                    <div key={group.date}>
-                      <div className="tgroup-head" data-testid="completed-day-header">
-                        <span className="tg-date">
-                          <b>{format(d, 'EEE')}</b>, {format(d, 'dd MMM yyyy')}
-                        </span>
-                      </div>
-                      {group.tasks.map((t) => (
-                        <TaskListRow
-                          key={t.id}
-                          task={t}
-                          list={t.listId ? listById.get(t.listId) : undefined}
-                          onToggleComplete={handleToggleComplete}
-                          onContentChange={handleContentChange}
-                          onDueDateChange={handleDueDateChange}
-                          availableLists={taskLists}
-                          onListChange={handleListChange}
-                        />
-                      ))}
+                {pagedDayGroups.map((group) => (
+                  <div key={group.date}>
+                    <div className="tgroup" data-testid="completed-day-header">
+                      <span>{dayGroupLabel(group.date)}</span>
+                      <span className="n">{group.totalInDay}</span>
+                      <span className="line" />
                     </div>
-                  )
-                })}
+                    {group.tasks.map((t) => (
+                      <TaskListRow
+                        key={t.id}
+                        task={t}
+                        list={t.listId ? listById.get(t.listId) : undefined}
+                        onToggleComplete={handleToggleComplete}
+                        onContentChange={handleContentChange}
+                        onDueDateChange={handleDueDateChange}
+                        availableLists={taskLists}
+                        onListChange={handleListChange}
+                      />
+                    ))}
+                  </div>
+                ))}
+                <div className="divider" />
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-fg-subtle" data-testid="completed-showing-count">
+                    Showing {shownCount} of {filteredTasks.length}
+                  </span>
+                  {shownCount < filteredTasks.length && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary ml-auto"
+                      onClick={() => setVisibleCount((prev) => prev + 25)}
+                      data-testid="completed-load-more"
+                    >
+                      Load more
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </section>

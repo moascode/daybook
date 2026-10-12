@@ -370,3 +370,23 @@
 
 
 }
+
+/* Assigned / Completed / List pages */
+@layer components {
+
+/* Completed's heatmap (CompletedAnalytics.tsx): `.heat` (charts.css) sizes
+   its implicit grid columns to content, which for ~53 weeks of squares
+   renders far narrower than the c12 card around it — `.heat--fill` spreads
+   them across the card's full width instead. `.heat-key`'s own `<i>`
+   swatches (also charts.css) never actually got the `.heat i.l1..l4`
+   colours: that rule is scoped under `.heat`, and the key's squares are
+   `.heat-key`'s own direct children, not nested inside a `.heat` — so in
+   the mockup itself they render as plain, uncoloured squares. Giving the
+   key matching colours directly fixes that rather than reproducing it. */
+.heat--fill { grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.heat-key i.l1 { background: rgb(var(--accent) / .25); }
+.heat-key i.l2 { background: rgb(var(--accent) / .45); }
+.heat-key i.l3 { background: rgb(var(--accent) / .7); }
+.heat-key i.l4 { background: rgb(var(--accent)); }
+
+}
