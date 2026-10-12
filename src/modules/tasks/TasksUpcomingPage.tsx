@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { format, parseISO, startOfWeek, addDays } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import {
   DndContext,
   pointerWithin,
@@ -9,27 +9,37 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
-  useDraggable,
-  useDroppable,
   type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core'
-import { Check } from 'lucide-react'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
-import type { TaskList } from '@/hooks/useTaskLists'
+import { useWalletRefChips } from '@/hooks/useWalletRefChips'
+import { useAppStore } from '@/stores/app.store'
 import { useToastStore } from '@/stores/toast.store'
 import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
-import { cn, errorMessage } from '@/lib/utils'
-import { DatePicker } from '@/components/ui/DatePicker'
+import { errorMessage, todayISO } from '@/lib/utils'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
 import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
+import { WeekHead } from '@/modules/tasks/upcoming/WeekHead'
+import { BandStats } from '@/modules/tasks/upcoming/BandStats'
+import { WeekBoard } from '@/modules/tasks/upcoming/WeekBoard'
+import { WaitingSection } from '@/modules/tasks/upcoming/WaitingSection'
+import { BalanceCard } from '@/modules/tasks/upcoming/BalanceCard'
+import {
+  bandTitle,
+  describeAssignedDays,
+  formatWeekRange,
+  mondayOf,
+  planAutoSchedule,
+  shiftDate,
+  usualWeek,
+  weekDatesFrom,
+} from '@/modules/tasks/upcoming/weekMath'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
-
-const UNSORTED_COLOR = '#6b7280'
 
 /**
  * Drop onto the day column under the pointer; with no pointer (a keyboard
@@ -58,28 +68,38 @@ function sortForBalancing(tasks: Task[]): Task[] {
 }
 
 /**
- * Upcoming — `/tasks/upcoming` (FEAT-026). A 7-column week board (Mon→Sun,
- * current week) rather than another flat list — planning across a week is
- * spatial, so the layout is a canvas of day columns, each drag-and-drop
- * capable, plus a "Waiting for a date" section below for undated tasks and
- * a "Balance the week" helper that proposes moving tasks off the busiest day.
+ * Upcoming — `/tasks/upcoming` (FEAT-026, mockup parity FEAT-057). A 7-column
+ * week board (Mon→Sun, navigable ±1 week at a time) rather than another flat
+ * list — planning across a week is spatial, so the layout is a canvas of day
+ * columns, each drag-and-drop capable, plus a "Waiting for a date" section
+ * below for undated tasks and a "Balance the week" helper that proposes
+ * moving tasks off the busiest day.
  *
- * One fetch: `loadTasks('all')` returns every incomplete task regardless of
- * due date and — unlike the outliner's unfiltered fetch — never touches the
- * Zustand store, so this page keeps its own local `tasks` state and mutates
- * it optimistically alongside every `rescheduleTasks`/`updateTask`/`completeTask` call.
+ * Two fetches: `loadTasks('all')` (every incomplete task) and
+ * `loadTasks('completed')` (for "Your usual week"'s historical baseline) —
+ * neither touches the Zustand store (unlike the outliner's unfiltered
+ * fetch), so this page keeps its own local `tasks`/`completedTasks` state
+ * and mutates it optimistically alongside every
+ * `rescheduleTasks`/`updateTask`/`completeTask` call.
  */
 export function TasksUpcomingPage() {
   const { loadTasks, addTask, updateTask, rescheduleTasks, completeTask } = useTasks()
   const { taskLists, loadTaskLists } = useTaskLists()
+  const { ensureLoaded: ensureWalletChips, resolveChip } = useWalletRefChips()
+  const currentUser = useAppStore((s) => s.user)
   const addToast = useToastStore((s) => s.addToast)
   const navigate = useNavigate()
 
   const [tasks, setTasks] = useState<Task[]>([])
+  const [completedTasks, setCompletedTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<GroupMember[]>([])
   const [loading, setLoading] = useState(true)
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [autoScheduling, setAutoScheduling] = useState(false)
+  // Weeks offset from the current one — 0 = this week, ±1 = next/previous, etc.
+  const [weekOffset, setWeekOffset] = useState(0)
+
   // FEAT-057: same shared "New task" modal FEAT-054 wired up on Today, opened
   // from the composer's "Task"/"Assign" shortcuts — see TaskComposer.tsx.
   const [taskFormOpen, setTaskFormOpen] = useState(false)
@@ -111,12 +131,14 @@ export function TasksUpcomingPage() {
     let cancelled = false
     Promise.all([
       loadTasksRef.current('all'),
+      loadTasksRef.current('completed'),
       loadTaskListsRef.current(),
       api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
     ])
-      .then(([open, , memberRows]) => {
+      .then(([open, done, , memberRows]) => {
         if (cancelled) return
         setTasks(open)
+        setCompletedTasks(done)
         setMembers(memberRows)
       })
       .catch((err) => {
@@ -131,13 +153,24 @@ export function TasksUpcomingPage() {
     }
   }, [])
 
+  // Wallet-linked chips (board cards + waiting rows): resolved once for the
+  // page, only fetched when a loaded task actually links to Wallet — same
+  // pattern as TasksAllPage.tsx.
+  const anyWalletRef = tasks.some((t) => t.walletRef)
+  useEffect(() => {
+    if (!anyWalletRef) return
+    ensureWalletChips().catch((err: unknown) => {
+      addToastRef.current({ message: errorMessage(err, 'Could not load the Wallet links on these tasks.') })
+    })
+  }, [anyWalletRef, ensureWalletChips])
+
   const listById = useMemo(() => new Map(taskLists.map((l) => [l.id, l])), [taskLists])
   const coMembers = useMemo(() => members.map((m) => ({ userId: m.userId, username: m.username })), [members])
 
-  const week = useMemo(() => {
-    const monday = startOfWeek(new Date(), { weekStartsOn: 1 })
-    return Array.from({ length: 7 }, (_, i) => format(addDays(monday, i), 'yyyy-MM-dd'))
-  }, [])
+  const today = todayISO()
+  const currentMonday = useMemo(() => mondayOf(today), [today])
+  const monday = useMemo(() => shiftDate(currentMonday, weekOffset * 7), [currentMonday, weekOffset])
+  const week = useMemo(() => weekDatesFrom(monday), [monday])
 
   const tasksByDay = useMemo(() => {
     const map = new Map<string, Task[]>()
@@ -159,53 +192,30 @@ export function TasksUpcomingPage() {
   const gap = maxEntry.count - minEntry.count
   const canBalance = gap >= 2
 
-  // Band stats (FEAT-057): tasks due within `week`, split into "hard
-  // deadlines" (no recurrence, no wallet link — the mockup's definition of
-  // genuinely fixed) and "recurring" (recurrence set). Deliberately built
+  // Band stats (FEAT-057 mockup parity): tasks due within the displayed
+  // `week`, split into "hard deadlines" (owner-approved definition: has a
+  // specific time, or is flagged high-priority — genuinely fixed points in
+  // the week) and "recurring" (recurrence set; a task can be both). Built
   // from `tasksByDay`'s values rather than filtering `tasks` directly, so
   // this only counts the same dated-within-the-displayed-week set the day
-  // columns show — a dated task outside this week (out of range) doesn't
-  // inflate either stat. The sub-line names real tasks (mockup: "insurance,
-  // rent, review" / "standup, plants, run"), not a fabricated stat.
-  //
-  // Single source of truth for "how many tasks are scheduled this week":
-  // `scheduledCount` (page-head summary line AND the band card's own
-  // band-main figure) derives from this same array's length, rather than
-  // separately re-summing `dayCounts` — both numbers can never drift apart.
+  // columns show.
   const weekTasks = useMemo(() => [...tasksByDay.values()].flat(), [tasksByDay])
   const scheduledCount = weekTasks.length
 
-  // Headline callout ("Wednesday is doing too much") — same "is the busiest
-  // day genuinely heavier than at least one other day" comparison
-  // TasksTodayPage.tsx's `isHeaviestDay` chip uses for its own load strip,
-  // just applied to the week's `dayCounts` instead: the two pages compare
-  // different shapes (Today checks whether *today specifically* is the max
-  // of a per-day-this-week strip; this page finds whichever day of the week
-  // is the max), so this stays a local one-liner rather than a shared
-  // extraction that would need to abstract over both call shapes for a
-  // single boolean comparison.
   const isHeaviestDayGenuine = maxEntry.count > 0 && dayCounts.some((d) => d.count < maxEntry.count)
 
   const hardDeadlineTasks = useMemo(
-    () => weekTasks.filter((t) => t.recurrence === null && t.walletRef === null),
+    () => weekTasks.filter((t) => t.dueTime !== null || t.priority === 'high'),
     [weekTasks],
   )
   const recurringTasks = useMemo(() => weekTasks.filter((t) => t.recurrence !== null), [weekTasks])
-
-  const summarizeTaskNames = (list: Task[], max = 3): string => {
-    const names = list.map((t) => t.content || 'Untitled task').filter(Boolean)
-    if (names.length === 0) return ''
-    if (names.length <= max) return names.join(', ')
-    return `${names.slice(0, max).join(', ')}…`
-  }
-  const hardDeadlineNames = useMemo(() => summarizeTaskNames(hardDeadlineTasks), [hardDeadlineTasks])
-  const recurringNames = useMemo(() => summarizeTaskNames(recurringTasks), [recurringTasks])
+  const usual = useMemo(() => usualWeek(completedTasks, monday, scheduledCount), [completedTasks, monday, scheduledCount])
+  const bandTitleText = bandTitle(weekOffset, formatWeekRange(monday))
 
   // Balance-the-week card (FEAT-057): recomputed from `tasksByDay` on every
   // render, so as candidates move off `maxEntry.date` the list shrinks (and
-  // the card disappears once `canBalance` goes false) with no extra state —
-  // unlike the old single-batch `proposal`, each row here acts independently
-  // via `moveTaskToDate`. Same `Math.floor(gap / 2)` sizing and
+  // `canBalance` goes false) with no extra state — each row acts
+  // independently via `moveTaskToDate`. Same `Math.floor(gap / 2)` sizing and
   // `sortForBalancing` candidate order FEAT-026's original batch move used.
   const balanceCandidates = useMemo(() => {
     if (!canBalance) return []
@@ -216,8 +226,6 @@ export function TasksUpcomingPage() {
 
   // One-line reason per candidate — only what's honestly derivable from the
   // task/day data already in scope (CLAUDE.md rule 7: no fabricated reasons).
-  // `sortForBalancing` already prefers untimed tasks, so most candidates hit
-  // the first branch; the fallback still names the real target-day gap.
   const balanceReason = (task: Task): string => {
     const targetDay = format(parseISO(minEntry.date), 'EEEE')
     return task.dueTime === null
@@ -230,16 +238,6 @@ export function TasksUpcomingPage() {
   // failure (CLAUDE.md rule 10), so a failure here still surfaces to the
   // user even though this page's own local list won't self-correct until
   // the next load.
-  //
-  // Due-date writes go through `rescheduleTasks` (POST /tasks/reschedule),
-  // not `updateTask` (PATCH /tasks/:id): `updateTask` no-ops when the task
-  // isn't already in the Zustand store, which is *always* true here — this
-  // page loads via `loadTasks('all')`, which by design never populates that
-  // store (see the doc comment above) — so `updateTask` would silently drop
-  // every due-date change on a cold load. `dueDate` is non-null: the only
-  // callers are the drag handler (always a day from `week`) and the
-  // "Waiting for a date" DatePicker, whose `onChange` only forwards a
-  // non-empty value (see WaitingRow below).
   const moveTaskToDate = async (taskId: string, dueDate: string) => {
     const previousDate = tasks.find((t) => t.id === taskId)?.dueDate ?? null
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate } : t)))
@@ -249,9 +247,7 @@ export function TasksUpcomingPage() {
       // date is the owner's call, not the assignee's) and silently updates 0
       // rows for a task this viewer doesn't own — no throw, since that's a
       // normal outcome, not an error. Reconcile against what the server
-      // actually moved rather than trusting the optimistic update above, and
-      // say so — the same rule 10 concern `rescheduleTasks` itself protects
-      // against, just moved to the ownership boundary instead of the store.
+      // actually moved rather than trusting the optimistic update above.
       if (updated.length === 0) {
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, dueDate: previousDate } : t)))
         addToast({ message: "Couldn't move that task — you can only reschedule tasks you own." })
@@ -272,16 +268,73 @@ export function TasksUpcomingPage() {
 
   const handleAddTask = async (date: string, content: string, listId: string | null) => {
     try {
-      // `addTask` seeds the Zustand store with the new task, so this
-      // `updateTask` (right after, same id) passes its store-existence
-      // guard rather than silently no-opping — unlike this page's other
-      // due-date/list writes (moveTaskToDate, etc.), which target tasks
-      // loaded via `loadTasks('all')` and never touch the store at all.
       const newTask = await addTask(content, null, null)
       await updateTask(newTask.id, { dueDate: date, listId })
       setTasks((prev) => [...prev, { ...newTask, dueDate: date, listId }])
     } catch {
       // addTask/updateTask already surfaced the error and reconciled the store.
+    }
+  }
+
+  // "Auto-schedule into the gaps" (FEAT-057): plan client-side, then persist
+  // grouped by target date (one rescheduleTasks call per day, not one per
+  // task) and report exactly what happened — including a day with no
+  // eligible slot and a day whose owner-scoped write didn't apply (CLAUDE.md
+  // rule 10: never resolve silently).
+  const handleAutoSchedule = async () => {
+    const currentCounts = new Map(week.map((d) => [d, tasksByDay.get(d)?.length ?? 0]))
+    const { assignments, skipped } = planAutoSchedule(undated, week, today, currentCounts)
+    if (assignments.length === 0) {
+      addToast({
+        message:
+          skipped > 0
+            ? "Couldn't auto-schedule — no day in this week is today or later."
+            : 'Nothing to schedule.',
+      })
+      return
+    }
+
+    setAutoScheduling(true)
+    const byDate = new Map<string, string[]>()
+    for (const a of assignments) {
+      byDate.set(a.date, [...(byDate.get(a.date) ?? []), a.taskId])
+    }
+
+    let movedCount = 0
+    let failedCount = 0
+    const movedAssignments: { taskId: string; date: string }[] = []
+    try {
+      for (const [date, ids] of byDate) {
+        try {
+          const updated = await rescheduleTasks(ids, date)
+          const updatedIds = new Set(updated.map((t) => t.id))
+          setTasks((prev) => prev.map((t) => (updatedIds.has(t.id) ? { ...t, dueDate: date } : t)))
+          movedCount += updated.length
+          failedCount += ids.length - updated.length
+          for (const t of updated) movedAssignments.push({ taskId: t.id, date })
+        } catch {
+          // rescheduleTasks already surfaced this batch's error; count the
+          // whole group as failed so the summary toast below stays honest.
+          failedCount += ids.length
+        }
+      }
+    } finally {
+      setAutoScheduling(false)
+    }
+
+    if (movedCount > 0) {
+      const span = describeAssignedDays(movedAssignments)
+      addToast({
+        message: `Scheduled ${movedCount} task${movedCount === 1 ? '' : 's'} ${span.includes('–') ? 'across' : 'on'} ${span}.`,
+      })
+    }
+    if (failedCount > 0) {
+      addToast({
+        message: `Couldn't schedule ${failedCount} task${failedCount === 1 ? '' : 's'} — you can only reschedule tasks you own.`,
+      })
+    }
+    if (skipped > 0) {
+      addToast({ message: `${skipped} task${skipped === 1 ? '' : 's'} left waiting — no eligible day this week.` })
     }
   }
 
@@ -371,12 +424,13 @@ export function TasksUpcomingPage() {
 
   return (
     <div className="content">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Upcoming</h1>
-          <p className="page-sub">This week's tasks, laid out day by day.</p>
-        </div>
-      </div>
+      <WeekHead
+        monday={monday}
+        weekOffset={weekOffset}
+        onPrev={() => setWeekOffset((o) => o - 1)}
+        onNext={() => setWeekOffset((o) => o + 1)}
+        onThisWeek={() => setWeekOffset(0)}
+      />
 
       <TaskComposer
         lists={taskLists}
@@ -388,41 +442,16 @@ export function TasksUpcomingPage() {
       />
 
       {!loading && weekTasks.length > 0 && (
-        <section className="card card-pad mb-4" data-testid="upcoming-band-stats">
-          <div className="card-head">
-            <div>
-              <span className="card-title">Next seven days</span>
-              <div className="card-sub" data-testid="upcoming-summary-line">
-                {scheduledCount} scheduled, {undated.length} waiting for a date
-              </div>
-            </div>
-            {isHeaviestDayGenuine && (
-              <span className="chip chip-warn ml-auto" data-testid="upcoming-heaviest-chip">
-                {format(parseISO(maxEntry.date), 'EEEE')} is doing too much
-              </span>
-            )}
-          </div>
-          <div className="band">
-            <div className="band-main">
-              <div className="band-fig">
-                <span className="v">{scheduledCount}</span>
-                <span className="k">tasks across seven days</span>
-              </div>
-            </div>
-            <div className="band-stats">
-              <div className="band-stat" data-testid="upcoming-stat-hard-deadlines">
-                <p className="k">Hard deadlines</p>
-                <p className="v">{hardDeadlineTasks.length}</p>
-                {hardDeadlineNames && <p className="s">{hardDeadlineNames}</p>}
-              </div>
-              <div className="band-stat" data-testid="upcoming-stat-recurring">
-                <p className="k">Recurring</p>
-                <p className="v">{recurringTasks.length}</p>
-                {recurringNames && <p className="s">{recurringNames}</p>}
-              </div>
-            </div>
-          </div>
-        </section>
+        <BandStats
+          bandTitleText={bandTitleText}
+          scheduledCount={scheduledCount}
+          undatedCount={undated.length}
+          isHeaviestDayGenuine={isHeaviestDayGenuine}
+          heaviestDayDate={maxEntry.date}
+          hardDeadlineTasks={hardDeadlineTasks}
+          recurringTasks={recurringTasks}
+          usual={usual}
+        />
       )}
 
       {loading ? (
@@ -434,80 +463,48 @@ export function TasksUpcomingPage() {
               waiting rows sat outside the context and could only be dated
               through their picker. */}
           <DndContext sensors={sensors} collisionDetection={dropOnDay} onDragEnd={handleDragEnd}>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
-              {week.map((date) => (
-                <DayColumn
-                  key={date}
-                  date={date}
-                  tasks={tasksByDay.get(date) ?? []}
-                  listById={listById}
-                  taskLists={taskLists}
-                  onComplete={handleComplete}
-                  onAddTask={handleAddTask}
-                  onOpenDetail={openDetail}
-                />
-              ))}
-            </div>
+            <WeekBoard
+              week={week}
+              tasksByDay={tasksByDay}
+              listById={listById}
+              taskLists={taskLists}
+              resolveWalletChip={resolveChip}
+              onAddTask={handleAddTask}
+              onOpenDetail={openDetail}
+            />
 
-            <div className="mt-6" data-testid="upcoming-waiting-section">
-              <div className="tgroup-head">
-                <span className="tg-date">Waiting for a date</span>
+            <div className="dash mt-4">
+              <div className="c8">
+                <WaitingSection
+                  undated={undated}
+                  listById={listById}
+                  coMembers={coMembers}
+                  currentUser={currentUser}
+                  onComplete={handleComplete}
+                  onOpenDetail={openDetail}
+                  onSetDate={(taskId, date) => {
+                    if (!week.includes(date)) {
+                      addToast({ message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this week` })
+                    }
+                    void moveTaskToDate(taskId, date)
+                  }}
+                  onAutoSchedule={() => void handleAutoSchedule()}
+                  autoScheduling={autoScheduling}
+                />
               </div>
-              {undated.length === 0 ? (
-                <p className="py-3 text-sm text-fg-subtle">Nothing is waiting on a date.</p>
-              ) : (
-                undated.map((t) => (
-                  <WaitingRow
-                    key={t.id}
-                    task={t}
-                    list={t.listId ? listById.get(t.listId) : undefined}
-                    onSetDate={(date) => {
-                      if (!week.includes(date)) {
-                        addToast({ message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this week` })
-                      }
-                      void moveTaskToDate(t.id, date)
-                    }}
-                    onOpenDetail={openDetail}
-                  />
-                ))
-              )}
+              <div className="c4">
+                <BalanceCard
+                  canBalance={canBalance}
+                  candidates={balanceCandidates}
+                  maxEntry={maxEntry}
+                  minEntry={minEntry}
+                  balanceReason={balanceReason}
+                  onMove={(taskId) => void moveTaskToDate(taskId, minEntry.date)}
+                />
+              </div>
             </div>
           </DndContext>
         </>
-      )}
-
-      {canBalance && (
-        <section className="card card-pad mt-4" data-testid="upcoming-balance-card">
-          <div className="card-head">
-            <div>
-              <span className="card-title">Balance the week</span>
-              <div className="card-sub">
-                {format(parseISO(maxEntry.date), 'EEEE')} has {maxEntry.count}, {format(parseISO(minEntry.date), 'EEEE')} has{' '}
-                {minEntry.count}
-              </div>
-            </div>
-          </div>
-          <div>
-            {balanceCandidates.map((task) => (
-              <div key={task.id} className="sug">
-                <div className="sug-main">
-                  <p className="sug-title">
-                    Move &quot;{task.content || 'Untitled task'}&quot; to {format(parseISO(minEntry.date), 'EEEE')}
-                  </p>
-                  <p className="sug-sub">{balanceReason(task)}</p>
-                </div>
-                <button
-                  type="button"
-                  data-testid={`upcoming-balance-move-${task.id}`}
-                  onClick={() => void moveTaskToDate(task.id, minEntry.date)}
-                  className="btn btn-secondary btn-sm"
-                >
-                  Move
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
 
       <TaskDetailModal
@@ -527,247 +524,6 @@ export function TasksUpcomingPage() {
         initialContent={taskFormContent}
         focusField={taskFormFocusField}
         onSubmit={handleTaskFormSubmit}
-      />
-    </div>
-  )
-}
-
-// ── Subcomponents ──────────────────────────────────────
-
-interface DayColumnProps {
-  date: string
-  tasks: Task[]
-  listById: Map<string, TaskList>
-  taskLists: TaskList[]
-  onComplete: (id: string) => void
-  onAddTask: (date: string, content: string, listId: string | null) => Promise<void>
-  onOpenDetail: (task: Task) => void
-}
-
-function DayColumn({ date, tasks, listById, taskLists, onComplete, onAddTask, onOpenDetail }: DayColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: date })
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [listId, setListId] = useState('')
-  const d = parseISO(date)
-
-  const commit = async () => {
-    const text = draft.trim()
-    const chosenListId = listId || null
-    setAdding(false)
-    setDraft('')
-    setListId('')
-    if (!text) return
-    await onAddTask(date, text, chosenListId)
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      data-testid={`upcoming-day-column-${date}`}
-      className={cn(
-        'flex min-h-[180px] flex-col gap-2 rounded-lg border border-line-subtle bg-surface-sunken p-2',
-        isOver && 'border-brand-400 ring-2 ring-brand-500/20',
-      )}
-    >
-      <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium text-fg-muted">{format(d, 'EEE d')}</span>
-        <span className="text-xs text-fg-faint" data-testid={`upcoming-day-count-${date}`}>
-          {tasks.length}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        {tasks.map((t) => (
-          <UpcomingCard
-            key={t.id}
-            task={t}
-            list={t.listId ? listById.get(t.listId) : undefined}
-            onComplete={onComplete}
-            onOpenDetail={onOpenDetail}
-          />
-        ))}
-      </div>
-
-      {adding ? (
-        <div
-          className="flex flex-col gap-1"
-          onBlur={(e) => {
-            // Both the text input and the list <select> live in this
-            // wrapper, and clicking from one to the other blurs the input —
-            // committing there (as a bare input-level onBlur would) closes
-            // the composer the moment someone picks a list before typing.
-            // Only commit once focus leaves the whole composer.
-            if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
-            void commit()
-          }}
-        >
-          <input
-            autoFocus
-            data-testid={`upcoming-add-day-${date}`}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void commit()
-              else if (e.key === 'Escape') {
-                setAdding(false)
-                setDraft('')
-                setListId('')
-              }
-            }}
-            placeholder="Add a task…"
-            className="rounded-md border border-line-strong bg-surface px-2 py-1 text-sm text-fg outline-none focus:border-brand-400"
-          />
-          <select
-            data-testid={`upcoming-add-day-list-${date}`}
-            value={listId}
-            onChange={(e) => setListId(e.target.value)}
-            className="rounded-md border border-line-strong bg-surface px-2 py-1 text-xs text-fg outline-none focus:border-brand-400"
-          >
-            <option value="">Unsorted</option>
-            {taskLists.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : (
-        <button
-          type="button"
-          data-testid={`upcoming-add-day-${date}`}
-          onClick={() => setAdding(true)}
-          className="rounded-md border border-dashed border-line-strong px-2 py-1.5 text-xs text-fg-faint transition-colors hover:border-brand-400 hover:text-brand-600"
-        >
-          + Add
-        </button>
-      )}
-    </div>
-  )
-}
-
-interface UpcomingCardProps {
-  task: Task
-  list: Pick<TaskList, 'id' | 'name' | 'color'> | undefined
-  onComplete: (id: string) => void
-  onOpenDetail: (task: Task) => void
-}
-
-function UpcomingCard({ task, list, onComplete, onOpenDetail }: UpcomingCardProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
-  const color = list?.color ?? UNSORTED_COLOR
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, borderLeftColor: color }
-    : { borderLeftColor: color }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      data-testid={`upcoming-card-${task.id}`}
-      className={cn(
-        'flex items-center gap-2 rounded-md border border-line border-l-4 bg-surface px-2 py-1.5 text-sm',
-        isDragging && 'opacity-50',
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => onComplete(task.id)}
-        aria-label="Mark complete"
-        className="tcheck shrink-0"
-      >
-        <Check className="h-3.5 w-3.5" />
-      </button>
-      {/*
-        Plain onClick alongside dnd-kit's `listeners`/`attributes`: dnd-kit's
-        PointerSensor listeners register only `onKeyDown`/`onPointerDown`
-        (verified in @dnd-kit/core's source), never `onClick`, so there's no
-        handler collision from spreading both on this node — a stationary
-        click (under the 8px activation distance) never starts a drag, so it
-        reaches this handler untouched.
-      */}
-      <span
-        data-testid={`upcoming-card-open-${task.id}`}
-        role="button"
-        tabIndex={0}
-        onClick={() => onOpenDetail(task)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onOpenDetail(task)
-          }
-        }}
-        title={task.content}
-        className="min-w-0 flex-1 cursor-pointer truncate text-fg"
-      >
-        {task.content || 'Untitled task'}
-      </span>
-    </div>
-  )
-}
-
-interface WaitingRowProps {
-  task: Task
-  list: Pick<TaskList, 'id' | 'name' | 'color'> | undefined
-  onSetDate: (date: string) => void
-  onOpenDetail: (task: Task) => void
-}
-
-function WaitingRow({ task, list, onSetDate, onOpenDetail }: WaitingRowProps) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
-  const color = list?.color ?? UNSORTED_COLOR
-  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined
-
-  // Draggable onto a day column, like UpcomingCard — the same plain-onClick-
-  // alongside-`listeners` reasoning applies, and the DatePicker still works:
-  // a click never travels the 8px activation distance.
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className={cn('task', isDragging && 'relative z-10 opacity-50')}
-      data-task-id={task.id}
-      data-testid={`upcoming-waiting-row-${task.id}`}
-    >
-      <span
-        className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-        style={{ background: color }}
-        aria-hidden="true"
-        title={list?.name ?? 'Unsorted'}
-      />
-      <div className="min-w-0 flex-1">
-        <p
-          data-testid={`upcoming-waiting-open-${task.id}`}
-          role="button"
-          tabIndex={0}
-          onClick={() => onOpenDetail(task)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              onOpenDetail(task)
-            }
-          }}
-          title={task.content}
-          className="task-title cursor-pointer"
-        >
-          {task.content || 'Untitled task'}
-        </p>
-      </div>
-      <DatePicker
-        aria-label={`Schedule ${task.content || 'task'}`}
-        value=""
-        onChange={(e) => {
-          // The picker starts (and stays) empty, so there's nothing
-          // meaningful to do when it reports an empty value back —
-          // the task is already undated.
-          if (e.target.value) onSetDate(e.target.value)
-        }}
-        data-testid={`upcoming-schedule-${task.id}`}
-        className="w-auto py-1"
       />
     </div>
   )

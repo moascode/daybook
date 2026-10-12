@@ -236,9 +236,18 @@
   display: flex; gap: var(--s6); margin-left: auto;
   padding-left: var(--s6); border-left: 1px solid rgb(var(--line-subtle));
 }
+/* FEAT-057 mockup parity: a band-stat's `.s` sub-line names real task
+   titles (summarizeTaskNames in BandStats.tsx), which run arbitrarily long
+   with 3+ tasks — capping the stat's own width and ellipsising that line to
+   one row keeps every stat the same size instead of the longest name
+   stretching the whole card. */
+.band-stat { max-width: 180px; }
 .band-stat .k { font-size: var(--t-xs); color: rgb(var(--fg-subtle)); }
 .band-stat .v { font-size: var(--t-md); font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 2px; }
-.band-stat .s { font-size: var(--t-micro); color: rgb(var(--fg-subtle)); margin-top: 2px; }
+.band-stat .s {
+  font-size: var(--t-micro); color: rgb(var(--fg-subtle)); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 @media (max-width: 900px) {
   .band-stats { margin-left: 0; padding-left: 0; border-left: none; padding-top: var(--s4);
                 border-top: 1px solid rgb(var(--line-subtle)); width: 100%; justify-content: space-between; gap: var(--s4); }
