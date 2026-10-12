@@ -235,7 +235,7 @@ tasks.get('/tasks', async (c) => {
       END AS due_state
     FROM tasks t
     WHERE ${conditions.join(' AND ')}
-    ORDER BY ${view === 'completed' ? 't.completed_at DESC' : 't.due_date IS NULL, t.due_date ASC, t.sort_order ASC'}
+    ORDER BY ${view === 'completed' ? 't.completed_at DESC, t.rowid DESC' : 't.due_date IS NULL, t.due_date ASC, t.sort_order ASC'}
   `
   const { results } = await c.env.DB.prepare(sql)
     .bind(today, today, ...whereParams)
