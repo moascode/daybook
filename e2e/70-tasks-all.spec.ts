@@ -221,4 +221,33 @@ test.describe('70 — All tasks page', () => {
     await chip.getByRole('button', { name: 'Remove filter' }).click()
     await expect(page.getByTestId('all-tasks-row')).toHaveCount(2)
   })
+
+  test('a long title wraps instead of truncating, and every column stays put', async ({ browser }) => {
+    // The trailing cells are fixed grid tracks (`.task--cols`), so a title
+    // running onto several lines must not shift any column on any row.
+    const page = await newAppPage(browser, '/tasks')
+    await page.setViewportSize({ width: 1400, height: 900 })
+    const today = businessDatePlus(0)
+    const long =
+      'Accounts: savings can be labelled for an account like a piggy bank — travel, bonus, personal and an emergency fund, each with its own target and progress bar'
+    await page.request.post(`${API}/tasks`, { data: { content: 'Short one', dueDate: today } })
+    await page.request.post(`${API}/tasks`, { data: { content: long, dueDate: today, dueTime: '18:00' } })
+    await page.request.post(`${API}/tasks`, { data: { content: 'Late one', dueDate: businessDatePlus(-3) } })
+
+    await page.goto('/tasks/all')
+    await expect(page.getByTestId('all-tasks-row')).toHaveCount(3)
+
+    const title = page.getByTestId('all-tasks-row-title').filter({ hasText: 'Accounts:' })
+    const oneLine = await page.getByTestId('all-tasks-row-title').filter({ hasText: 'Short one' }).boundingBox()
+    const box = await title.boundingBox()
+    expect(box!.height).toBeGreaterThan(oneLine!.height * 1.5) // wrapped, not clipped to one line
+    await expect(title).toHaveText(long)
+
+    const columnStarts = await page
+      .getByTestId('all-tasks-row')
+      .evaluateAll((rows) =>
+        rows.map((r) => Array.from(r.children, (c) => Math.round(c.getBoundingClientRect().left)).join(',')),
+      )
+    expect(new Set(columnStarts).size).toBe(1)
+  })
 })

@@ -70,7 +70,10 @@ function dateColumns(task: Task): { exact: string; relative: string; state: 'lat
     const late = -diff
     return { exact: format(d, 'EEE d'), relative: late === 1 ? 'Yesterday' : `${late} days late`, state: 'late' }
   }
-  if (diff === 0) return { exact: time, relative: 'Today', state: 'soon' }
+  // Amber marks a time that's actually coming up today; an untimed task due
+  // today is ordinary, and tinting a whole day's worth of rows buries the one
+  // that matters.
+  if (diff === 0) return { exact: time, relative: 'Today', state: task.dueTime ? 'soon' : 'ok' }
   if (diff === 1) return { exact: time, relative: 'Tomorrow', state: 'ok' }
   return { exact: time, relative: format(d, diff < 7 ? 'EEE d' : 'd MMM'), state: 'ok' }
 }
@@ -162,7 +165,7 @@ export function AllTasksRow({
   const label = task.content || 'task'
 
   return (
-    <div className={cn('task', task.isCompleted && 'done')} data-testid="all-tasks-row" data-task-id={task.id}>
+    <div className={cn('task task--cols', task.isCompleted && 'done')} data-testid="all-tasks-row" data-task-id={task.id}>
       <button
         type="button"
         className={cn(
@@ -238,145 +241,136 @@ export function AllTasksRow({
         </div>
       </div>
 
-      <div className="task-meta">
-        <div className="flex flex-shrink-0 items-center gap-2">
-          {showDatePicker ? (
-            <span className="inline-flex shrink-0 items-center gap-1">
-              <input
-                type="date"
-                autoFocus
-                aria-label={`Due date for ${label}`}
-                data-testid={`all-tasks-row-due-input-${task.id}`}
-                value={dueDateDraft}
-                onChange={(e) => setDueDateDraft(e.target.value)}
-                onBlur={() => saveDueDate(dueDateDraft || null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
-                  if (e.key === 'Escape') {
-                    setDueDateDraft(task.dueDate ?? '')
-                    setShowDatePicker(false)
-                  }
-                }}
-                className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-              />
-              {dueDateDraft && (
-                <button
-                  type="button"
-                  aria-label="Clear due date"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => saveDueDate(null)}
-                  className="text-fg-faint hover:text-fg-muted"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </span>
-          ) : (
-            <>
-              <span
-                className={cn(
-                  'task-when col-hide-md min-w-[56px] shrink-0 text-right',
-                  cols.state === 'late' && 'late',
-                  cols.state === 'soon' && 'soon',
-                )}
-              >
-                {cols.exact}
-              </span>
-              {/* The relative column doubles as the date editor, so the due
-                  date stays one click away without an extra control. */}
-              <button
-                type="button"
-                onClick={() => !task.isCompleted && setShowDatePicker(true)}
-                disabled={task.isCompleted}
-                aria-label={task.dueDate ? `Change due date for ${label}` : `Set due date for ${label}`}
-                data-testid={`all-tasks-row-due-${task.id}`}
-                className="task-when col-mobile-hide min-w-[76px] shrink-0 rounded text-right hover:text-fg disabled:hover:text-fg-muted"
-              >
-                {cols.relative}
-              </button>
-            </>
-          )}
-
-          {assignee ? (
-            <span
-              className={cn('avatar', avatarClass(assignee.userId))}
-              style={{ width: 24, height: 24, fontSize: 10 }}
-              title={assignee.username}
-              data-testid="all-tasks-row-assignee"
+      {/* Each cell below is its own track of `.task--cols` (tasks.css): exact
+          date, relative date, avatar, actions — fixed widths, so they line up
+          on every row however long the title runs. */}
+      {showDatePicker ? (
+        <span className="task-when-edit">
+          <input
+            type="date"
+            autoFocus
+            aria-label={`Due date for ${label}`}
+            data-testid={`all-tasks-row-due-input-${task.id}`}
+            value={dueDateDraft}
+            onChange={(e) => setDueDateDraft(e.target.value)}
+            onBlur={() => saveDueDate(dueDateDraft || null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
+              if (e.key === 'Escape') {
+                setDueDateDraft(task.dueDate ?? '')
+                setShowDatePicker(false)
+              }
+            }}
+            className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          {dueDateDraft && (
+            <button
+              type="button"
+              aria-label="Clear due date"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => saveDueDate(null)}
+              className="text-fg-faint hover:text-fg-muted"
             >
-              {assignee.username.charAt(0).toUpperCase()}
-            </span>
-          ) : (
-            // Hold the avatar's footprint so the kebab lines up on every row.
-            <span className="avatar" aria-hidden="true" style={{ width: 24, height: 24, visibility: 'hidden' }} />
+              <X className="h-3 w-3" />
+            </button>
           )}
+        </span>
+      ) : (
+        <>
+          <span className={cn('task-when col-exact', cols.state === 'late' && 'late', cols.state === 'soon' && 'soon')}>
+            {cols.exact}
+          </span>
+          {/* The relative column doubles as the date editor, so the due date
+              stays one click away without an extra control. */}
+          <button
+            type="button"
+            onClick={() => !task.isCompleted && setShowDatePicker(true)}
+            disabled={task.isCompleted}
+            aria-label={task.dueDate ? `Change due date for ${label}` : `Set due date for ${label}`}
+            data-testid={`all-tasks-row-due-${task.id}`}
+            className="task-when rounded hover:text-fg disabled:hover:text-fg-muted"
+          >
+            {cols.relative}
+          </button>
+          <span className="col-avatar flex justify-center">
+            {assignee && (
+              <span
+                className={cn('avatar', avatarClass(assignee.userId))}
+                style={{ width: 24, height: 24, fontSize: 10 }}
+                title={assignee.username}
+                data-testid="all-tasks-row-assignee"
+              >
+                {assignee.username.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </span>
+        </>
+      )}
 
-          <div className="trow-actions flex-shrink-0 items-center text-fg-faint">
-            <DropdownMenu.Root>
-              <DropdownMenu.Trigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
-                  aria-label={`More actions for ${label}`}
-                  data-testid={`all-tasks-row-options-${task.id}`}
-                >
-                  <MoreHorizontal className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <DropdownMenu.Content className={MENU_CONTENT} sideOffset={4} align="end">
-                  <DropdownMenu.Item
-                    className={MENU_ITEM}
-                    onSelect={() => onOpenDetail(task)}
-                    data-testid={`task-row-detail-${task.id}`}
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-fg-faint" />
-                    Edit details
-                  </DropdownMenu.Item>
-                  {!task.isCompleted && (
-                    <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setShowDatePicker(true)}>
-                      <CalendarClock className="h-3.5 w-3.5 text-fg-faint" />
-                      Reschedule
-                    </DropdownMenu.Item>
-                  )}
-                  <DropdownMenu.Sub>
-                    <DropdownMenu.SubTrigger className={MENU_ITEM} data-testid={`task-row-move-${task.id}`}>
-                      <FolderInput className="h-3.5 w-3.5 text-fg-faint" />
-                      Move to list
-                    </DropdownMenu.SubTrigger>
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.SubContent className={MENU_CONTENT} sideOffset={4}>
-                        <DropdownMenu.RadioGroup
-                          value={task.listId ?? ''}
-                          onValueChange={(value) => moveToList(value || null)}
-                        >
-                          {[{ id: '', name: 'Unsorted', color: 'rgb(var(--line-strong))' }, ...availableLists].map(
-                            (l) => (
-                              <DropdownMenu.RadioItem
-                                key={l.id || 'unsorted'}
-                                value={l.id}
-                                className={cn(MENU_ITEM, 'data-[state=checked]:font-semibold data-[state=checked]:text-fg')}
-                              >
-                                <span
-                                  className="h-2 w-2 shrink-0 rounded-full"
-                                  style={{ background: l.color }}
-                                  aria-hidden="true"
-                                />
-                                {l.name}
-                              </DropdownMenu.RadioItem>
-                            ),
-                          )}
-                        </DropdownMenu.RadioGroup>
-                      </DropdownMenu.SubContent>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu.Sub>
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
-          </div>
-        </div>
+      <div className="trow-actions items-center text-fg-faint">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+              aria-label={`More actions for ${label}`}
+              data-testid={`all-tasks-row-options-${task.id}`}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content className={MENU_CONTENT} sideOffset={4} align="end">
+              <DropdownMenu.Item
+                className={MENU_ITEM}
+                onSelect={() => onOpenDetail(task)}
+                data-testid={`task-row-detail-${task.id}`}
+              >
+                <Pencil className="h-3.5 w-3.5 text-fg-faint" />
+                Edit details
+              </DropdownMenu.Item>
+              {!task.isCompleted && (
+                <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setShowDatePicker(true)}>
+                  <CalendarClock className="h-3.5 w-3.5 text-fg-faint" />
+                  Reschedule
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger className={MENU_ITEM} data-testid={`task-row-move-${task.id}`}>
+                  <FolderInput className="h-3.5 w-3.5 text-fg-faint" />
+                  Move to list
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.SubContent className={MENU_CONTENT} sideOffset={4}>
+                    <DropdownMenu.RadioGroup
+                      value={task.listId ?? ''}
+                      onValueChange={(value) => moveToList(value || null)}
+                    >
+                      {[{ id: '', name: 'Unsorted', color: 'rgb(var(--line-strong))' }, ...availableLists].map(
+                        (l) => (
+                          <DropdownMenu.RadioItem
+                            key={l.id || 'unsorted'}
+                            value={l.id}
+                            className={cn(MENU_ITEM, 'data-[state=checked]:font-semibold data-[state=checked]:text-fg')}
+                          >
+                            <span
+                              className="h-2 w-2 shrink-0 rounded-full"
+                              style={{ background: l.color }}
+                              aria-hidden="true"
+                            />
+                            {l.name}
+                          </DropdownMenu.RadioItem>
+                        ),
+                      )}
+                    </DropdownMenu.RadioGroup>
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Sub>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
     </div>
   )
