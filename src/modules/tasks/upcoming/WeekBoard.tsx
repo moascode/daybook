@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { useClickUnlessDragged } from './useClickUnlessDragged'
 import { recurrenceLabel } from '@/modules/tasks/taskRowFormat'
 import { cn, todayISO } from '@/lib/utils'
 import type { TaskList } from '@/hooks/useTaskLists'
@@ -30,6 +31,7 @@ interface BCardProps {
 
 function BCard({ task, list, walletChip, onOpenDetail }: BCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
+  const openDetailClick = useClickUnlessDragged(() => onOpenDetail(task))
   const color = list?.color ?? UNSORTED_COLOR
   const label = task.content || 'Untitled task'
   const style = transform
@@ -43,7 +45,7 @@ function BCard({ task, list, walletChip, onOpenDetail }: BCardProps) {
       {...listeners}
       {...attributes}
       aria-label={`${label} — drag to move`}
-      onClick={() => onOpenDetail(task)}
+      {...openDetailClick}
       data-testid={`upcoming-card-${task.id}`}
       className={cn('bcard', isDragging && 'opacity-50')}
     >

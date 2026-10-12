@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, MoreHorizontal, Pencil, CalendarClock, X } from 'lucide-react'
 import { useDraggable } from '@dnd-kit/core'
+import { useClickUnlessDragged } from './useClickUnlessDragged'
 import { cn } from '@/lib/utils'
 import { avatarClass } from '@/lib/avatar'
 import { addedLabel, MENU_CONTENT, MENU_ITEM } from '@/modules/tasks/taskRowFormat'
@@ -23,6 +24,7 @@ interface WaitingRowProps {
 
 function WaitingRow({ task, list, assignee, onComplete, onOpenDetail, onSetDate }: WaitingRowProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
+  const openDetailClick = useClickUnlessDragged(() => onOpenDetail(task))
   const color = list?.color ?? UNSORTED_COLOR
   const label = task.content || 'Untitled task'
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined
@@ -56,7 +58,7 @@ function WaitingRow({ task, list, assignee, onComplete, onOpenDetail, onSetDate 
             data-testid={`upcoming-waiting-open-${task.id}`}
             role="button"
             tabIndex={0}
-            onClick={() => onOpenDetail(task)}
+            {...openDetailClick}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()

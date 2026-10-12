@@ -416,20 +416,14 @@ test.describe('69 — Tasks Today page', () => {
     await expect(page).toHaveURL(/\/tasks\/assigned$/)
   })
 
-  test('BUG-013: an overdue row keeps its due-date badge legible when .task-meta wraps to its own row at ≤900px', async ({
+  test('BUG-013: an overdue row keeps its title and due date legible on the fixed grid at narrow widths', async ({
     browser,
   }) => {
-    // TaskRow.tsx now renders a `.task-meta` wrapper (FEAT-054,
-    // docs/backlog/EP-07-tasks-depth/FEAT-054-tasks-today-design-adoption.md)
-    // instead of 3 bare children, so it matches `.task:has(.task-meta)` —
-    // including the ≤900px rule (src/styles/tasks.css) that gives
-    // `.task-meta` (and everything inside it, including the due-date badge)
-    // its own row below the title rather than competing with it for the
-    // name track. This replaces the old regression check, which asserted
-    // TaskRow had NO `.task-meta` and stayed side-by-side at narrow widths
-    // (docs/backlog/EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md)
-    // — per FEAT-054's own note, that assertion becomes an equivalent
-    // invariant check against the NEW two-row layout, not a deletion.
+    // TaskRow is on the fixed-column `.task--cols` grid (tasks.css): the title
+    // is the only flexible track and wraps, the date cells are fixed tracks
+    // beside it. Narrow widths drop the exact-date column rather than
+    // reflowing the row, so the relative date ("30 days late") must stay
+    // visible, to the right of the title, inside the row.
     const page = await newAppPage(browser, '/tasks')
 
     const taskRes = await page.request.post(`${API}/tasks`, {
@@ -445,23 +439,16 @@ test.describe('69 — Tasks Today page', () => {
       await page.setViewportSize({ width, height: 900 })
       const rowBox = await row.boundingBox()
       const titleBox = await row.locator('.task-title').boundingBox()
-      // FEAT-054 product-owner review added a second `.task-when` (the plain
-      // "Thu 14"/"Today" anchor column, alongside the contextual "3 days
-      // late" one) — `.first()` keeps this test pinned to the contextual
-      // badge it was always checking.
-      const whenBox = await row.locator('.task-when').first().boundingBox()
+      const whenBox = await row.locator('.task-when:visible').first().boundingBox()
       expect(rowBox).not.toBeNull()
       expect(titleBox).not.toBeNull()
       expect(whenBox).not.toBeNull()
-      // Both stay legible and indented past the 20px checkbox track...
       expect(titleBox!.width).toBeGreaterThan(80)
       expect(whenBox!.width).toBeGreaterThan(20)
       expect(titleBox!.x).toBeGreaterThan(rowBox!.x + 20)
-      // ...but now stack into two rows (title, then the due badge inside
-      // .task-meta below it) instead of sitting side by side on one row —
-      // the inverse of what the old bare-3-child layout did.
-      expect(whenBox!.y).toBeGreaterThan(titleBox!.y)
-      // And the badge never renders past the row's own right edge.
+      // Same row, to the right of the title — never stacked under it, never
+      // past the row's right edge.
+      expect(whenBox!.x).toBeGreaterThanOrEqual(titleBox!.x + titleBox!.width - 1)
       expect(whenBox!.x + whenBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1)
     }
   })
