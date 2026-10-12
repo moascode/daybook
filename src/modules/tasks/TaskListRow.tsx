@@ -3,6 +3,7 @@ import { Check, Repeat, CalendarClock, X, Pencil, MoreVertical, Trash2 } from 'l
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
+import { useAssignees } from '@/hooks/useAssignees'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -157,6 +158,7 @@ export function TaskListRow({
 }: TaskListRowProps) {
   const state = dueState(task)
   const { assignTask, updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
+  const assignees = useAssignees(coMembers ?? [])
 
   // Controlled locally rather than reading `task.assigneeId` straight through:
   // every page rendering this row keeps its own local `tasks` state (not the
@@ -351,7 +353,7 @@ export function TaskListRow({
         {coMembers && (
           <select
             aria-label={`Assign ${task.content || 'task'} to`}
-            title={coMembers.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
+            title={assignees.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
             data-testid={`task-row-assignee-${task.id}`}
             value={assigneeDraft}
             onChange={(e) => {
@@ -376,7 +378,7 @@ export function TaskListRow({
             )}
           >
             <option value="">Unassigned</option>
-            {coMembers.map((m) => (
+            {assignees.map((m) => (
               <option key={m.userId} value={m.userId}>
                 {m.username}
               </option>

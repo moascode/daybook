@@ -44,31 +44,37 @@ test.describe('quick add', () => {
     }
   })
 
-  test('routes to Tasks with the composer focused, and to the import modal', async ({ browser }) => {
+  test('opens the New task modal on Tasks, and the import modal', async ({ browser }) => {
     const page = await newAppPage(browser)
     await seedAccount(page)
 
     await page.getByTestId('quick-add').click()
     await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
     await expect(page).toHaveURL(/\/tasks/)
-    // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
-    // a bare route change did nothing visible — the fix puts the cursor in
-    // the composer, matching how Expense/Income/Transfer open their form.
-    await expect(page.getByTestId('today-composer-input')).toBeFocused()
+    // Expense/Income/Transfer each open their form, so Task must too — a
+    // focused composer (BUG-005's first fix) still read as "nothing happened".
+    await expect(page.getByTestId('task-form-modal')).toBeVisible()
+    await expect(page.getByTestId('task-form-content')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('task-form-modal')).toBeHidden()
 
     await page.getByTestId('quick-add').click()
     await page.locator('[data-testid="quick-add-item"][data-action="import"]').click()
     await expect(page.getByRole('dialog')).toBeVisible()
   })
 
-  test('"Task" focuses the composer even when already on /tasks (BUG-005’s reported no-op)', async ({ browser }) => {
+  test('"Task" opens the New task modal even when already on /tasks (BUG-005’s reported no-op)', async ({
+    browser,
+  }) => {
     const page = await newAppPage(browser, '/tasks')
 
-    await page.getByTestId('today-composer-input').blur()
-    await page.getByTestId('quick-add').click()
-    await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
-
-    await expect(page.getByTestId('today-composer-input')).toBeFocused()
+    for (let i = 0; i < 2; i++) {
+      await page.getByTestId('quick-add').click()
+      await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
+      await expect(page.getByTestId('task-form-modal')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(page.getByTestId('task-form-modal')).toBeHidden()
+    }
   })
 
   test('closes on Escape and on an outside click', async ({ browser }) => {

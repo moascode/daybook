@@ -233,6 +233,45 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('1')
   })
 
+  test('a Waiting for a date task can be dragged onto a day', async ({ browser }) => {
+    // The waiting list used to sit outside the board's DndContext, so an
+    // undated task could only be dated through its picker.
+    const page = await newAppPage(browser, '/tasks')
+    const wednesday = addDaysIso(businessWeekMonday(), 2)
+
+    const task = await (await page.request.post(`${API}/tasks`, { data: { content: 'Dragged from waiting' } })).json()
+    await page.goto('/tasks/upcoming')
+
+    const row = page.getByTestId(`upcoming-waiting-row-${task.id}`)
+    await expect(row).toBeVisible()
+    await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('0')
+
+    const from = await row.boundingBox()
+    const to = await page.getByTestId(`upcoming-day-column-${wednesday}`).boundingBox()
+    if (!from || !to) throw new Error('Expected the row and the column to have a layout box')
+
+    // A nudge past the 8px activation distance, released over the waiting
+    // list itself, must not schedule it onto whichever day is nearest.
+    await page.mouse.move(from.x + 40, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(from.x + 60, from.y + from.height / 2, { steps: 5 })
+    await page.mouse.up()
+    await expect(row).toBeVisible()
+    await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('0')
+
+    await page.mouse.move(from.x + 40, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 15 })
+    await page.mouse.up()
+
+    await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('1')
+    await expect(page.getByTestId(`upcoming-card-${task.id}`)).toContainText('Dragged from waiting')
+    await expect(row).toHaveCount(0)
+
+    await page.reload()
+    await expect(page.getByTestId(`upcoming-card-${task.id}`)).toBeVisible()
+  })
+
   test('FEAT-057: composer task with no date word lands in Waiting for a date, not a day column', async ({
     browser,
   }) => {

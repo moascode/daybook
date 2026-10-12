@@ -4,6 +4,7 @@ import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { useAssignees } from '@/hooks/useAssignees'
 import type { TaskPriority } from '@/types/tasks.types'
 
 export interface TaskFormList {
@@ -108,6 +109,7 @@ export function TaskFormModal({
   const [prevInitialListId, setPrevInitialListId] = useState(initialListId)
   const contentRef = useRef<HTMLInputElement>(null)
   const assigneeRef = useRef<HTMLSelectElement>(null)
+  const assignees = useAssignees(coMembers)
 
   // Reset the form when the modal (re)opens — adjust state during render
   // rather than in an effect, mirroring TransactionForm.tsx's identical
@@ -143,7 +145,7 @@ export function TaskFormModal({
   ]
   const assigneeOptions = [
     { value: '', label: 'Unassigned' },
-    ...coMembers.map((m) => ({ value: m.userId, label: m.username })),
+    ...assignees.map((m) => ({ value: m.userId, label: m.username })),
   ]
 
   const trimmedContent = form.content.trim()

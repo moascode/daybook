@@ -171,4 +171,34 @@ test.describe('99 — Task detail modal', () => {
     }[]
     expect(tasks.find((t) => t.content === 'Prep standup')?.list_id).not.toBeNull()
   })
+
+  test('a task can be assigned to yourself', async ({ browser }) => {
+    // `/groups/members` excludes the caller, so every assignee picker used to
+    // list co-members only — a solo user saw nothing but "Unassigned".
+    const page = await newAppPage(browser, '/tasks')
+
+    await page.getByTestId('quick-add').click()
+    await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
+    await expect(page.getByTestId('task-form-modal')).toBeVisible()
+    await page.getByTestId('task-form-content').fill('Water the plants')
+    await page.getByTestId('task-form-assignee').selectOption({ label: 'Me' })
+    await page.getByTestId('task-form-due-date').fill(businessDatePlus(0))
+    await page.getByTestId('task-form-submit').click()
+    await expect(page.getByTestId('task-form-modal')).toBeHidden()
+
+    const rows = (await (await page.request.get('/api/tasks')).json()) as {
+      content: string
+      user_id: string
+      assignee_id: string | null
+    }[]
+    const created = rows.find((t) => t.content === 'Water the plants')
+    expect(created?.assignee_id).toBe(created?.user_id)
+
+    // The row shows the viewer's own avatar, and the detail modal reads "Me".
+    const row = page.getByTestId('today-task-row').filter({ hasText: 'Water the plants' })
+    await expect(row.getByTestId('today-task-row-assignee')).toBeVisible()
+    await row.getByTestId(/^today-task-row-options-/).click()
+    await page.getByRole('menuitem', { name: 'Edit details' }).click()
+    await expect(page.getByTestId('task-detail-assignee').locator('option:checked')).toHaveText('Me')
+  })
 })

@@ -142,7 +142,7 @@ export function TasksHabitsPage() {
   // `{ openCreateHabit: true }` so the create-habit modal opens immediately
   // instead of just changing the route — same one-shot nav-state +
   // `location.key` guard TasksTodayPage.tsx already uses for its own
-  // `focusComposer` flag (BUG-005).
+  // `openTaskForm` flag (quick add).
   const location = useLocation()
   const navigate = useNavigate()
   const shouldOpenCreate = (location.state as { openCreateHabit?: boolean } | null)?.openCreateHabit

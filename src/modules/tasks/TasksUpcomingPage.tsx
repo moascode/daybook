@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import { format, parseISO, startOfWeek, addDays } from 'date-fns'
 import {
   DndContext,
-  closestCenter,
+  pointerWithin,
+  rectIntersection,
   PointerSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
   useDraggable,
   useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { Check } from 'lucide-react'
@@ -28,6 +30,18 @@ import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
 const UNSORTED_COLOR = '#6b7280'
+
+/**
+ * Drop onto the day column under the pointer; with no pointer (a keyboard
+ * drag), fall back to whichever column the dragged card overlaps. Never
+ * `closestCenter`: it always picks *some* column, so a "Waiting for a date"
+ * row nudged past the 8px activation distance and let go where it was would
+ * be scheduled onto whichever day happened to be nearest.
+ */
+const dropOnDay: CollisionDetection = (args) => {
+  const hits = pointerWithin(args)
+  return hits.length > 0 ? hits : rectIntersection(args)
+}
 
 /**
  * Sort candidates for "Balance the week": untimed tasks first, then
@@ -415,7 +429,11 @@ export function TasksUpcomingPage() {
         <p className="text-sm text-fg-subtle">Loading your upcoming tasks…</p>
       ) : (
         <>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          {/* One DndContext around the week AND the waiting list, so an
+              undated task can be dragged straight onto a day — before, the
+              waiting rows sat outside the context and could only be dated
+              through their picker. */}
+          <DndContext sensors={sensors} collisionDetection={dropOnDay} onDragEnd={handleDragEnd}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7">
               {week.map((date) => (
                 <DayColumn
@@ -430,31 +448,31 @@ export function TasksUpcomingPage() {
                 />
               ))}
             </div>
-          </DndContext>
 
-          <div className="mt-6" data-testid="upcoming-waiting-section">
-            <div className="tgroup-head">
-              <span className="tg-date">Waiting for a date</span>
+            <div className="mt-6" data-testid="upcoming-waiting-section">
+              <div className="tgroup-head">
+                <span className="tg-date">Waiting for a date</span>
+              </div>
+              {undated.length === 0 ? (
+                <p className="py-3 text-sm text-fg-subtle">Nothing is waiting on a date.</p>
+              ) : (
+                undated.map((t) => (
+                  <WaitingRow
+                    key={t.id}
+                    task={t}
+                    list={t.listId ? listById.get(t.listId) : undefined}
+                    onSetDate={(date) => {
+                      if (!week.includes(date)) {
+                        addToast({ message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this week` })
+                      }
+                      void moveTaskToDate(t.id, date)
+                    }}
+                    onOpenDetail={openDetail}
+                  />
+                ))
+              )}
             </div>
-            {undated.length === 0 ? (
-              <p className="py-3 text-sm text-fg-subtle">Nothing is waiting on a date.</p>
-            ) : (
-              undated.map((t) => (
-                <WaitingRow
-                  key={t.id}
-                  task={t}
-                  list={t.listId ? listById.get(t.listId) : undefined}
-                  onSetDate={(date) => {
-                    if (!week.includes(date)) {
-                      addToast({ message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this week` })
-                    }
-                    void moveTaskToDate(t.id, date)
-                  }}
-                  onOpenDetail={openDetail}
-                />
-              ))
-            )}
-          </div>
+          </DndContext>
         </>
       )}
 
@@ -698,10 +716,23 @@ interface WaitingRowProps {
 }
 
 function WaitingRow({ task, list, onSetDate, onOpenDetail }: WaitingRowProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id })
   const color = list?.color ?? UNSORTED_COLOR
+  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined
 
+  // Draggable onto a day column, like UpcomingCard — the same plain-onClick-
+  // alongside-`listeners` reasoning applies, and the DatePicker still works:
+  // a click never travels the 8px activation distance.
   return (
-    <div className="task" data-task-id={task.id}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...listeners}
+      {...attributes}
+      className={cn('task', isDragging && 'relative z-10 opacity-50')}
+      data-task-id={task.id}
+      data-testid={`upcoming-waiting-row-${task.id}`}
+    >
       <span
         className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
         style={{ background: color }}
