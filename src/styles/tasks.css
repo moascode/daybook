@@ -118,7 +118,10 @@
   .task--cols .trow-actions { grid-column: 5; }
 }
 /* Phones: no hover, so the actions stay visible; the avatar gives way to the
-   relative date, which is the column worth keeping. */
+   relative date, which is the column worth keeping. The date editor (input +
+   clear button) needs more than the 84px when-column alone, so it takes over
+   the actions column too while open — the kebab hides for that moment rather
+   than sitting underneath the editor. */
 @media (max-width: 680px) {
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 84px 32px; }
   .task--cols .col-avatar { display: none; }

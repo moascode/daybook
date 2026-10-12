@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { format, parseISO, startOfWeek, subWeeks } from 'date-fns'
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -88,6 +89,7 @@ export function TasksAllPage() {
   const { taskLists, loadTaskLists } = useTaskLists()
   const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const addToast = useToastStore((s) => s.addToast)
+  const removeToast = useToastStore((s) => s.removeToast)
   const { ensureLoaded: ensureWalletChips, resolveChip } = useWalletRefChips()
   const navigate = useNavigate()
 
@@ -107,6 +109,10 @@ export function TasksAllPage() {
   const [sort, setSort] = useState<TaskSort>('due')
   const [limit, setLimit] = useState(PAGE_SIZE)
   const listRef = useRef<HTMLElement>(null)
+  // Keyed per deleted task id (TasksListDetailPage.tsx's pattern, FEAT-062
+  // review fix #6) — two deletes close together each keep their own toast
+  // and their own undo data instead of clobbering each other's.
+  const undoToastIdsRef = useRef<Map<string, string>>(new Map())
 
   // FEAT-058: same shared "New task" modal FEAT-054/FEAT-057 wire up on
   // Today/Upcoming, opened from the composer's "Task"/"Assign" shortcuts.
@@ -248,13 +254,33 @@ export function TasksAllPage() {
     return { name: list.name, count: topCount }
   })()
 
-  // "Done this week" — completions in the last 7 days, no "+N vs usual"
-  // comparison (that needs a historical weekly average this page doesn't
-  // load — same category FEAT-054/FEAT-057 both already declined to fabricate).
-  const weekStartISO = isoDatePlus(-6)
-  const doneThisWeekCount = completedTasks.filter(
-    (t) => t.completedAt && t.completedAt.slice(0, 10) >= weekStartISO && t.completedAt.slice(0, 10) <= today,
-  ).length
+  // "Done this week" — the SAME ISO week (Monday start) the Completion
+  // chart's current-week bar counts, not a rolling 7 days: the two
+  // disagreed whenever today isn't a Monday (a rolling window and the
+  // chart's calendar week cover different sets of days). "+N vs usual"
+  // (mockup) compares it against the mean completions per ISO week over
+  // the previous 8 weeks, mirrored from completedTasks the same way as
+  // CompletionCard.tsx's own weekKey — hidden until there are at least two
+  // prior weeks with any completions, so "usual" is never a single data
+  // point dressed up as an average, and hidden again when the two numbers
+  // are equal (nothing to report).
+  const isoWeekKey = (dateIso: string): string =>
+    format(startOfWeek(parseISO(dateIso.slice(0, 10)), { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  const thisWeekStart = startOfWeek(parseISO(today), { weekStartsOn: 1 })
+  const thisWeekKey = format(thisWeekStart, 'yyyy-MM-dd')
+  const doneThisWeekCount = completedTasks.filter((t) => t.completedAt && isoWeekKey(t.completedAt) === thisWeekKey).length
+
+  const priorWeekCounts = Array.from({ length: 8 }, (_, i) => {
+    const key = format(subWeeks(thisWeekStart, i + 1), 'yyyy-MM-dd')
+    return completedTasks.filter((t) => t.completedAt && isoWeekKey(t.completedAt) === key).length
+  })
+  const priorWeeksWithData = priorWeekCounts.filter((c) => c > 0).length
+  const usualPerWeek = priorWeekCounts.reduce((s, c) => s + c, 0) / priorWeekCounts.length
+  const vsUsualDelta = priorWeeksWithData >= 2 ? Math.round(doneThisWeekCount - usualPerWeek) : 0
+  const vsUsualChip =
+    priorWeeksWithData >= 2 && vsUsualDelta !== 0
+      ? { label: `${vsUsualDelta > 0 ? '+' : ''}${vsUsualDelta} vs usual`, positive: vsUsualDelta > 0 }
+      : null
 
   // ── Filtering (criterion 3) ─────────────────────────────────────────
   const q = searchDraft.trim().toLowerCase()
@@ -372,16 +398,93 @@ export function TasksAllPage() {
   }
 
   const handleScheduleUndated = async () => {
+    // Open + undated only, even on the All tab where `filteredTasks` can
+    // also hold completed rows (status === 'all') — a completed or dated
+    // task has no business being swept into "today".
     const ids = undatedOpen.map((t) => t.id)
     if (ids.length === 0) return
     try {
       const updated = await rescheduleTasks(ids, today)
       const updatedIds = new Set(updated.map((t) => t.id))
       setOpenTasks((prev) => prev.map((t) => (updatedIds.has(t.id) ? { ...t, dueDate: today } : t)))
-      addToast({ message: `Scheduled ${updated.length} task${updated.length === 1 ? '' : 's'} for today.` })
+      // POST /tasks/reschedule is scoped to the caller's own tasks
+      // (worker/routes/tasks.ts) — not sharing-aware — so a task the viewer
+      // only sees here because they're its assignee (not its owner) comes
+      // back unmoved. Never claim success for those (CLAUDE.md §2 rule 10):
+      // say exactly how many moved and why the rest didn't.
+      const skipped = ids.length - updated.length
+      const scheduledMsg = `Scheduled ${updated.length} task${updated.length === 1 ? '' : 's'} for today`
+      addToast({
+        message:
+          skipped > 0
+            ? `${scheduledMsg} — ${skipped} couldn't move because ${skipped === 1 ? 'it belongs' : 'they belong'} to someone else.`
+            : `${scheduledMsg}.`,
+      })
     } catch (err) {
       addToast({ message: errorMessage(err, 'Could not schedule those tasks — please try again.') })
     }
+  }
+
+  /**
+   * CD-20: delete via `deleteTaskById` already happened in the row — this
+   * only keeps the page's local arrays in step and offers the undo-toast,
+   * same split as `handleContentChange`/`handleDueDateChange` above. Both
+   * arrays are filtered against every id the server actually removed
+   * (cascaded descendants included), not just the row's own id, so an
+   * orphaned child never lingers with a stale subtask count. Undo recreates
+   * only the row itself (not cascaded descendants) — this page, unlike
+   * TasksListDetailPage.tsx, doesn't track a deleted row's children, and no
+   * flat All-tasks row surfaces a subtask as its own entry to restore.
+   */
+  const handleRowDeleted = (task: Task, deletedIds: string[]) => {
+    setOpenTasks((prev) => prev.filter((t) => !deletedIds.includes(t.id)))
+    setCompletedTasks((prev) => prev.filter((t) => !deletedIds.includes(t.id)))
+
+    const undoDelete = async () => {
+      try {
+        await api.post('/tasks', {
+          id: task.id,
+          parentId: task.parentId,
+          content: task.content,
+          note: task.note,
+          isCompleted: task.isCompleted,
+          isCollapsed: task.isCollapsed,
+          sortOrder: task.sortOrder,
+          dueDate: task.dueDate ?? null,
+          listId: task.listId ?? null,
+          priority: task.priority,
+          dueTime: task.dueTime ?? null,
+          assigneeId: task.assigneeId ?? null,
+          assignedAt: task.assignedAt ?? null,
+          recurrence: task.recurrence ?? null,
+          recurrenceData: task.recurrenceData ?? null,
+          recurrenceParentId: task.recurrenceParentId ?? null,
+          walletRef: task.walletRef ?? null,
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+        })
+      } catch (err) {
+        addToast({ message: errorMessage(err, 'Could not undo that delete — please try again.') })
+        return
+      }
+      if (task.isCompleted) setCompletedTasks((prev) => [task, ...prev])
+      else setOpenTasks((prev) => [...prev, task])
+    }
+
+    const existingToastId = undoToastIdsRef.current.get(task.id)
+    if (existingToastId) removeToast(existingToastId)
+    const toastId = addToast({
+      message: 'Task deleted',
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          void undoDelete()
+          undoToastIdsRef.current.delete(task.id)
+        },
+      },
+      duration: 5000,
+    })
+    undoToastIdsRef.current.set(task.id, toastId)
   }
 
   // Composer wiring (FEAT-058), mirroring TasksUpcomingPage.tsx's
@@ -488,17 +591,20 @@ export function TasksAllPage() {
         <p className="text-sm text-fg-subtle">Loading your tasks…</p>
       ) : (
         <>
-          {/* Stat cards (FEAT-058) — four .stat-card tiles in a .grid.g4, the
-              real mockup idiom (confirmed against the rendered
-              tasks-all.html: each stat is `.card.stat-card` >
+          {/* Stat cards (FEAT-058) — four `.card.stat-card.c3` tiles on the
+              `.dash` 12-col grid, the real mockup idiom (confirmed against
+              the rendered tasks-all.html: `.dash` > `.card.stat-card.c3` >
               `.stat-topline` (`.stat-icon` + `.stat-label`) > `.stat-value`
-              > `.stat-foot`). NOT `.band-stats`/`.band-stat` — that idiom
-              belongs to Today/Upcoming, whose mockups pair it with a
-              `.band-main` sibling; without one here it renders with ~50%
-              blank space. `.stat-foot` (src/styles/data.css) already exists
-              for exactly the sub-line role below. */}
-          <div className="grid g4 mb-4">
-            <div className="card stat-card" data-testid="all-tasks-stat-overdue">
+              > `.stat-foot`) — not the old `.grid.g4`, which isn't part of
+              the mockup's layout system and doesn't share `.dash`'s
+              responsive `.c3` collapse (layout.css: 2-up at <=1080px/680px).
+              NOT `.band-stats`/`.band-stat` — that idiom belongs to
+              Today/Upcoming, whose mockups pair it with a `.band-main`
+              sibling; without one here it renders with ~50% blank space.
+              `.stat-foot` (src/styles/data.css) already exists for exactly
+              the sub-line role below. */}
+          <div className="dash mb-4">
+            <div className="card stat-card c3" data-testid="all-tasks-stat-overdue">
               <div className="stat-topline">
                 <span className="stat-icon bg-neg-bg text-neg-fg">
                   <AlertTriangle className="h-3.5 w-3.5" />
@@ -512,7 +618,7 @@ export function TasksAllPage() {
                 </p>
               )}
             </div>
-            <div className="card stat-card" data-testid="all-tasks-stat-due-this-week">
+            <div className="card stat-card c3" data-testid="all-tasks-stat-due-this-week">
               <div className="stat-topline">
                 <span className="stat-icon bg-accent-bg text-accent-fg">
                   <CalendarClock className="h-3.5 w-3.5" />
@@ -522,7 +628,7 @@ export function TasksAllPage() {
               <p className="stat-value">{dueThisWeekCount}</p>
               {dueTodayCount > 0 && <p className="stat-foot">{dueTodayCount} of them today</p>}
             </div>
-            <div className="card stat-card" data-testid="all-tasks-stat-no-due-date">
+            <div className="card stat-card c3" data-testid="all-tasks-stat-no-due-date">
               <div className="stat-topline">
                 <span className="stat-icon bg-info-bg text-info-fg">
                   <Inbox className="h-3.5 w-3.5" />
@@ -536,7 +642,7 @@ export function TasksAllPage() {
                 </p>
               )}
             </div>
-            <div className="card stat-card" data-testid="all-tasks-stat-done-this-week">
+            <div className="card stat-card c3" data-testid="all-tasks-stat-done-this-week">
               <div className="stat-topline">
                 <span className="stat-icon bg-pos-bg text-pos-fg">
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -544,6 +650,16 @@ export function TasksAllPage() {
                 <span className="stat-label">Done this week</span>
               </div>
               <p className={cn('stat-value', doneThisWeekCount > 0 && 'pos')}>{doneThisWeekCount}</p>
+              {vsUsualChip && (
+                <p className="stat-foot">
+                  <span
+                    className={cn('chip', vsUsualChip.positive ? 'chip-pos' : 'chip-neg')}
+                    data-testid="all-tasks-done-vs-usual"
+                  >
+                    {vsUsualChip.label}
+                  </span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -588,6 +704,7 @@ export function TasksAllPage() {
                   type="button"
                   className="filter-btn hide-mobile hover:bg-surface-hover hover:text-fg"
                   aria-label={`Sort by ${SORT_LABELS[sort]}`}
+                  aria-haspopup="menu"
                   data-testid="all-tasks-sort"
                 >
                   <ArrowUpDown className="h-3.5 w-3.5" />
@@ -759,6 +876,7 @@ export function TasksAllPage() {
                         onContentChange={handleContentChange}
                         onDueDateChange={handleDueDateChange}
                         onListChange={handleListChange}
+                        onDelete={handleRowDeleted}
                       />
                     ))}
                   </div>

@@ -11,9 +11,49 @@
  */
 
 import { test, expect } from '@playwright/test'
+import type { Browser } from '@playwright/test'
 import { newAppPage, businessDatePlus } from './helpers'
 
 const API = '/api'
+
+/**
+ * Two users in the same household group, mirroring e2e/92-tasks-assigned.spec.ts's
+ * `createGroupOfTwo` — duplicated locally rather than shared, since that
+ * helper lives in a spec file we don't own and this file's lock list doesn't
+ * extend to helpers.ts. Needed for the "Schedule these" shortfall test: a
+ * task the viewer only sees here as the SECOND user's assignment (not its
+ * owner) is exactly the case `POST /tasks/reschedule`'s owner-only scoping
+ * (worker/routes/tasks.ts) leaves unmoved.
+ */
+async function createGroupOfTwo(browser: Browser) {
+  const ownerCtx = await browser.newContext()
+  const assigneeCtx = await browser.newContext()
+  const ownerPage = await ownerCtx.newPage()
+  const assigneePage = await assigneeCtx.newPage()
+
+  const ownerName = `owner_all_${Date.now()}`
+  const assigneeName = `asnee_all_${Date.now()}`
+
+  await ownerPage.request.post(`${API}/auth/signup`, { data: { username: ownerName, password: 'test-password' } })
+  await assigneePage.request.post(`${API}/auth/signup`, { data: { username: assigneeName, password: 'test-password' } })
+
+  const groupRes = await ownerPage.request.post(`${API}/groups`, { data: { name: 'All Tasks Test Household' } })
+  const group = await groupRes.json()
+  await ownerPage.request.post(`${API}/groups/${group.id}/invites`, { data: { username: assigneeName } })
+
+  const invitesRes = await assigneePage.request.get(`${API}/invites`)
+  const invites = await invitesRes.json()
+  const invite = invites.find((i: { group_id: string }) => i.group_id === group.id)
+  await assigneePage.request.post(`${API}/invites/${invite.id}/accept`)
+
+  return { ownerPage, assigneePage, ownerCtx, assigneeCtx }
+}
+
+async function currentUserId(page: import('@playwright/test').Page): Promise<string> {
+  const res = await page.request.get(`${API}/auth/me`)
+  const { user } = await res.json()
+  return user.id
+}
 
 test.describe('70 — All tasks page', () => {
   test('sidebar nav item is visible and stat cards render with no tasks yet', async ({ browser }) => {
@@ -249,5 +289,90 @@ test.describe('70 — All tasks page', () => {
         rows.map((r) => Array.from(r.children, (c) => Math.round(c.getBoundingClientRect().left)).join(',')),
       )
     expect(new Set(columnStarts).size).toBe(1)
+  })
+
+  test('deleting a row removes it and Undo restores it', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    await page.request.post(`${API}/tasks`, { data: { content: 'Disposable task' } })
+
+    await page.goto('/tasks/all')
+    const row = page.getByTestId('all-tasks-row').filter({ hasText: 'Disposable task' })
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: /More actions/ }).click()
+    await page.getByTestId(/all-tasks-row-delete-/).click()
+
+    await expect(page.getByTestId('all-tasks-row').filter({ hasText: 'Disposable task' })).toHaveCount(0)
+    const toast = page.getByText('Task deleted')
+    await expect(toast).toBeVisible()
+
+    await page.getByRole('button', { name: 'Undo' }).click()
+    await expect(page.getByTestId('all-tasks-row').filter({ hasText: 'Disposable task' })).toBeVisible()
+  })
+
+  test('"Done this week" matches the Completion chart\'s current-week bar', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    const task = await (await page.request.post(`${API}/tasks`, { data: { content: 'Finish me' } })).json()
+    await page.request.post(`${API}/tasks/${task.id}/complete`)
+
+    await page.goto('/tasks/all')
+    const nowBar = page.getByTestId('all-tasks-completion-bars').locator('rect').last()
+    const nowCount = await nowBar.getAttribute('data-count')
+
+    await expect(page.getByTestId('all-tasks-stat-done-this-week').locator('.stat-value')).toHaveText(nowCount ?? '')
+  })
+
+  test('"Schedule these" reports a shortfall when a task belongs to someone else', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // The SECOND user's own undated task — viewed from their own All tab,
+    // this one is theirs (`user_id` matches) and CAN move.
+    await assigneePage.request.post(`${API}/tasks`, { data: { content: "Assignee's own task" } })
+    // Created and owned by the FIRST user, then handed to the second — it
+    // shows up on the second user's All tab too (view=all includes
+    // `assignee_id = viewer`), but `POST /tasks/reschedule` is scoped to
+    // `user_id = caller` only (worker/routes/tasks.ts, "not sharing-aware"),
+    // so the second user's "Schedule these" can't move it.
+    const handedOff = await (
+      await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Handed off task' } })
+    ).json()
+    await ownerPage.request.patch(`${API}/tasks/${handedOff.id}`, { data: { assigneeId } })
+
+    await assigneePage.goto('/tasks/all')
+    const undatedGroup = assigneePage.getByTestId('all-tasks-no-due-date-group')
+    await expect(undatedGroup).toContainText('2')
+
+    await assigneePage.getByTestId('schedule-undated-btn').click()
+    await expect(
+      assigneePage.getByText(/Scheduled 1 task for today — 1 couldn't move because it belongs to someone else\./),
+    ).toBeVisible()
+    await expect(assigneePage.getByTestId('all-tasks-row').filter({ hasText: "Assignee's own task" })).toBeVisible()
+    await expect(assigneePage.getByTestId('all-tasks-no-due-date-group')).toContainText('1')
+    await expect(assigneePage.getByTestId('all-tasks-row').filter({ hasText: 'Handed off task' })).toBeVisible()
+
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
+
+  test('stat cards reflow into pairs instead of overflowing at 375px', async ({ browser }) => {
+    const page = await newAppPage(browser, '/tasks')
+    await page.goto('/tasks/all')
+    await page.setViewportSize({ width: 375, height: 800 })
+
+    const cards = page.locator('.dash > .stat-card')
+    await expect(cards).toHaveCount(4)
+    const boxes = await cards.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()))
+
+    // No card runs past the viewport (the `.dash` grid actually reflowed,
+    // not just shrunk its tracks past zero).
+    for (const box of boxes) {
+      expect(box.right).toBeLessThanOrEqual(375 + 1)
+    }
+    // Two visually distinct rows — cards pair up two-per-row at this width
+    // (layout.css's `.c3 { grid-column: span 6 }` under 680px), not the
+    // single desktop row of four `.grid.g4` used to render.
+    const tops = new Set(boxes.map((b) => Math.round(b.top)))
+    expect(tops.size).toBe(2)
   })
 })
