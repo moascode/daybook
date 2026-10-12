@@ -57,30 +57,29 @@ export function TasksTodayPage() {
   const [taskFormContent, setTaskFormContent] = useState<string | undefined>(undefined)
   const [taskFormFocusField, setTaskFormFocusField] = useState<'assignee' | undefined>(undefined)
 
-  // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
-  // the global quick-add's "Task" action navigates here with
-  // `{ focusComposer: true }` so the cursor lands straight in the composer
-  // instead of just changing the route. Same one-shot nav-state +
-  // `location.key` guard WalletPage.tsx uses for its own quick-add flag — a
-  // navigation to the route we're already on updates `location` without
-  // remounting, so a lazy `useState` initializer would miss it.
+  // The global quick-add's "Task" action navigates here with
+  // `{ openTaskForm: true }` and the "New task" modal opens — the same thing
+  // its Expense/Income/Transfer siblings do for Wallet. (BUG-005 first fixed
+  // the bare route change by focusing the composer; a focused input still
+  // read as "nothing happened".) Same one-shot nav-state + `location.key`
+  // guard WalletPage.tsx uses for its own quick-add flag — a navigation to
+  // the route we're already on updates `location` without remounting, so a
+  // lazy `useState` initializer would miss it.
   const location = useLocation()
   const navigate = useNavigate()
-  const shouldFocusComposer = (location.state as { focusComposer?: boolean } | null)?.focusComposer
-  const [handledFocusKey, setHandledFocusKey] = useState<string | null>(null)
-  if (shouldFocusComposer && location.key !== handledFocusKey) {
-    setHandledFocusKey(location.key)
+  const shouldOpenTaskForm = (location.state as { openTaskForm?: boolean } | null)?.openTaskForm
+  const [handledOpenKey, setHandledOpenKey] = useState<string | null>(null)
+  if (shouldOpenTaskForm && location.key !== handledOpenKey) {
+    setHandledOpenKey(location.key)
+    setTaskFormContent(undefined)
+    setTaskFormFocusField(undefined)
+    setTaskFormOpen(true)
   }
   useEffect(() => {
-    // Gated on `!loading` too: the composer only exists once the initial
-    // fetch resolves (below, inside the `loading ? ... : ...` branch), so
-    // running this before then would find `composerInputRef.current` still
-    // null and never get another chance once the nav state is cleared.
-    if (shouldFocusComposer && handledFocusKey === location.key && !loading) {
-      composerInputRef.current?.focus()
+    if (shouldOpenTaskForm && handledOpenKey === location.key) {
       navigate(location.pathname, { replace: true, state: null })
     }
-  }, [shouldFocusComposer, handledFocusKey, location, navigate, loading])
+  }, [shouldOpenTaskForm, handledOpenKey, location, navigate])
 
   // `useTasks()`/`useTaskLists()` re-derive `loadTasks`/`loadTaskLists`/
   // `addToast` on every render of ANY subscriber to the tasks store,

@@ -67,13 +67,12 @@ export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
       key: 'task',
       label: 'Task',
       icon: CheckSquare,
-      // BUG-005 (docs/backlog/EP-07-tasks-depth/BUG-005-quick-add-task-noop.md):
-      // a bare navigate('/tasks') was a no-op when already on /tasks, and
-      // even from elsewhere it landed on the page with nothing focused.
-      // `focusComposer` (read by TasksTodayPage.tsx) puts the cursor in the
-      // composer either way, matching how Expense/Income/Transfer actually
-      // open their form rather than just changing the route.
-      go: () => { navigate('/tasks', { state: { focusComposer: true } }); close() },
+      // BUG-005 made a bare navigate('/tasks') at least focus the composer,
+      // but a focused input is not a form: Expense/Income/Transfer each open
+      // their modal, so Task must too. `openTaskForm` (read by
+      // TasksTodayPage.tsx) opens the "New task" TaskFormModal, including
+      // when already on /tasks.
+      go: () => { navigate('/tasks', { state: { openTaskForm: true } }); close() },
     },
     { key: 'import', label: 'Import transactions', icon: Upload, go: () => goWallet({ openImport: true }) },
   ]

@@ -3,6 +3,7 @@ import { Modal } from '@/components/ui/Modal'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { cn } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
+import { useAssignees } from '@/hooks/useAssignees'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task, TaskPriority } from '@/types/tasks.types'
 
@@ -73,6 +74,7 @@ export function TaskDetailModal({
 
   const { updateTaskContent, updateTaskNote, updateTaskList, updateTaskDueDate, updateTaskPriority, assignTask } =
     useTasks()
+  const assignees = useAssignees(coMembers ?? [])
 
   if (!task || !current) {
     return <Modal open={false} onOpenChange={onOpenChange} title="Task" children={null} />
@@ -227,7 +229,7 @@ export function TaskDetailModal({
               className={fieldInputClass}
             >
               <option value="">Unassigned</option>
-              {coMembers.map((m) => (
+              {assignees.map((m) => (
                 <option key={m.userId} value={m.userId}>
                   {m.username}
                 </option>

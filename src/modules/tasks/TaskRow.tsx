@@ -5,6 +5,7 @@ import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
+import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
@@ -164,6 +165,7 @@ export function TaskRow({
   const state = dueState(task)
   const { updateTaskContent, updateTaskDueDate, deleteTaskById } = useTasks()
   const { resolveChip } = useWalletRefChips()
+  const self = useAppStore((s) => s.user)
 
   // Click-to-edit content — same render-time re-sync pattern as
   // TaskListRow.tsx's `contentDraft` (not a `useEffect`, since a page keeping
@@ -211,7 +213,11 @@ export function TaskRow({
       })
   }
 
-  const assignee = coMembers?.find((m) => m.userId === task.assigneeId)
+  // `coMembers` excludes the viewer, so a task assigned to yourself needs the
+  // viewer resolved separately or its avatar renders blank.
+  const assignee =
+    coMembers?.find((m) => m.userId === task.assigneeId) ??
+    (self && task.assigneeId === self.id ? { userId: self.id, username: self.username } : undefined)
   const walletChip = resolveChip(task.walletRef)
   const recurrence = recurrenceLabel(task)
 
