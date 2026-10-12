@@ -11,6 +11,7 @@ import { useTaskLists } from '@/hooks/useTaskLists'
 import { useToastStore } from '@/stores/toast.store'
 import { useDayStore } from '@/stores/day.store'
 import { NewListModal } from '@/modules/tasks/NewListModal'
+import { TasksNavBadge } from '@/modules/tasks/TasksNavBadge'
 
 interface ModuleSidebarProps {
   open: boolean
@@ -123,6 +124,8 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
                     {item.label}
                     {item.to === '/wallet/shared' && <PendingClaimsBadge />}
                     {item.to === '/wallet/inbox' && <CaptureInboxBadge />}
+                    {item.to === '/tasks' && <TasksNavBadge kind="today" />}
+                    {item.to === '/tasks/assigned' && <TasksNavBadge kind="assigned" />}
                   </NavLink>
                 ),
               )}
