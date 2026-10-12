@@ -134,13 +134,22 @@ async function computeWindow(db: D1Database, habit: HabitRow, today: string): Pr
   // every window date are already expressed in (CLAUDE.md §3 Tests trap —
   // slicing the UTC string directly would misjudge "due" for the 8 hours a
   // day the UTC and MYT dates disagree).
+  //
+  // Two exceptions widen the start back out. A tick the user back-filled
+  // before the creation date is a real, recorded day, so tracking starts at
+  // the earliest of creation and the first entry. And a Wallet-derived habit
+  // ("no spend") is measured from real spending history, which exists for
+  // every day in the window whether or not the habit did yet.
+  const firstEntry = results.reduce<string | null>((min, r) => (min === null || r.date < min ? r.date : min), null)
   const createdDate = businessDateOf(habit.created_at)
+  const trackedFrom =
+    spendDates !== null ? windowStart : firstEntry !== null && firstEntry < createdDate ? firstEntry : createdDate
 
   const window: WindowDay[] = []
   for (let i = STATS_WINDOW_DAYS - 1; i >= 0; i--) {
     const date = dateMinusDays(today, i)
     const weekday = weekdayOf(date)
-    const due = date >= createdDate && isDueOn(schedule, weekday)
+    const due = date >= trackedFrom && isDueOn(schedule, weekday)
     const done = isDoneOn(habit, entryMap, spendDates, date)
     window.push({ date, done, due })
   }
