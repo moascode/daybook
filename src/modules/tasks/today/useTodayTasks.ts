@@ -264,7 +264,7 @@ export function useTodayTasks() {
       const shortfall = ids.length - updated.length
       if (shortfall > 0) {
         addToast({
-          message: `${shortfall} couldn't move — they belong to someone else.`,
+          message: `${shortfall} couldn't move because you can't edit ${shortfall === 1 ? 'it' : 'them'}.`,
         })
       }
     } catch (err) {

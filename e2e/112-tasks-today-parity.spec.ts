@@ -128,37 +128,28 @@ test.describe('111 — Today page parity', () => {
     await expect(page.getByTestId('habit-name-input')).toBeVisible()
   })
 
-  test('reschedule all reports a shortfall for a task it has no right to move', async ({ browser }) => {
+  test('reschedule all also moves an overdue task someone else handed you', async ({ browser }) => {
+    // An assignee may reschedule a task they were handed (same access as
+    // completing it), so "Reschedule both" moves both rows — none is left
+    // stuck in Overdue behind a success toast.
     const { ownerPage, memberPage, ownerCtx, memberCtx } = await createHousehold(browser)
     const ownerId = await currentUserId(ownerPage)
     const yesterday = businessDatePlus(-1)
 
-    // The owner's own overdue task — reschedulable.
     await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Owner overdue task', dueDate: yesterday } })
-
-    // A task the MEMBER owns, overdue, and assigned to the owner — it shows
-    // up in the owner's "Mine" Overdue group (assignee match), but
-    // POST /tasks/reschedule only updates rows where user_id = caller, so
-    // this one can never move for the owner.
     const memberTask = await (
       await memberPage.request.post(`${API}/tasks`, { data: { content: 'Member overdue task', dueDate: yesterday } })
     ).json()
     await memberPage.request.patch(`${API}/tasks/${memberTask.id}`, { data: { assigneeId: ownerId } })
 
     await ownerPage.goto('/tasks')
-    await expect(ownerPage.getByTestId('today-task-row').filter({ hasText: 'Owner overdue task' })).toBeVisible()
-    await expect(ownerPage.getByTestId('today-task-row').filter({ hasText: 'Member overdue task' })).toBeVisible()
-
     const rescheduleBtn = ownerPage.getByTestId('reschedule-all-btn')
     await expect(rescheduleBtn).toHaveText('Reschedule both to today')
     await rescheduleBtn.click()
 
-    // The owner's own task moved into Today...
-    await expect(ownerPage.getByTestId('today-task-row').filter({ hasText: 'Owner overdue task' })).toBeVisible()
-    // ...the member's task is still stuck in Overdue...
-    await expect(ownerPage.getByTestId('reschedule-all-btn')).toBeVisible()
-    // ...and the page never claims it moved something it didn't.
-    await expect(ownerPage.getByTestId('toast').filter({ hasText: "couldn't move" })).toBeVisible()
+    await expect(ownerPage.getByText('Rescheduled 2 tasks to today.')).toBeVisible()
+    await expect(ownerPage.getByTestId('reschedule-all-btn')).toHaveCount(0)
+    await expect(ownerPage.getByTestId('today-task-row').filter({ hasText: 'Member overdue task' })).toBeVisible()
 
     await ownerCtx.close()
     await memberCtx.close()
