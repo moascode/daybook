@@ -322,33 +322,25 @@ test.describe('70 — All tasks page', () => {
     await expect(page.getByTestId('all-tasks-stat-done-this-week').locator('.stat-value')).toHaveText(nowCount ?? '')
   })
 
-  test('"Schedule these" reports a shortfall when a task belongs to someone else', async ({ browser }) => {
+  test('"Schedule these" also moves a task someone else handed you', async ({ browser }) => {
+    // An assignee may reschedule a task they were handed (the same access
+    // POST /tasks/:id/complete grants), so "Schedule these" moves it with
+    // the viewer's own task instead of silently skipping it.
     const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
-    // The SECOND user's own undated task — viewed from their own All tab,
-    // this one is theirs (`user_id` matches) and CAN move.
     await assigneePage.request.post(`${API}/tasks`, { data: { content: "Assignee's own task" } })
-    // Created and owned by the FIRST user, then handed to the second — it
-    // shows up on the second user's All tab too (view=all includes
-    // `assignee_id = viewer`), but `POST /tasks/reschedule` is scoped to
-    // `user_id = caller` only (worker/routes/tasks.ts, "not sharing-aware"),
-    // so the second user's "Schedule these" can't move it.
     const handedOff = await (
       await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Handed off task' } })
     ).json()
     await ownerPage.request.patch(`${API}/tasks/${handedOff.id}`, { data: { assigneeId } })
 
     await assigneePage.goto('/tasks/all')
-    const undatedGroup = assigneePage.getByTestId('all-tasks-no-due-date-group')
-    await expect(undatedGroup).toContainText('2')
+    await expect(assigneePage.getByTestId('all-tasks-no-due-date-group')).toContainText('2')
 
     await assigneePage.getByTestId('schedule-undated-btn').click()
-    await expect(
-      assigneePage.getByText(/Scheduled 1 task for today — 1 couldn't move because it belongs to someone else\./),
-    ).toBeVisible()
-    await expect(assigneePage.getByTestId('all-tasks-row').filter({ hasText: "Assignee's own task" })).toBeVisible()
-    await expect(assigneePage.getByTestId('all-tasks-no-due-date-group')).toContainText('1')
+    await expect(assigneePage.getByText('Scheduled 2 tasks for today.')).toBeVisible()
+    await expect(assigneePage.getByTestId('all-tasks-no-due-date-group')).toHaveCount(0)
     await expect(assigneePage.getByTestId('all-tasks-row').filter({ hasText: 'Handed off task' })).toBeVisible()
 
     await ownerCtx.close()

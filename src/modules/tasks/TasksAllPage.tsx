@@ -407,17 +407,17 @@ export function TasksAllPage() {
       const updated = await rescheduleTasks(ids, today)
       const updatedIds = new Set(updated.map((t) => t.id))
       setOpenTasks((prev) => prev.map((t) => (updatedIds.has(t.id) ? { ...t, dueDate: today } : t)))
-      // POST /tasks/reschedule is scoped to the caller's own tasks
-      // (worker/routes/tasks.ts) — not sharing-aware — so a task the viewer
-      // only sees here because they're its assignee (not its owner) comes
-      // back unmoved. Never claim success for those (CLAUDE.md §2 rule 10):
-      // say exactly how many moved and why the rest didn't.
+      // POST /tasks/reschedule moves what the caller may act on (owner,
+      // assignee or writable shared list) and returns only those — a task in
+      // a read-only shared list comes back unmoved. Never claim success for
+      // those (CLAUDE.md §2 rule 10): say exactly how many moved and why the
+      // rest didn't.
       const skipped = ids.length - updated.length
       const scheduledMsg = `Scheduled ${updated.length} task${updated.length === 1 ? '' : 's'} for today`
       addToast({
         message:
           skipped > 0
-            ? `${scheduledMsg} — ${skipped} couldn't move because ${skipped === 1 ? 'it belongs' : 'they belong'} to someone else.`
+            ? `${scheduledMsg} — ${skipped} couldn't move because you can't edit ${skipped === 1 ? 'it' : 'them'}.`
             : `${scheduledMsg}.`,
       })
     } catch (err) {
