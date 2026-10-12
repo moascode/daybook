@@ -18,7 +18,8 @@ import { RING_COLORS, pooledWeekdayStats } from './habits/habitMath'
  * Habits — `/tasks/habits` (FEAT-029, docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md;
  * visual language brought to design parity by FEAT-061,
  * docs/backlog/EP-07-tasks-depth/FEAT-061-tasks-habits-design-adoption.md;
- * parity + hardening pass tracked wherever this session's work item lives).
+ * production-hardening pass adding edit, archive/restore, a race-safe
+ * toggle and ConfirmDeleteModal-backed delete — see e2e/111-tasks-habits-parity.spec.ts).
  * A habit is a repeated commitment tracked by day, not a due-dated task
  * instance — rings/streaks/dots/weekday chart all come pre-computed from
  * `GET /habits` (worker/routes/habits.ts's computeStats) except the pooled
