@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns'
-import { todayISO } from '@/lib/utils'
+import { localDateOfUtc, todayISO } from '@/lib/utils'
 import type { Task } from '@/types/tasks.types'
 
 // Shared by every task row on the fixed-column `.task--cols` grid
@@ -26,7 +26,7 @@ export function daysLate(dateIso: string): number {
 
 /** "Added 4 months ago" — the mockup's chip for an undated task, so its age is visible. */
 export function addedLabel(createdAt: string): string {
-  const days = dayDiff(createdAt.slice(0, 10), todayISO())
+  const days = dayDiff(localDateOfUtc(createdAt), todayISO())
   if (days <= 0) return 'Added today'
   if (days === 1) return 'Added yesterday'
   if (days < 30) return `Added ${days} days ago`

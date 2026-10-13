@@ -187,10 +187,15 @@ export function TasksUpcomingPage() {
     () => week.map((date) => ({ date, count: tasksByDay.get(date)?.length ?? 0 })),
     [week, tasksByDay],
   )
-  const maxEntry = dayCounts.reduce((a, b) => (b.count > a.count ? b : a))
-  const minEntry = dayCounts.reduce((a, b) => (b.count < a.count ? b : a))
+  // Balancing only ever looks at today onwards: a day that's already gone
+  // can't take a task, and suggesting "move it to Monday" on a Tuesday is a
+  // move into the past. A week that's entirely past has nothing to balance.
+  const openDays = dayCounts.filter((d) => d.date >= today)
+  const balanceDays = openDays.length > 0 ? openDays : dayCounts
+  const maxEntry = balanceDays.reduce((a, b) => (b.count > a.count ? b : a))
+  const minEntry = balanceDays.reduce((a, b) => (b.count < a.count ? b : a))
   const gap = maxEntry.count - minEntry.count
-  const canBalance = gap >= 2
+  const canBalance = openDays.length > 1 && gap >= 2
 
   // Band stats (FEAT-057 mockup parity): tasks due within the displayed
   // `week`, split into "hard deadlines" (owner-approved definition: has a
