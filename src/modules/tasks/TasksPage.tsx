@@ -82,7 +82,25 @@ interface TaskTemplate {
   createdAt: string
 }
 
-export function TasksPage() {
+interface TasksPageProps {
+  /**
+   * Tasks-lists-parity P0 (seen live): TasksListDetailPage.tsx's Outline
+   * view used to render this component completely unfiltered, so a real
+   * list's Outline tab showed EVERY task from EVERY list, not just this
+   * one's. `listFilter` scopes it to one list's roots — a real list's id,
+   * or `null` for Unsorted's list_id-IS-NULL roots. `undefined` (every
+   * other caller of this page — the actual /tasks outliner route — is
+   * unaffected) keeps the old, unfiltered behaviour.
+   *
+   * Only applied while at the true top level (`rootId === null`): zooming
+   * into a specific task (`setRootId`) must keep showing that task's own
+   * subtasks regardless of their `listId`, the same "root scoped, subtasks
+   * not" rule `BulletTree.tsx`'s `rootListFilter` documents.
+   */
+  listFilter?: string | null
+}
+
+export function TasksPage({ listFilter }: TasksPageProps = {}) {
   const {
     tasks,
     rootId,
@@ -112,6 +130,14 @@ export function TasksPage() {
 
   const { addToast, removeToast } = useToastStore()
 
+  // Only meaningful while at the true top level — see `listFilter`'s own doc
+  // comment on why a zoomed-in view (`rootId !== null`) ignores it. Declared
+  // early (ahead of every handler below that closes over it) rather than
+  // down by its other use near the render — several of those handlers'
+  // `useCallback` dependency arrays reference it directly, which would be a
+  // `const` TDZ error if it were declared later in this same function body.
+  const effectiveListFilter = rootId === null ? listFilter : undefined
+
   const [loaded, setLoaded] = useState(false)
   const [focusId, setFocusId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -133,6 +159,24 @@ export function TasksPage() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const undoToastIdRef = useRef<string | null>(null)
 
+  // Walks a task up to its topmost ancestor to find the root it belongs to —
+  // search (below) needs this to stay scoped to `listFilter`, since a
+  // subtask's own `listId` doesn't reflect the list its root lives in (see
+  // `BulletTree.tsx`'s `rootListFilter` doc comment).
+  const belongsToFilteredList = useCallback(
+    (task: Task): boolean => {
+      if (listFilter === undefined) return true
+      let cur = task
+      while (cur.parentId) {
+        const parent = tasks.find((t) => t.id === cur.parentId)
+        if (!parent) break
+        cur = parent
+      }
+      return cur.listId === listFilter
+    },
+    [tasks, listFilter],
+  )
+
   // ── Search results ────────────────────────────────
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -140,11 +184,11 @@ export function TasksPage() {
     return tasks
       .filter(
         (t) =>
-          t.content.toLowerCase().includes(q) ||
-          t.note.toLowerCase().includes(q),
+          (t.content.toLowerCase().includes(q) || t.note.toLowerCase().includes(q)) &&
+          belongsToFilteredList(t),
       )
       .slice(0, 50)
-  }, [tasks, searchQuery])
+  }, [tasks, searchQuery, belongsToFilteredList])
 
   // ── Undo toast helper ─────────────────────────────
   const showDeleteToast = useCallback(() => {
@@ -209,12 +253,23 @@ export function TasksPage() {
       if (!task) return
       try {
         const newTask = await addTask('', task.parentId, id)
+        // List-scoped Outline (TasksListDetailPage.tsx): a new ROOT-level
+        // sibling needs this list's `listId` too, or `BulletTree.tsx`'s
+        // `rootListFilter` would immediately hide it the moment this
+        // component re-renders — the one case where silently not showing a
+        // just-created row would look like data loss rather than a filter.
+        // Nested siblings (task.parentId !== null) are unaffected by the
+        // filter at all (it only ever applies at depth 0), so nothing to do
+        // for those.
+        if (effectiveListFilter !== undefined && task.parentId === null) {
+          await updateTask(newTask.id, { listId: effectiveListFilter })
+        }
         setFocusId(newTask.id)
       } catch {
         // addTask already surfaced the error and reconciled the store.
       }
     },
-    [addTask],
+    [addTask, updateTask, effectiveListFilter],
   )
 
   const handleBackspaceEmpty = useCallback(
@@ -279,11 +334,17 @@ export function TasksPage() {
   const handleAddRootTask = useCallback(async () => {
     try {
       const newTask = await addTask('', rootId)
+      // Same list-scoped-Outline fixup as `handleEnter` above — see its
+      // comment. `rootId === null` here is exactly the depth-0 case
+      // `effectiveListFilter` is scoped to.
+      if (effectiveListFilter !== undefined && rootId === null) {
+        await updateTask(newTask.id, { listId: effectiveListFilter })
+      }
       setFocusId(newTask.id)
     } catch {
       // addTask already surfaced the error and reconciled the store.
     }
-  }, [addTask, rootId])
+  }, [addTask, updateTask, rootId, effectiveListFilter])
 
   const handleSaveAsTemplate = useCallback((task: Task) => {
     setTemplateTaskToSave(task)
@@ -495,7 +556,9 @@ export function TasksPage() {
     )
   }
 
-  const currentLevelTasks = tasks.filter((t) => t.parentId === rootId)
+  const currentLevelTasks = tasks.filter(
+    (t) => t.parentId === rootId && (effectiveListFilter === undefined || t.listId === effectiveListFilter),
+  )
   const isEmpty = currentLevelTasks.length === 0
   const isSearching = searchQuery.trim().length > 0
 
@@ -736,6 +799,7 @@ export function TasksPage() {
               parentId={rootId}
               depth={0}
               focusId={focusId}
+              rootListFilter={effectiveListFilter}
               sortByDue={sortByDue}
               selectMode={selectMode}
               selectedIds={selectedIds}

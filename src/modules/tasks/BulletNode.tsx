@@ -235,8 +235,15 @@ export function BulletNode({
           </button>
         )}
 
-        {/* Collapse chevron — aligned to the bullet column */}
+        {/* Collapse chevron — aligned to the bullet column. Unlike the drag
+            handle/checkbox beside it (tabIndex=-1: Enter/Tab inside the
+            editor already drive this outliner's keyboard model), a task
+            with no other collapse affordance needs this one reachable by
+            keyboard — left at -1 it was invisible to Tab entirely.
+            `aria-expanded` only makes sense once there's something to
+            expand/collapse. */}
         <button
+          type="button"
           className={cn(
             'flex h-7 w-5 shrink-0 items-center justify-center rounded transition-colors',
             hasChildren
@@ -244,8 +251,9 @@ export function BulletNode({
               : 'text-transparent pointer-events-none',
           )}
           onClick={() => hasChildren && onToggleCollapse(task.id)}
-          aria-label={task.isCollapsed ? 'Expand' : 'Collapse'}
-          tabIndex={-1}
+          aria-label={task.isCollapsed ? `Expand ${task.content || 'task'}` : `Collapse ${task.content || 'task'}`}
+          aria-expanded={hasChildren ? !task.isCollapsed : undefined}
+          tabIndex={hasChildren ? 0 : -1}
         >
           {hasChildren && (
             <ChevronRight

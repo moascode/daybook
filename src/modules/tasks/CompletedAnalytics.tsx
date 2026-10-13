@@ -41,12 +41,17 @@ function computeRuns(dates: string[], countByDate: Map<string, number>, today: s
   return runs
 }
 
-/** Bucket a day's completion count into one of 4 shading intensities. */
-function intensityClass(count: number): string {
-  if (count === 0) return 'bg-surface-sunken'
-  if (count === 1) return 'bg-emerald-200'
-  if (count <= 3) return 'bg-emerald-400'
-  return 'bg-emerald-600'
+/** Bucket a day's completion count into one of the mockup's 4 shading
+ *  intensities (`tasks.css`'s `.heat i.l1`..`l4` — accent-alpha levels, not
+ *  a raw Tailwind `bg-emerald-*` scale, so the heatmap follows the accent
+ *  colour like every other chart in the app rather than hardcoding green).
+ *  '' (no level class) renders `.heat i`'s own empty-day background. */
+function intensityLevelClass(count: number): string {
+  if (count === 0) return ''
+  if (count === 1) return 'l1'
+  if (count === 2) return 'l2'
+  if (count <= 4) return 'l3'
+  return 'l4'
 }
 
 /**
@@ -146,27 +151,39 @@ export function CompletedAnalytics({ data }: { data: CompletedAnalyticsData }) {
         </div>
         <div className="heat-key ml-auto">
           <span>Less</span>
-          <i className="bg-surface-sunken" />
-          <i className="bg-emerald-200" />
-          <i className="bg-emerald-400" />
-          <i className="bg-emerald-600" />
+          <i />
+          <i className="l1" />
+          <i className="l2" />
+          <i className="l3" />
+          <i className="l4" />
           <span>More</span>
         </div>
       </div>
 
       <div className="mb-4 overflow-x-auto">
-        <div className="inline-flex gap-[3px]" data-testid="completed-heatmap">
-          {weeks.map((col, i) => (
-            <div key={i} className="flex flex-col gap-[3px]">
-              {col.map((date) => (
-                <div
-                  key={date}
-                  data-testid={`heatmap-day-${date}`}
-                  title={`${date} — ${countByDate.get(date) ?? 0} completed`}
-                  className={cn('h-2.5 w-2.5 rounded-sm', date > today ? 'opacity-0' : intensityClass(countByDate.get(date) ?? 0))}
-                />
-              ))}
-            </div>
+        {/* `.heat`/`.heat-key`'s accent-alpha levels (tasks.css's appended
+            block below gives the key's own swatches real colour — the
+            mockup's markup never actually painted them, since `.heat
+            i.l1..l4` is scoped under `.heat`, not `.heat-key`). `heat--fill`
+            stretches the grid's implicit columns to the card's full width —
+            `.heat` alone sizes its (auto) columns to content, which on this
+            many squares renders far narrower than the card. Flat list of
+            `<i>`s, not nested per-week `<div>`s: `grid-auto-flow: column`
+            already lays 7 items per column in the SAME top-to-bottom,
+            oldest-week-first order `weeks.flat()` produces. */}
+        <div
+          className="heat heat--fill"
+          data-testid="completed-heatmap"
+          role="img"
+          aria-label={`Completion heatmap: ${heatmapTotal} tasks completed over the last year`}
+        >
+          {weeks.flat().map((date) => (
+            <i
+              key={date}
+              data-testid={`heatmap-day-${date}`}
+              title={`${date} — ${countByDate.get(date) ?? 0} completed`}
+              className={cn(date > today && 'opacity-0', intensityLevelClass(countByDate.get(date) ?? 0))}
+            />
           ))}
         </div>
       </div>
@@ -280,13 +297,21 @@ export function CompletedByListCards({
             <div className="card-sub">From created to done, average</div>
           </div>
         </div>
-        {bySpeed.map((row) => {
+        {bySpeed.map((row, idx) => {
           const list = row.listId ? listById.get(row.listId) : undefined
           const name = row.listId ? (list?.name ?? 'Deleted list') : 'Unsorted'
           return (
             <div key={row.listId ?? 'unsorted'} className="kv">
               <span className="k">{name}</span>
-              <span className="v">{row.avgDays.toFixed(1)} days</span>
+              {/* The slowest list (bySpeed is sorted slowest-first) reads as
+                  a warning, same convention the mockup's own "Someday"
+                  row uses — a `text-neg-fg` class would be the usual way,
+                  but `.kv .v`'s own colour is set via plain CSS, not
+                  Tailwind, so matching its specificity needs the token
+                  directly. */}
+              <span className="v" style={idx === 0 && bySpeed.length > 1 ? { color: 'rgb(var(--neg-fg))' } : undefined}>
+                {row.avgDays.toFixed(1)} days
+              </span>
             </div>
           )
         })}
