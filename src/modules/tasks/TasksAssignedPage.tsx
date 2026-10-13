@@ -168,6 +168,20 @@ export function TasksAssignedPage() {
     setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, listId } : t)))
   }
 
+  // Section 1's kebab offers "Assign to" too (useAssignees, "Me" included)
+  // — a row waiting on the viewer can be handed off further. A task
+  // reassigned away from the viewer no longer belongs in `waitingOnYou`, so
+  // it's dropped from there the same way completing it already is;
+  // `allOpen` just keeps its new `assigneeId`.
+  const handleAssigneeChange = (taskId: string, assigneeId: string | null) => {
+    setAllOpen((prev) => prev.map((t) => (t.id === taskId ? { ...t, assigneeId } : t)))
+    if (assigneeId !== currentUserId) {
+      setWaitingOnYou((prev) => prev.filter((t) => t.id !== taskId))
+    } else {
+      setWaitingOnYou((prev) => prev.map((t) => (t.id === taskId ? { ...t, assigneeId } : t)))
+    }
+  }
+
   // BUG-011: this page's rows don't cover priority/note — TaskDetailModal
   // does. Same staleness story as the handlers above — patch every section
   // that might hold this task by id, since the modal's own opener doesn't
@@ -582,6 +596,8 @@ export function TasksAssignedPage() {
                         task={t}
                         list={t.listId ? listById.get(t.listId) : undefined}
                         onToggleComplete={handleToggleComplete}
+                        coMembers={coMembers}
+                        onAssigneeChange={handleAssigneeChange}
                         onContentChange={handleContentChange}
                         onDueDateChange={handleDueDateChange}
                         availableLists={taskLists}

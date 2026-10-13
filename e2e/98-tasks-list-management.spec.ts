@@ -64,6 +64,11 @@ test.describe('98 — Tasks list management', () => {
     // fetch already ran, so the picker needs a reload to see it.
     await page.reload()
 
+    // This test exercises the OUTLINER's own "Move to list…" dialog
+    // (BulletNode.tsx), not the List view's kebab — List is now the
+    // page's default (tasks-lists-parity), so Outline needs selecting first.
+    await page.getByTestId('list-view-outline').click()
+
     await page.getByRole('button', { name: 'New task' }).first().click()
     await expect(page.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
     await page.keyboard.type('Drop off dry cleaning')

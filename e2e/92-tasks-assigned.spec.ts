@@ -104,14 +104,16 @@ test.describe('92 — Tasks assigned to me', () => {
     await assigneeCtx.close()
   })
 
-  test('an undated assignment shows the gone-quiet flag in the owner\'s handed-out rail', async ({ browser }) => {
+  test('a freshly-assigned undated task shows no Stale chip yet', async ({ browser }) => {
     const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
     const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Sort out the storage unit' } })
     const task = await taskRes.json()
-    // No dueDate — this is exactly the "gone quiet" condition (assigned
-    // without a date), not related to assignedAt.
+    // No dueDate, assigned "now" — tasks-lists-parity's compact handed-out
+    // row only flags "Stale" once an undated task has sat that way for over
+    // a week (see `handedOutChip` in TasksAssignedPage.tsx), not the moment
+    // it's handed out — so this row renders with no chip at all yet.
     await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
 
     await ownerPage.goto('/tasks/assigned')
@@ -122,54 +124,66 @@ test.describe('92 — Tasks assigned to me', () => {
 
     const handedOut = ownerPage.getByTestId('assigned-handed-out-section')
     await expect(handedOut).toContainText('Sort out the storage unit')
-    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toBeVisible()
-    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toContainText('Gone quiet')
+    await expect(ownerPage.getByTestId(`assigned-handed-out-row-${task.id}`)).toBeVisible()
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).not.toBeVisible()
 
     await ownerCtx.close()
     await assigneeCtx.close()
   })
 
-  test('the assignee picker on the assigned page persists via PATCH and survives reload', async ({ browser }) => {
-    const { ownerPage, assigneePage, assigneeName, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+  test('an undated task assigned over a week ago shows the Stale chip in the handed-out rail', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
-    // Seed an unassigned task the owner will assign through the picker's UI
-    // (not the API), so this exercises TaskListRow's <select> onChange path.
-    const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Book the venue', dueDate: '2026-12-01' } })
+    const assignedAt = `${businessDatePlus(-10)} 09:00:00`
+    const taskRes = await ownerPage.request.post(`${API}/tasks`, {
+      data: { content: 'Sort out the garage', assigneeId, assignedAt },
+    })
     const task = await taskRes.json()
-    // Assign it to the co-member up front so it renders in the handed-out
-    // rail (where TaskListRow's picker is actually rendered with coMembers),
-    // then reassign to Unassigned via the picker to prove the control writes.
-    await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // FEAT-059: the handed-out rail (where this picker renders) sits behind
-    // the From-me tab now.
     await ownerPage.getByTestId('assigned-audience-from-me').click()
 
-    const picker = ownerPage.getByTestId(`task-row-assignee-${task.id}`)
-    await expect(picker).toBeVisible()
-    await expect(picker).toHaveValue(assigneeId)
-    await expect(picker.locator('option', { hasText: assigneeName })).toHaveCount(1)
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toBeVisible()
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toContainText('Stale')
 
-    // Change it to Unassigned through the picker's own UI — the actual
-    // control under test, not the seeding API used above.
-    const card = ownerPage.getByTestId('assigned-handed-out-section').locator('.card', { hasText: 'Book the venue' })
-    await picker.selectOption('')
-    await expect(picker).toHaveValue('')
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
 
-    // Same-page sync check: onAssigneeChange should update this page's own
-    // local state immediately, not just the picker's own draft — without it,
-    // the card's "Assigned to X" caption would still show the old assignee
-    // (or the whole card would linger in the handed-out rail, since it's no
-    // longer assigned to anyone) until a reload.
-    await expect(card).not.toBeVisible()
-    await expect(ownerPage.getByTestId('assigned-handed-out-empty')).toBeVisible()
+  test('reassigning a handed-out task from its row kebab persists via PATCH and survives reload', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // Seed an unassigned-looking task, then assign it to the co-member up
+    // front so it renders in the handed-out rail, where this page no longer
+    // renders a full TaskListRow at all (it's a compact `.prow`, FEAT-027/
+    // tasks-lists-parity) — the row that DOES still carry the kebab's
+    // "Assign to" submenu is in the "Waiting on you" section instead, so
+    // this now exercises that row on the assignee's own page.
+    const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Book the venue', dueDate: '2026-12-01' } })
+    const task = await taskRes.json()
+    await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
+
+    await assigneePage.goto('/tasks/assigned')
+    await expect(assigneePage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    const row = assigneePage.locator(`[data-task-id="${task.id}"]`)
+    await expect(row).toBeVisible()
+    await row.getByTestId(`task-row-more-${task.id}`).click()
+    await assigneePage.getByTestId(`task-row-assign-${task.id}`).hover()
+    await assigneePage.getByTestId(`task-row-assign-unassigned-${task.id}`).click()
+
+    // The row leaves "Waiting on you" the moment it's unassigned — same
+    // same-page sync story the old inline picker's `onAssigneeChange` gave,
+    // now driven by the kebab instead.
+    await expect(row).not.toBeVisible()
+    await expect(assigneePage.getByTestId('assigned-waiting-empty')).toBeVisible()
 
     // Persistence check (FEAT-026's review convention, applied here too):
     // reload and re-fetch the task directly, not just re-read the DOM.
-    await ownerPage.reload()
+    await assigneePage.reload()
     const after = await ownerPage.request.get(`${API}/tasks?view=all`)
     const afterRows = await after.json()
     const persisted = afterRows.find((r: { id: string }) => r.id === task.id)
