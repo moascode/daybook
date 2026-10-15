@@ -16,6 +16,19 @@ interface BulletTreeProps {
   parentId: string | null
   depth: number
   focusId: string | null
+  /**
+   * Tasks-lists-parity P0 — scopes the TOP-LEVEL render to one list's roots:
+   * a real list's id, or `null` for Unsorted's list_id-IS-NULL roots.
+   * `undefined` (every other caller, and this component's own recursive
+   * calls below) means "every root regardless of list" — the existing,
+   * unfiltered behaviour. Only ever meaningful at `depth === 0`: a task's
+   * OWN subtasks render under it regardless of their own `listId` (a
+   * subtask doesn't carry the parent's list the way the mockup's nesting
+   * implies — gating by list only at the root is what "this list's tasks +
+   * their subtasks" means), so this is read once here and never threaded
+   * into the recursive <BulletTree> calls that render children.
+   */
+  rootListFilter?: string | null
   sortByDue?: boolean
   selectMode?: boolean
   selectedIds?: Set<string>
@@ -42,6 +55,7 @@ export function BulletTree({
   parentId,
   depth,
   focusId,
+  rootListFilter,
   sortByDue = false,
   selectMode = false,
   selectedIds,
@@ -72,12 +86,15 @@ export function BulletTree({
         .filter((t) => {
           if (t.parentId !== pid) return false
           if (hideCompleted && t.isCompleted) return false
+          // Only the top-level call passes this (depth 0, parentId === the
+          // original rootId) — see the prop's own doc comment.
+          if (rootListFilter !== undefined && depth === 0 && t.listId !== rootListFilter) return false
           return true
         })
         .sort((a, b) =>
           sortByDue ? dueDateSorter(a, b) : a.sortOrder - b.sortOrder,
         ),
-    [tasks, hideCompleted, sortByDue],
+    [tasks, hideCompleted, sortByDue, rootListFilter, depth],
   )
 
   const checkHasChildren = useCallback(

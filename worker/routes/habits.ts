@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr } from '../lib.ts'
+import { updateRow, todayStr, businessDateOf } from '../lib.ts'
 
 // FEAT-029 (docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md) — Habits.
 // A habit is a repeated commitment tracked by day (habit_entries), a
@@ -122,12 +122,34 @@ async function computeWindow(db: D1Database, habit: HabitRow, today: string): Pr
   const schedule = parseSchedule(habit.schedule)
   const spendDates =
     habit.linked_kind === 'wallet:no-spend' ? await noSpendDatesInRange(db, habit.user_id, windowStart, today) : null
+  // A habit's own creation date, not the window start — a date before this
+  // was never a day the habit existed, so it can never be "due", regardless
+  // of what its (possibly weekday-restricted) schedule says. Without this, a
+  // habit created today starts with ~STATS_WINDOW_DAYS of due-but-missed
+  // history baked in before it ever had a chance to be kept — every derived
+  // stat (ring %, keptRate, weekday rates, streaks, joint stats) is built
+  // from this same `due` flag, so fixing it here fixes all of them at once.
+  // created_at is a raw SQL `datetime('now')` value (UTC); businessDateOf()
+  // converts it to the same business-timezone calendar date `today` and
+  // every window date are already expressed in (CLAUDE.md §3 Tests trap —
+  // slicing the UTC string directly would misjudge "due" for the 8 hours a
+  // day the UTC and MYT dates disagree).
+  //
+  // Two exceptions widen the start back out. A tick the user back-filled
+  // before the creation date is a real, recorded day, so tracking starts at
+  // the earliest of creation and the first entry. And a Wallet-derived habit
+  // ("no spend") is measured from real spending history, which exists for
+  // every day in the window whether or not the habit did yet.
+  const firstEntry = results.reduce<string | null>((min, r) => (min === null || r.date < min ? r.date : min), null)
+  const createdDate = businessDateOf(habit.created_at)
+  const trackedFrom =
+    spendDates !== null ? windowStart : firstEntry !== null && firstEntry < createdDate ? firstEntry : createdDate
 
   const window: WindowDay[] = []
   for (let i = STATS_WINDOW_DAYS - 1; i >= 0; i--) {
     const date = dateMinusDays(today, i)
     const weekday = weekdayOf(date)
-    const due = isDueOn(schedule, weekday)
+    const due = date >= trackedFrom && isDueOn(schedule, weekday)
     const done = isDoneOn(habit, entryMap, spendDates, date)
     window.push({ date, done, due })
   }
@@ -151,7 +173,11 @@ function computeStatsFromWindow(habit: HabitRow, window: WindowDay[]): HabitStat
     const { date, done, due } = window[idx]!
     const weekday = weekdayOf(date)
 
-    if (due) {
+    // A manual habit's today, not yet ticked, isn't a miss — the day isn't
+    // over (the same forgiveness the current streak gets below). Counting it
+    // made today's weekday read 0% and "the weakest day" every morning.
+    const pendingToday = date === today && !done && !habit.linked_kind
+    if (due && !pendingToday) {
       dueByWeekday[weekday]++
       if (done) keptByWeekday[weekday]++
     }
@@ -377,16 +403,24 @@ habits.post('/habits/:id/toggle', async (c) => {
     return c.json({ error: 'this habit is derived automatically and cannot be toggled by hand' }, 400)
   }
 
-  const existing = await c.env.DB.prepare('SELECT done FROM habit_entries WHERE habit_id = ? AND date = ?')
+  // Race-safe toggle: INSERT OR IGNORE first, rather than SELECT-then-INSERT/
+  // DELETE. Two quick clicks (or a slow network retry racing the original
+  // request) previously both read "no row" and both tried to INSERT, and the
+  // second INSERT hit the (habit_id, date) primary key and threw a raw 500.
+  // `OR IGNORE` makes a colliding insert a no-op row-count of 0 instead of an
+  // error, and `meta.changes` tells us which branch actually happened: if our
+  // insert landed (changes > 0) a row now exists and the toggle is "on"; if
+  // it didn't (another request's insert won the race, or a row was already
+  // there) the entry exists regardless of who wrote it, so this click's
+  // intent is "off" — delete it. Either way this never throws on conflict.
+  const inserted = await c.env.DB.prepare(
+    'INSERT OR IGNORE INTO habit_entries (habit_id, date, done) VALUES (?, ?, 1)',
+  )
     .bind(id, date)
-    .first<{ done: number }>()
+    .run()
 
-  if (existing) {
+  if (inserted.meta.changes === 0) {
     await c.env.DB.prepare('DELETE FROM habit_entries WHERE habit_id = ? AND date = ?').bind(id, date).run()
-  } else {
-    await c.env.DB.prepare('INSERT INTO habit_entries (habit_id, date, done) VALUES (?, ?, 1)')
-      .bind(id, date)
-      .run()
   }
 
   const today = todayStr()

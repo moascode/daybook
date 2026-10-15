@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, X } from 'lucide-react'
-import { format, parseISO } from 'date-fns'
-import { cn, todayISO } from '@/lib/utils'
+import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, Trash2, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
 import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import { avatarClass } from '@/lib/avatar'
+import { MENU_CONTENT, MENU_ITEM, addedLabel, dateColumns, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -25,65 +25,11 @@ interface AllTasksRowProps {
   onContentChange: (taskId: string, content: string) => void
   onDueDateChange: (taskId: string, dueDate: string | null) => void
   onListChange: (taskId: string, listId: string | null) => void
-}
-
-const MENU_ITEM =
-  'flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-sunken focus:bg-surface-sunken'
-const MENU_CONTENT =
-  'z-50 min-w-[180px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-xl shadow-line/60 animate-in fade-in-0 zoom-in-95'
-
-function dayDiff(fromIso: string, toIso: string): number {
-  const [y1, m1, d1] = fromIso.split('-').map(Number)
-  const [y2, m2, d2] = toIso.split('-').map(Number)
-  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000)
-}
-
-/** "Added 4 months ago" — the mockup's chip for an undated task, so its age is visible. */
-function addedLabel(createdAt: string): string {
-  const days = dayDiff(createdAt.slice(0, 10), todayISO())
-  if (days <= 0) return 'Added today'
-  if (days === 1) return 'Added yesterday'
-  if (days < 30) return `Added ${days} days ago`
-  const months = Math.floor(days / 30)
-  if (months < 12) return `Added ${months} month${months === 1 ? '' : 's'} ago`
-  const years = Math.floor(months / 12)
-  return `Added ${years} year${years === 1 ? '' : 's'} ago`
-}
-
-/**
- * The two trailing date columns, as in tasks-all.html: an exact column
- * ("Thu 14" when late, otherwise the due time) and a relative one
- * ("3 days late", "Today", "Mon 18"). Undated rows show a dash in both.
- */
-function dateColumns(task: Task): { exact: string; relative: string; state: 'late' | 'soon' | 'ok' } {
-  if (task.isCompleted) {
-    const done = task.completedAt ? format(parseISO(task.completedAt.slice(0, 10)), 'd MMM') : ''
-    return { exact: '', relative: done ? `Done ${done}` : 'Done', state: 'ok' }
-  }
-  if (!task.dueDate) return { exact: '—', relative: '—', state: 'ok' }
-  const d = parseISO(task.dueDate)
-  const diff = dayDiff(todayISO(), task.dueDate)
-  // Untimed reads "Anytime" only on today's rows, where the question is live;
-  // repeated down a whole week of rows it is just noise.
-  const time = task.dueTime ? task.dueTime.slice(0, 5) : diff === 0 ? 'Anytime' : ''
-  if (diff < 0) {
-    const late = -diff
-    return { exact: format(d, 'EEE d'), relative: late === 1 ? 'Yesterday' : `${late} days late`, state: 'late' }
-  }
-  // Amber marks a time that's actually coming up today; an untimed task due
-  // today is ordinary, and tinting a whole day's worth of rows buries the one
-  // that matters.
-  if (diff === 0) return { exact: time, relative: 'Today', state: task.dueTime ? 'soon' : 'ok' }
-  if (diff === 1) return { exact: time, relative: 'Tomorrow', state: 'ok' }
-  return { exact: time, relative: format(d, diff < 7 ? 'EEE d' : 'd MMM'), state: 'ok' }
-}
-
-function recurrenceLabel(task: Task): string | null {
-  if (!task.recurrence) return null
-  const interval = task.recurrenceData?.interval ?? 1
-  if (task.recurrence === 'custom') return 'Repeats weekly'
-  const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[task.recurrence]
-  return interval > 1 ? `Repeats every ${interval} ${unit}s` : `Repeats ${task.recurrence}`
+  /** Notify-only, like the other callbacks: the row deletes via `deleteTaskById`
+   *  itself, then hands the page the task and every id the server actually
+   *  removed (cascaded descendants included) so it can patch its local
+   *  arrays and offer the undo toast (CD-20). */
+  onDelete: (task: Task, deletedIds: string[]) => void
 }
 
 /**
@@ -104,8 +50,9 @@ export function AllTasksRow({
   onContentChange,
   onDueDateChange,
   onListChange,
+  onDelete,
 }: AllTasksRowProps) {
-  const { updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
+  const { updateTaskContent, updateTaskDueDate, updateTaskList, deleteTaskById } = useTasks()
   const self = useAppStore((s) => s.user)
 
   // Click-to-edit content — same render-time re-sync as TaskListRow.tsx, since
@@ -368,6 +315,21 @@ export function AllTasksRow({
                   </DropdownMenu.SubContent>
                 </DropdownMenu.Portal>
               </DropdownMenu.Sub>
+              <DropdownMenu.Item
+                className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm text-red-600 outline-none hover:bg-red-50 focus:bg-red-50"
+                data-testid={`all-tasks-row-delete-${task.id}`}
+                onSelect={() => {
+                  deleteTaskById(task.id)
+                    .then((deletedIds) => onDelete(task, deletedIds))
+                    .catch(() => {
+                      // deleteTaskById already surfaces the failure (reportAndReconcile) —
+                      // nothing more for this row to do.
+                    })
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete task
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>

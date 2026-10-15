@@ -121,3 +121,10 @@
 
 
 }
+
+/* Section label (proposal-v2/theme.css `.u-label`): micro, uppercase,
+   tracked — the sidebar's "Lists" / "Review" headings and similar. */
+.u-label {
+  font-size: var(--t-micro); font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: rgb(var(--fg-subtle));
+}

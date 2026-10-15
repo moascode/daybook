@@ -1,146 +1,109 @@
-import { useEffect, useRef, useState } from 'react'
-import { Check, Repeat, CalendarClock, X, Pencil, MoreVertical, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, UserRound, Trash2, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
+import { useAppStore } from '@/stores/app.store'
+import { Button } from '@/components/ui/Button'
+import { avatarClass } from '@/lib/avatar'
+import { MENU_CONTENT, MENU_ITEM, addedLabel, dateColumns, dayDiff, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
+
+/**
+ * Completed rows show WHEN they were finished, not a due date — the exact
+ * column is the completion time ("09:48"), the relative column is a day
+ * label ("Today" / "Yesterday" / "Sat 16"), always, regardless of what the
+ * task was ever due. `taskRowFormat.ts`'s own `dateColumns` deliberately
+ * doesn't cover this (its completed branch exists only for AllTasksRow's
+ * mixed open+done list, where "Done 14 Oct" reads fine folded into one
+ * column) — this row renders completed tasks on their own two columns
+ * instead, so it gets its own formatter.
+ */
+function completedDateColumns(task: Task): { exact: string; relative: string; state: 'ok' } {
+  if (!task.completedAt) return { exact: '', relative: '', state: 'ok' }
+  const day = task.completedAt.slice(0, 10)
+  const parsed = parseISO(task.completedAt.replace(' ', 'T'))
+  const exact = format(parsed, 'HH:mm')
+  const diff = dayDiff(day, todayISO())
+  const relative = diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : format(parsed, 'EEE d')
+  return { exact, relative, state: 'ok' }
+}
 
 export interface TaskListRowProps {
   task: Task
   list: TaskList | undefined
   onToggleComplete: (id: string) => void
   /**
-   * FEAT-027 (docs/backlog/EP-07-tasks-depth/FEAT-027-tasks-assigned-to-me.md):
-   * household co-members, for the inline "Assign to…" picker. Resolved ONCE by
-   * the parent page (a `GET /groups/members` call), never per-row — mirrors how
-   * `list` is a per-row lookup into a parent-resolved map rather than its own
-   * fetch. Optional and omitted by every page except TasksAssignedPage.tsx for
-   * now, so the picker simply doesn't render there (same optional-prop,
-   * hide-when-absent pattern this component already uses for `list`).
+   * Household co-members, for the kebab's "Assign to…" submenu
+   * (`useAssignees` resolves "Me" + these). Optional and hide-when-absent —
+   * a page that hasn't resolved its household yet (or never needs to) omits
+   * this and the submenu simply isn't offered.
    */
   coMembers?: { userId: string; username: string }[]
-  /**
-   * FEAT-027: called after a successful assignee change, so a parent page
-   * keeping its own local `tasks` state (every current consumer does — see
-   * `coMembers`'s doc comment) can update its own copy. Without this, a page
-   * deriving a section from `task.assigneeId` (e.g. TasksAssignedPage.tsx's
-   * "handed out" filter) would show a stale, self-contradicting state after a
-   * successful change until the next full reload.
-   */
+  /** Called after a successful assignee change, so a page keeping its own
+   *  local `tasks` state (every current consumer does, not the outliner's
+   *  Zustand store) can keep a derived section (e.g. "handed out") honest. */
   onAssigneeChange?: (taskId: string, assigneeId: string | null) => void
-  /**
-   * FEAT-052 (docs/backlog/EP-07-tasks-depth/FEAT-052-edit-task-from-row.md):
-   * called after a successful content edit. Optional, same notify-only role
-   * as `onAssigneeChange` — most pages don't derive anything from a task's
-   * content, so most consumers pass nothing and the row's own local draft
-   * (below) is enough. TasksAllPage.tsx doesn't need it either: it doesn't
-   * group by content.
-   */
+  /** Called after a successful content edit — most pages don't derive
+   *  anything from a task's content, so this is optional. */
   onContentChange?: (taskId: string, content: string) => void
-  /**
-   * BUG-006 (docs/backlog/EP-07-tasks-depth/BUG-006-no-due-date-change-in-list-view.md):
-   * called after a successful due-date change. TasksAllPage.tsx passes this
-   * — it buckets `openTasks` into Overdue/This week/date groups, so a stale
-   * bucket after a change would show the row in the wrong section until the
-   * next reload, the same staleness `onAssigneeChange` exists to prevent for
-   * TasksAssignedPage.tsx's assignee-derived sections.
-   */
+  /** Called after a successful due-date change, so a page bucketing rows by
+   *  due date can move this one to its new bucket. */
   onDueDateChange?: (taskId: string, dueDate: string | null) => void
-  /**
-   * FEAT-051 (docs/backlog/EP-07-tasks-depth/FEAT-051-task-list-picker.md):
-   * every list the caller can file a task into, for the "Move to…" picker.
-   * Resolved ONCE by the parent page, same "not a per-row fetch" story as
-   * `coMembers`. Optional and hide-when-absent, same convention.
-   */
+  /** Every list the caller can file a task into, for the kebab's "Move to
+   *  list" submenu. Optional and hide-when-absent. */
   availableLists?: TaskList[]
-  /**
-   * FEAT-051: called after a successful list change. Every current consumer
-   * derives `list` (above) from its own local `tasks` array via a
-   * `listId → TaskList` lookup, so without this the dot/name shown here
-   * would stay on the old list until the next reload — the same staleness
-   * `onAssigneeChange`/`onDueDateChange` exist to prevent.
-   */
+  /** Called after a successful list change. */
   onListChange?: (taskId: string, listId: string | null) => void
-  /**
-   * BUG-011 (docs/backlog/EP-07-tasks-depth/BUG-011-no-way-to-set-priority.md):
-   * opens `TaskDetailModal.tsx` for this task. This row's own inline editors
-   * (content, list, due date, assignee) don't cover priority or note, so the
-   * modal is the row's only route to editing those — same optional,
-   * hide-when-absent convention as `coMembers`/`onAssigneeChange`/etc above.
-   * TasksListDetailPage.tsx doesn't pass this yet, so it's unaffected;
-   * TasksAssignedPage.tsx wired it in for both its sections once
-   * TaskDetailModal.tsx shipped (BUG-007..012).
-   */
+  /** Opens `TaskDetailModal.tsx` for this task — this row's own editors
+   *  don't cover priority or note. Optional and hide-when-absent. */
   onOpenDetail?: (task: Task) => void
-  /**
-   * FEAT-062 (docs/backlog/EP-07-tasks-depth/FEAT-062-tasks-list-detail-design-adoption.md):
-   * the resolved chip text for a task's `walletRef`, already produced by the
-   * parent page's own `useWalletRefChips().resolveChip()` call (the same hook
-   * `BulletNode.tsx` uses) — resolved once per section, not re-implemented
-   * here. Optional and hide-when-absent, same convention as `coMembers`/
-   * `list`: every page except `TasksListDetailPage.tsx`'s List view passes
-   * nothing and gets no wallet chip.
-   */
+  /** The resolved chip text for a task's `walletRef` (the parent page's own
+   *  `useWalletRefChips().resolveChip()` call). Optional and hide-when-absent. */
   walletChip?: string | null
   /**
-   * FEAT-062 (review fix #3/#6/#7): called when the user picks Delete in this
-   * row's own "More" menu. The row itself makes NO API call and keeps no
-   * undo state — every page that renders this row keeps its own local
-   * `openTasks`/`completedInList`-style arrays independent of the outliner's
-   * Zustand store (same staleness story as `onContentChange`/`onDueDateChange`/
-   * `onListChange` above), and a task assigned to the viewer by a co-member
-   * or living in a group-shared list is never IN that store at all — routing
-   * the actual delete through it (as an earlier version of this row did, via
-   * `useTasks().deleteTask`) silently no-oped for exactly those tasks
-   * (CLAUDE.md §2 rule 10). The parent page performs the real delete (via
-   * `useTasks().deleteTaskById`, the store-independent variant) using the
-   * full `Task` object it already holds for this row, and owns the
-   * undo-snapshot/toast itself. Its presence also gates whether the "More"
-   * button renders at all — hide-when-absent, same convention as every
-   * other optional affordance here.
+   * One extra free-text chip in `.task-sub`, for a page-specific fact the
+   * row's own fixed chip set doesn't cover. TasksAssignedPage.tsx's
+   * "Waiting on you" section uses this for "Asked N days ago" — the mockup
+   * repurposes this row's date columns for that section (asker-relative
+   * time instead of the due date), but every other page needs those
+   * columns to stay due-date columns, so this stays a chip instead of a
+   * third column meaning.
+   */
+  extraChip?: string | null
+  /**
+   * Overrides whose avatar the row shows — default is the task's assignee.
+   * TasksAssignedPage.tsx's "Waiting on you" section passes the task's
+   * OWNER here instead: every row there is already assigned to the viewer
+   * (that's what "waiting on you" means), so showing the assignee would
+   * just be the viewer's own avatar on every row — the asker is the
+   * information actually worth an avatar there. `null` renders no avatar at
+   * all (an explicit "nobody", distinct from "not overridden").
+   */
+  avatarUserId?: string | null
+  /**
+   * Called when the user picks Delete in the kebab. The row makes NO API
+   * call and keeps no undo state — the parent performs the real delete
+   * (`useTasks().deleteTaskById`, the store-independent variant — every page
+   * rendering this row keeps its own local arrays, not the outliner's
+   * Zustand store, so the store-backed `deleteTask` silently no-ops for
+   * tasks assigned in by a co-member or living in a shared list) and owns
+   * the undo-snapshot/toast itself. Optional — hides the Delete item.
    */
   onDelete?: (taskId: string) => void
 }
 
-/** 'late' (red) / 'soon' (amber) / 'ok' / 'none' — drives `.task-when`'s colour. */
-function dueState(task: Task): 'late' | 'soon' | 'ok' | 'none' {
-  if (!task.dueDate) return 'none'
-  if (task.isCompleted) return 'ok'
-  const today = todayISO()
-  if (task.dueDate < today) return 'late'
-  if (task.dueDate === today) return 'soon'
-  return 'ok'
-}
-
-// Accepts either a plain YYYY-MM-DD (due_date) or a "YYYY-MM-DD HH:MM:SS"
-// SQLite datetime (completed_at) — only the date portion is ever displayed,
-// and parseISO chokes on the space-separated SQLite form.
-function formatDue(dateStr: string): string {
-  return format(parseISO(dateStr.slice(0, 10)), 'dd MMM')
-}
-
-// FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md):
-// short read-only label for the recurrence chip. Editing recurrence is
-// outliner-only (BulletNode.tsx's "Repeats…" dialog) — see FEAT-052 for the
-// tracked gap of editing it from a row like this one.
-function recurrenceLabel(task: Task): string | null {
-  if (!task.recurrence) return null
-  const interval = task.recurrenceData?.interval ?? 1
-  if (task.recurrence === 'custom') return 'Repeats weekly'
-  const unit = { daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' }[task.recurrence]
-  return interval > 1 ? `Repeats every ${interval} ${unit}s` : `Repeats ${task.recurrence}`
-}
-
 /**
- * One task row for Assigned to me and a list's detail page (born on the All
- * tasks page in R5 PR-2, which now uses `AllTasksRow.tsx`). Unlike `TaskRow.tsx`
- * (Today's grouping-aware row, which assumes overdue/today/done-today
- * context and has no list chip/subtask progress), this row is due-date
- * agnostic and always shows the task's list colour chip and subtask
- * progress — a different concern, hence a separate component (CLAUDE.md
- * rule 7) rather than forcing new props onto `TaskRow`.
+ * One task row for Assigned to me, Completed and a list's detail page — the
+ * mockup's fixed `.task task--cols` grid (`AllTasksRow.tsx`'s layout,
+ * `tasks.css`), not the old flexible `.task-name`/`.task-meta` grid. Every
+ * optional editor (list, assignee, reschedule) now lives in the kebab menu
+ * instead of a per-row inline `<select>` — the mockup puts row actions in
+ * one "more" menu, and a fixed grid has no spare track for N independent
+ * dropdowns anyway.
  */
 export function TaskListRow({
   task,
@@ -154,30 +117,14 @@ export function TaskListRow({
   onListChange,
   onOpenDetail,
   walletChip,
+  extraChip,
+  avatarUserId,
   onDelete,
 }: TaskListRowProps) {
-  const state = dueState(task)
   const { assignTask, updateTaskContent, updateTaskDueDate, updateTaskList } = useTasks()
+  const self = useAppStore((s) => s.user)
   const assignees = useAssignees(coMembers ?? [])
 
-  // Controlled locally rather than reading `task.assigneeId` straight through:
-  // every page rendering this row keeps its own local `tasks` state (not the
-  // Zustand store — see TasksAssignedPage.tsx), so a successful PATCH here
-  // wouldn't otherwise cause a re-render that shows the new value. Re-synced
-  // from the prop during render (React's documented pattern for "adjusting
-  // state when a prop changes" without an effect's extra render) rather than
-  // in a `useEffect`, so an assignment made elsewhere or a reload still wins.
-  const [assigneeDraft, setAssigneeDraft] = useState(task.assigneeId ?? '')
-  const [syncedAssigneeId, setSyncedAssigneeId] = useState(task.assigneeId)
-  if (task.assigneeId !== syncedAssigneeId) {
-    setSyncedAssigneeId(task.assigneeId)
-    setAssigneeDraft(task.assigneeId ?? '')
-  }
-
-  // FEAT-052: click-to-edit content. Same render-time re-sync pattern as
-  // assigneeDraft above — this row's own local `tasks` array isn't the
-  // Zustand store either, so an edit made elsewhere (or a reload) needs to
-  // win over a stale draft.
   const [isEditingContent, setIsEditingContent] = useState(false)
   const [contentDraft, setContentDraft] = useState(task.content)
   const [syncedContent, setSyncedContent] = useState(task.content)
@@ -193,13 +140,11 @@ export function TaskListRow({
     updateTaskContent(task.id, trimmed)
       .then((updated) => onContentChange?.(task.id, updated.content))
       .catch(() => {
-        // updateTaskContent already surfaced the error (reportAndReconcile);
-        // revert the draft so the row doesn't keep showing an unsaved edit.
+        // updateTaskContent already surfaced the error; drop the unsaved draft.
         setContentDraft(task.content)
       })
   }
 
-  // BUG-006: an inline due-date control, toggled by the calendar icon below.
   const [showDatePicker, setShowDatePicker] = useState(false)
   const [dueDateDraft, setDueDateDraft] = useState(task.dueDate ?? '')
   const [syncedDueDate, setSyncedDueDate] = useState(task.dueDate)
@@ -214,13 +159,43 @@ export function TaskListRow({
     setShowDatePicker(false)
     updateTaskDueDate(task.id, value)
       .then((updated) => onDueDateChange?.(task.id, updated.dueDate))
+      .catch(() => setDueDateDraft(previous))
+  }
+
+  const moveToList = (listId: string | null) => {
+    if (listId === task.listId) return
+    updateTaskList(task.id, listId)
+      .then(() => onListChange?.(task.id, listId))
       .catch(() => {
-        setDueDateDraft(previous)
+        // updateTaskList already surfaced the error (reportAndReconcile).
       })
   }
 
+  const changeAssignee = (assigneeId: string | null) => {
+    if (assigneeId === task.assigneeId) return
+    assignTask(task.id, assigneeId)
+      .then(() => onAssigneeChange?.(task.id, assigneeId))
+      .catch(() => {
+        // assignTask already surfaced the error (reportAndReconcile).
+      })
+  }
+
+  const label = task.content || 'task'
+  const cols = task.isCompleted ? completedDateColumns(task) : dateColumns(task)
+  const recurrence = recurrenceLabel(task)
+
+  // Default: the task's own assignee. `avatarUserId === undefined` means
+  // "not overridden" — `null` is a real, explicit "show nobody" (see the
+  // prop's own doc comment).
+  const effectiveAvatarUserId = avatarUserId !== undefined ? avatarUserId : task.assigneeId
+  const avatarPerson =
+    effectiveAvatarUserId === null
+      ? undefined
+      : (coMembers ?? []).find((m) => m.userId === effectiveAvatarUserId) ??
+        (self && effectiveAvatarUserId === self.id ? { userId: self.id, username: self.username } : undefined)
+
   return (
-    <div className={cn('task', task.isCompleted && 'done')} data-testid="all-tasks-row" data-task-id={task.id}>
+    <div className={cn('task task--cols', task.isCompleted && 'done')} data-testid="all-tasks-row" data-task-id={task.id}>
       <button
         type="button"
         className={cn(
@@ -235,72 +210,7 @@ export function TaskListRow({
         <Check />
       </button>
 
-      {/* BUG-013 (docs/backlog/EP-07-tasks-depth/BUG-013-task-row-grid-not-structurally-fixed.md):
-          the list indicator and the title/note now share one `.task-name`
-          wrapper, which is what actually occupies the `.task` grid's
-          flexible track — previously the list indicator was its own grid
-          child and could claim that track ahead of the title, capping the
-          name at a fixed 128px on every row with a list. */}
       <div className="task-name">
-        {/* Per-list colour is user data (D-10), not a semantic token — an
-            inline style is the correct, documented exception (same as
-            ModuleSidebar's list dots). */}
-        {!availableLists && list && (
-          <span
-            className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-            style={{ background: list.color }}
-            aria-hidden="true"
-            title={list.name}
-            data-testid="all-tasks-row-list-chip"
-          />
-        )}
-
-        {/* FEAT-051 — only rendered where a parent page resolved the list of
-            options (see the prop's own doc comment); every other page passes
-            nothing and gets the plain read-only dot above, unchanged. */}
-        {availableLists && (
-          <span
-            className="inline-flex shrink-0 items-center gap-1"
-            data-testid="all-tasks-row-list-chip"
-            title={list?.name ?? 'Unsorted'}
-          >
-            <span
-              className="h-2 w-2 flex-shrink-0 rounded-full"
-              style={{ background: list?.color ?? '#6b7280' }}
-              aria-hidden="true"
-            />
-            <select
-              aria-label={`Move ${task.content || 'task'} to a list`}
-              data-testid={`task-row-list-${task.id}`}
-              value={task.listId ?? ''}
-              onChange={(e) => {
-                const value = e.target.value || null
-                updateTaskList(task.id, value)
-                  .then(() => onListChange?.(task.id, value))
-                  .catch(() => {
-                    // updateTaskList already surfaced the error (reportAndReconcile).
-                  })
-              }}
-              className={cn(
-                'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
-                // BUG-010 (docs/backlog/EP-07-tasks-depth/BUG-010-all-tasks-row-layout-squeezes-name.md):
-                // capped so a long list name can't claim space budgeted for the
-                // `.task` grid's 1fr name column — it truncates inside its own
-                // control instead.
-                'max-w-[92px]',
-                'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
-              )}
-            >
-              <option value="">Unsorted</option>
-              {availableLists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </span>
-        )}
-
         <div className="min-w-0 flex-1">
           {isEditingContent ? (
             <input
@@ -316,7 +226,7 @@ export function TaskListRow({
                   setIsEditingContent(false)
                 }
               }}
-              aria-label={`Edit ${task.content || 'task'}`}
+              aria-label={`Edit ${label}`}
               data-testid="all-tasks-row-content-input"
               className="w-full rounded border border-brand-500 bg-surface px-1 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/20"
             />
@@ -324,273 +234,235 @@ export function TaskListRow({
             <p
               className="task-title cursor-text"
               onClick={() => setIsEditingContent(true)}
+              title={task.content}
               data-testid="all-tasks-row-title"
             >
               {task.content || 'Untitled task'}
             </p>
           )}
-          {task.note && <p className="task-sub truncate">{task.note}</p>}
+          <div className="task-sub">
+            {/* Per-list colour is user data (D-10) — the documented inline-style exception. */}
+            <span className="lchip" data-testid="all-tasks-row-list-chip" title={list?.name ?? 'Unsorted'}>
+              <i style={{ background: list?.color ?? 'rgb(var(--line-strong))' }} aria-hidden="true" />
+              {list?.name ?? 'Unsorted'}
+            </span>
+            {task.subtaskTotal > 0 && (
+              <span className="sub-count" data-testid="all-tasks-row-subtasks">
+                {task.subtaskDone} of {task.subtaskTotal}
+              </span>
+            )}
+            {recurrence && (
+              <span className="chip chip-mute inline-flex items-center gap-1" data-testid="all-tasks-row-recurrence">
+                <Repeat className="h-3 w-3" aria-hidden="true" />
+                {recurrence}
+              </span>
+            )}
+            {walletChip && (
+              <span className="chip chip-mute" data-testid="all-tasks-row-wallet-chip">
+                {walletChip}
+              </span>
+            )}
+            {extraChip && (
+              <span className="chip chip-mute" data-testid="all-tasks-row-extra-chip">
+                {extraChip}
+              </span>
+            )}
+            {!task.dueDate && !task.isCompleted && (
+              <span className="chip chip-mute" data-testid="all-tasks-row-age">
+                {addedLabel(task.createdAt)}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* BUG-013: every optional trailing element below now shares one
-          `.task-meta` wrapper (a single grid track) instead of each claiming
-          its own fixed-width grid column — however many of these a page
-          passes, they share that track and, below `tasks.css`'s ≤900px
-          breakpoint, its own row under `.task-name` (with its own internal
-          flex-wrap above that) rather than overflowing into each other's
-          fixed tracks. */}
-      <div className="task-meta">
-        {task.subtaskTotal > 0 && (
-          <span className="chip chip-mute" data-testid="all-tasks-row-subtasks">
-            {task.subtaskDone}/{task.subtaskTotal}
-          </span>
-        )}
-
-        {/* FEAT-027 — only rendered where a parent page resolved co-members
-            (currently just TasksAssignedPage.tsx); every other page passes no
-            `coMembers` and gets the row's existing layout, unchanged. */}
-        {coMembers && (
-          <select
-            aria-label={`Assign ${task.content || 'task'} to`}
-            title={assignees.find((m) => m.userId === assigneeDraft)?.username ?? 'Unassigned'}
-            data-testid={`task-row-assignee-${task.id}`}
-            value={assigneeDraft}
-            onChange={(e) => {
-              const value = e.target.value
-              const previous = assigneeDraft
-              setAssigneeDraft(value)
-              assignTask(task.id, value || null)
-                .then(() => onAssigneeChange?.(task.id, value || null))
-                .catch(() => {
-                  // assignTask already surfaced the error (reportAndReconcile);
-                  // revert the optimistic draft so the control doesn't keep
-                  // showing a change that never persisted.
-                  setAssigneeDraft(previous)
-                })
+      {showDatePicker ? (
+        <span className="task-when-edit">
+          <input
+            type="date"
+            autoFocus
+            aria-label={`Due date for ${label}`}
+            data-testid={`all-tasks-row-due-input-${task.id}`}
+            value={dueDateDraft}
+            onChange={(e) => setDueDateDraft(e.target.value)}
+            onBlur={() => saveDueDate(dueDateDraft || null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
+              if (e.key === 'Escape') {
+                setDueDateDraft(task.dueDate ?? '')
+                setShowDatePicker(false)
+              }
             }}
-            className={cn(
-              'shrink-0 truncate rounded-md border border-line-strong bg-surface px-1.5 py-1 text-xs text-fg-subtle',
-              // BUG-010: same cap as the list picker above — a long co-member
-              // username can't squeeze the name column.
-              'max-w-[92px]',
-              'focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20',
-            )}
-          >
-            <option value="">Unassigned</option>
-            {assignees.map((m) => (
-              <option key={m.userId} value={m.userId}>
-                {m.username}
-              </option>
-            ))}
-          </select>
-        )}
-
-        {task.recurrence && (
-          <span
-            className="chip chip-mute inline-flex items-center gap-1"
-            data-testid="all-tasks-row-recurrence"
-            title={recurrenceLabel(task) ?? undefined}
-          >
-            <Repeat className="h-3 w-3" aria-hidden="true" />
+            className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          {dueDateDraft && (
+            <button
+              type="button"
+              aria-label="Clear due date"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => saveDueDate(null)}
+              className="text-fg-faint hover:text-fg-muted"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </span>
+      ) : (
+        <>
+          <span className={cn('task-when col-exact', cols.state === 'late' && 'late', cols.state === 'soon' && 'soon')}>
+            {cols.exact}
           </span>
-        )}
-
-        {/* FEAT-062 — resolved by the parent page's `useWalletRefChips()`,
-            same hook BulletNode.tsx already uses; hidden when the parent
-            doesn't pass one (either no walletRef, or the Wallet data hasn't
-            loaded yet). */}
-        {walletChip && (
-          <span className="chip chip-mute" data-testid="all-tasks-row-wallet-chip">
-            {walletChip}
-          </span>
-        )}
-
-        {/* BUG-006: due date is now editable from this row, not just displayed.
-            The badge itself (when present) opens the picker; otherwise a bare
-            calendar icon does, matching BulletNode.tsx's due-date affordance. */}
-        {showDatePicker ? (
-          <span className="inline-flex shrink-0 items-center gap-1">
-            <input
-              type="date"
-              autoFocus
-              aria-label={`Due date for ${task.content || 'task'}`}
-              data-testid={`all-tasks-row-due-input-${task.id}`}
-              value={dueDateDraft}
-              onChange={(e) => setDueDateDraft(e.target.value)}
-              onBlur={() => saveDueDate(dueDateDraft || null)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveDueDate(dueDateDraft || null)
-                if (e.key === 'Escape') {
-                  setDueDateDraft(task.dueDate ?? '')
-                  setShowDatePicker(false)
-                }
-              }}
-              className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            />
-            {dueDateDraft && (
-              <button
-                type="button"
-                aria-label="Clear due date"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => saveDueDate(null)}
-                className="text-fg-faint hover:text-fg-muted"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </span>
-        ) : task.dueDate ? (
-          <button
-            type="button"
-            onClick={() => setShowDatePicker(true)}
-            data-testid={`all-tasks-row-due-${task.id}`}
-            className={cn('task-when', state === 'late' && 'late', state === 'soon' && 'soon')}
-          >
-            {task.isCompleted && task.completedAt
-              ? `Done ${formatDue(task.completedAt)}`
-              : state === 'late'
-                ? `Overdue · ${formatDue(task.dueDate)}`
-                : state === 'soon'
-                  ? 'Today'
-                  : formatDue(task.dueDate)}
-          </button>
-        ) : (
-          !task.isCompleted && (
+          {/* Completed rows show WHEN they were finished — not editable
+              (there's no due date to reschedule once a task is done; the
+              checkbox above is how it comes back to being open). Open rows'
+              relative column doubles as the due-date editor, same as
+              AllTasksRow.tsx. */}
+          {task.isCompleted ? (
+            <span className="task-when">{cols.relative}</span>
+          ) : (
             <button
               type="button"
               onClick={() => setShowDatePicker(true)}
-              aria-label={`Set due date for ${task.content || 'task'}`}
-              data-testid={`all-tasks-row-set-due-${task.id}`}
-              className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+              aria-label={task.dueDate ? `Change due date for ${label}` : `Set due date for ${label}`}
+              data-testid={`all-tasks-row-due-${task.id}`}
+              className="task-when rounded hover:text-fg"
             >
-              <CalendarClock className="h-3.5 w-3.5" />
+              {cols.relative}
             </button>
-          )
-        )}
-
-        {/* BUG-011: this row's inline editors don't cover priority or note —
-            the modal does. Hide-when-absent, same as every other optional
-            affordance in this row. No longer needs to hide while the due-date
-            editor is expanded (BUG-013 fixed) — both are now flex siblings in
-            the same `.task-meta` wrapper, and flex siblings cannot overlap
-            regardless of content width, unlike the old competing fixed grid
-            tracks. */}
-        {onOpenDetail && (
-          <button
-            type="button"
-            onClick={() => onOpenDetail(task)}
-            aria-label={`Edit details for ${task.content || 'task'}`}
-            data-testid={`task-row-detail-${task.id}`}
-            className="shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        )}
-
-        {/* FEAT-062 — List-view-only "More" menu, hide-when-absent like every
-            other optional affordance here. */}
-        {onDelete && (
-          <RowMoreMenu
-            taskId={task.id}
-            taskContent={task.content}
-            onDelete={() => onDelete(task.id)}
-          />
-        )}
-      </div>
-    </div>
-  )
-}
-
-/**
- * FEAT-062 — a per-row "More" (⋮) popover with a single real action,
- * Delete. Reuses FEAT-061's popover CSS (`tasks.css`'s `.row-menu`/
- * `.row-menu-item` — renamed from `.habit-menu`/`.habit-menu-item` in this
- * same change, since it was never actually habit-specific and is now used
- * for tasks too — see `TasksHabitsPage.tsx`'s matching rename) and the same
- * outside-click/Escape/focus handling `TasksHabitsPage.tsx`'s
- * `HabitOptionsMenu` already built, rather than inventing a third popover
- * implementation or reusing `AccountMenu`'s page-level 328px panel (which
- * clips/mispositions when anchored to a per-row trigger — the exact reason
- * FEAT-061 built its own in the first place).
- */
-function RowMoreMenu({
-  taskId,
-  taskContent,
-  onDelete,
-}: {
-  taskId: string
-  taskContent: string
-  onDelete: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const firstItemRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    firstItemRef.current?.focus()
-    function handlePointerDown(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false)
-      // FEAT-062 review fix #9: Tab doesn't trap focus inside this menu (no
-      // full arrow-key roving either — judged not worth the extra complexity
-      // here), so without this a Tab press leaves the menu open while focus
-      // moves on past it. Closing on Tab (without preventDefault, so the
-      // browser's own default tab order still proceeds) is the cheap half of
-      // that gap worth fixing now.
-      if (e.key === 'Tab') setOpen(false)
-    }
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [open])
-
-  // Closing by any route (item click, outside click, Escape) returns focus to
-  // the trigger — same story as HabitOptionsMenu's identical effect.
-  const wasOpen = useRef(false)
-  useEffect(() => {
-    if (wasOpen.current && !open) triggerRef.current?.focus()
-    wasOpen.current = open
-  }, [open])
-
-  return (
-    <div className="pop-anchor" ref={containerRef}>
-      <button
-        type="button"
-        ref={triggerRef}
-        className="icon-btn"
-        aria-label={`More actions for ${taskContent || 'task'}`}
-        aria-haspopup="true"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        data-testid={`task-row-more-${taskId}`}
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
-      {open && (
-        <div className="row-menu open" role="menu" aria-label="Task options" data-testid={`task-row-more-menu-${taskId}`}>
-          <button
-            type="button"
-            role="menuitem"
-            ref={firstItemRef}
-            className="row-menu-item"
-            onClick={() => {
-              setOpen(false)
-              onDelete()
-            }}
-          >
-            <Trash2 className="icon h-4 w-4" />
-            Delete
-          </button>
-        </div>
+          )}
+          <span className="col-avatar flex justify-center">
+            {avatarPerson && (
+              <span
+                className={cn('avatar', avatarClass(avatarPerson.userId))}
+                style={{ width: 24, height: 24, fontSize: 10 }}
+                title={avatarPerson.username}
+                data-testid="all-tasks-row-assignee"
+              >
+                {avatarPerson.username.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </span>
+        </>
       )}
+
+      <div className="trow-actions items-center text-fg-faint">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="rounded text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+              aria-label={`More actions for ${label}`}
+              data-testid={`task-row-more-${task.id}`}
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              className={MENU_CONTENT}
+              sideOffset={4}
+              align="end"
+              data-testid={`task-row-more-menu-${task.id}`}
+            >
+              {onOpenDetail && (
+                <DropdownMenu.Item
+                  className={MENU_ITEM}
+                  onSelect={() => onOpenDetail(task)}
+                  data-testid={`task-row-detail-${task.id}`}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-fg-faint" />
+                  Edit details
+                </DropdownMenu.Item>
+              )}
+              {!task.isCompleted && (
+                <DropdownMenu.Item className={MENU_ITEM} onSelect={() => setShowDatePicker(true)}>
+                  <CalendarClock className="h-3.5 w-3.5 text-fg-faint" />
+                  Reschedule
+                </DropdownMenu.Item>
+              )}
+              {availableLists && (
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger className={MENU_ITEM} data-testid={`task-row-move-${task.id}`}>
+                    <FolderInput className="h-3.5 w-3.5 text-fg-faint" />
+                    Move to list
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.SubContent className={MENU_CONTENT} sideOffset={4}>
+                      <DropdownMenu.RadioGroup
+                        value={task.listId ?? ''}
+                        onValueChange={(value) => moveToList(value || null)}
+                      >
+                        {[{ id: '', name: 'Unsorted', color: 'rgb(var(--line-strong))' }, ...availableLists].map(
+                          (l) => (
+                            <DropdownMenu.RadioItem
+                              key={l.id || 'unsorted'}
+                              value={l.id}
+                              className={cn(MENU_ITEM, 'data-[state=checked]:font-semibold data-[state=checked]:text-fg')}
+                            >
+                              <span
+                                className="h-2 w-2 shrink-0 rounded-full"
+                                style={{ background: l.color }}
+                                aria-hidden="true"
+                              />
+                              {l.name}
+                            </DropdownMenu.RadioItem>
+                          ),
+                        )}
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Sub>
+              )}
+              {coMembers && (
+                <DropdownMenu.Sub>
+                  <DropdownMenu.SubTrigger className={MENU_ITEM} data-testid={`task-row-assign-${task.id}`}>
+                    <UserRound className="h-3.5 w-3.5 text-fg-faint" />
+                    Assign to
+                  </DropdownMenu.SubTrigger>
+                  <DropdownMenu.Portal>
+                    <DropdownMenu.SubContent className={MENU_CONTENT} sideOffset={4}>
+                      <DropdownMenu.RadioGroup
+                        value={task.assigneeId ?? ''}
+                        onValueChange={(value) => changeAssignee(value || null)}
+                      >
+                        <DropdownMenu.RadioItem
+                          value=""
+                          className={cn(MENU_ITEM, 'data-[state=checked]:font-semibold data-[state=checked]:text-fg')}
+                          data-testid={`task-row-assign-unassigned-${task.id}`}
+                        >
+                          Unassigned
+                        </DropdownMenu.RadioItem>
+                        {assignees.map((m) => (
+                          <DropdownMenu.RadioItem
+                            key={m.userId}
+                            value={m.userId}
+                            className={cn(MENU_ITEM, 'data-[state=checked]:font-semibold data-[state=checked]:text-fg')}
+                            data-testid={`task-row-assign-option-${task.id}-${m.userId}`}
+                          >
+                            {m.username}
+                          </DropdownMenu.RadioItem>
+                        ))}
+                      </DropdownMenu.RadioGroup>
+                    </DropdownMenu.SubContent>
+                  </DropdownMenu.Portal>
+                </DropdownMenu.Sub>
+              )}
+              {onDelete && (
+                <DropdownMenu.Item
+                  className={cn(MENU_ITEM, 'text-neg-fg')}
+                  onSelect={() => onDelete(task.id)}
+                  data-testid={`task-row-delete-${task.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenu.Item>
+              )}
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
     </div>
   )
 }

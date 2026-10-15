@@ -64,6 +64,11 @@ test.describe('98 — Tasks list management', () => {
     // fetch already ran, so the picker needs a reload to see it.
     await page.reload()
 
+    // This test exercises the OUTLINER's own "Move to list…" dialog
+    // (BulletNode.tsx), not the List view's kebab — List is now the
+    // page's default (tasks-lists-parity), so Outline needs selecting first.
+    await page.getByTestId('list-view-outline').click()
+
     await page.getByRole('button', { name: 'New task' }).first().click()
     await expect(page.getByRole('textbox', { name: 'Task content' }).last()).toBeFocused()
     await page.keyboard.type('Drop off dry cleaning')
@@ -77,6 +82,17 @@ test.describe('98 — Tasks list management', () => {
     await page.getByTestId('task-list-select').selectOption(list.id)
     await page.getByTestId('task-list-save-btn').click()
 
+    // Unsorted's Outline is scoped to list_id IS NULL roots only
+    // (TasksPage.tsx's `listFilter`, tasks-lists-parity P0) — the task just
+    // got filed under "Errands 2", so it no longer belongs on THIS page and
+    // disappears the moment the store re-renders. Re-opening its menu here
+    // to check "List: Errands 2" was the old (pre-scoping) assumption that
+    // Outline showed every task regardless of list; re-verify the label on
+    // the list it actually lives on now instead.
+    await expect(page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Drop off dry cleaning' })).toHaveCount(0)
+
+    await page.goto(`/tasks/lists/${list.id}`)
+    await page.getByTestId('list-view-outline').click()
     await openTaskMenu(page, 'Drop off dry cleaning')
     await expect(page.getByRole('menuitem', { name: `List: ${list.name}` })).toBeVisible()
     await page.keyboard.press('Escape')

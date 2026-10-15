@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns'
-import { todayISO } from '@/lib/utils'
+import { localDateOfUtc, todayISO } from '@/lib/utils'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -29,7 +29,7 @@ export const OLD_TASK_DAYS = 90
 
 /** Days since a task was created. */
 export function taskAgeDays(task: Task): number {
-  return dayDiff(task.createdAt.slice(0, 10), todayISO())
+  return dayDiff(localDateOfUtc(task.createdAt), todayISO())
 }
 
 const PRIORITY_RANK: Record<string, number> = { high: 0, med: 1, low: 2 }

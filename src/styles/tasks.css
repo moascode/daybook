@@ -114,15 +114,25 @@
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 104px 28px 32px; }
   .task--cols .col-exact { display: none; }
   .task--cols .task-when-edit { grid-column: 3 / 5; }
+  .task--cols:has(.task-when-edit) .trow-actions { display: none; }
   .task--cols .trow-actions { grid-column: 5; }
 }
 /* Phones: no hover, so the actions stay visible; the avatar gives way to the
-   relative date, which is the column worth keeping. */
+   relative date, which is the column worth keeping. The date editor (input +
+   clear button) needs more than the 84px when-column alone, so it takes over
+   the actions column too while open — the kebab hides for that moment rather
+   than sitting underneath the editor. */
 @media (max-width: 680px) {
   .task--cols { grid-template-columns: 20px minmax(0, 1fr) 84px 32px; }
   .task--cols .col-avatar { display: none; }
-  .task--cols .task-when-edit { grid-column: 3 / 4; }
+  .task--cols .task-when-edit { grid-column: 3 / 5; }
+  .task--cols:has(.task-when-edit) .trow-actions { display: none; }
   .task--cols .trow-actions { grid-column: 4; opacity: 1; }
+}
+/* No hover on touch screens (tablets included, whatever their width), so
+   the row menu must never hide behind :hover there. */
+@media (hover: none) {
+  .task--cols .trow-actions { opacity: 1; }
 }
 
 /* list chip — a task's list, coloured like a category */
@@ -284,6 +294,25 @@
   .habit-main { flex-basis: auto; }
 }
 
+/* Habits parity pass — today's dot, due but not yet decided, is neither
+   "kept" (.on, filled accent) nor "missed" (.miss, faint red): the day isn't
+   over, so painting it as a miss would read as a judgement that hasn't
+   happened yet. Outline-only, same track colour as an undue day's ring, so
+   it reads as "waiting", not "failed". */
+.dots i.today-pending {
+  background: rgb(var(--surface));
+  border: 2px solid rgb(var(--accent) / .5);
+  box-sizing: border-box;
+}
+.dots i.today-pending:hover { transform: scale(1.25); }
+
+/* Archived habits — collapsible section at the foot of the board. The
+   toggle row reuses `.card-title` for its label so it matches every other
+   card header's weight/size without inventing a new text style. */
+.habits-archived-toggle { cursor: pointer; }
+.habit-archived-row { transition: background var(--dur-fast) var(--ease); }
+.habit-archived-row:hover { background: rgb(var(--surface-hover)); }
+
 /* =====================================================================
    COMPOSER — the module's primary action, at the top, impossible to miss
    ===================================================================== */
@@ -361,5 +390,25 @@
 /* the pill owns the focus affordance — the input must not draw a second ring */
 .composer-field input:focus-visible, .qadd input:focus-visible { box-shadow: none; }
 
+
+}
+
+/* Assigned / Completed / List pages */
+@layer components {
+
+/* Completed's heatmap (CompletedAnalytics.tsx): `.heat` (charts.css) sizes
+   its implicit grid columns to content, which for ~53 weeks of squares
+   renders far narrower than the c12 card around it — `.heat--fill` spreads
+   them across the card's full width instead. `.heat-key`'s own `<i>`
+   swatches (also charts.css) never actually got the `.heat i.l1..l4`
+   colours: that rule is scoped under `.heat`, and the key's squares are
+   `.heat-key`'s own direct children, not nested inside a `.heat` — so in
+   the mockup itself they render as plain, uncoloured squares. Giving the
+   key matching colours directly fixes that rather than reproducing it. */
+.heat--fill { grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.heat-key i.l1 { background: rgb(var(--accent) / .25); }
+.heat-key i.l2 { background: rgb(var(--accent) / .45); }
+.heat-key i.l3 { background: rgb(var(--accent) / .7); }
+.heat-key i.l4 { background: rgb(var(--accent)); }
 
 }

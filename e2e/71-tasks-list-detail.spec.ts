@@ -55,20 +55,26 @@ test.describe('71 — Tasks list detail page', () => {
 
     await page.goto(`/tasks/lists/${list.id}`)
 
-    // Outline is the default view (kept identical to 01-tasks.spec.ts's
-    // expectations at /tasks/lists/unsorted) — it should show the outliner
-    // chrome, not the grouped List rows.
-    await expect(page.getByTestId('list-view-outline')).toHaveAttribute('aria-selected', 'true')
-    await expect(page.getByRole('button', { name: 'New task' }).first()).toBeVisible()
-
-    await page.getByTestId('list-view-list').click()
+    // List is now the default view (tasks-lists-parity): Outline used to
+    // default because it showed every list's tasks unfiltered, so it had to
+    // be the one view this page couldn't get wrong by scoping. Now that
+    // Outline is correctly scoped to THIS list (`TasksPage.tsx`'s
+    // `listFilter`), there's no correctness reason left to default away
+    // from List, the mockup's own default.
     await expect(page.getByTestId('list-view-list')).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('Take out trash')).toBeVisible()
     await expect(page.getByTestId('list-detail-open-header')).toBeVisible()
 
-    // Switch back — the task is still there, nothing was lost.
+    // Outline, scoped to this list, still shows the same task — not every
+    // list's tasks (the P0 this change fixes).
     await page.getByTestId('list-view-outline').click()
+    await expect(page.getByTestId('list-view-outline')).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByRole('button', { name: 'New task' }).first()).toBeVisible()
+    await expect(page.getByText('Take out trash')).toBeVisible()
+
+    // Switch back — the task is still there, nothing was lost.
+    await page.getByTestId('list-view-list').click()
+    await expect(page.getByText('Take out trash')).toBeVisible()
   })
 
   test('List mode groups Open and Done-this-week correctly', async ({ browser }) => {
@@ -127,5 +133,61 @@ test.describe('71 — Tasks list detail page', () => {
     const page = (openPage = await newAppPage(browser, '/tasks/lists/unsorted'))
     await expect(page.getByTestId('list-detail-title')).toHaveText('Unsorted')
     await expect(page.getByTestId('list-detail-rail')).not.toBeVisible()
+  })
+
+  test('tasks-lists-parity P0: Outline shows only this list\'s tasks, not every list\'s', async ({ browser }) => {
+    const page = (openPage = await newAppPage(browser, '/tasks'))
+
+    const listA = await (
+      await page.request.post(`${API}/task-lists`, { data: { name: 'List A', color: '#3b82f6' } })
+    ).json()
+    const listB = await (
+      await page.request.post(`${API}/task-lists`, { data: { name: 'List B', color: '#ef4444' } })
+    ).json()
+    await page.request.post(`${API}/tasks`, { data: { content: 'Task in A', listId: listA.id } })
+    await page.request.post(`${API}/tasks`, { data: { content: 'Task in B', listId: listB.id } })
+
+    await page.goto(`/tasks/lists/${listA.id}`)
+    await page.getByTestId('list-view-outline').click()
+    await expect(page.getByText('Task in A')).toBeVisible()
+    // The bug this fixes: Outline rendered the whole outliner unfiltered, so
+    // List A's Outline tab showed List B's tasks too.
+    await expect(page.getByText('Task in B')).not.toBeVisible()
+
+    await page.goto(`/tasks/lists/${listB.id}`)
+    await page.getByTestId('list-view-outline').click()
+    await expect(page.getByText('Task in B')).toBeVisible()
+    await expect(page.getByText('Task in A')).not.toBeVisible()
+
+    // Unsorted's Outline only shows list_id-null roots — neither listed task.
+    await page.goto('/tasks/lists/unsorted')
+    await page.getByTestId('list-view-outline').click()
+    await expect(page.getByText('Task in A')).not.toBeVisible()
+    await expect(page.getByText('Task in B')).not.toBeVisible()
+  })
+
+  test('deleting a list via the rail moves its tasks to Unsorted', async ({ browser }) => {
+    const page = (openPage = await newAppPage(browser, '/tasks'))
+
+    const list = await (
+      await page.request.post(`${API}/task-lists`, { data: { name: 'To be deleted', color: '#8b5cf6' } })
+    ).json()
+    await page.request.post(`${API}/tasks`, { data: { content: 'Orphaned task', listId: list.id } })
+
+    await page.goto(`/tasks/lists/${list.id}`)
+    await expect(page.getByTestId('list-detail-rail')).toBeVisible()
+
+    await page.getByTestId('list-detail-delete-btn').click();
+    await page.getByTestId('list-detail-delete-confirm').click()
+
+    // Navigates to Unsorted, where the orphaned task now lives.
+    await expect(page).toHaveURL(/\/tasks\/lists\/unsorted$/)
+    await page.getByTestId('list-view-list').click()
+    await expect(page.getByText('Orphaned task')).toBeVisible()
+
+    // The list itself is gone server-side, not just hidden.
+    const after = await page.request.get(`${API}/task-lists`)
+    const lists = await after.json()
+    expect(lists.some((l: { id: string }) => l.id === list.id)).toBe(false)
   })
 })

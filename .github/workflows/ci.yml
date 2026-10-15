@@ -149,7 +149,12 @@ jobs:
           # container and /home/runner on a bare runner, so name both rather
           # than silently uploading nothing — which is what "No files were
           # found" meant on the last few failures.
+          # …and /github/home in this container job, which is where the
+          # crashes actually wrote (`🪵 Logs were written to
+          # "/github/home/.config/.wrangler/logs/…"`) while the two paths
+          # above uploaded nothing.
           path: |
+            /github/home/.config/.wrangler/logs/
             /root/.config/.wrangler/logs/
             /home/runner/.config/.wrangler/logs/
           if-no-files-found: ignore

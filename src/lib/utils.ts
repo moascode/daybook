@@ -167,6 +167,21 @@ export function todayISO(): string {
   return `${yyyy}-${mm}-${dd}`
 }
 
+/**
+ * The local calendar date of a SQLite `datetime('now')` value — those are UTC
+ * ('YYYY-MM-DD HH:MM:SS', no zone), so slicing the string gives yesterday's
+ * date for the hours UTC trails Malaysia. `created_at` columns are written
+ * this way; `completed_at` is already business-time (nowStr()) and needs no
+ * conversion.
+ */
+export function localDateOfUtc(sqlUtc: string): string {
+  const d = new Date(`${sqlUtc.replace(' ', 'T')}Z`)
+  if (Number.isNaN(d.getTime())) return sqlUtc.slice(0, 10)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
 export function nowISO(): string {
   return new Date().toISOString().replace('T', ' ').slice(0, 19)
 }

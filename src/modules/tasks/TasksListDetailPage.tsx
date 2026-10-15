@@ -5,7 +5,7 @@ import { useTaskLists } from '@/hooks/useTaskLists'
 import type { TaskList } from '@/hooks/useTaskLists'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { useToastStore } from '@/stores/toast.store'
-import { errorMessage } from '@/lib/utils'
+import { cn, errorMessage } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
@@ -14,10 +14,28 @@ import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/T
 import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
 const UNSORTED_ID = 'unsorted'
+const VIEW_MODE_KEY = 'daybook.taskListDetail.viewMode'
+
+/** Reads the last view-mode choice (List/Outline) for this kind of page —
+ *  Unsorted and real lists each remember their own. Unsorted defaults to
+ *  Outline: it's the outliner's home, the inbox every new bullet lands in.
+ *  A real list defaults to List, as proposal-v2/tasks-list.html shows it.
+ *  localStorage can throw (private mode, blocked site data) or return junk;
+ *  both fall back to that default. */
+function readStoredViewMode(unsorted: boolean): ViewMode {
+  const fallback: ViewMode = unsorted ? 'outline' : 'list'
+  try {
+    const stored = localStorage.getItem(`${VIEW_MODE_KEY}.${unsorted ? 'unsorted' : 'list'}`)
+    return stored === 'outline' || stored === 'list' ? stored : fallback
+  } catch {
+    return fallback
+  }
+}
 
 /** Display-only stand-in for the `unsorted` sentinel — list_id IS NULL has no
  *  real `task_lists` row, so there is nothing to fetch or rename. */
@@ -86,14 +104,17 @@ function findNextFocusSelector(deletedId: string, openRows: Task[], doneRows: Ta
  * materially bigger feature than this pass) and stay out — see FEAT-062's
  * "What this item does NOT build" section.
  *
- * DEFAULT VIEW IS OUTLINE, not List, even though this is nominally a "list
- * detail" page. `e2e/01-tasks.spec.ts` (plus 07/08/09/12/19/21/22/46/47)
- * navigate straight to `/tasks/lists/unsorted` and assert outliner content —
- * a "New task" button, contenteditable rows — with nothing else on screen
- * first. Defaulting to List mode would show this page's band + grouped rows
- * instead and break every one of those specs' very first assertions. Outline
- * mode renders the existing `TasksPage` completely unchanged (same as PR-1's
- * fallback), so keeping it the default preserves that behaviour exactly.
+ * DEFAULT VIEW IS LIST (tasks-lists-parity): the mockup's own default for a
+ * list's detail page, and now that Outline mode is scoped to this one list
+ * (see `TasksPage.tsx`'s `listFilter` prop, added in the same change — before
+ * that fix, Outline on a real list showed EVERY task from EVERY list, a
+ * live-seen P0), there's no longer a correctness reason to default away from
+ * it. The last choice persists in `localStorage` (`readStoredViewMode`
+ * above) across visits — try/catch-guarded, same convention as
+ * `useTasks.ts`'s own `ROOT_ID_KEY`. `e2e/01-tasks.spec.ts` (plus
+ * 07/08/09/12/19/21/22/46/47), which navigate straight to
+ * `/tasks/lists/unsorted` and assert outliner-only content, now need the
+ * Outline tab clicked first — the tracked cost of this default flip.
  */
 export function TasksListDetailPage() {
   const { listId = UNSORTED_ID } = useParams<{ listId: string }>()
@@ -101,7 +122,7 @@ export function TasksListDetailPage() {
   const navigate = useNavigate()
 
   const { loadTasks, addTask, completeTask, deleteTaskById } = useTasks()
-  const { taskLists, loadTaskLists } = useTaskLists()
+  const { taskLists, loadTaskLists, deleteTaskList } = useTaskLists()
   const { addToast, removeToast } = useToastStore()
   // FEAT-062: the same hook `BulletNode.tsx` already uses to resolve a
   // task's `walletRef` into real MYR chip text — not a second implementation.
@@ -129,7 +150,26 @@ export function TasksListDetailPage() {
   // directly in `handleDeleteTask` below, not read back out of this map).
   const undoToastIdsRef = useRef<Map<string, string>>(new Map())
 
-  const [viewMode, setViewMode] = useState<ViewMode>('outline')
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => readStoredViewMode(isUnsorted))
+  // Moving between Unsorted and a real list reuses this component, so pick
+  // up the other kind's remembered mode during render rather than keeping
+  // whichever one the previous page had.
+  const [viewModeKind, setViewModeKind] = useState(isUnsorted)
+  if (viewModeKind !== isUnsorted) {
+    setViewModeKind(isUnsorted)
+    setViewModeState(readStoredViewMode(isUnsorted))
+  }
+  const setViewMode = (mode: ViewMode) => {
+    setViewModeState(mode)
+    try {
+      localStorage.setItem(`${VIEW_MODE_KEY}.${isUnsorted ? 'unsorted' : 'list'}`, mode)
+    } catch {
+      // Best-effort persistence only — the toggle itself still works for
+      // the rest of this session even if it can't be remembered.
+    }
+  }
+  const [deleteListOpen, setDeleteListOpen] = useState(false)
+  const [deletingList, setDeletingList] = useState(false)
   const [openTasks, setOpenTasks] = useState<Task[]>([])
   const [completedInList, setCompletedInList] = useState<Task[]>([])
   // FEAT-062: the real household's co-members, for the composer's `@` picker
@@ -606,6 +646,27 @@ export function TasksListDetailPage() {
     }
   }
 
+  // "Delete list" — high-consequence (every task currently in it moves to
+  // Unsorted) and not cascading data loss, but still a one-way structural
+  // change to the household's list set, so `ConfirmDeleteModal` (CLAUDE.md
+  // §6's delete-confirmation policy) rather than tasks' usual undo-toast —
+  // this isn't a task delete, it's a LIST delete, and CD-20's exception is
+  // scoped to tasks specifically.
+  const handleDeleteList = async () => {
+    if (isUnsorted) return
+    setDeletingList(true)
+    try {
+      await deleteTaskList(listId)
+      setDeleteListOpen(false)
+      addToast({ message: `"${list.name}" deleted — its tasks moved to Unsorted.` })
+      navigate('/tasks/lists/unsorted')
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not delete this list — please try again.') })
+    } finally {
+      setDeletingList(false)
+    }
+  }
+
   return (
     <div className="content">
       <div className="page-head">
@@ -692,9 +753,16 @@ export function TasksListDetailPage() {
       </div>
 
       <div className="dash">
-        <section className="c8 stack">
+        {/* Unsorted has no rail (no name/colour/delete to manage) — this
+            section takes the full width instead of leaving an empty c4
+            column, same convention as every other c8+aside layout in this
+            app when the aside has nothing to render. */}
+        <section className={cn('stack', isUnsorted ? 'c12' : 'c8')}>
           {viewMode === 'outline' ? (
-            <TasksPage />
+            // Tasks-lists-parity P0: scoped to THIS list's roots (see
+            // `TasksPage.tsx`'s `listFilter` doc comment) — rendering it
+            // unfiltered used to show every task from every list here.
+            <TasksPage listFilter={isUnsorted ? null : listId} />
           ) : loading ? (
             <p className="text-sm text-fg-subtle">Loading this list…</p>
           ) : (
@@ -774,8 +842,11 @@ export function TasksListDetailPage() {
           )}
         </section>
 
-        <aside className="c4 stack">
-          {!isUnsorted && (
+        {/* Unsorted has nothing to rename/recolour/delete — no aside at all
+            (the section above takes the full c12 width instead), rather than
+            an empty c4 column with a blank card. */}
+        {!isUnsorted && (
+          <aside className="c4 stack">
             <div className="card card-pad" data-testid="list-detail-rail">
               <div className="card-head">
                 <span className="card-title">List settings</span>
@@ -821,9 +892,37 @@ export function TasksListDetailPage() {
                 </Button>
               </div>
             </div>
-          )}
-        </aside>
+
+            <div className="card card-pad" data-testid="list-detail-danger">
+              <div className="card-head">
+                <span className="card-title">Danger zone</span>
+              </div>
+              <p className="mb-3 text-xs text-fg-subtle">
+                Deleting this list keeps its tasks — they move to Unsorted.
+              </p>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => setDeleteListOpen(true)}
+                data-testid="list-detail-delete-btn"
+              >
+                Delete list
+              </Button>
+            </div>
+          </aside>
+        )}
       </div>
+
+      <ConfirmDeleteModal
+        open={deleteListOpen}
+        onOpenChange={setDeleteListOpen}
+        title={`Delete "${list.name}"?`}
+        description="Its tasks move to Unsorted — nothing is deleted except the list itself. This can't be undone."
+        onConfirm={handleDeleteList}
+        confirmLabel={deletingList ? 'Deleting…' : 'Delete list'}
+        confirmTestId="list-detail-delete-confirm"
+      />
 
       <TaskFormModal
         open={taskFormOpen}

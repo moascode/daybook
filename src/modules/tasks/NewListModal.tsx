@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn, errorMessage } from '@/lib/utils'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { useToastStore } from '@/stores/toast.store'
 
 // Same palette as TasksListDetailPage.tsx's rename/recolour rail — kept as
 // its own small copy rather than a shared import; two unrelated components
@@ -33,6 +34,7 @@ export function NewListModal({
   const [name, setName] = useState('')
   const [color, setColor] = useState(COLOR_PRESETS[0])
   const [saving, setSaving] = useState(false)
+  const addToast = useToastStore((s) => s.addToast)
 
   const reset = () => {
     setName('')
@@ -47,6 +49,10 @@ export function NewListModal({
       await onCreate({ name: trimmed, color })
       onOpenChange(false)
       reset()
+    } catch (err) {
+      // CLAUDE.md §2 rule 10: a failed create must say so and keep the
+      // modal open with what the user typed, not close as if it worked.
+      addToast({ message: errorMessage(err, 'Could not create that list — please try again.') })
     } finally {
       setSaving(false)
     }

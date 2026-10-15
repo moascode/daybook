@@ -61,8 +61,12 @@ export function useNotificationBadges(): void {
           try {
             const raw = await api.get<Record<string, unknown>[]>('/invites')
             if (!cancelled) setPendingInvites(raw.map(mapInvite))
-          } catch {
-            // ignore — the poll retries in 60s
+          } catch (err) {
+            // CLAUDE.md §2 rule 10: a swallowed failure here used to look
+            // identical to "no pending invites" — log it so a real outage is
+            // visible, even though the badge itself stays silent until the
+            // poll succeeds again in 60s.
+            console.error('useNotificationBadges: failed to load invites', err)
           }
         })(),
 
@@ -85,8 +89,8 @@ export function useNotificationBadges(): void {
                 return differenceInDays(parseISO(r.nextDueDate), today) <= 7
               }).length
             useNotificationBadgeStore.getState().setBillsDueCount(count)
-          } catch {
-            // ignore — the poll retries in 60s
+          } catch (err) {
+            console.error('useNotificationBadges: failed to load bills due', err)
           }
         })(),
 
@@ -104,8 +108,8 @@ export function useNotificationBadges(): void {
                 return !isBefore(today, startOfDay(parseISO(t.dueDate)))
               }).length
             useNotificationBadgeStore.getState().setTasksDueCount(count)
-          } catch {
-            // ignore — the poll retries in 60s
+          } catch (err) {
+            console.error('useNotificationBadges: failed to load tasks due', err)
           }
         })(),
       ]).then(() => undefined)

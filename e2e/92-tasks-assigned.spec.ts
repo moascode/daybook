@@ -71,8 +71,11 @@ test.describe('92 — Tasks assigned to me', () => {
     await assigneePage.goto('/tasks/assigned')
     await expect(assigneePage.locator('main')).toBeVisible({ timeout: 20_000 })
 
+    // FEAT-059/tasks-lists-parity: the group header reads "From <owner>",
+    // not "Waiting on <owner>" — "waiting on you" is the section's own
+    // title, so the per-owner group heading says who's asking instead.
     const waitingSection = assigneePage.getByTestId('assigned-waiting-section')
-    await expect(waitingSection).toContainText(`Waiting on ${ownerName}`)
+    await expect(waitingSection).toContainText(`From ${ownerName}`)
     await expect(waitingSection).toContainText('Review the budget draft')
 
     await ownerCtx.close()
@@ -104,14 +107,16 @@ test.describe('92 — Tasks assigned to me', () => {
     await assigneeCtx.close()
   })
 
-  test('an undated assignment shows the gone-quiet flag in the owner\'s handed-out rail', async ({ browser }) => {
+  test('a freshly-assigned undated task shows no Stale chip yet', async ({ browser }) => {
     const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
     const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Sort out the storage unit' } })
     const task = await taskRes.json()
-    // No dueDate — this is exactly the "gone quiet" condition (assigned
-    // without a date), not related to assignedAt.
+    // No dueDate, assigned "now" — tasks-lists-parity's compact handed-out
+    // row only flags "Stale" once an undated task has sat that way for over
+    // a week (see `handedOutChip` in TasksAssignedPage.tsx), not the moment
+    // it's handed out — so this row renders with no chip at all yet.
     await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
 
     await ownerPage.goto('/tasks/assigned')
@@ -122,54 +127,66 @@ test.describe('92 — Tasks assigned to me', () => {
 
     const handedOut = ownerPage.getByTestId('assigned-handed-out-section')
     await expect(handedOut).toContainText('Sort out the storage unit')
-    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toBeVisible()
-    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toContainText('Gone quiet')
+    await expect(ownerPage.getByTestId(`assigned-handed-out-row-${task.id}`)).toBeVisible()
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).not.toBeVisible()
 
     await ownerCtx.close()
     await assigneeCtx.close()
   })
 
-  test('the assignee picker on the assigned page persists via PATCH and survives reload', async ({ browser }) => {
-    const { ownerPage, assigneePage, assigneeName, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+  test('an undated task assigned over a week ago shows the Stale chip in the handed-out rail', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
-    // Seed an unassigned task the owner will assign through the picker's UI
-    // (not the API), so this exercises TaskListRow's <select> onChange path.
-    const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Book the venue', dueDate: '2026-12-01' } })
+    const assignedAt = `${businessDatePlus(-10)} 09:00:00`
+    const taskRes = await ownerPage.request.post(`${API}/tasks`, {
+      data: { content: 'Sort out the garage', assigneeId, assignedAt },
+    })
     const task = await taskRes.json()
-    // Assign it to the co-member up front so it renders in the handed-out
-    // rail (where TaskListRow's picker is actually rendered with coMembers),
-    // then reassign to Unassigned via the picker to prove the control writes.
-    await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
 
     await ownerPage.goto('/tasks/assigned')
     await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // FEAT-059: the handed-out rail (where this picker renders) sits behind
-    // the From-me tab now.
     await ownerPage.getByTestId('assigned-audience-from-me').click()
 
-    const picker = ownerPage.getByTestId(`task-row-assignee-${task.id}`)
-    await expect(picker).toBeVisible()
-    await expect(picker).toHaveValue(assigneeId)
-    await expect(picker.locator('option', { hasText: assigneeName })).toHaveCount(1)
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toBeVisible()
+    await expect(ownerPage.getByTestId(`assigned-gone-quiet-${task.id}`)).toContainText('Stale')
 
-    // Change it to Unassigned through the picker's own UI — the actual
-    // control under test, not the seeding API used above.
-    const card = ownerPage.getByTestId('assigned-handed-out-section').locator('.card', { hasText: 'Book the venue' })
-    await picker.selectOption('')
-    await expect(picker).toHaveValue('')
+    await ownerCtx.close()
+    await assigneeCtx.close()
+  })
 
-    // Same-page sync check: onAssigneeChange should update this page's own
-    // local state immediately, not just the picker's own draft — without it,
-    // the card's "Assigned to X" caption would still show the old assignee
-    // (or the whole card would linger in the handed-out rail, since it's no
-    // longer assigned to anyone) until a reload.
-    await expect(card).not.toBeVisible()
-    await expect(ownerPage.getByTestId('assigned-handed-out-empty')).toBeVisible()
+  test('reassigning a handed-out task from its row kebab persists via PATCH and survives reload', async ({ browser }) => {
+    const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
+    const assigneeId = await currentUserId(assigneePage)
+
+    // Seed an unassigned-looking task, then assign it to the co-member up
+    // front so it renders in the handed-out rail, where this page no longer
+    // renders a full TaskListRow at all (it's a compact `.prow`, FEAT-027/
+    // tasks-lists-parity) — the row that DOES still carry the kebab's
+    // "Assign to" submenu is in the "Waiting on you" section instead, so
+    // this now exercises that row on the assignee's own page.
+    const taskRes = await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Book the venue', dueDate: '2026-12-01' } })
+    const task = await taskRes.json()
+    await ownerPage.request.patch(`${API}/tasks/${task.id}`, { data: { assigneeId } })
+
+    await assigneePage.goto('/tasks/assigned')
+    await expect(assigneePage.locator('main')).toBeVisible({ timeout: 20_000 })
+
+    const row = assigneePage.locator(`[data-task-id="${task.id}"]`)
+    await expect(row).toBeVisible()
+    await row.getByTestId(`task-row-more-${task.id}`).click()
+    await assigneePage.getByTestId(`task-row-assign-${task.id}`).hover()
+    await assigneePage.getByTestId(`task-row-assign-unassigned-${task.id}`).click()
+
+    // The row leaves "Waiting on you" the moment it's unassigned — same
+    // same-page sync story the old inline picker's `onAssigneeChange` gave,
+    // now driven by the kebab instead.
+    await expect(row).not.toBeVisible()
+    await expect(assigneePage.getByTestId('assigned-waiting-empty')).toBeVisible()
 
     // Persistence check (FEAT-026's review convention, applied here too):
     // reload and re-fetch the task directly, not just re-read the DOM.
-    await ownerPage.reload()
+    await assigneePage.reload()
     const after = await ownerPage.request.get(`${API}/tasks?view=all`)
     const afterRows = await after.json()
     const persisted = afterRows.find((r: { id: string }) => r.id === task.id)
@@ -368,16 +385,16 @@ test.describe('92 — Tasks assigned to me', () => {
     await assigneeCtx.close()
   })
 
-  test('BUG-013: a handed-out row with every optional field set renders without squeezing the name or overlapping controls', async ({ browser }) => {
-    // The "handed out" rail is the only place a TaskListRow ever gets every
+  test('BUG-013: a waiting-on-you row with every optional field set renders without squeezing the name or overlapping controls', async ({ browser }) => {
+    // The "handed out" rail no longer renders a full TaskListRow at all
+    // (tasks-lists-parity) — it's a compact `.prow` with no `data-task-id`,
+    // so it can no longer reproduce BUG-013. "Waiting on you" (Section 1,
+    // the default To-me tab) is now the only place a TaskListRow gets every
     // optional prop at once (coMembers, availableLists, onOpenDetail — see
-    // TasksAssignedPage.tsx's second <TaskListRow>), so it's the only page
-    // that can actually reproduce BUG-013: a fixed 6-track CSS grid whose
-    // tracks were assigned by DOM order, not by role. The list <select>
-    // (FEAT-051) rendered ahead of the title and could claim the grid's only
-    // flexible (1fr) track, capping the title at a fixed 128px on every row
-    // with a list — and the due-date picker's "Clear" button could overlap
-    // the edit-detail button once both were showing.
+    // TasksAssignedPage.tsx's first <TaskListRow>), so the regression this
+    // guards — a fixed-column grid whose tracks were assigned by DOM order,
+    // not by role, and a due-date picker's "Clear" button that could overlap
+    // the edit-detail button — is checked there instead.
     const { ownerPage, assigneePage, ownerCtx, assigneeCtx } = await createGroupOfTwo(browser)
     const assigneeId = await currentUserId(assigneePage)
 
@@ -394,20 +411,35 @@ test.describe('92 — Tasks assigned to me', () => {
     // due-date/edit-detail set above.
     await ownerPage.request.post(`${API}/tasks`, { data: { content: 'Sub-step', parentId: task.id } })
 
-    await ownerPage.goto('/tasks/assigned')
-    await expect(ownerPage.locator('main')).toBeVisible({ timeout: 20_000 })
-    // FEAT-059: the handed-out rail sits behind the From-me tab now.
-    await ownerPage.getByTestId('assigned-audience-from-me').click()
+    // Viewed from the ASSIGNEE's own page — this task is waiting on them.
+    await assigneePage.goto('/tasks/assigned')
+    await expect(assigneePage.locator('main')).toBeVisible({ timeout: 20_000 })
 
-    const row = ownerPage.locator(`[data-task-id="${task.id}"]`)
+    const row = assigneePage.locator(`[data-task-id="${task.id}"]`)
     await expect(row).toBeVisible()
 
-    // Every optional child is present at once.
+    // Every optional child is present at once. The assignee avatar now
+    // renders as `all-tasks-row-assignee` (no per-task suffix — the old
+    // inline <select> this testid named is gone) and shows the ASKER's
+    // avatar here, not the viewer's own (every row in this section is
+    // already assigned to the viewer, so the assignee avatar would just be
+    // the viewer's own on every row — see TaskListRow's `avatarUserId` doc).
     await expect(row.getByTestId('all-tasks-row-list-chip')).toBeVisible()
     await expect(row.getByTestId('all-tasks-row-subtasks')).toBeVisible()
-    await expect(row.getByTestId(`task-row-assignee-${task.id}`)).toBeVisible()
+    await expect(row.getByTestId('all-tasks-row-assignee')).toBeVisible()
     await expect(row.getByTestId('all-tasks-row-recurrence')).toBeVisible()
-    await expect(row.getByTestId(`task-row-detail-${task.id}`)).toBeVisible()
+
+    // "Edit details" now lives inside the kebab's menu (it's no longer an
+    // always-visible row button), so it only exists in the DOM once that
+    // menu is open — open it, confirm the item, then close before the rest.
+    await row.getByTestId(`task-row-more-${task.id}`).click()
+    // The menu renders through a Radix Portal (document.body), not inside
+    // `row`'s own DOM subtree — query it from the page, not scoped to `row`.
+    const menu = assigneePage.getByTestId(`task-row-more-menu-${task.id}`)
+    await expect(menu).toBeVisible()
+    await expect(menu.getByTestId(`task-row-detail-${task.id}`)).toBeVisible()
+    await assigneePage.keyboard.press('Escape')
+    await expect(menu).not.toBeVisible()
 
     // The name column is genuinely flexible, not capped at the old fixed
     // 128px track — 200px is a threshold the pre-fix layout could never
@@ -418,25 +450,28 @@ test.describe('92 — Tasks assigned to me', () => {
     expect(titleBox!.width).toBeGreaterThan(200)
 
     // Expand the due-date picker (BUG-011's original overlap: its "Clear"
-    // button vs. the edit-detail button) and assert the two no longer share
-    // any screen space — proof this is now structurally impossible (both
-    // wrap inside one `.task-meta` flex row) rather than avoided by hiding
-    // one control while the other is open.
+    // button vs. the row's own kebab trigger — "Edit details" moved inside
+    // that kebab's menu, so the kebab trigger is the always-visible control
+    // now sharing the row with the date editor) and assert the two no
+    // longer share any screen space — proof this is now structurally
+    // impossible (`task-when-edit` spans grid columns 3/6, `trow-actions`
+    // is pinned to column 6 — tasks.css) rather than avoided by hiding one
+    // control while the other is open.
     await row.getByTestId(`all-tasks-row-due-${task.id}`).click()
     const clearButton = row.getByRole('button', { name: 'Clear due date' })
     await expect(clearButton).toBeVisible()
-    const editButton = row.getByTestId(`task-row-detail-${task.id}`)
-    await expect(editButton).toBeVisible()
+    const moreButton = row.getByTestId(`task-row-more-${task.id}`)
+    await expect(moreButton).toBeVisible()
 
     const clearBox = await clearButton.boundingBox()
-    const editBox = await editButton.boundingBox()
+    const moreBox = await moreButton.boundingBox()
     expect(clearBox).not.toBeNull()
-    expect(editBox).not.toBeNull()
+    expect(moreBox).not.toBeNull()
     const overlaps =
-      clearBox!.x < editBox!.x + editBox!.width &&
-      clearBox!.x + clearBox!.width > editBox!.x &&
-      clearBox!.y < editBox!.y + editBox!.height &&
-      clearBox!.y + clearBox!.height > editBox!.y
+      clearBox!.x < moreBox!.x + moreBox!.width &&
+      clearBox!.x + clearBox!.width > moreBox!.x &&
+      clearBox!.y < moreBox!.y + moreBox!.height &&
+      clearBox!.y + clearBox!.height > moreBox!.y
     expect(overlaps).toBe(false)
 
     // BUG-013 (review round): the first structural fix only checked the
@@ -449,7 +484,7 @@ test.describe('92 — Tasks assigned to me', () => {
     // page's card is ~392px wide around a 700px viewport). Re-check at that
     // width, and at a real mobile width, that the name never collapses.
     for (const width of [700, 375]) {
-      await ownerPage.setViewportSize({ width, height: 900 })
+      await assigneePage.setViewportSize({ width, height: 900 })
       const narrowTitleBox = await row.getByTestId('all-tasks-row-title').boundingBox()
       expect(narrowTitleBox).not.toBeNull()
       expect(narrowTitleBox!.width).toBeGreaterThan(80)
