@@ -7,6 +7,7 @@ import { cn, errorMessage } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
+import { TaskTimeRow } from '@/modules/tasks/TaskTimeRow'
 import { useToastStore } from '@/stores/toast.store'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task, TaskPriority, TaskRecurrenceFrequency } from '@/types/tasks.types'
@@ -246,6 +247,7 @@ export function TaskDetailModal({
                 recurrenceData: snapshot.recurrenceData ?? null,
                 recurrenceParentId: snapshot.recurrenceParentId ?? null,
                 walletRef: snapshot.walletRef ?? null,
+                trackedMinutes: snapshot.trackedMinutes,
                 createdAt: snapshot.createdAt,
                 updatedAt: snapshot.updatedAt,
               })
@@ -406,6 +408,12 @@ export function TaskDetailModal({
             </select>
           </div>
         )}
+
+        <TaskTimeRow
+          task={current}
+          inputClassName={fieldInputClass}
+          onChange={(fields) => commit({ ...current, ...fields })}
+        />
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="task-detail-note" className="text-sm font-medium text-fg-muted">

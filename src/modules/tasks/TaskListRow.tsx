@@ -9,6 +9,7 @@ import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import { avatarClass } from '@/lib/avatar'
 import { MENU_CONTENT, MENU_ITEM, addedLabel, dateColumns, dayDiff, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
+import { TaskTimeChips } from '@/modules/tasks/TaskTimeChips'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -246,6 +247,8 @@ export function TaskListRow({
               <i style={{ background: list?.color ?? 'rgb(var(--line-strong))' }} aria-hidden="true" />
               {list?.name ?? 'Unsorted'}
             </span>
+            <TaskTimeChips task={task} />
+
             {task.subtaskTotal > 0 && (
               <span className="sub-count" data-testid="all-tasks-row-subtasks">
                 {task.subtaskDone} of {task.subtaskTotal}
