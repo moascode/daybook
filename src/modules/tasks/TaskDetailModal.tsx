@@ -7,6 +7,7 @@ import { cn, errorMessage } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
+import { TaskTimeRow } from '@/modules/tasks/TaskTimeRow'
 import { useToastStore } from '@/stores/toast.store'
 import { TaskSubtasks } from '@/modules/tasks/TaskSubtasks'
 import { useSubtasks } from '@/modules/tasks/useSubtasks'
@@ -286,6 +287,7 @@ export function TaskDetailModal({
                 recurrenceData: snapshot.recurrenceData ?? null,
                 recurrenceParentId: snapshot.recurrenceParentId ?? null,
                 walletRef: snapshot.walletRef ?? null,
+                trackedMinutes: snapshot.trackedMinutes,
                 remindAt: snapshot.remindAt ?? null,
                 createdAt: snapshot.createdAt,
                 updatedAt: snapshot.updatedAt,
@@ -491,6 +493,12 @@ export function TaskDetailModal({
             </select>
           </div>
         )}
+
+        <TaskTimeRow
+          task={current}
+          inputClassName={fieldInputClass}
+          onChange={(fields) => commit({ ...current, ...fields })}
+        />
 
         <TaskSubtasks
           items={subtasks.items}

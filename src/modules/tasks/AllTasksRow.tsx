@@ -8,6 +8,7 @@ import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import { avatarClass } from '@/lib/avatar'
 import { MENU_CONTENT, MENU_ITEM, addedLabel, dateColumns, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
+import { TaskTimeChips } from '@/modules/tasks/TaskTimeChips'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -181,6 +182,7 @@ export function AllTasksRow({
                 {walletChip}
               </span>
             )}
+            <TaskTimeChips task={task} />
             {!task.dueDate && !task.isCompleted && (
               <span className="chip chip-mute" data-testid="all-tasks-row-age">
                 {addedLabel(task.createdAt)}

@@ -68,6 +68,9 @@ export interface TaskRow {
   recurrence_parent_id?: string | null
   // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md).
   wallet_ref?: string | null
+  // Tracked time (migration 0031).
+  tracked_minutes?: number
+  timer_started_at?: string | null
   // FEAT-055.
   remind_at?: string | null
 }
@@ -98,6 +101,8 @@ export function rowToTask(row: TaskRow): Task {
     recurrenceData: row.recurrence_data ? (JSON.parse(row.recurrence_data) as TaskRecurrenceData) : null,
     recurrenceParentId: row.recurrence_parent_id ?? null,
     walletRef: row.wallet_ref ?? null,
+    trackedMinutes: row.tracked_minutes ?? 0,
+    timerStartedAt: row.timer_started_at ?? null,
     remindAt: row.remind_at ?? null,
   }
 }
@@ -562,6 +567,7 @@ export function useTasks() {
         recurrenceData: t.recurrenceData ?? null,
         recurrenceParentId: t.recurrenceParentId ?? null,
         walletRef: t.walletRef ?? null,
+        trackedMinutes: t.trackedMinutes,
         remindAt: t.remindAt ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
@@ -690,6 +696,7 @@ export function useTasks() {
           recurrenceData: t.recurrenceData ?? null,
           recurrenceParentId: t.recurrenceParentId ?? null,
           walletRef: t.walletRef ?? null,
+          trackedMinutes: t.trackedMinutes,
           remindAt: t.remindAt ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,

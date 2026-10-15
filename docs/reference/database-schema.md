@@ -461,6 +461,25 @@ ALTER TABLE recurring_transactions ADD COLUMN amount_changed_at TEXT;    -- null
   source (b); source (a) matches a real charge against the rule and never
   touches these columns.
 
+### Tasks tracked time (migration `0031_task_tracked_time.sql` / `0030_` on the server)
+
+```sql
+ALTER TABLE tasks ADD COLUMN tracked_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN timer_started_at TEXT DEFAULT NULL; -- UTC datetime('now') form; NULL = not running
+```
+
+- `tracked_minutes` is PATCHable (`trackedMinutes`, integer 0..100000, else 400).
+  `timer_started_at` is **not** client-writable: only `POST /tasks/:id/timer/start`
+  sets it and `.../timer/stop` clears it, adding `max(1, round(elapsed minutes))`
+  to `tracked_minutes`. Elapsed is computed in SQL (`julianday`) from the stored
+  UTC string, never taken from the client.
+- Starting a timer stops any other running timer on tasks the caller owns or is
+  assigned (banking its time) and lists them in `stoppedTimers` in the response.
+  Both endpoints use `canActOnTask`; 409 if already running / not running.
+- `POST /tasks/:id/complete` (completing, not un-completing) banks and clears a
+  running timer in the same UPDATE.
+- Types: `Task.trackedMinutes`, `Task.timerStartedAt` (`src/types/tasks.types.ts`).
+
 ### Habit "every N days" interval (migration `0030_habit_interval.sql` / `0029_habit_interval.sql` on the server)
 
 ```sql

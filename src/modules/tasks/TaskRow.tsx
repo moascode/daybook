@@ -9,6 +9,7 @@ import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { useAppStore } from '@/stores/app.store'
 import { Button } from '@/components/ui/Button'
 import { todayDueColumns, recurrenceLabel, MENU_ITEM, MENU_CONTENT } from '@/modules/tasks/taskRowFormat'
+import { TaskTimeChips } from '@/modules/tasks/TaskTimeChips'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task } from '@/types/tasks.types'
 
@@ -178,6 +179,8 @@ export function TaskRow({
                 Unsorted
               </span>
             )}
+
+            <TaskTimeChips task={task} />
 
             {task.subtaskTotal > 0 && (
               <span className="sub-count" data-testid="today-task-row-subtasks">

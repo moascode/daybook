@@ -9,6 +9,7 @@ import { errorMessage, todayISO, dateMinusDays } from '@/lib/utils'
 import { dayDiff } from '@/modules/tasks/taskRowFormat'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
 import { CompletedAnalytics, CompletedByListCards } from '@/modules/tasks/CompletedAnalytics'
+import { formatTrackedMinutes } from '@/modules/tasks/trackedTime'
 import type { Task } from '@/types/tasks.types'
 
 type CompletedRange = '30d' | '6m' | 'all'
@@ -186,6 +187,16 @@ export function TasksCompletedPage() {
     return out
   }, [dayGroups, visibleCount])
 
+  // Header total for a day sums the WHOLE day (like `totalInDay`), not just
+  // the rows the page budget has revealed so far.
+  const trackedByDay = useMemo(() => {
+    const out = new Map<string, number>()
+    for (const g of dayGroups) {
+      out.set(g.date, g.tasks.reduce((sum, t) => sum + t.trackedMinutes, 0))
+    }
+    return out
+  }, [dayGroups])
+
   const shownCount = pagedDayGroups.reduce((sum, g) => sum + g.tasks.length, 0)
 
   const pageSub =
@@ -321,6 +332,14 @@ export function TasksCompletedPage() {
                       <span>{dayGroupLabel(group.date)}</span>
                       <span className="n">{group.totalInDay}</span>
                       <span className="line" />
+                      {(trackedByDay.get(group.date) ?? 0) > 0 && (
+                        <span
+                          style={{ fontSize: 'var(--t-xs)', color: 'rgb(var(--fg-subtle))' }}
+                          data-testid="completed-day-tracked"
+                        >
+                          {formatTrackedMinutes(trackedByDay.get(group.date) ?? 0)} of tracked work
+                        </span>
+                      )}
                     </div>
                     {group.tasks.map((t) => (
                       <TaskListRow

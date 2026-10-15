@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { AppEnv } from '../types.ts'
 import { updateRow, todayStr, nowStr, businessDateOf, daysBetween, ownsAllRefs, isValidRemindAt } from '../lib.ts'
 import { pushToUser } from '../lib/pushToUser.ts'
@@ -48,6 +49,18 @@ const TASK_COLS: Record<string, string> = {
   recurrenceData: 'recurrence_data',
   // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md).
   walletRef: 'wallet_ref',
+  // Tracked time (migration 0031): manual edit only — the timer endpoints
+  // below are the other writer. timer_started_at is deliberately NOT here.
+  trackedMinutes: 'tracked_minutes',
+}
+
+const MAX_TRACKED_MINUTES = 100000
+
+/** Elapsed whole minutes since `timer_started_at` (a UTC datetime('now') string), at least 1. */
+const ELAPSED_MINUTES_SQL = `MAX(1, CAST(ROUND((julianday('now') - julianday(timer_started_at)) * 1440) AS INTEGER))`
+
+function isValidTrackedMinutes(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= MAX_TRACKED_MINUTES
 }
 
 const RECURRENCE_FREQS = new Set(['daily', 'weekly', 'monthly', 'yearly', 'custom'])
@@ -296,12 +309,12 @@ tasks.post('/tasks', async (c) => {
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
         list_id, priority, due_time, assignee_id, assigned_at, recurrence, recurrence_data,
-        recurrence_parent_id, wallet_ref, remind_at, created_at, updated_at)
+        recurrence_parent_id, wallet_ref, tracked_minutes, remind_at, created_at, updated_at)
      VALUES
        (COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, COALESCE(?, 'none'), ?, ?, ?,
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, COALESCE(?, 0), ?,
         COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
@@ -309,7 +322,7 @@ tasks.post('/tasks', async (c) => {
     // id, userId, parentId, content, note,
     // isCompleted, isCollapsed, sortOrder, dueDate,
     // listId, priority, dueTime, assigneeId, assignedAt,
-    // recurrence, recurrenceData, recurrenceParentId, walletRef, remindAt, createdAt, updatedAt
+    // recurrence, recurrenceData, recurrenceParentId, walletRef, trackedMinutes, remindAt, createdAt, updatedAt
     .bind(
       b.id ?? null,
       userId,
@@ -338,6 +351,8 @@ tasks.post('/tasks', async (c) => {
         : b.recurrenceData ?? null,
       b.recurrenceParentId ?? null,
       b.walletRef ?? null,
+      // Restore-only, like walletRef above — undoing a delete keeps the time.
+      isValidTrackedMinutes(b.trackedMinutes) ? b.trackedMinutes : null,
       b.remindAt ?? null,
       b.createdAt ?? null,
       b.updatedAt ?? null,
@@ -411,6 +426,10 @@ tasks.patch('/tasks/:id', async (c) => {
     if (!table || !refId || !(await ownsAllRefs(c.env.DB, userId, [[table, refId]]))) {
       return c.json({ error: 'invalid walletRef' }, 400)
     }
+  }
+
+  if ('trackedMinutes' in body && !isValidTrackedMinutes(body.trackedMinutes)) {
+    return c.json({ error: `trackedMinutes must be a whole number from 0 to ${MAX_TRACKED_MINUTES}` }, 400)
   }
 
   // FEAT-028: a recurrence needs a due date to advance from — reject setting
@@ -516,12 +535,84 @@ tasks.post('/tasks/:id/complete', async (c) => {
   const row = await c.env.DB.prepare(
     `UPDATE tasks
      SET is_completed = ?, completed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END,
+         -- Completing stops a running timer and banks its time, in this same
+         -- statement (SET expressions read the pre-update row).
+         tracked_minutes = tracked_minutes
+           + CASE WHEN ? = 1 AND timer_started_at IS NOT NULL THEN ${ELAPSED_MINUTES_SQL} ELSE 0 END,
+         timer_started_at = CASE WHEN ? = 1 THEN NULL ELSE timer_started_at END,
          updated_at = datetime('now')
      WHERE id = ?
      RETURNING *`,
   )
-    .bind(next, next, nowStr(), id)
+    .bind(next, next, nowStr(), next, next, id)
     .first()
+  return c.json(row)
+})
+
+// Tracked-time timer. Elapsed time is always computed here from the stored
+// UTC timestamp (never trusted from the client). Same access predicate as
+// complete (canActOnTask).
+async function loadTimerTask(c: Context<AppEnv>, id: string) {
+  const task = await c.env.DB.prepare(
+    'SELECT id, user_id, assignee_id, list_id, timer_started_at FROM tasks WHERE id = ?',
+  )
+    .bind(id)
+    .first<{
+      id: string
+      user_id: string
+      assignee_id: string | null
+      list_id: string | null
+      timer_started_at: string | null
+    }>()
+  if (!task) return null
+  const writable = await writableListIds(c.env.DB, c.get('userId'))
+  return canActOnTask(task, c.get('userId'), writable) ? task : null
+}
+
+tasks.post('/tasks/:id/timer/start', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const task = await loadTimerTask(c, id)
+  if (!task) return c.json({ error: 'task not found' }, 404)
+  if (task.timer_started_at) return c.json({ error: 'timer already running' }, 409)
+
+  // One running timer per person: stop (and bank) any other of their own or
+  // assigned tasks' timers first, and report which, so the UI can say so.
+  const [stopped, started] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE tasks
+       SET tracked_minutes = tracked_minutes + ${ELAPSED_MINUTES_SQL},
+           timer_started_at = NULL, updated_at = datetime('now')
+       WHERE timer_started_at IS NOT NULL AND id != ? AND (user_id = ? OR assignee_id = ?)
+       RETURNING id, content`,
+    ).bind(id, userId, userId),
+    c.env.DB.prepare(
+      `UPDATE tasks SET timer_started_at = datetime('now'), updated_at = datetime('now')
+       WHERE id = ? AND timer_started_at IS NULL
+       RETURNING *`,
+    ).bind(id),
+  ])
+  const row = (started.results as Record<string, unknown>[])[0]
+  if (!row) return c.json({ error: 'timer already running' }, 409)
+  return c.json({ ...row, stoppedTimers: stopped.results })
+})
+
+tasks.post('/tasks/:id/timer/stop', async (c) => {
+  const id = c.req.param('id')
+  const task = await loadTimerTask(c, id)
+  if (!task) return c.json({ error: 'task not found' }, 404)
+  if (!task.timer_started_at) return c.json({ error: 'timer is not running' }, 409)
+
+  const row = await c.env.DB.prepare(
+    `UPDATE tasks
+     SET tracked_minutes = tracked_minutes + ${ELAPSED_MINUTES_SQL},
+         timer_started_at = NULL, updated_at = datetime('now')
+     WHERE id = ? AND timer_started_at IS NOT NULL
+     RETURNING *`,
+  )
+    .bind(id)
+    .first()
+  if (!row) return c.json({ error: 'timer is not running' }, 409)
   return c.json(row)
 })
 
