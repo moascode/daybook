@@ -216,9 +216,13 @@ test.describe('101 — Tasks list detail design adoption (FEAT-062)', () => {
     await ownerPage.goto(`/tasks/lists/${list.id}`)
     await ownerPage.getByTestId('list-view-list').click()
 
-    const assigneeSelect = ownerPage.getByTestId(`task-row-assignee-${task.id}`)
-    await expect(assigneeSelect).toBeVisible()
-    await assigneeSelect.selectOption({ label: memberName })
+    // The inline assignee <select> is gone (tasks-lists-parity) — assigning
+    // now lives in the row's kebab menu, under its "Assign to" submenu.
+    await ownerPage.getByTestId(`task-row-more-${task.id}`).click()
+    await ownerPage.getByTestId(`task-row-assign-${task.id}`).hover()
+    const assigneeOption = ownerPage.locator(`[data-testid^="task-row-assign-option-${task.id}-"]`).filter({ hasText: memberName })
+    await expect(assigneeOption).toBeVisible()
+    await assigneeOption.click()
 
     const verifyRes = await ownerPage.request.get(`${API}/tasks?view=list&list=${list.id}`)
     const tasks = await verifyRes.json()
@@ -254,10 +258,19 @@ test.describe('101 — Tasks list detail design adoption (FEAT-062)', () => {
     await page.keyboard.press('Escape')
     await expect(menu).not.toBeVisible()
 
-    // Outside click closes it too.
+    // Outside click closes it too. Radix's DropdownMenu is modal by default:
+    // while open it sets the rest of the page to `pointer-events: none`, so
+    // the real hit-test target at these coordinates is `<html>`, not this
+    // title — Playwright's actionability check (unlike a real browser, which
+    // dispatches the native pointerdown regardless and lets Radix's own
+    // document-level capture listener close the menu before the paired
+    // click/mouseup land) refuses to click what it can't see as the
+    // top-most element and polls forever. `force: true` dispatches the
+    // click at the coordinates directly, which is what actually exercises
+    // the real dismiss path (and is what a genuine user's click does too).
     await moreBtn.click()
     await expect(menu).toBeVisible()
-    await page.getByTestId('list-detail-title').click()
+    await page.getByTestId('list-detail-title').click({ force: true })
     await expect(menu).not.toBeVisible()
 
     // Delete — undo-toast policy (CLAUDE.md §6), not a confirm modal.
@@ -322,7 +335,7 @@ test.describe('101 — Tasks list detail design adoption (FEAT-062)', () => {
     await memberCtx.close()
   })
 
-  test('deleting a parent removes its subtask rows too, not just the parent (review fix #2)', async ({ browser }) => {
+  test('deleting a parent removes its subtask too, not just the parent (review fix #2)', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
     const created = await page.request.post(`${API}/task-lists`, { data: { name: 'Cascade list', color: '#eab308' } })
@@ -335,19 +348,30 @@ test.describe('101 — Tasks list detail design adoption (FEAT-062)', () => {
 
     await page.goto(`/tasks/lists/${list.id}`)
     await page.getByTestId('list-view-list').click()
+    // An undated, unassigned subtask is no longer its own row in List view —
+    // GET /tasks?view=list now excludes it, surfacing it only via the
+    // parent's subtask-count chip (the outliner's checklist, not a flat row).
     await expect(page.getByText('Plan the trip')).toBeVisible()
-    await expect(page.getByText('Book flights')).toBeVisible()
+    await expect(page.getByTestId('all-tasks-row-subtasks')).toHaveText('0 of 1')
+    await expect(page.getByText('Book flights')).not.toBeVisible()
 
     const moreBtn = page.getByTestId(`task-row-more-${parent.id}`)
     await moreBtn.click()
     await page.getByTestId(`task-row-more-menu-${parent.id}`).getByRole('menuitem', { name: 'Delete' }).click()
 
     await expect(page.getByText('Plan the trip')).not.toBeVisible()
-    await expect(page.getByText('Book flights')).not.toBeVisible()
     await expect(page.getByTestId('list-detail-open-empty')).toBeVisible()
 
     const afterRes = await page.request.get(`${API}/tasks?view=list&list=${list.id}`)
     expect((await afterRes.json()).length).toBe(0)
+
+    // Confirm the cascade actually reached the subtask server-side too, not
+    // just that both dropped out of this (already subtask-excluding) view —
+    // the outliner's own Outline view is the one place a subtask is still a
+    // real row, so it's the one place that can prove it's gone, not just hidden.
+    await page.getByTestId('list-view-outline').click()
+    await expect(page.getByText('Plan the trip')).not.toBeVisible()
+    await expect(page.getByText('Book flights')).not.toBeVisible()
   })
 
   test('deleting a task the viewer does not own — in a list shared to their group — actually removes it (review fix #3)', async ({
