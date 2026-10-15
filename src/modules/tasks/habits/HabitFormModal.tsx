@@ -200,6 +200,8 @@ export function HabitFormModal({
                     onClick={() => {
                       setFrequency(opt.value)
                       setIntervalError(null)
+                      // "Every day" lights every weekday toggle, so they never disagree.
+                      if (opt.value === 'daily') setValues((prev) => ({ ...prev, schedule: null }))
                     }}
                     className={cn(
                       'rounded-full border px-3 py-1 text-xs',
@@ -245,7 +247,7 @@ export function HabitFormModal({
               </div>
             )}
 
-            {frequency === 'days' && (
+            {frequency !== 'interval' && (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium text-fg-muted">Due on</span>
               <div className="flex gap-1.5">
@@ -256,7 +258,11 @@ export function HabitFormModal({
                       key={day}
                       type="button"
                       data-testid={`habit-schedule-day-${day}`}
-                      onClick={() => toggleScheduleDay(day)}
+                      onClick={() => {
+                        // Turning a day off from "Every day" is choosing specific days.
+                        setFrequency('days')
+                        toggleScheduleDay(day)
+                      }}
                       aria-pressed={due}
                       aria-label={WEEKDAY_FULL[day]}
                       className={cn(
