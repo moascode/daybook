@@ -49,4 +49,6 @@ export interface Task {
   // FEAT-032 (docs/backlog/EP-07-tasks-depth/FEAT-032-tasks-wallet-chips.md):
   // `<kind>:<id>` linking this task to a Wallet object, e.g. 'goal:<id>'.
   walletRef: string | null
+  // FEAT-055: 'YYYY-MM-DDTHH:MM' in business time; a nudge, never a deadline.
+  remindAt: string | null
 }

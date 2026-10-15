@@ -414,6 +414,30 @@ ALTER TABLE goals ADD COLUMN note        TEXT;  -- nullable card subtitle, trimm
   and `is_non_cash = 0` filter as `GET /accounts/balances`, bucketed by
   `substr(date, 1, 7)`.
 
+### Task reminders (migration `0029_task_remind_at.sql` / `0028_task_remind_at.sql` on the server, FEAT-055)
+
+```sql
+ALTER TABLE tasks ADD COLUMN remind_at TEXT DEFAULT NULL; -- 'YYYY-MM-DDTHH:MM' in business time (Asia/Kuala_Lumpur)
+CREATE INDEX IF NOT EXISTS idx_tasks_remind_at ON tasks(remind_at);
+```
+
+- A nudge, not a deadline: a task with `remind_at` and no `due_date` is never
+  overdue. `POST`/`PATCH /tasks` accept `remindAt` (strict
+  `YYYY-MM-DDTHH:MM`, else 400; `null` clears) and `GET` returns `remind_at`.
+  Client type: `Task.remindAt`.
+- Stored as business-clock text so it compares lexically with
+  `businessMinuteStr()` (`worker/lib.ts`). `view=today` also returns open,
+  undated tasks whose `remind_at` date is today.
+- Delivery (`*/15 * * * *` cron → `runReminders`, `worker/scheduled.ts`): an
+  open task with `remind_at <= now` and a date no older than yesterday is
+  claimed in `push_sent_log` (`kind = 'reminder:<task id>'`, `sent_on` = the
+  reminder's date; recipient = `COALESCE(assignee_id, user_id)`) and pushed
+  payload-less to that user's live subscriptions. `notificationsFor` lists due
+  reminders first ("Reminder: <content>" / "<n> reminders").
+- `GET /tasks/:id/children` returns a task's direct children (the detail
+  modal's checklist); the flat `view=` queries still hide undated, unassigned
+  subtasks.
+
 ### Recurring pause + price tracking (migration `0027_recurring_pause_price.sql` / `0026_recurring_pause_price.sql` on the server, FEAT-068)
 
 ```sql

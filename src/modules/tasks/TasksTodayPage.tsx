@@ -90,6 +90,8 @@ export function TasksTodayPage() {
         lists={data.taskLists}
         coMembers={data.coMembers}
         onCreateTask={data.handleCreateTask}
+        onTasksCreated={data.handleTasksCreated}
+        defaultDueDate={data.today}
         onOpenHabitModal={handleOpenHabitModal}
         onOpenTaskForm={handleOpenTaskForm}
         onOpenAssignForm={handleOpenAssignForm}

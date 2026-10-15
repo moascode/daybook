@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { errorMessage, todayISO } from '@/lib/utils'
 import { dayDiff } from '@/modules/tasks/taskRowFormat'
+import { upsertTasks } from '@/modules/tasks/composer/upsertTasks'
 import type { TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
 import type { TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
 import type { Task } from '@/types/tasks.types'
@@ -111,7 +112,11 @@ export function useTodayTasks() {
   const visibleCompleted = audience === 'mine' ? completedTasks.filter(mineFilter) : completedTasks
 
   const overdueTasks = visibleOpen.filter((t) => t.dueDate !== null && t.dueDate < today)
-  const todayTasks = visibleOpen.filter((t) => t.dueDate === today)
+  // FEAT-055: an undated task whose reminder falls today is listed here too —
+  // it has no due date on purpose, so it can never land in Overdue.
+  const todayTasks = visibleOpen.filter(
+    (t) => t.dueDate === today || (t.dueDate === null && t.remindAt?.slice(0, 10) === today),
+  )
   const doneTodayTasks = visibleCompleted.filter((t) => t.completedAt?.slice(0, 10) === today)
   const upNext = visibleOpen
     .filter((t) => t.dueDate !== null && t.dueDate > today)
@@ -197,6 +202,7 @@ export function useTodayTasks() {
         recurrenceData: t.recurrenceData ?? null,
         recurrenceParentId: t.recurrenceParentId ?? null,
         walletRef: t.walletRef ?? null,
+        remindAt: t.remindAt ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
@@ -317,6 +323,9 @@ export function useTodayTasks() {
     }
   }
 
+  // Reminder/Checklist composer acts create their own tasks and report them here.
+  const handleTasksCreated = (created: Task[]) => setOpenTasks((prev) => upsertTasks(prev, created))
+
   const handleTaskFormSubmit = async (draft: TaskFormDraft) => {
     await handleCreateTask(draft)
   }
@@ -417,6 +426,7 @@ export function useTodayTasks() {
     handleRescheduleAll,
     handleCreateTask,
     handleTaskFormSubmit,
+    handleTasksCreated,
     handleSaved,
     handleDeletedFromModal,
   }

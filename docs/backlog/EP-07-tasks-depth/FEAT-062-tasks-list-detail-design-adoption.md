@@ -111,9 +111,9 @@ design-adoption pass, authorized by the owner to proceed autonomously.
   MYR app never uses (CLAUDE.md §1).
 - **Reminder / Checklist composer shortcuts.** `TaskComposer`'s existing
   shortcut set is Task / Habit / Assign only (`TaskComposer.tsx` props) —
-  Reminder and Checklist are tracked separately (FEAT-055/056, both still
-  "Open," blocked on their own product questions). Reusing `TaskComposer`
-  here inherits exactly its current shortcut set; none is added.
+  Reminder and Checklist shipped separately (FEAT-055/056, 2026-10-15) and
+  `TaskComposer` carries them on every page it is mounted on, this one
+  included — they file the new task into this page's list.
 
 ## Acceptance criteria
 
