@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
 import {
   DndContext,
@@ -26,18 +26,26 @@ import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/Task
 import { WeekHead } from '@/modules/tasks/upcoming/WeekHead'
 import { BandStats } from '@/modules/tasks/upcoming/BandStats'
 import { WeekBoard } from '@/modules/tasks/upcoming/WeekBoard'
+import { MonthBoard } from '@/modules/tasks/upcoming/MonthBoard'
 import { WaitingSection } from '@/modules/tasks/upcoming/WaitingSection'
 import { BalanceCard } from '@/modules/tasks/upcoming/BalanceCard'
 import {
-  bandTitle,
   describeAssignedDays,
-  formatWeekRange,
   mondayOf,
   planAutoSchedule,
-  shiftDate,
   usualWeek,
   weekDatesFrom,
 } from '@/modules/tasks/upcoming/weekMath'
+import {
+  gridDates,
+  parseRange,
+  rangeBandTitle,
+  rangeContains,
+  rangeSpanLabel,
+  statDates,
+  stepAnchor,
+  type UpcomingRange,
+} from '@/modules/tasks/upcoming/rangeMath'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
@@ -97,8 +105,12 @@ export function TasksUpcomingPage() {
   const [detailTask, setDetailTask] = useState<Task | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [autoScheduling, setAutoScheduling] = useState(false)
-  // Weeks offset from the current one — 0 = this week, ±1 = next/previous, etc.
-  const [weekOffset, setWeekOffset] = useState(0)
+  // Week / Fortnight / Month live in the URL (`?range=`) so a reload or a
+  // shared link keeps the view; `anchor` is any date inside the displayed
+  // stretch, so switching range keeps you on the same part of the calendar.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const range = parseRange(searchParams.get('range'))
+  const [anchor, setAnchor] = useState(() => todayISO())
 
   // FEAT-057: same shared "New task" modal FEAT-054 wired up on Today, opened
   // from the composer's "Task"/"Assign" shortcuts — see TaskComposer.tsx.
@@ -168,18 +180,34 @@ export function TasksUpcomingPage() {
   const coMembers = useMemo(() => members.map((m) => ({ userId: m.userId, username: m.username })), [members])
 
   const today = todayISO()
-  const currentMonday = useMemo(() => mondayOf(today), [today])
-  const monday = useMemo(() => shiftDate(currentMonday, weekOffset * 7), [currentMonday, weekOffset])
-  const week = useMemo(() => weekDatesFrom(monday), [monday])
+  // `grid` is every date drawn (a month includes muted neighbour days);
+  // `rangeDays` is what the stats describe — the same days, minus those.
+  const grid = useMemo(() => gridDates(anchor, range), [anchor, range])
+  const rangeDays = useMemo(() => statDates(anchor, range), [anchor, range])
+  // Balance reasons about one week: the displayed one (Week range only).
+  const week = useMemo(() => weekDatesFrom(mondayOf(anchor)), [anchor])
+  const monday = week[0]
+
+  const setRange = (next: UpcomingRange) => {
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'week') params.delete('range')
+        else params.set('range', next)
+        return params
+      },
+      { replace: true },
+    )
+  }
 
   const tasksByDay = useMemo(() => {
     const map = new Map<string, Task[]>()
-    for (const date of week) map.set(date, [])
+    for (const date of grid) map.set(date, [])
     for (const t of tasks) {
       if (t.dueDate && map.has(t.dueDate)) map.get(t.dueDate)!.push(t)
     }
     return map
-  }, [tasks, week])
+  }, [tasks, grid])
 
   const undated = useMemo(() => tasks.filter((t) => t.dueDate === null), [tasks])
 
@@ -187,6 +215,12 @@ export function TasksUpcomingPage() {
     () => week.map((date) => ({ date, count: tasksByDay.get(date)?.length ?? 0 })),
     [week, tasksByDay],
   )
+  // The band's heaviest-day chip spans the whole range, not just one week.
+  const rangeCounts = useMemo(
+    () => rangeDays.map((date) => ({ date, count: tasksByDay.get(date)?.length ?? 0 })),
+    [rangeDays, tasksByDay],
+  )
+  const heaviest = rangeCounts.reduce((a, b) => (b.count > a.count ? b : a))
   // Balancing only ever looks at today onwards: a day that's already gone
   // can't take a task, and suggesting "move it to Monday" on a Tuesday is a
   // move into the past. A week that's entirely past has nothing to balance.
@@ -195,7 +229,7 @@ export function TasksUpcomingPage() {
   const maxEntry = balanceDays.reduce((a, b) => (b.count > a.count ? b : a))
   const minEntry = balanceDays.reduce((a, b) => (b.count < a.count ? b : a))
   const gap = maxEntry.count - minEntry.count
-  const canBalance = openDays.length > 1 && gap >= 2
+  const canBalance = range === 'week' && openDays.length > 1 && gap >= 2
 
   // Band stats (FEAT-057 mockup parity): tasks due within the displayed
   // `week`, split into "hard deadlines" (owner-approved definition: has a
@@ -204,18 +238,25 @@ export function TasksUpcomingPage() {
   // from `tasksByDay`'s values rather than filtering `tasks` directly, so
   // this only counts the same dated-within-the-displayed-week set the day
   // columns show.
-  const weekTasks = useMemo(() => [...tasksByDay.values()].flat(), [tasksByDay])
+  const weekTasks = useMemo(
+    () => rangeDays.flatMap((d) => tasksByDay.get(d) ?? []),
+    [rangeDays, tasksByDay],
+  )
   const scheduledCount = weekTasks.length
 
-  const isHeaviestDayGenuine = maxEntry.count > 0 && dayCounts.some((d) => d.count < maxEntry.count)
+  const isHeaviestDayGenuine = heaviest.count > 0 && rangeCounts.some((d) => d.count < heaviest.count)
 
   const hardDeadlineTasks = useMemo(
     () => weekTasks.filter((t) => t.dueTime !== null || t.priority === 'high'),
     [weekTasks],
   )
   const recurringTasks = useMemo(() => weekTasks.filter((t) => t.recurrence !== null), [weekTasks])
-  const usual = useMemo(() => usualWeek(completedTasks, monday, scheduledCount), [completedTasks, monday, scheduledCount])
-  const bandTitleText = bandTitle(weekOffset, formatWeekRange(monday))
+  // "Your usual week" is a per-week baseline, so only the Week range compares against it.
+  const usual = useMemo(
+    () => (range === 'week' ? usualWeek(completedTasks, monday, scheduledCount) : null),
+    [range, completedTasks, monday, scheduledCount],
+  )
+  const bandTitleText = rangeBandTitle(anchor, range, today)
 
   // Balance-the-week card (FEAT-057): recomputed from `tasksByDay` on every
   // render, so as candidates move off `maxEntry.date` the list shrinks (and
@@ -295,13 +336,13 @@ export function TasksUpcomingPage() {
   // batch-level summary and reports a day with no eligible slot at all
   // (CLAUDE.md rule 10: never resolve silently).
   const handleAutoSchedule = async () => {
-    const currentCounts = new Map(week.map((d) => [d, tasksByDay.get(d)?.length ?? 0]))
-    const { assignments, skipped } = planAutoSchedule(undated, week, today, currentCounts)
+    const currentCounts = new Map(rangeDays.map((d) => [d, tasksByDay.get(d)?.length ?? 0]))
+    const { assignments, skipped } = planAutoSchedule(undated, rangeDays, today, currentCounts)
     if (assignments.length === 0) {
       addToast({
         message:
           skipped > 0
-            ? "Couldn't auto-schedule — no day in this week is today or later."
+            ? "Couldn't auto-schedule — no day in this view is today or later."
             : 'Nothing to schedule.',
       })
       return
@@ -325,7 +366,7 @@ export function TasksUpcomingPage() {
       })
     }
     if (skipped > 0) {
-      addToast({ message: `${skipped} task${skipped === 1 ? '' : 's'} left waiting — no eligible day this week.` })
+      addToast({ message: `${skipped} task${skipped === 1 ? '' : 's'} left waiting — no eligible day in this view.` })
     }
   }
 
@@ -416,11 +457,13 @@ export function TasksUpcomingPage() {
   return (
     <div className="content">
       <WeekHead
-        monday={monday}
-        weekOffset={weekOffset}
-        onPrev={() => setWeekOffset((o) => o - 1)}
-        onNext={() => setWeekOffset((o) => o + 1)}
-        onThisWeek={() => setWeekOffset(0)}
+        anchor={anchor}
+        range={range}
+        atCurrent={rangeContains(anchor, range, today)}
+        onRangeChange={setRange}
+        onPrev={() => setAnchor((a) => stepAnchor(a, range, -1))}
+        onNext={() => setAnchor((a) => stepAnchor(a, range, 1))}
+        onThisRange={() => setAnchor(today)}
       />
 
       <TaskComposer
@@ -435,10 +478,12 @@ export function TasksUpcomingPage() {
       {!loading && weekTasks.length > 0 && (
         <BandStats
           bandTitleText={bandTitleText}
+          spanLabel={rangeSpanLabel(range, rangeDays.length)}
+          datedHeaviestDay={range !== 'week'}
           scheduledCount={scheduledCount}
           undatedCount={undated.length}
           isHeaviestDayGenuine={isHeaviestDayGenuine}
-          heaviestDayDate={maxEntry.date}
+          heaviestDayDate={heaviest.date}
           hardDeadlineTasks={hardDeadlineTasks}
           recurringTasks={recurringTasks}
           usual={usual}
@@ -454,18 +499,33 @@ export function TasksUpcomingPage() {
               waiting rows sat outside the context and could only be dated
               through their picker. */}
           <DndContext sensors={sensors} collisionDetection={dropOnDay} onDragEnd={handleDragEnd}>
-            <WeekBoard
-              week={week}
-              tasksByDay={tasksByDay}
-              listById={listById}
-              taskLists={taskLists}
-              resolveWalletChip={resolveChip}
-              onAddTask={handleAddTask}
-              onOpenDetail={openDetail}
-            />
+            {range === 'month' ? (
+              <MonthBoard
+                grid={grid}
+                month={anchor.slice(0, 7)}
+                tasksByDay={tasksByDay}
+                listById={listById}
+                onOpenDetail={openDetail}
+                onPickDay={(date) => {
+                  setAnchor(date)
+                  setRange('week')
+                }}
+              />
+            ) : (
+              <WeekBoard
+                week={grid}
+                title={range === 'fortnight' ? 'The fortnight' : 'The week'}
+                tasksByDay={tasksByDay}
+                listById={listById}
+                taskLists={taskLists}
+                resolveWalletChip={resolveChip}
+                onAddTask={handleAddTask}
+                onOpenDetail={openDetail}
+              />
+            )}
 
             <div className="dash mt-4">
-              <div className="c8">
+              <div className={range === 'week' ? 'c8' : 'c12'}>
                 <WaitingSection
                   undated={undated}
                   listById={listById}
@@ -474,8 +534,10 @@ export function TasksUpcomingPage() {
                   onComplete={handleComplete}
                   onOpenDetail={openDetail}
                   onSetDate={(taskId, date) => {
-                    if (!week.includes(date)) {
-                      addToast({ message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this week` })
+                    if (!rangeDays.includes(date)) {
+                      addToast({
+                        message: `Scheduled for ${format(parseISO(date), 'd MMM')} — outside this ${range}`,
+                      })
                     }
                     void moveTaskToDate(taskId, date)
                   }}
@@ -483,16 +545,20 @@ export function TasksUpcomingPage() {
                   autoScheduling={autoScheduling}
                 />
               </div>
-              <div className="c4">
-                <BalanceCard
-                  canBalance={canBalance}
-                  candidates={balanceCandidates}
-                  maxEntry={maxEntry}
-                  minEntry={minEntry}
-                  balanceReason={balanceReason}
-                  onMove={(taskId) => void moveTaskToDate(taskId, minEntry.date)}
-                />
-              </div>
+              {/* Balancing is a one-week idea (busiest vs quietest of seven
+                  days), so the card only exists on the Week range. */}
+              {range === 'week' && (
+                <div className="c4">
+                  <BalanceCard
+                    canBalance={canBalance}
+                    candidates={balanceCandidates}
+                    maxEntry={maxEntry}
+                    minEntry={minEntry}
+                    balanceReason={balanceReason}
+                    onMove={(taskId) => void moveTaskToDate(taskId, minEntry.date)}
+                  />
+                </div>
+              )}
             </div>
           </DndContext>
         </>

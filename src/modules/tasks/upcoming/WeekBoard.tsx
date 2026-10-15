@@ -167,7 +167,9 @@ function DayColumn({ date, tasks, listById, taskLists, resolveWalletChip, onAddT
 }
 
 interface WeekBoardProps {
+  /** 7 dates for a week, 14 for a fortnight — drawn as stacked 7-column rows. */
   week: string[]
+  title?: string
   tasksByDay: Map<string, Task[]>
   listById: Map<string, TaskList>
   taskLists: TaskList[]
@@ -181,27 +183,29 @@ interface WeekBoardProps {
  * `.board`/`.bcol`/`.bcard` etc. already live in tasks.css (ported from
  * proposal-v2/theme.css §4-5); this just wires tasks into them.
  */
-export function WeekBoard({ week, tasksByDay, listById, taskLists, resolveWalletChip, onAddTask, onOpenDetail }: WeekBoardProps) {
+export function WeekBoard({ week, title = 'The week', tasksByDay, listById, taskLists, resolveWalletChip, onAddTask, onOpenDetail }: WeekBoardProps) {
   return (
     <section className="card card-pad">
       <div className="card-head">
-        <span className="card-title">The week</span>
+        <span className="card-title">{title}</span>
         <span className="card-sub ml-auto">Drag a card to move it — the day totals update as you go</span>
       </div>
-      <div className="board">
-        {week.map((date) => (
-          <DayColumn
-            key={date}
-            date={date}
-            tasks={tasksByDay.get(date) ?? []}
-            listById={listById}
-            taskLists={taskLists}
-            resolveWalletChip={resolveWalletChip}
-            onAddTask={onAddTask}
-            onOpenDetail={onOpenDetail}
-          />
-        ))}
-      </div>
+      {Array.from({ length: Math.ceil(week.length / 7) }, (_, row) => (
+        <div key={row} className={cn('board', row > 0 && 'mt-2')}>
+          {week.slice(row * 7, row * 7 + 7).map((date) => (
+            <DayColumn
+              key={date}
+              date={date}
+              tasks={tasksByDay.get(date) ?? []}
+              listById={listById}
+              taskLists={taskLists}
+              resolveWalletChip={resolveWalletChip}
+              onAddTask={onAddTask}
+              onOpenDetail={onOpenDetail}
+            />
+          ))}
+        </div>
+      ))}
     </section>
   )
 }
