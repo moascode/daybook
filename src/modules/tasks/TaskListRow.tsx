@@ -360,7 +360,12 @@ export function TaskListRow({
             </Button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
-            <DropdownMenu.Content className={MENU_CONTENT} sideOffset={4} align="end">
+            <DropdownMenu.Content
+              className={MENU_CONTENT}
+              sideOffset={4}
+              align="end"
+              data-testid={`task-row-more-menu-${task.id}`}
+            >
               {onOpenDetail && (
                 <DropdownMenu.Item
                   className={MENU_ITEM}
