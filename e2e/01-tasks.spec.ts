@@ -338,6 +338,13 @@ test('delete empty task via Backspace key', async () => {
   await page.getByRole('button', { name: 'New task' }).first().click()
   await expect(page.getByRole('textbox', { name: 'Task content' })).toHaveCount(countBefore + 1)
 
+  // The row renders as soon as the store has it, but focus lands a beat later
+  // (TasksPage sets focusId only after addTask's rebalance resolves). Pressing
+  // Backspace inside that gap sends it to <body> and nothing is deleted — so
+  // wait for the empty editor to actually hold focus first.
+  await expect(page.locator('[aria-label="Task content"]:focus')).toHaveCount(1)
+  await expect(page.locator('[aria-label="Task content"]:focus')).toHaveText('')
+
   // New task editor is focused and empty — Backspace should delete it
   await page.keyboard.press('Backspace')
   await page.waitForTimeout(200)
