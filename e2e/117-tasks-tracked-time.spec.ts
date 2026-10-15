@@ -71,6 +71,13 @@ test.describe('117 — Tasks tracked time', () => {
     await page.keyboard.press('Escape')
     await expect(page.getByTestId('task-row-timer-running')).toBeVisible()
 
+    // All tasks renders its own row component — it must carry the same chips.
+    await page.goto('/tasks/all')
+    const allRow = page.getByTestId('all-tasks-row').filter({ hasText: 'Write the report' })
+    await expect(allRow.getByTestId('task-row-timer-running')).toBeVisible()
+    await expect(allRow.getByTestId('task-row-tracked')).toHaveText('45m')
+    await page.goto('/tasks')
+
     await openDetail(page, 'Write the report')
     await page.getByTestId('task-timer-toggle').click()
     await expect(page.getByTestId('task-timer-elapsed')).toHaveCount(0)
