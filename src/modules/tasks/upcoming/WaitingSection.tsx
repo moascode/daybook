@@ -44,7 +44,13 @@ function WaitingRow({ task, list, assignee, onComplete, onOpenDetail, onSetDate 
       style={style}
       {...listeners}
       {...attributes}
-      className={cn('task task--cols', isDragging && 'relative z-10 opacity-50')}
+      // select-none/touch-none: without them, a mouse-down-and-drag that
+      // starts over the title text can race the browser's own native text
+      // selection instead of (or alongside) dnd-kit's drag — the gesture is
+      // ambiguous to the browser otherwise, since nothing here says "this
+      // text isn't selectable." BCard below carries the same two classes
+      // for the same reason.
+      className={cn('task task--cols select-none touch-none', isDragging && 'relative z-10 opacity-50')}
       data-task-id={task.id}
       data-testid={`upcoming-waiting-row-${task.id}`}
     >

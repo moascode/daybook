@@ -47,7 +47,10 @@ function BCard({ task, list, walletChip, onOpenDetail }: BCardProps) {
       aria-label={`${label} — drag to move`}
       {...openDetailClick}
       data-testid={`upcoming-card-${task.id}`}
-      className={cn('bcard', isDragging && 'opacity-50')}
+      // select-none/touch-none: see WaitingSection.tsx's WaitingRow for why
+      // — a draggable element with plain text content can otherwise race
+      // the browser's native text-selection drag against dnd-kit's own.
+      className={cn('bcard select-none touch-none', isDragging && 'opacity-50')}
     >
       <div className="bcard-t">{label}</div>
       <div className="bcard-m">{cardMeta(task, list?.name ?? 'Unsorted', walletChip)}</div>
