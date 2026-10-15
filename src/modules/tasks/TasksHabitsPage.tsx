@@ -110,6 +110,7 @@ export function TasksHabitsPage() {
         color: values.color,
         targetPerWeek: values.targetPerWeek,
         schedule: values.schedule,
+        intervalDays: values.intervalDays,
       })
     } else {
       await createHabit(values)

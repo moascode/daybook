@@ -39,6 +39,8 @@ export interface Habit {
   targetPerWeek: number
   /** 0=Sun..6=Sat; null = due every day. */
   schedule: number[] | null
+  /** Repeat every N days (2..365), a fixed cycle anchored on `createdAt`'s date; null = use `schedule`. Mutually exclusive with `schedule`. */
+  intervalDays: number | null
   linkedKind: HabitLinkedKind | null
   archived: boolean
   createdAt: string

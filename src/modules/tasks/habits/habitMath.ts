@@ -2,7 +2,7 @@
 // math shared across the Habits page's cards. Split out of the former
 // monolithic TasksHabitsPage.tsx so each card file can import only what it
 // needs (CLAUDE.md §2 rule 6: one concern per file).
-import { todayISO } from '@/lib/utils'
+import { dateMinusDays, localDateOfUtc, todayISO } from '@/lib/utils'
 import type { Habit, HabitDayEntry } from '@/types/habits.types'
 
 export const COLOR_PRESETS = [
@@ -43,10 +43,38 @@ export const BAR_MAX_PX = 100
  * re-deriving it. */
 export const BAR_FOOT_OFFSET_PX = 24
 
-/** Whether `weekday` (0=Sun..6=Sat) is a day `schedule` is due at all — the
- * same rule `worker/routes/habits.ts`'s `isDueOn` uses server-side. */
-export function isDueOn(schedule: number[] | null, weekday: number): boolean {
-  return schedule === null || schedule.includes(weekday)
+/** Whole calendar days `to` − `from` (YYYY-MM-DD), pure Y/M/D arithmetic. */
+function daysBetween(from: string, to: string): number {
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000)
+}
+
+/** Whether `date` (YYYY-MM-DD) is a day this habit is due at all — the same
+ * rule `worker/routes/habits.ts`'s `isDueOn` uses server-side. An N-day cycle
+ * is anchored on the habit's creation date; otherwise the weekday `schedule`
+ * (null = every day) decides. Takes the whole habit so no caller can forget
+ * the interval. */
+export function isDueOn(habit: Pick<Habit, 'schedule' | 'intervalDays' | 'createdAt'>, date: string): boolean {
+  if (habit.intervalDays !== null) {
+    const gap = daysBetween(localDateOfUtc(habit.createdAt), date)
+    return gap >= 0 && gap % habit.intervalDays === 0
+  }
+  return habit.schedule === null || habit.schedule.includes(weekdayOf(date))
+}
+
+/** The weekdays (0=Sun..6=Sat) this habit was due on at least once in the
+ * 12-week stats window ending today — every weekday for "every day", the
+ * schedule for a weekday habit, and whichever the cycle landed on for an
+ * every-N-days one. */
+export function habitDueWeekdays(habit: Habit): number[] {
+  const today = todayISO()
+  const seen = new Set<number>()
+  for (let i = 0; i < 84; i++) {
+    const date = dateMinusDays(today, i)
+    if (isDueOn(habit, date)) seen.add(weekdayOf(date))
+  }
+  return [...seen].sort()
 }
 
 /** 0=Sun..6=Sat for a YYYY-MM-DD date string, pure calendar-date arithmetic —
@@ -85,14 +113,13 @@ export function keptRate28(habit: Habit): number {
   return due > 0 ? kept / due : 0
 }
 
-/** "Every day" / "Weekdays" / "Mon, Wed, Fri" — see FEAT-061's "does NOT
- * build" note: no every-N-days cadence, the data model only has a
- * day-of-week schedule or none. The "· Wallet" suffix is the ONLY category
+/** "Every day" / "Weekdays" / "Mon, Wed, Fri" / "Every 3 days". The "· Wallet" suffix is the ONLY category
  * chip this page shows, because it is the only one backed by real data
  * (`linkedKind`) — there is no general "list"/"category" concept on a habit
  * to fabricate one for every other row. */
 export function scheduleDescription(habit: Habit): string {
   const base = (() => {
+    if (habit.intervalDays !== null) return `Every ${habit.intervalDays} days`
     if (habit.schedule === null) return 'Every day'
     const sorted = [...habit.schedule].sort()
     if (sorted.length === 5 && sorted.join(',') === '1,2,3,4,5') return 'Weekdays'

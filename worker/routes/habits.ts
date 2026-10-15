@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr, businessDateOf } from '../lib.ts'
+import { updateRow, todayStr, businessDateOf, daysBetween } from '../lib.ts'
 
 // FEAT-029 (docs/backlog/EP-07-tasks-depth/FEAT-029-tasks-habits.md) — Habits.
 // A habit is a repeated commitment tracked by day (habit_entries), a
@@ -15,6 +15,7 @@ const HABIT_COLS: Record<string, string> = {
   icon: 'icon',
   targetPerWeek: 'target_per_week',
   schedule: 'schedule',
+  intervalDays: 'interval_days',
   archived: 'archived',
   // linkedKind is deliberately NOT here — it is set once at creation and
   // never changed by PATCH (changing what a habit is linked to after the
@@ -29,6 +30,7 @@ interface HabitRow {
   icon: string | null
   target_per_week: number
   schedule: string | null
+  interval_days: number | null
   linked_kind: string | null
   archived: number
   created_at: string
@@ -45,9 +47,33 @@ function parseSchedule(raw: string | null): number[] | null {
   }
 }
 
-/** Whether `weekday` (0=Sun..6=Sat) is a day this habit is due at all. */
-function isDueOn(schedule: number[] | null, weekday: number): boolean {
-  return schedule === null || schedule.includes(weekday)
+/** Whether `date` is a day this habit is due at all. A fixed N-day cycle
+ * (`interval_days`, anchored on `anchor` — the habit's creation business date)
+ * and a weekday `schedule` are mutually exclusive; neither set = every day. */
+function isDueOn(
+  habit: { interval_days: number | null },
+  schedule: number[] | null,
+  anchor: string,
+  date: string,
+): boolean {
+  if (habit.interval_days !== null) {
+    const gap = daysBetween(anchor, date)
+    return gap >= 0 && gap % habit.interval_days === 0
+  }
+  return schedule === null || schedule.includes(weekdayOf(date))
+}
+
+/** Validates a client-supplied interval. Returns an error message, or null when OK. */
+function intervalError(v: unknown): string | null {
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 2 || v > 365) {
+    return 'intervalDays must be a whole number from 2 to 365'
+  }
+  return null
+}
+
+/** Weekly target for an N-day cycle — how many due days a week can hold. */
+function weeklyTargetFor(intervalDays: number): number {
+  return Math.ceil(7 / intervalDays)
 }
 
 // "No spend day" (design.md) — done derives from there being no expense
@@ -148,8 +174,7 @@ async function computeWindow(db: D1Database, habit: HabitRow, today: string): Pr
   const window: WindowDay[] = []
   for (let i = STATS_WINDOW_DAYS - 1; i >= 0; i--) {
     const date = dateMinusDays(today, i)
-    const weekday = weekdayOf(date)
-    const due = date >= trackedFrom && isDueOn(schedule, weekday)
+    const due = date >= trackedFrom && isDueOn(habit, schedule, createdDate, date)
     const done = isDoneOn(habit, entryMap, spendDates, date)
     window.push({ date, done, due })
   }
@@ -344,20 +369,28 @@ habits.post('/habits', async (c) => {
   if (b.linkedKind != null && !LINKED_KINDS.has(String(b.linkedKind))) {
     return c.json({ error: 'unknown linkedKind' }, 400)
   }
+  const hasInterval = b.intervalDays != null
+  if (hasInterval) {
+    const err = intervalError(b.intervalDays)
+    if (err) return c.json({ error: err }, 400)
+    if (b.linkedKind != null) return c.json({ error: 'a Wallet-linked habit cannot repeat every N days' }, 400)
+    if (b.schedule != null) return c.json({ error: 'intervalDays and schedule are mutually exclusive' }, 400)
+  }
 
   const row = await c.env.DB.prepare(
-    `INSERT INTO habits (id, user_id, name, color, icon, target_per_week, schedule, linked_kind, created_at, updated_at)
-     VALUES (lower(hex(randomblob(16))), ?, ?, COALESCE(?, '#10b981'), ?, COALESCE(?, 7), ?, ?, datetime('now'), datetime('now'))
+    `INSERT INTO habits (id, user_id, name, color, icon, target_per_week, schedule, interval_days, linked_kind, created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, COALESCE(?, '#10b981'), ?, COALESCE(?, 7), ?, ?, ?, datetime('now'), datetime('now'))
      RETURNING *`,
   )
-    // userId, name, color, icon, targetPerWeek, schedule, linkedKind
+    // userId, name, color, icon, targetPerWeek, schedule, intervalDays, linkedKind
     .bind(
       userId,
       b.name,
       b.color ?? null,
       b.icon ?? null,
-      b.targetPerWeek ?? null,
+      hasInterval ? weeklyTargetFor(b.intervalDays as number) : (b.targetPerWeek ?? null),
       b.schedule != null ? JSON.stringify(b.schedule) : null,
+      hasInterval ? b.intervalDays : null,
       b.linkedKind ?? null,
     )
     .first<HabitRow>()
@@ -369,6 +402,21 @@ habits.post('/habits', async (c) => {
 habits.patch('/habits/:id', async (c) => {
   const userId = c.get('userId')
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>
+  // schedule and intervalDays are mutually exclusive: setting one clears the other.
+  const settingInterval = body.intervalDays != null
+  if (settingInterval) {
+    const err = intervalError(body.intervalDays)
+    if (err) return c.json({ error: err }, 400)
+    if (body.schedule != null) return c.json({ error: 'intervalDays and schedule are mutually exclusive' }, 400)
+    const existing = await c.env.DB.prepare('SELECT linked_kind FROM habits WHERE id = ? AND user_id = ?')
+      .bind(c.req.param('id'), userId)
+      .first<{ linked_kind: string | null }>()
+    if (existing?.linked_kind) return c.json({ error: 'a Wallet-linked habit cannot repeat every N days' }, 400)
+    body.schedule = null
+    body.targetPerWeek = weeklyTargetFor(body.intervalDays as number)
+  } else if (body.schedule != null && !('intervalDays' in body)) {
+    body.intervalDays = null
+  }
   if ('schedule' in body && body.schedule !== null && typeof body.schedule === 'object') {
     body.schedule = JSON.stringify(body.schedule)
   }
