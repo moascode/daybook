@@ -1,6 +1,6 @@
 import { AlertTriangle, Flame, Sparkles } from 'lucide-react'
 import { useToastStore } from '@/stores/toast.store'
-import { isDueOn, keptAndDue, keptRate28 } from './habitMath'
+import { habitDueWeekdays, keptAndDue, keptRate28 } from './habitMath'
 import type { Habit } from '@/types/habits.types'
 
 interface WorthKnowingRow {
@@ -41,7 +41,7 @@ export function WorthKnowingCard({
         title: `"${weakest.habit.name}" is at ${Math.round(weakest.rate * 100)}%`,
         sub: `kept ${kept} of ${due} due days`,
         action:
-          weakest.habit.targetPerWeek > 1
+          weakest.habit.targetPerWeek > 1 && weakest.habit.intervalDays === null
             ? {
                 label: 'Lower it',
                 onClick: async () => {
@@ -71,7 +71,7 @@ export function WorthKnowingCard({
     // unscheduled day as a 0 that drags the average down, so a 100%-kept
     // Mon–Fri habit scored 5/7 ≈ 0.71 and never qualified for this row.
     const aboveTwelveWeeks = habits.filter((h) => {
-      const dueWeekdays = [0, 1, 2, 3, 4, 5, 6].filter((wd) => isDueOn(h.schedule, wd))
+      const dueWeekdays = habitDueWeekdays(h)
       if (dueWeekdays.length === 0) return false
       const avg = dueWeekdays.reduce((s, wd) => s + h.stats.weekdayRates[wd], 0) / dueWeekdays.length
       return avg >= 0.8

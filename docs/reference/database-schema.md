@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-12
+> **Status:** Live · **Last verified:** 2026-10-15
 
 # Database schema
 
@@ -460,6 +460,21 @@ ALTER TABLE recurring_transactions ADD COLUMN amount_changed_at TEXT;    -- null
   actually changes `amount` (old value, today's date) — this is price-rise
   source (b); source (a) matches a real charge against the rule and never
   touches these columns.
+
+### Habit "every N days" interval (migration `0030_habit_interval.sql` / `0029_habit_interval.sql` on the server)
+
+```sql
+ALTER TABLE habits ADD COLUMN interval_days INTEGER DEFAULT NULL; -- every N days (N>=2); NULL = use schedule
+```
+
+- A fixed cycle anchored on the habit's `created_at` business date: day D is due
+  iff `D >= anchor` and `daysBetween(anchor, D) % interval_days === 0`.
+- Mutually exclusive with `schedule`: `POST`/`PATCH /habits` store `schedule`
+  NULL whenever `interval_days` is set (and clear `interval_days` when a weekday
+  schedule is set). Accepted range is an integer 2..365, else 400. A linked
+  (`wallet:no-spend`) habit cannot have one.
+- `target_per_week` is derived as `ceil(7 / interval_days)` when an interval is
+  set, so the weekly ring has a sensible denominator.
 
 ### `push_sent_log` kinds (no DDL change)
 
