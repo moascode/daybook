@@ -452,6 +452,20 @@ ALTER TABLE habits ADD COLUMN interval_days INTEGER DEFAULT NULL; -- every N day
 - `target_per_week` is derived as `ceil(7 / interval_days)` when an interval is
   set, so the weekly ring has a sensible denominator.
 
+### `push_sent_log` kinds (no DDL change)
+
+`push_sent_log (user_id, kind, sent_on)` (PK on all three, migration
+`0020_push_subscriptions.sql`) holds two kinds of rows:
+
+- `morning` / `evening` — the scheduled digest's once-per-slot-per-day guard.
+- `nudge:<taskId>` — a task nudge (`POST /api/tasks/:id/nudge`). `user_id` is the
+  **assignee** (the person being pinged), `sent_on` is the business-timezone day.
+  The PK is the one-nudge-per-task-per-day guard (`ON CONFLICT DO NOTHING`,
+  `meta.changes === 0` → 409 "Already nudged today"). `notificationsFor()` reads
+  today's `nudge:%` rows back, joined to tasks still open and still assigned to
+  that user. `GET /api/tasks/nudged-today` returns the caller's own nudged task
+  ids (joined through `tasks.user_id`) so the UI can show "Nudged" after a reload.
+
 ---
 
 ## 7. TypeScript Types

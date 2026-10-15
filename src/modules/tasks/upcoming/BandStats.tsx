@@ -4,6 +4,10 @@ import type { Task } from '@/types/tasks.types'
 
 interface BandStatsProps {
   bandTitleText: string
+  /** What the big figure counts across: "seven days", "fourteen days", "31 days". */
+  spanLabel: string
+  /** Name the heaviest day with its date (needed once the range spans more than one week). */
+  datedHeaviestDay: boolean
   scheduledCount: number
   undatedCount: number
   isHeaviestDayGenuine: boolean
@@ -21,7 +25,7 @@ function summarizeTaskNames(list: Task[], max = 3): string {
 }
 
 /**
- * The "This week" / "Next week" / date-range summary band (FEAT-057 mockup):
+ * The "This week" / "Next week" / fortnight / month summary band (FEAT-057 mockup):
  * hard deadlines, recurring, and — only when there's honest history to
  * compare against — "Your usual week". `.band-stat` is capped to a fixed
  * width and its `.s` sub-line ellipsises to one line (layout.css) so a long
@@ -29,6 +33,8 @@ function summarizeTaskNames(list: Task[], max = 3): string {
  */
 export function BandStats({
   bandTitleText,
+  spanLabel,
+  datedHeaviestDay,
   scheduledCount,
   undatedCount,
   isHeaviestDayGenuine,
@@ -51,7 +57,7 @@ export function BandStats({
         </div>
         {isHeaviestDayGenuine && (
           <span className="chip chip-warn ml-auto" data-testid="upcoming-heaviest-chip">
-            {format(parseISO(heaviestDayDate), 'EEEE')} is doing too much
+            {format(parseISO(heaviestDayDate), datedHeaviestDay ? 'EEEE d MMM' : 'EEEE')} is doing too much
           </span>
         )}
       </div>
@@ -59,7 +65,7 @@ export function BandStats({
         <div className="band-main">
           <div className="band-fig">
             <span className="v">{scheduledCount}</span>
-            <span className="k">tasks across seven days</span>
+            <span className="k">tasks across {spanLabel}</span>
           </div>
         </div>
         <div className="band-stats">

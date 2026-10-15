@@ -123,7 +123,7 @@ server/
 ├── routes/
 │   ├── health.ts                    ← GET /api/health (public)
 │   ├── auth.ts                      ← /api/auth/signup|login|logout|me + requireAuth (public)
-│   ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
+│   ├── tasks.ts                     ← /api/tasks (incl. /tasks/:id/nudge, /tasks/nudged-today), /api/task-templates (auth)
 │   ├── wallet.ts                    ← /api/accounts, /transactions, /categories,
 │   │                                   /budgets, /recurring-transactions, /goals (auth)
 │   ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
@@ -168,7 +168,7 @@ worker/
 └── routes/
     ├── health.ts                    ← GET /api/health (public)
     ├── auth.ts                      ← signup/login/logout/me/change-password + requireAuth
-    ├── tasks.ts                     ← /api/tasks, /api/task-templates (auth)
+    ├── tasks.ts                     ← /api/tasks (incl. /tasks/:id/nudge, /tasks/nudged-today), /api/task-templates (auth)
     ├── settings.ts                  ← GET /api/settings, PUT /api/settings/:key (auth)
     ├── groups.ts                    ← /api/groups, /api/invites, /api/users/search (auth)
     ├── settlements.ts               ← /api/settlements, /api/transaction-shares/:id/* (auth)
