@@ -30,6 +30,8 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.17.0 | 2026-10-15 | Tasks production pass: every page to mockup parity — fixed-column rows, Outline scoped to its list, subtask leak, assignee edit/reschedule access, habit stat fixes, Upcoming board/week nav, Assigned/Completed/Habits rebuilt (#265) |
+| v3.16.1 | 2026-10-12 | All tasks rows on a fixed-column grid; titles wrap (#264) |
 | v3.16.0 | 2026-10-12 | All tasks page adopts the mockup with every control live; quick add opens the New task modal; self-assign; drag from Waiting for a date (#261–#262) |
 | v3.15.0 | 2026-10-12 | FEAT-024 three-way settlement + minimum-transfer plan; BUG-002 impossible dates rejected; BUG-003 day headers pinned; Tasks + Wallet design parity (FEAT-054–070); Today refetch race (#236–#260) |
 | v3.14.0 | 2026-09-22 | Task detail modal, Tasks composer fixes, BUG-013 grid fix (#231–#235) |
@@ -1018,3 +1020,20 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
 - **#262**, `/tasks/all` rebuilt to `proposal-v2/tasks-all.html`, with every control live: Open/Done/All, Group by list, a sort menu, Load more (25 rows), the mockup row (`AllTasksRow.tsx`, actions in a kebab), and the Completion and "Where tasks go to die" cards as hand-drawn SVG. The age card's Review applies an "Older than three months" filter. `TaskListRow` now serves only Assigned to me and list detail.
 - The deploy took three attempts of release run 38251648743. Wrangler's Deploy step hit Cloudflare API errors twice: a malformed 200 on `…/deployments`, then a 504 on `…/secrets`, during a Cloudflare partial outage. Each time production stayed on v3.15.0. `gh run rerun` with no re-tag was enough.
 - Lesson: `npx tsc --noEmit -p .` checks nothing here. The root `tsconfig.json` is references-only, so use `tsc -b`.
+
+## 2026-10-15 — Tasks production pass, shipped as v3.17.0 (PR #265)
+
+- Eight read-only agents audited every Tasks page against `docs/reference/proposal-v2/`, then six workstreams fixed them in parallel worktrees and merged into one integration branch.
+- **Every task row** now uses the mockup's fixed-column grid (`.task--cols`) via shared helpers in `src/modules/tasks/taskRowFormat.ts`. Row actions moved into one ⋯ menu.
+- **Bugs fixed:**
+  - A list's Outline showed every task.
+  - Undated subtasks leaked into the flat views.
+  - PATCH and reschedule were owner-only while complete and delete weren't; one `canActOnTask()` predicate now covers all four.
+  - Habits counted the days before a habit was created and an unticked today as misses.
+  - Upcoming's "Hard deadlines" counted everything, and its Balance card suggested past days.
+  - Task age used the UTC date.
+- **Process lessons:**
+  - Agent worktrees are created from `main`, not from the session's current branch. A shared base branch has to be merged into each one explicitly.
+  - Agents running in parallel must not run Playwright, because they share port 5173.
+  - The CI "empty `[WebServer] ERROR`" crash is the server process being killed (the uploaded wrangler log just stops). The upload path was fixed in #265 to include `/github/home`; the out-of-memory root cause is filed as a follow-up.
+
