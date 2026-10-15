@@ -26,7 +26,7 @@ export function WeekHead({ monday, weekOffset, onPrev, onNext, onThisWeek }: Wee
           {rangeLabel}
         </span>
       </div>
-      <div className="page-actions">
+      <div className="page-actions page-actions--nav">
         <button
           type="button"
           className="icon-btn"

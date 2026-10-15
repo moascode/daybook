@@ -79,6 +79,9 @@
   .g2, .g3, .g4 { grid-template-columns: repeat(2, minmax(0,1fr)); gap: var(--s3); }
   .g-1-on-mobile { grid-template-columns: minmax(0,1fr) !important; }
   .page-actions { display: none; }          /* replaced by the FAB */
+  /* …except navigation, which the FAB can't stand in for (Upcoming's
+     week arrows): without it a phone could never leave the current week. */
+  .page-actions.page-actions--nav { display: flex; }
   .summary { gap: var(--s5); }
   .summary-spark { max-width: none; width: 100%; }
 }
@@ -251,6 +254,9 @@
 @media (max-width: 900px) {
   .band-stats { margin-left: 0; padding-left: 0; border-left: none; padding-top: var(--s4);
                 border-top: 1px solid rgb(var(--line-subtle)); width: 100%; justify-content: space-between; gap: var(--s4); }
+  /* Share the row instead of each claiming 180px, so a names line ellipsises
+     inside the card rather than running past its edge on a phone. */
+  .band-stat { max-width: none; min-width: 0; flex: 1 1 0; }
 }
 
 /* a task list fills its row — the space below the last task is room for more */
