@@ -9,6 +9,7 @@
  */
 
 import { test, expect } from '@playwright/test'
+import { format, parseISO } from 'date-fns'
 import { newAppPage, businessToday } from './helpers'
 
 const API = '/api'
@@ -99,50 +100,77 @@ test.describe('91 — Tasks upcoming week board', () => {
   test('Balance the week card shows candidates and a single Move applies just that task', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
     const monday = businessWeekMonday()
-    const tuesday = addDaysIso(monday, 1)
-    const friday = addDaysIso(monday, 4)
+    const today = businessToday()
 
-    // Three tasks on Tuesday; one each on every other day except Friday, so
-    // Friday is the SOLE quietest day — the board's tie-break for "quietest"
-    // keeps the first zero-count day in week order, so leaving more than one
-    // day at zero would make the target ambiguous and this assertion flaky
-    // by construction, not by the app's behaviour.
-    let firstTuesdayTaskId = ''
-    for (const content of ['Tue task 1', 'Tue task 2', 'Tue task 3']) {
-      const res = await page.request.post(`${API}/tasks`, { data: { content, dueDate: tuesday } })
-      const task = await res.json()
-      if (!firstTuesdayTaskId) firstTuesdayTaskId = task.id
+    // Balancing only ever considers today-or-later days (TasksUpcomingPage.tsx's
+    // `openDays` filter — a day that's already gone can't take a task, so it's
+    // never the busiest OR the quietest candidate). Fixed Tuesday/Friday
+    // offsets only produced a meaningful scenario when "today" fell on or
+    // before Tuesday; pick the busiest/quietest pair from the days that are
+    // actually still open THIS week instead of hardcoding them.
+    let todayOffset = 0
+    for (let i = 0; i < 7; i++) {
+      if (addDaysIso(monday, i) === today) {
+        todayOffset = i
+        break
+      }
     }
-    for (const [label, offset] of [['Mon', 0], ['Wed', 2], ['Thu', 3], ['Sat', 5], ['Sun', 6]] as const) {
+    const openOffsets = [0, 1, 2, 3, 4, 5, 6].filter((i) => i >= todayOffset)
+    // Needs the busiest day, the quietest day, AND at least one filler day in
+    // between so the quietest is unambiguous (every other open day nonzero) —
+    // fewer than 3 open days this week (today is Fri/Sat/Sun) can't build that
+    // without ambiguity, so skip rather than assert something flaky by
+    // construction, not by the app's behaviour.
+    test.skip(openOffsets.length < 3, 'Needs at least 3 open (today-or-later) days this week')
+
+    const busiestOffset = openOffsets[0]
+    const quietestOffset = openOffsets[openOffsets.length - 1]
+    const fillerOffsets = openOffsets.slice(1, -1)
+    const busiest = addDaysIso(monday, busiestOffset)
+    const quietest = addDaysIso(monday, quietestOffset)
+
+    // Three tasks on the busiest day; one each on every OTHER open day except
+    // the quietest, so the quietest is the SOLE zero-count day — the board's
+    // tie-break for "quietest" keeps the first zero-count day in week order,
+    // so leaving more than one day at zero would make the target ambiguous.
+    let firstBusiestTaskId = ''
+    for (const content of ['Busy task 1', 'Busy task 2', 'Busy task 3']) {
+      const res = await page.request.post(`${API}/tasks`, { data: { content, dueDate: busiest } })
+      const task = await res.json()
+      if (!firstBusiestTaskId) firstBusiestTaskId = task.id
+    }
+    for (const offset of fillerOffsets) {
       await page.request.post(`${API}/tasks`, {
-        data: { content: `${label} filler`, dueDate: addDaysIso(monday, offset) },
+        data: { content: `Filler ${offset}`, dueDate: addDaysIso(monday, offset) },
       })
     }
 
     await page.goto('/tasks/upcoming')
-    await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('3')
-    await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('0')
+    await expect(page.getByTestId(`upcoming-day-count-${busiest}`)).toHaveText('3')
+    await expect(page.getByTestId(`upcoming-day-count-${quietest}`)).toHaveText('0')
 
     // FEAT-057: the card shows itself automatically (gap >= 2, no button
     // click needed) with one candidate row per task (floor(gap/2) of them),
     // each independently movable — not a single confirm/cancel batch.
     const card = page.getByTestId('upcoming-balance-card')
     await expect(card).toBeVisible()
-    await expect(card).toContainText('Tuesday')
-    await expect(card).toContainText('Friday')
+    const busiestName = format(parseISO(busiest), 'EEEE')
+    const quietestName = format(parseISO(quietest), 'EEEE')
+    await expect(card).toContainText(busiestName)
+    await expect(card).toContainText(quietestName)
 
-    const moveBtn = page.getByTestId(`upcoming-balance-move-${firstTuesdayTaskId}`)
+    const moveBtn = page.getByTestId(`upcoming-balance-move-${firstBusiestTaskId}`)
     await expect(moveBtn).toBeVisible()
     await moveBtn.click()
 
-    await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('2')
-    await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('1')
+    await expect(page.getByTestId(`upcoming-day-count-${busiest}`)).toHaveText('2')
+    await expect(page.getByTestId(`upcoming-day-count-${quietest}`)).toHaveText('1')
 
     // Same persistence check as the DatePicker-schedule test above: confirm
     // the balance move survives a reload, not just the optimistic local state.
     await page.reload()
-    await expect(page.getByTestId(`upcoming-day-count-${tuesday}`)).toHaveText('2')
-    await expect(page.getByTestId(`upcoming-day-count-${friday}`)).toHaveText('1')
+    await expect(page.getByTestId(`upcoming-day-count-${busiest}`)).toHaveText('2')
+    await expect(page.getByTestId(`upcoming-day-count-${quietest}`)).toHaveText('1')
 
     // Week is now within 1 of itself everywhere plausible for this seed
     // (gap between the new max and min may still be >= 2 depending on the
@@ -254,8 +282,9 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(row).toBeVisible()
     await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('0')
 
+    const column = page.getByTestId(`upcoming-day-column-${wednesday}`)
     const from = await row.boundingBox()
-    const to = await page.getByTestId(`upcoming-day-column-${wednesday}`).boundingBox()
+    const to = await column.boundingBox()
     if (!from || !to) throw new Error('Expected the row and the column to have a layout box')
 
     // A nudge past the 8px activation distance, released over the waiting
@@ -267,10 +296,76 @@ test.describe('91 — Tasks upcoming week board', () => {
     await expect(row).toBeVisible()
     await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('0')
 
-    await page.mouse.move(from.x + 40, from.y + from.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 15 })
-    await page.mouse.up()
+    // The real drag. `page.mouse.*` drives Chrome's native OS-level input
+    // pipeline, and in this headless environment that consistently lost a
+    // race to the browser's own native text-selection gesture instead of
+    // ever engaging dnd-kit's PointerSensor — confirmed with an isolated
+    // repro outside this suite: a mousedown-then-steps-interpolated-move
+    // over the row never set dnd-kit's `isDragging` state, `getSelection()`
+    // showed an active selection instead, and no amount of pacing (manual
+    // per-step pauses, a bigger step count, a small lead-in move before the
+    // jump, waiting on the target's hover ring before releasing) closed that
+    // race — every variant above was tried and still lost it. Dispatching
+    // the same pointerdown/pointermove/pointerup sequence a real drag
+    // produces, but as DOM events (bypassing Chrome's native mouse pipeline
+    // entirely), exercises the exact same dnd-kit listeners a real user's
+    // drag does without competing against the browser's own selection
+    // handling — and is what the isolated repro confirmed actually works,
+    // once the final move is given a real animation-frame tick to let
+    // dnd-kit's (React-state-driven, rAF-gated) collision detection register
+    // the drop target before release — same root cause `page.mouse`'s lack
+    // of inter-event yield ran into.
+    await page.evaluate(
+      ({ fromX, fromY, toX, toY }) => {
+        function fire(type: string, el: Element | Document, x: number, y: number, buttons: number) {
+          const ev = new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            clientX: x,
+            clientY: y,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true,
+            button: 0,
+            buttons,
+          })
+          el.dispatchEvent(ev)
+        }
+        const row = document.querySelector<HTMLElement>('[data-testid^="upcoming-waiting-row-"]')
+        if (!row) throw new Error('waiting row not found')
+        fire('pointermove', row, fromX, fromY, 0)
+        fire('pointerdown', row, fromX, fromY, 1)
+        const steps = 15
+        for (let i = 1; i <= steps; i++) {
+          const x = fromX + ((toX - fromX) * i) / steps
+          const y = fromY + ((toY - fromY) * i) / steps
+          fire('pointermove', document, x, y, 1)
+        }
+        return new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      },
+      { fromX: from.x + 40, fromY: from.y + from.height / 2, toX: to.x + to.width / 2, toY: to.y + to.height / 2 },
+    )
+    // The column's own hover-state ring class is the real signal that the
+    // drop target registered — proof the drag actually engaged, not just
+    // that the pointer passed over it.
+    await expect(column).toHaveClass(/ring-2/)
+    await page.evaluate(({ toX, toY }) => {
+      document.dispatchEvent(
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: toX,
+          clientY: toY,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+        }),
+      )
+    }, { toX: to.x + to.width / 2, toY: to.y + to.height / 2 })
 
     await expect(page.getByTestId(`upcoming-day-count-${wednesday}`)).toHaveText('1')
     await expect(page.getByTestId(`upcoming-card-${task.id}`)).toContainText('Dragged from waiting')
