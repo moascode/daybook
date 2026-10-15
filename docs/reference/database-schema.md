@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-12
+> **Status:** Live · **Last verified:** 2026-10-15
 
 # Database schema
 
@@ -414,6 +414,30 @@ ALTER TABLE goals ADD COLUMN note        TEXT;  -- nullable card subtitle, trimm
   and `is_non_cash = 0` filter as `GET /accounts/balances`, bucketed by
   `substr(date, 1, 7)`.
 
+### Task reminders (migration `0029_task_remind_at.sql` / `0028_task_remind_at.sql` on the server, FEAT-055)
+
+```sql
+ALTER TABLE tasks ADD COLUMN remind_at TEXT DEFAULT NULL; -- 'YYYY-MM-DDTHH:MM' in business time (Asia/Kuala_Lumpur)
+CREATE INDEX IF NOT EXISTS idx_tasks_remind_at ON tasks(remind_at);
+```
+
+- A nudge, not a deadline: a task with `remind_at` and no `due_date` is never
+  overdue. `POST`/`PATCH /tasks` accept `remindAt` (strict
+  `YYYY-MM-DDTHH:MM`, else 400; `null` clears) and `GET` returns `remind_at`.
+  Client type: `Task.remindAt`.
+- Stored as business-clock text so it compares lexically with
+  `businessMinuteStr()` (`worker/lib.ts`). `view=today` also returns open,
+  undated tasks whose `remind_at` date is today.
+- Delivery (`*/15 * * * *` cron → `runReminders`, `worker/scheduled.ts`): an
+  open task with `remind_at <= now` and a date no older than yesterday is
+  claimed in `push_sent_log` (`kind = 'reminder:<task id>'`, `sent_on` = the
+  reminder's date; recipient = `COALESCE(assignee_id, user_id)`) and pushed
+  payload-less to that user's live subscriptions. `notificationsFor` lists due
+  reminders first ("Reminder: <content>" / "<n> reminders").
+- `GET /tasks/:id/children` returns a task's direct children (the detail
+  modal's checklist); the flat `view=` queries still hide undated, unassigned
+  subtasks.
+
 ### Recurring pause + price tracking (migration `0027_recurring_pause_price.sql` / `0026_recurring_pause_price.sql` on the server, FEAT-068)
 
 ```sql
@@ -455,6 +479,35 @@ ALTER TABLE tasks ADD COLUMN timer_started_at TEXT DEFAULT NULL; -- UTC datetime
 - `POST /tasks/:id/complete` (completing, not un-completing) banks and clears a
   running timer in the same UPDATE.
 - Types: `Task.trackedMinutes`, `Task.timerStartedAt` (`src/types/tasks.types.ts`).
+
+### Habit "every N days" interval (migration `0030_habit_interval.sql` / `0029_habit_interval.sql` on the server)
+
+```sql
+ALTER TABLE habits ADD COLUMN interval_days INTEGER DEFAULT NULL; -- every N days (N>=2); NULL = use schedule
+```
+
+- A fixed cycle anchored on the habit's `created_at` business date: day D is due
+  iff `D >= anchor` and `daysBetween(anchor, D) % interval_days === 0`.
+- Mutually exclusive with `schedule`: `POST`/`PATCH /habits` store `schedule`
+  NULL whenever `interval_days` is set (and clear `interval_days` when a weekday
+  schedule is set). Accepted range is an integer 2..365, else 400. A linked
+  (`wallet:no-spend`) habit cannot have one.
+- `target_per_week` is derived as `ceil(7 / interval_days)` when an interval is
+  set, so the weekly ring has a sensible denominator.
+
+### `push_sent_log` kinds (no DDL change)
+
+`push_sent_log (user_id, kind, sent_on)` (PK on all three, migration
+`0020_push_subscriptions.sql`) holds two kinds of rows:
+
+- `morning` / `evening` — the scheduled digest's once-per-slot-per-day guard.
+- `nudge:<taskId>` — a task nudge (`POST /api/tasks/:id/nudge`). `user_id` is the
+  **assignee** (the person being pinged), `sent_on` is the business-timezone day.
+  The PK is the one-nudge-per-task-per-day guard (`ON CONFLICT DO NOTHING`,
+  `meta.changes === 0` → 409 "Already nudged today"). `notificationsFor()` reads
+  today's `nudge:%` rows back, joined to tasks still open and still assigned to
+  that user. `GET /api/tasks/nudged-today` returns the caller's own nudged task
+  ids (joined through `tasks.user_id`) so the UI can show "Nudged" after a reload.
 
 ---
 

@@ -1,4 +1,4 @@
-import { todayStr, businessDatePlus } from '../lib.ts'
+import { todayStr, businessDatePlus, businessMinuteStr } from '../lib.ts'
 import { EFFECTIVE_AMOUNT_SQL } from './sharing.ts'
 
 // What Daybook is willing to interrupt you about (v3 P4).
@@ -38,6 +38,47 @@ function money(n: number): string {
   return `RM${n.toFixed(2)}`
 }
 
+/**
+ * Task nudges received today (a nudge is a `push_sent_log` row of kind
+ * `nudge:<taskId>` keyed on the assignee). Only nudges whose task is still open
+ * and still assigned to this user count — completing or reassigning the task
+ * retires its nudge without any cleanup. Today-only is by design: a nudge is a
+ * "now" ping, not a standing reminder (tasksDue covers that).
+ */
+async function nudges(db: D1Database, userId: string): Promise<Notification | null> {
+  const { results } = await db
+    .prepare(
+      `SELECT t.content AS content, u.username AS owner_name
+         FROM push_sent_log l
+         JOIN tasks t ON l.kind = 'nudge:' || t.id
+         JOIN users u ON u.id = t.user_id
+        WHERE l.user_id = ?1 AND l.sent_on = ?2 AND l.kind LIKE 'nudge:%'
+          AND t.is_completed = 0 AND t.assignee_id = ?1
+        ORDER BY l.rowid DESC`,
+    )
+    .bind(userId, todayStr())
+    .all<{ content: string; owner_name: string }>()
+  const n = results.length
+  if (n === 0) return null
+  if (n === 1) {
+    return {
+      kind: 'nudge',
+      title: `${results[0].owner_name} nudged you`,
+      body: results[0].content || 'Untitled task',
+      url: '/tasks/assigned',
+      attention: true,
+    }
+  }
+  const from = Array.from(new Set(results.map((r) => r.owner_name)))
+  return {
+    kind: 'nudge',
+    title: `${n} nudges`,
+    body: `${from.length === 1 ? from[0] : `${from.length} people`} nudged you about ${results[0].content || 'a task'} and ${n - 1} more.`,
+    url: '/tasks/assigned',
+    attention: true,
+  }
+}
+
 /** Tasks due today or already overdue, not completed. */
 async function tasksDue(db: D1Database, userId: string): Promise<Notification | null> {
   const row = await db
@@ -54,6 +95,34 @@ async function tasksDue(db: D1Database, userId: string): Promise<Notification | 
     kind: 'tasks',
     title: n === 1 ? '1 task due' : `${n} tasks due`,
     body: n === 1 ? 'One thing is due today or overdue.' : `${n} things are due today or overdue.`,
+    url: '/tasks',
+    attention: true,
+  }
+}
+
+/**
+ * Reminders whose time has come (FEAT-055): `remind_at` is in the past but on
+ * today's date, task still open. Yesterday's missed ones are not re-announced —
+ * a reminder is a nudge for a moment, not a debt. Goes to the owner, or the
+ * assignee when the task was handed to someone (same rule runReminders uses).
+ */
+async function dueReminders(db: D1Database, userId: string): Promise<Notification | null> {
+  const { results } = await db
+    .prepare(
+      `SELECT content FROM tasks
+        WHERE COALESCE(assignee_id, user_id) = ? AND is_completed = 0
+          AND remind_at IS NOT NULL AND remind_at <= ? AND substr(remind_at, 1, 10) = ?
+        ORDER BY remind_at ASC`,
+    )
+    .bind(userId, businessMinuteStr(), todayStr())
+    .all<{ content: string }>()
+  const n = results.length
+  if (n === 0) return null
+  const first = results[0].content || 'Untitled task'
+  return {
+    kind: 'reminders',
+    title: n === 1 ? `Reminder: ${first}` : `${n} reminders`,
+    body: n === 1 ? 'A reminder you set has come up.' : `${n} reminders you set have come up.`,
     url: '/tasks',
     attention: true,
   }
@@ -248,7 +317,7 @@ export async function notificationsFor(
   userId: string,
   slot?: Slot,
 ): Promise<Notification[]> {
-  const morning = [captureSilence, pendingInvites, openClaims, capturesWaiting, billsDue, budgetThreshold, tasksDue]
+  const morning = [dueReminders, nudges, captureSilence, pendingInvites, openClaims, capturesWaiting, billsDue, budgetThreshold, tasksDue]
   const evening = [todaySpend]
   const checks = slot === 'morning' ? morning : slot === 'evening' ? evening : [...morning, ...evening]
 

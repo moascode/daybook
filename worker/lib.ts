@@ -297,3 +297,25 @@ export async function ownedIdSet(
     .all<{ id: string }>()
   return new Set(results.map((r) => r.id))
 }
+
+/**
+ * The business-timezone clock to the minute, in the exact shape `tasks.remind_at`
+ * stores ("YYYY-MM-DDTHH:MM") so the two compare lexically. `at` exists for
+ * tests; production callers pass nothing.
+ */
+export function businessMinuteStr(at: Date = new Date()): string {
+  const parts = dateTimeFmt.formatToParts(at)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value
+  // Some runtimes render midnight as hour "24" under hour12:false.
+  const hour = get('hour') === '24' ? '00' : get('hour')
+  return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}`
+}
+
+/** Strict shape of `tasks.remind_at`: a real calendar date and a 00:00-23:59 time. */
+export function isValidRemindAt(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const m = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)$/.exec(value)
+  if (!m) return false
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3])
+}

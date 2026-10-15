@@ -1,7 +1,7 @@
 import type { Env } from './types.ts'
-import { todayStr } from './lib.ts'
+import { todayStr, businessMinuteStr } from './lib.ts'
 import { notificationsFor, type Slot } from './lib/notifications.ts'
-import { sendPush } from './lib/webpush.ts'
+import { pushToUser } from './lib/pushToUser.ts'
 
 /**
  * The scheduled digest (v3 P4).
@@ -25,22 +25,13 @@ import { sendPush } from './lib/webpush.ts'
 export async function runDigest(env: Env, slot: Slot): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return
 
-  const subject = env.VAPID_SUBJECT || 'mailto:daybook@moascode.dev'
   const today = todayStr()
 
   const { results: subs } = await env.DB.prepare(
-    `SELECT id, user_id, endpoint FROM push_subscriptions WHERE expired_at IS NULL`,
-  ).all<{ id: string; user_id: string; endpoint: string }>()
-  if (subs.length === 0) return
+    `SELECT DISTINCT user_id FROM push_subscriptions WHERE expired_at IS NULL`,
+  ).all<{ user_id: string }>()
 
-  const byUser = new Map<string, { id: string; endpoint: string }[]>()
-  for (const s of subs) {
-    const list = byUser.get(s.user_id) ?? []
-    list.push({ id: s.id, endpoint: s.endpoint })
-    byUser.set(s.user_id, list)
-  }
-
-  for (const [userId, endpoints] of byUser) {
+  for (const { user_id: userId } of subs) {
     let pending
     try {
       pending = await notificationsFor(env.DB, userId, slot)
@@ -62,20 +53,58 @@ export async function runDigest(env: Env, slot: Slot): Promise<void> {
       .run()
     if (claim.meta.changes === 0) continue
 
-    for (const { id, endpoint } of endpoints) {
-      const res = await sendPush(endpoint, subject, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY)
-      if (res.gone) {
-        await env.DB.prepare(`UPDATE push_subscriptions SET expired_at = datetime('now') WHERE id = ?`)
-          .bind(id)
-          .run()
-      } else if (res.ok) {
-        await env.DB.prepare(`UPDATE push_subscriptions SET last_sent_at = datetime('now') WHERE id = ?`)
-          .bind(id)
-          .run()
-      } else {
-        // Transient: leave it alone and let the next slot try again.
-        console.error('digest: push failed', endpoint, res.status)
-      }
-    }
+    await pushToUser(env, userId)
   }
+}
+
+export interface ReminderRun {
+  /** Reminders whose time had come and which were still open. */
+  due: number
+  /** Of those, how many this run claimed (the rest had already been sent). */
+  claimed: number
+  /** Pushes the push service accepted. */
+  pushed: number
+}
+
+/**
+ * The reminder sweep (FEAT-055), run every 15 minutes.
+ *
+ * A task's `remind_at` ('YYYY-MM-DDTHH:MM', business time) has passed, the
+ * task is still open, and its date is no older than yesterday — a reminder
+ * that old was missed, and announcing it now would be noise, not help.
+ * `push_sent_log` (kind `reminder:<task id>`, dated by the reminder's own day)
+ * makes each reminder fire at most once even if the cron overlaps or retries.
+ * The recipient is the assignee when there is one, else the owner. `now` is a
+ * business-time minute string, for tests.
+ */
+export async function runReminders(env: Env, now: string = businessMinuteStr()): Promise<ReminderRun> {
+  const run: ReminderRun = { due: 0, claimed: 0, pushed: 0 }
+  const yesterday = new Date(`${now.slice(0, 10)}T00:00:00Z`)
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  const earliest = `${yesterday.toISOString().slice(0, 10)}T00:00`
+
+  const { results: due } = await env.DB.prepare(
+    `SELECT id, COALESCE(assignee_id, user_id) AS recipient, substr(remind_at, 1, 10) AS day
+       FROM tasks
+      WHERE is_completed = 0 AND remind_at IS NOT NULL AND remind_at <= ? AND remind_at >= ?`,
+  )
+    .bind(now, earliest)
+    .all<{ id: string; recipient: string; day: string }>()
+  run.due = due.length
+
+  for (const { id, recipient, day } of due) {
+    // Claimed even without VAPID keys, so configuring push later never
+    // replays a backlog of stale reminders.
+    const claim = await env.DB.prepare(
+      `INSERT INTO push_sent_log (user_id, kind, sent_on) VALUES (?, ?, ?)
+       ON CONFLICT (user_id, kind, sent_on) DO NOTHING`,
+    )
+      .bind(recipient, `reminder:${id}`, day)
+      .run()
+    if (claim.meta.changes === 0) continue
+    run.claimed++
+    // pushToUser is a no-op returning 0 when VAPID keys are not configured.
+    run.pushed += await pushToUser(env, recipient)
+  }
+  return run
 }

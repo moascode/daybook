@@ -76,6 +76,11 @@ test('deleting an empty task via Backspace also shows the undo toast', async () 
   await page.getByRole('button', { name: 'New task' }).first().click()
   await expect(page.getByRole('textbox', { name: 'Task content' })).toHaveCount(countBefore + 1)
 
+  // Focus lands a beat after the row renders (see 01-tasks' Backspace test);
+  // pressing inside that gap sends the key to <body> and deletes nothing.
+  await expect(page.locator('[aria-label="Task content"]:focus')).toHaveCount(1)
+  await expect(page.locator('[aria-label="Task content"]:focus')).toHaveText('')
+
   // The new editor is focused and empty — Backspace should delete it and show a toast
   await page.keyboard.press('Backspace')
   await page.waitForTimeout(200)

@@ -110,6 +110,15 @@ export function todayDueColumns(task: Task, now: Date = new Date()): DueColumns 
   if (task.isCompleted && task.completedAt) {
     return { relative: formatCompletedTime(task.completedAt), exact: 'Today', state: 'ok' }
   }
+  // FEAT-055: an undated reminder listed on Today reads as its clock time.
+  if (!task.dueDate && task.remindAt) {
+    const time = task.remindAt.slice(11, 16)
+    return {
+      relative: `at ${time}`,
+      exact: task.remindAt.slice(0, 10) === todayISO() ? 'Today' : '—',
+      state: task.remindAt.slice(0, 10) === todayISO() && isTimeAhead(time, now) ? 'soon' : 'ok',
+    }
+  }
   if (!task.dueDate) return { relative: '—', exact: '—', state: 'ok' }
 
   const today = todayISO()
@@ -128,6 +137,24 @@ export function todayDueColumns(task: Task, now: Date = new Date()): DueColumns 
     exact: 'Today',
     state: isTimeAhead(task.dueTime, now) ? 'soon' : 'ok',
   }
+}
+
+/**
+ * A reminder's short label (FEAT-055): "18:00 today", "09:00 tomorrow",
+ * "Thu 09:00" within the next week, "12 Dec 09:00" beyond. `remindAt` is
+ * 'YYYY-MM-DDTHH:MM'; a malformed value yields null so a bad row renders no
+ * chip rather than "Invalid Date".
+ */
+export function reminderLabel(remindAt: string | null): string | null {
+  if (!remindAt || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(remindAt)) return null
+  const date = remindAt.slice(0, 10)
+  const time = remindAt.slice(11, 16)
+  const diff = dayDiff(todayISO(), date)
+  if (diff === 0) return `${time} today`
+  if (diff === 1) return `${time} tomorrow`
+  if (diff === -1) return `${time} yesterday`
+  const d = parseISO(date)
+  return diff > 1 && diff < 7 ? `${format(d, 'EEE')} ${time}` : `${format(d, 'd MMM')} ${time}`
 }
 
 export function recurrenceLabel(task: Task): string | null {

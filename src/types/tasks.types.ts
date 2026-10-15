@@ -54,4 +54,6 @@ export interface Task {
   // except trackedMinutes, which PATCH may set directly.
   trackedMinutes: number
   timerStartedAt: string | null
+  // FEAT-055: 'YYYY-MM-DDTHH:MM' in business time; a nudge, never a deadline.
+  remindAt: string | null
 }

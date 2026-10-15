@@ -13,6 +13,7 @@ interface HabitRow {
   icon: string | null
   target_per_week: number
   schedule: string | null
+  interval_days: number | null
   linked_kind: HabitLinkedKind | null
   archived: number
   created_at: string
@@ -43,6 +44,7 @@ function rowToHabit(row: HabitRow): Habit {
     icon: row.icon,
     targetPerWeek: row.target_per_week,
     schedule: row.schedule ? (JSON.parse(row.schedule) as number[]) : null,
+    intervalDays: row.interval_days,
     linkedKind: row.linked_kind,
     archived: row.archived === 1,
     createdAt: row.created_at,
@@ -92,6 +94,7 @@ export function useHabits() {
       icon?: string | null
       targetPerWeek?: number
       schedule?: number[] | null
+      intervalDays?: number | null
       linkedKind?: HabitLinkedKind | null
     }): Promise<Habit> => {
       let row: HabitRow
@@ -117,6 +120,7 @@ export function useHabits() {
         icon: string | null
         targetPerWeek: number
         schedule: number[] | null
+        intervalDays: number | null
         archived: boolean
       }>,
     ): Promise<void> => {

@@ -12,9 +12,11 @@ import { cn, errorMessage, todayISO } from '@/lib/utils'
 import { avatarClass } from '@/lib/avatar'
 import { dayDiff, recurrenceLabel } from '@/modules/tasks/taskRowFormat'
 import { TaskListRow } from '@/modules/tasks/TaskListRow'
+import { useNudges } from '@/modules/tasks/useNudges'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
 import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
+import { upsertTasks } from '@/modules/tasks/composer/upsertTasks'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
@@ -111,6 +113,7 @@ export function TasksAssignedPage() {
   const [taskFormContent, setTaskFormContent] = useState<string | undefined>(undefined)
   const [taskFormFocusField, setTaskFormFocusField] = useState<'assignee' | undefined>(undefined)
   const navigate = useNavigate()
+  const { nudgedIds, pendingIds, nudgingAll, seedNudged, nudgeOne, nudgeAll } = useNudges()
 
   const openDetail = (task: Task) => {
     setDetailTask(task)
@@ -125,9 +128,11 @@ export function TasksAssignedPage() {
       loadTasks('completed'),
       api.get<Record<string, unknown>[]>('/groups/members').then((rows) => rows.map(mapMember)),
       loadTaskLists(),
+      api.get<{ taskIds: string[] }>('/tasks/nudged-today'),
     ])
-      .then(([assigned, all, done, memberRows]) => {
+      .then(([assigned, all, done, memberRows, , nudged]) => {
         if (cancelled) return
+        seedNudged(nudged.taskIds)
         setWaitingOnYou(assigned)
         setAllOpen(all)
         setCompleted(done)
@@ -515,6 +520,16 @@ export function TasksAssignedPage() {
                     {chip.label}
                   </span>
                 )}
+                <button
+                  type="button"
+                  className="btn btn-quiet btn-sm"
+                  aria-label={`Nudge ${assigneeName} about ${task.content || 'Untitled task'}`}
+                  disabled={nudgedIds.has(task.id) || pendingIds.has(task.id) || nudgingAll}
+                  onClick={() => nudgeOne({ taskId: task.id, assigneeName })}
+                  data-testid={`assigned-nudge-${task.id}`}
+                >
+                  {nudgedIds.has(task.id) ? 'Nudged' : 'Nudge'}
+                </button>
               </div>
             )
           })}
@@ -608,6 +623,7 @@ export function TasksAssignedPage() {
         lists={taskLists}
         coMembers={coMembers}
         onCreateTask={handleCreateTask}
+        onTasksCreated={(created) => setAllOpen((prev) => upsertTasks(prev, created))}
         onOpenHabitModal={handleOpenHabitModal}
         onOpenTaskForm={handleOpenTaskForm}
         onOpenAssignForm={handleOpenAssignForm}
@@ -710,6 +726,19 @@ export function TasksAssignedPage() {
               <aside className="card card-pad c4" data-testid="assigned-out-rail">
                 <div className="card-head">
                   <div className="card-title">You assigned out</div>
+                  {handedOut.length > 0 && (
+                    <button
+                      type="button"
+                      className="section-action"
+                      disabled={nudgingAll}
+                      onClick={() =>
+                        nudgeAll(handedOut.map(({ task, assigneeName }) => ({ taskId: task.id, assigneeName })))
+                      }
+                      data-testid="assigned-nudge-all"
+                    >
+                      {nudgingAll ? 'Nudging…' : 'Nudge all ›'}
+                    </button>
+                  )}
                 </div>
                 {renderHandedOut(false)}
               </aside>

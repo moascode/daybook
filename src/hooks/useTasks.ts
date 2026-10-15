@@ -36,7 +36,7 @@ const ROOT_ID_KEY = 'daybook.rootId'
 const pendingDeletes = new Set<string>()
 
 /** DB row shape — column names match the SQL schema. */
-interface TaskRow {
+export interface TaskRow {
   id: string
   user_id: string
   parent_id: string | null
@@ -71,10 +71,12 @@ interface TaskRow {
   // Tracked time (migration 0031).
   tracked_minutes?: number
   timer_started_at?: string | null
+  // FEAT-055.
+  remind_at?: string | null
 }
 
 /** Convert a DB row to the in-memory Task interface. */
-function rowToTask(row: TaskRow): Task {
+export function rowToTask(row: TaskRow): Task {
   return {
     id: row.id,
     ownerId: row.user_id,
@@ -101,6 +103,7 @@ function rowToTask(row: TaskRow): Task {
     walletRef: row.wallet_ref ?? null,
     trackedMinutes: row.tracked_minutes ?? 0,
     timerStartedAt: row.timer_started_at ?? null,
+    remindAt: row.remind_at ?? null,
   }
 }
 
@@ -565,6 +568,7 @@ export function useTasks() {
         recurrenceParentId: t.recurrenceParentId ?? null,
         walletRef: t.walletRef ?? null,
         trackedMinutes: t.trackedMinutes,
+        remindAt: t.remindAt ?? null,
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
       })
@@ -693,6 +697,7 @@ export function useTasks() {
           recurrenceParentId: t.recurrenceParentId ?? null,
           walletRef: t.walletRef ?? null,
           trackedMinutes: t.trackedMinutes,
+          remindAt: t.remindAt ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })
