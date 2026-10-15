@@ -77,8 +77,13 @@ export function ConsistencyCard({
   const longest = longestHabit?.stats ?? { bestStreak: 0, bestStreakEnd: null, currentStreak: 0 }
   // Review fix #5a: when that habit's longest-ever run IS its current,
   // still-running streak, "ended {today}" is a fabrication — say "ongoing".
+  // A run through yesterday is still going while today isn't ticked yet —
+  // today is forgiven until it's over, so "ended yesterday" would be wrong.
+  const yesterday = dateMinusDays(today, 1)
   const longestOngoing =
-    longest.bestStreak > 0 && longest.bestStreakEnd === today && longestHabit?.stats.currentStreak === longest.bestStreak
+    longest.bestStreak > 0 &&
+    (longest.bestStreakEnd === today || longest.bestStreakEnd === yesterday) &&
+    longestHabit?.stats.currentStreak === longest.bestStreak
 
   // Weakest day — the single weekday with the lowest POOLED 28-day kept
   // rate (review fix #2: this used to read each habit's 12-week

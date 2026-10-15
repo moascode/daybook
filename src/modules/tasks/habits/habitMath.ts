@@ -2,6 +2,7 @@
 // math shared across the Habits page's cards. Split out of the former
 // monolithic TasksHabitsPage.tsx so each card file can import only what it
 // needs (CLAUDE.md §2 rule 6: one concern per file).
+import { todayISO } from '@/lib/utils'
 import type { Habit, HabitDayEntry } from '@/types/habits.types'
 
 export const COLOR_PRESETS = [
@@ -59,11 +60,18 @@ export function weekdayOf(dateStr: string): number {
 }
 
 /** Kept/due counts over a habit's 28-day grid window (`habit.stats.entries`). */
+/** A due day that counts toward a rate: kept, or already over. Today, not
+ *  yet ticked, isn't a miss — the day isn't finished — so it stays out of
+ *  every kept-rate until it's ticked or tomorrow arrives. */
+export function countsAsDue(e: HabitDayEntry): boolean {
+  return e.due && (e.done || e.date !== todayISO())
+}
+
 export function keptAndDue(entries: HabitDayEntry[]): { kept: number; due: number } {
   let kept = 0
   let due = 0
   for (const e of entries) {
-    if (e.due) {
+    if (countsAsDue(e)) {
       due++
       if (e.done) kept++
     }
@@ -104,7 +112,7 @@ export function pooledWeekdayStats(habits: Habit[]): { due: number[]; kept: numb
   const kept = new Array(7).fill(0)
   for (const h of habits) {
     for (const e of h.stats.entries) {
-      if (!e.due) continue
+      if (!countsAsDue(e)) continue
       const weekday = weekdayOf(e.date)
       due[weekday]++
       if (e.done) kept[weekday]++

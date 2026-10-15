@@ -173,7 +173,11 @@ function computeStatsFromWindow(habit: HabitRow, window: WindowDay[]): HabitStat
     const { date, done, due } = window[idx]!
     const weekday = weekdayOf(date)
 
-    if (due) {
+    // A manual habit's today, not yet ticked, isn't a miss — the day isn't
+    // over (the same forgiveness the current streak gets below). Counting it
+    // made today's weekday read 0% and "the weakest day" every morning.
+    const pendingToday = date === today && !done && !habit.linked_kind
+    if (due && !pendingToday) {
       dueByWeekday[weekday]++
       if (done) keptByWeekday[weekday]++
     }

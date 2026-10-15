@@ -205,7 +205,11 @@ export function CompletedAnalytics({ data }: { data: CompletedAnalyticsData }) {
             <p className="v">
               {longest ? longest.length : 0} day{(longest ? longest.length : 0) === 1 ? '' : 's'}
             </p>
-            {longest && <p className="s">ended {format(parseISO(longest.end), 'd MMMM')}</p>}
+            {longest && (
+              <p className="s">
+                {current.run && longest.end === current.run.end ? 'still going' : `ended ${format(parseISO(longest.end), 'd MMMM')}`}
+              </p>
+            )}
           </div>
           <div className="band-stat">
             <p className="k">Current streak</p>
