@@ -63,7 +63,7 @@ export function dateColumns(task: Task): { exact: string; relative: string; stat
   // Amber marks a time that's actually coming up today; an untimed task due
   // today is ordinary, and tinting a whole day's worth of rows buries the one
   // that matters.
-  if (diff === 0) return { exact: time, relative: 'Today', state: task.dueTime ? 'soon' : 'ok' }
+  if (diff === 0) return { exact: time, relative: 'Today', state: task.dueTime && isTimeAhead(task.dueTime) ? 'soon' : 'ok' }
   if (diff === 1) return { exact: time, relative: 'Tomorrow', state: 'ok' }
   return { exact: time, relative: format(d, diff < 7 ? 'EEE d' : 'd MMM'), state: 'ok' }
 }
