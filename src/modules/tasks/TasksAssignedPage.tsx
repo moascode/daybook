@@ -475,6 +475,98 @@ export function TasksAssignedPage() {
     }
   }
 
+  // The handed-out list, rendered in both views: as the compact rail beside
+  // "Waiting on you" (the mockup's c4 card) and as "From me"'s main list.
+  const renderHandedOut = (framed: boolean) => (
+    <>
+      {handedOut.length === 0 ? (
+        <p className="py-3 text-sm text-fg-subtle" data-testid="assigned-handed-out-empty">
+          You haven't assigned anything to anyone else yet.
+        </p>
+      ) : (
+        <div className={framed ? 'card card-pad' : undefined}>
+          {handedOut.map(({ task, assigneeName }) => {
+            const chip = handedOutChip(task)
+            return (
+              <div key={task.id} className="prow" data-testid={`assigned-handed-out-row-${task.id}`}>
+                <button
+                  type="button"
+                  className={cn('tcheck', task.priority === 'high' && 'pri-high', task.priority === 'med' && 'pri-med')}
+                  aria-label="Mark complete"
+                  onClick={() => handleToggleComplete(task.id)}
+                >
+                  <Check />
+                </button>
+                <span
+                  className={cn('avatar', task.assigneeId ? avatarClass(task.assigneeId) : undefined)}
+                  title={assigneeName}
+                >
+                  {assigneeName.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="pname">{task.content || 'Untitled task'}</div>
+                  <div className="psub">{handedOutStatusLine(task)}</div>
+                </div>
+                {chip && (
+                  <span
+                    className={cn('chip', chip.neg ? 'chip-neg' : 'chip-mute')}
+                    data-testid={`assigned-gone-quiet-${task.id}`}
+                  >
+                    {chip.label}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+          {neverPickedUp.length > 0 && (
+            <>
+              <div className="divider" style={{ marginTop: 'var(--s2)' }} />
+              <div className="sug" style={{ paddingBottom: 0 }}>
+                <div className="sug-main">
+                  <div className="sug-title">
+                    {neverPickedUp.length} gone quiet
+                  </div>
+                  <div className="sug-sub">Assigned without a date</div>
+                </div>
+                {showAddDates ? (
+                  <span className="inline-flex items-center gap-1">
+                    <input
+                      type="date"
+                      autoFocus
+                      aria-label="New due date for the never-picked-up tasks"
+                      value={addDatesValue}
+                      onChange={(e) => setAddDatesValue(e.target.value)}
+                      data-testid="assigned-add-dates-input"
+                      className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={handleAddDates}
+                      disabled={!addDatesValue || addingDates}
+                      data-testid="assigned-add-dates-confirm"
+                    >
+                      Set
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowAddDates(true)}
+                    data-testid="assigned-add-dates-btn"
+                  >
+                    Add dates
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="content">
       <div className="page-head">
@@ -574,9 +666,13 @@ export function TasksAssignedPage() {
                (the owner), not the assignee — every row here is already
                assigned to the viewer, so the assignee avatar would just be
                the viewer's own on every row. */
-            <div className="mb-6" id="assigned-panel-to-me" role="tabpanel" aria-labelledby="assigned-tab-to-me" data-testid="assigned-waiting-section">
-              <div className="tgroup-head">
-                <span className="tg-date">Waiting on you</span>
+            <div className="dash mb-6" id="assigned-panel-to-me" role="tabpanel" aria-labelledby="assigned-tab-to-me">
+              <section className="card card-pad c8" data-testid="assigned-waiting-section">
+              <div className="card-head">
+                <div>
+                  <div className="card-title">Waiting on you</div>
+                  <div className="card-sub">Grouped by who asked</div>
+                </div>
               </div>
               {waitingByOwner.length === 0 ? (
                 <p className="py-3 text-sm text-fg-subtle" data-testid="assigned-waiting-empty">
@@ -610,6 +706,13 @@ export function TasksAssignedPage() {
                   </div>
                 ))
               )}
+              </section>
+              <aside className="card card-pad c4" data-testid="assigned-out-rail">
+                <div className="card-head">
+                  <div className="card-title">You assigned out</div>
+                </div>
+                {renderHandedOut(false)}
+              </aside>
             </div>
           )}
 
@@ -624,91 +727,7 @@ export function TasksAssignedPage() {
                 <div className="tgroup-head">
                   <span className="tg-date">What you've handed out</span>
                 </div>
-                {handedOut.length === 0 ? (
-                  <p className="py-3 text-sm text-fg-subtle" data-testid="assigned-handed-out-empty">
-                    You haven't assigned anything to anyone else yet.
-                  </p>
-                ) : (
-                  <div className="card card-pad">
-                    {handedOut.map(({ task, assigneeName }) => {
-                      const chip = handedOutChip(task)
-                      return (
-                        <div key={task.id} className="prow" data-testid={`assigned-handed-out-row-${task.id}`}>
-                          <button
-                            type="button"
-                            className={cn('tcheck', task.priority === 'high' && 'pri-high', task.priority === 'med' && 'pri-med')}
-                            aria-label="Mark complete"
-                            onClick={() => handleToggleComplete(task.id)}
-                          >
-                            <Check />
-                          </button>
-                          <span
-                            className={cn('avatar', task.assigneeId ? avatarClass(task.assigneeId) : undefined)}
-                            title={assigneeName}
-                          >
-                            {assigneeName.charAt(0).toUpperCase()}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="pname">{task.content || 'Untitled task'}</div>
-                            <div className="psub">{handedOutStatusLine(task)}</div>
-                          </div>
-                          {chip && (
-                            <span
-                              className={cn('chip', chip.neg ? 'chip-neg' : 'chip-mute')}
-                              data-testid={`assigned-gone-quiet-${task.id}`}
-                            >
-                              {chip.label}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })}
-                    {neverPickedUp.length > 0 && (
-                      <>
-                        <div className="divider" style={{ marginTop: 'var(--s2)' }} />
-                        <div className="sug" style={{ paddingBottom: 0 }}>
-                          <div className="sug-main">
-                            <div className="sug-title">
-                              {neverPickedUp.length} gone quiet
-                            </div>
-                            <div className="sug-sub">Assigned without a date</div>
-                          </div>
-                          {showAddDates ? (
-                            <span className="inline-flex items-center gap-1">
-                              <input
-                                type="date"
-                                autoFocus
-                                aria-label="New due date for the never-picked-up tasks"
-                                value={addDatesValue}
-                                onChange={(e) => setAddDatesValue(e.target.value)}
-                                data-testid="assigned-add-dates-input"
-                                className="rounded border border-brand-500 bg-surface px-1 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                onClick={handleAddDates}
-                                disabled={!addDatesValue || addingDates}
-                                data-testid="assigned-add-dates-confirm"
-                              >
-                                Set
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setShowAddDates(true)}
-                              data-testid="assigned-add-dates-btn"
-                            >
-                              Add dates
-                            </button>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                {renderHandedOut(true)}
               </div>
 
 
