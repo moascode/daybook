@@ -82,6 +82,17 @@ test.describe('98 — Tasks list management', () => {
     await page.getByTestId('task-list-select').selectOption(list.id)
     await page.getByTestId('task-list-save-btn').click()
 
+    // Unsorted's Outline is scoped to list_id IS NULL roots only
+    // (TasksPage.tsx's `listFilter`, tasks-lists-parity P0) — the task just
+    // got filed under "Errands 2", so it no longer belongs on THIS page and
+    // disappears the moment the store re-renders. Re-opening its menu here
+    // to check "List: Errands 2" was the old (pre-scoping) assumption that
+    // Outline showed every task regardless of list; re-verify the label on
+    // the list it actually lives on now instead.
+    await expect(page.getByRole('textbox', { name: 'Task content' }).filter({ hasText: 'Drop off dry cleaning' })).toHaveCount(0)
+
+    await page.goto(`/tasks/lists/${list.id}`)
+    await page.getByTestId('list-view-outline').click()
     await openTaskMenu(page, 'Drop off dry cleaning')
     await expect(page.getByRole('menuitem', { name: `List: ${list.name}` })).toBeVisible()
     await page.keyboard.press('Escape')
