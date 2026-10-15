@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
 import { updateRow, todayStr, nowStr, businessDateOf, daysBetween, ownsAllRefs } from '../lib.ts'
+import { pushToUser } from '../lib/pushToUser.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
 // Port of server/routes/tasks.ts. Mounted behind requireAuth.
@@ -518,6 +519,59 @@ tasks.post('/tasks/reschedule', async (c) => {
     .bind(dueDate, ...allowedIds)
     .all()
   return c.json(results)
+})
+
+// ── Nudge (ping the assignee of a task you handed out) ───────────────
+//
+// No schema: a nudge is a `push_sent_log` row (user_id = the assignee, kind =
+// 'nudge:<taskId>', sent_on = today), so the table's primary key is also the
+// one-nudge-per-task-per-day guard, and notificationsFor() reads the same rows
+// back to say "<owner> nudged you". The push itself is payload-less like every
+// other (worker/lib/webpush.ts).
+
+// Task ids the caller has nudged today, so the UI can show "Nudged" after a
+// reload. The log is keyed on the assignee, hence the join through tasks.
+tasks.get('/tasks/nudged-today', async (c) => {
+  const userId = c.get('userId')
+  const { results } = await c.env.DB.prepare(
+    `SELECT t.id AS id
+       FROM push_sent_log l
+       JOIN tasks t ON l.kind = 'nudge:' || t.id
+      WHERE t.user_id = ? AND l.sent_on = ? AND l.kind LIKE 'nudge:%'`,
+  )
+    .bind(userId, todayStr())
+    .all<{ id: string }>()
+  return c.json({ taskIds: results.map((r) => r.id) })
+})
+
+tasks.post('/tasks/:id/nudge', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const task = await c.env.DB.prepare(
+    'SELECT id, user_id, assignee_id, is_completed FROM tasks WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; assignee_id: string | null; is_completed: number }>()
+  if (!task) return c.json({ error: 'task not found' }, 404)
+  // Only the person who handed the task out may nudge. Everyone else is told
+  // plainly rather than given a 404 — the assignee can already see the task.
+  if (task.user_id !== userId) return c.json({ error: 'Only the person who assigned a task can nudge it' }, 403)
+  if (task.is_completed) return c.json({ error: 'That task is already done' }, 409)
+  if (!task.assignee_id || task.assignee_id === userId) {
+    return c.json({ error: 'That task is not assigned to anyone else' }, 409)
+  }
+
+  const claim = await c.env.DB.prepare(
+    `INSERT INTO push_sent_log (user_id, kind, sent_on) VALUES (?, ?, ?)
+     ON CONFLICT (user_id, kind, sent_on) DO NOTHING`,
+  )
+    .bind(task.assignee_id, `nudge:${task.id}`, todayStr())
+    .run()
+  if (claim.meta.changes === 0) return c.json({ error: 'Already nudged today' }, 409)
+
+  const devices = await pushToUser(c.env, task.assignee_id)
+  return c.json({ ok: true, devices })
 })
 
 // ── Completed analytics (FEAT-030) ───────────────────
