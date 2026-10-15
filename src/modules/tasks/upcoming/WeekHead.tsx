@@ -54,33 +54,37 @@ export function WeekHead({ anchor, range, atCurrent, onRangeChange, onPrev, onNe
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={`Previous ${range}`}
-          data-testid="upcoming-week-prev"
-          onClick={onPrev}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          data-testid="upcoming-week-this"
-          disabled={atCurrent}
-          onClick={onThisRange}
-        >
-          This {range}
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={`Next ${range}`}
-          data-testid="upcoming-week-next"
-          onClick={onNext}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+        {/* One unit, so a narrow screen wraps the nav as a whole instead of
+            stranding "‹" beside the tabs and "This …" + "›" on the next line. */}
+        <div className="flex items-center gap-1" data-testid="upcoming-range-nav">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`Previous ${range}`}
+            data-testid="upcoming-week-prev"
+            onClick={onPrev}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            data-testid="upcoming-week-this"
+            disabled={atCurrent}
+            onClick={onThisRange}
+          >
+            This {range}
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`Next ${range}`}
+            data-testid="upcoming-week-next"
+            onClick={onNext}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   )
