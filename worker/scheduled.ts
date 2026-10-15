@@ -1,7 +1,7 @@
 import type { Env } from './types.ts'
 import { todayStr, businessMinuteStr } from './lib.ts'
 import { notificationsFor, type Slot } from './lib/notifications.ts'
-import { sendPush } from './lib/webpush.ts'
+import { pushToUser } from './lib/pushToUser.ts'
 
 /**
  * The scheduled digest (v3 P4).
@@ -25,22 +25,13 @@ import { sendPush } from './lib/webpush.ts'
 export async function runDigest(env: Env, slot: Slot): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return
 
-  const subject = env.VAPID_SUBJECT || 'mailto:daybook@moascode.dev'
   const today = todayStr()
 
   const { results: subs } = await env.DB.prepare(
-    `SELECT id, user_id, endpoint FROM push_subscriptions WHERE expired_at IS NULL`,
-  ).all<{ id: string; user_id: string; endpoint: string }>()
-  if (subs.length === 0) return
+    `SELECT DISTINCT user_id FROM push_subscriptions WHERE expired_at IS NULL`,
+  ).all<{ user_id: string }>()
 
-  const byUser = new Map<string, { id: string; endpoint: string }[]>()
-  for (const s of subs) {
-    const list = byUser.get(s.user_id) ?? []
-    list.push({ id: s.id, endpoint: s.endpoint })
-    byUser.set(s.user_id, list)
-  }
-
-  for (const [userId, endpoints] of byUser) {
+  for (const { user_id: userId } of subs) {
     let pending
     try {
       pending = await notificationsFor(env.DB, userId, slot)
@@ -62,44 +53,8 @@ export async function runDigest(env: Env, slot: Slot): Promise<void> {
       .run()
     if (claim.meta.changes === 0) continue
 
-    await pushToSubscriptions(env, endpoints, { subject, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY })
+    await pushToUser(env, userId)
   }
-}
-
-interface LiveSub {
-  id: string
-  endpoint: string
-}
-
-/**
- * Send one payload-less push to each of a user's live subscriptions and keep
- * their bookkeeping honest: a 404/410 retires the subscription, a success
- * stamps `last_sent_at`, anything else is logged and left for the next try.
- * Shared by the digest and the reminder cron so the two cannot drift.
- */
-async function pushToSubscriptions(
-  env: Env,
-  subs: LiveSub[],
-  vapid: { subject: string; publicKey: string; privateKey: string },
-): Promise<number> {
-  let delivered = 0
-  for (const { id, endpoint } of subs) {
-    const res = await sendPush(endpoint, vapid.subject, vapid.publicKey, vapid.privateKey)
-    if (res.gone) {
-      await env.DB.prepare(`UPDATE push_subscriptions SET expired_at = datetime('now') WHERE id = ?`)
-        .bind(id)
-        .run()
-    } else if (res.ok) {
-      delivered++
-      await env.DB.prepare(`UPDATE push_subscriptions SET last_sent_at = datetime('now') WHERE id = ?`)
-        .bind(id)
-        .run()
-    } else {
-      // Transient: leave it alone and let the next slot try again.
-      console.error('push failed', endpoint, res.status)
-    }
-  }
-  return delivered
 }
 
 export interface ReminderRun {
@@ -137,11 +92,9 @@ export async function runReminders(env: Env, now: string = businessMinuteStr()):
     .all<{ id: string; recipient: string; day: string }>()
   run.due = due.length
 
-  const publicKey = env.VAPID_PUBLIC_KEY
-  const privateKey = env.VAPID_PRIVATE_KEY
-  const subject = env.VAPID_SUBJECT || 'mailto:daybook@moascode.dev'
-
   for (const { id, recipient, day } of due) {
+    // Claimed even without VAPID keys, so configuring push later never
+    // replays a backlog of stale reminders.
     const claim = await env.DB.prepare(
       `INSERT INTO push_sent_log (user_id, kind, sent_on) VALUES (?, ?, ?)
        ON CONFLICT (user_id, kind, sent_on) DO NOTHING`,
@@ -150,14 +103,8 @@ export async function runReminders(env: Env, now: string = businessMinuteStr()):
       .run()
     if (claim.meta.changes === 0) continue
     run.claimed++
-    if (!publicKey || !privateKey) continue
-
-    const { results: subs } = await env.DB.prepare(
-      `SELECT id, endpoint FROM push_subscriptions WHERE user_id = ? AND expired_at IS NULL`,
-    )
-      .bind(recipient)
-      .all<LiveSub>()
-    run.pushed += await pushToSubscriptions(env, subs, { subject, publicKey, privateKey })
+    // pushToUser is a no-op returning 0 when VAPID keys are not configured.
+    run.pushed += await pushToUser(env, recipient)
   }
   return run
 }

@@ -1,59 +1,90 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { formatWeekRange } from '@/modules/tasks/upcoming/weekMath'
+import { addDays, format, parseISO } from 'date-fns'
+import { formatWeekRange, mondayOf } from '@/modules/tasks/upcoming/weekMath'
+import { UPCOMING_RANGES, formatMonthLabel, type UpcomingRange } from '@/modules/tasks/upcoming/rangeMath'
 
 interface WeekHeadProps {
-  monday: string
-  weekOffset: number
+  anchor: string
+  range: UpcomingRange
+  /** True when the displayed range already contains today (disables "This …"). */
+  atCurrent: boolean
+  onRangeChange: (range: UpcomingRange) => void
   onPrev: () => void
   onNext: () => void
-  onThisWeek: () => void
+  onThisRange: () => void
+}
+
+const RANGE_LABEL: Record<UpcomingRange, string> = { week: 'Week', fortnight: 'Fortnight', month: 'Month' }
+
+function headLabel(anchor: string, range: UpcomingRange): string {
+  if (range === 'month') return formatMonthLabel(anchor)
+  const monday = mondayOf(anchor)
+  if (range === 'week') return formatWeekRange(monday)
+  const start = parseISO(monday)
+  return `${format(start, 'd MMM')} – ${format(addDays(start, 13), 'd MMM')}`
 }
 
 /**
  * Upcoming's page head (FEAT-057 mockup parity): title, the displayed
- * week's range as an inline `.page-sub`, and prev/"This week"/next nav —
- * shifting Monday ±7 days, never touching `new Date()` directly (the
- * caller derives `monday` from `todayISO()`).
+ * range as an inline `.page-sub`, the Week / Fortnight / Month segment, and
+ * prev/"This …"/next nav. The caller derives `anchor` from `todayISO()`,
+ * never `new Date()`.
  */
-export function WeekHead({ monday, weekOffset, onPrev, onNext, onThisWeek }: WeekHeadProps) {
-  const rangeLabel = formatWeekRange(monday)
-
+export function WeekHead({ anchor, range, atCurrent, onRangeChange, onPrev, onNext, onThisRange }: WeekHeadProps) {
   return (
     <div className="page-head">
       <div>
         <h1 className="page-title">Upcoming</h1>
         <span className="page-sub" data-testid="upcoming-week-range">
-          {rangeLabel}
+          {headLabel(anchor, range)}
         </span>
       </div>
-      <div className="page-actions page-actions--nav">
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Previous week"
-          data-testid="upcoming-week-prev"
-          onClick={onPrev}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          data-testid="upcoming-week-this"
-          disabled={weekOffset === 0}
-          onClick={onThisWeek}
-        >
-          This week
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Next week"
-          data-testid="upcoming-week-next"
-          onClick={onNext}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
+      <div className="page-actions page-actions--nav" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div className="segment" role="tablist" aria-label="Upcoming range">
+          {UPCOMING_RANGES.map((r) => (
+            <button
+              key={r}
+              type="button"
+              role="tab"
+              aria-selected={r === range}
+              data-testid={`upcoming-range-${r}`}
+              onClick={() => onRangeChange(r)}
+            >
+              {RANGE_LABEL[r]}
+            </button>
+          ))}
+        </div>
+        {/* One unit, so a narrow screen wraps the nav as a whole instead of
+            stranding "‹" beside the tabs and "This …" + "›" on the next line. */}
+        <div className="flex items-center gap-1" data-testid="upcoming-range-nav">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`Previous ${range}`}
+            data-testid="upcoming-week-prev"
+            onClick={onPrev}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            data-testid="upcoming-week-this"
+            disabled={atCurrent}
+            onClick={onThisRange}
+          >
+            This {range}
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={`Next ${range}`}
+            data-testid="upcoming-week-next"
+            onClick={onNext}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   )
