@@ -1,7 +1,7 @@
 import type { Env } from './types.ts'
 import { todayStr } from './lib.ts'
 import { notificationsFor, type Slot } from './lib/notifications.ts'
-import { sendPush } from './lib/webpush.ts'
+import { pushToUser } from './lib/pushToUser.ts'
 
 /**
  * The scheduled digest (v3 P4).
@@ -25,22 +25,13 @@ import { sendPush } from './lib/webpush.ts'
 export async function runDigest(env: Env, slot: Slot): Promise<void> {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return
 
-  const subject = env.VAPID_SUBJECT || 'mailto:daybook@moascode.dev'
   const today = todayStr()
 
   const { results: subs } = await env.DB.prepare(
-    `SELECT id, user_id, endpoint FROM push_subscriptions WHERE expired_at IS NULL`,
-  ).all<{ id: string; user_id: string; endpoint: string }>()
-  if (subs.length === 0) return
+    `SELECT DISTINCT user_id FROM push_subscriptions WHERE expired_at IS NULL`,
+  ).all<{ user_id: string }>()
 
-  const byUser = new Map<string, { id: string; endpoint: string }[]>()
-  for (const s of subs) {
-    const list = byUser.get(s.user_id) ?? []
-    list.push({ id: s.id, endpoint: s.endpoint })
-    byUser.set(s.user_id, list)
-  }
-
-  for (const [userId, endpoints] of byUser) {
+  for (const { user_id: userId } of subs) {
     let pending
     try {
       pending = await notificationsFor(env.DB, userId, slot)
@@ -62,20 +53,6 @@ export async function runDigest(env: Env, slot: Slot): Promise<void> {
       .run()
     if (claim.meta.changes === 0) continue
 
-    for (const { id, endpoint } of endpoints) {
-      const res = await sendPush(endpoint, subject, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY)
-      if (res.gone) {
-        await env.DB.prepare(`UPDATE push_subscriptions SET expired_at = datetime('now') WHERE id = ?`)
-          .bind(id)
-          .run()
-      } else if (res.ok) {
-        await env.DB.prepare(`UPDATE push_subscriptions SET last_sent_at = datetime('now') WHERE id = ?`)
-          .bind(id)
-          .run()
-      } else {
-        // Transient: leave it alone and let the next slot try again.
-        console.error('digest: push failed', endpoint, res.status)
-      }
-    }
+    await pushToUser(env, userId)
   }
 }
