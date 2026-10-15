@@ -21,15 +21,19 @@ import type { GroupMember } from '@/types/household.types'
 const UNSORTED_ID = 'unsorted'
 const VIEW_MODE_KEY = 'daybook.taskListDetail.viewMode'
 
-/** Reads the last view-mode choice (List/Outline) — localStorage can throw
- *  (private mode, blocked site data) or come back with junk, neither of
- *  which should crash the page; both fall back to the documented default. */
-function readStoredViewMode(): ViewMode {
+/** Reads the last view-mode choice (List/Outline) for this kind of page —
+ *  Unsorted and real lists each remember their own. Unsorted defaults to
+ *  Outline: it's the outliner's home, the inbox every new bullet lands in.
+ *  A real list defaults to List, as proposal-v2/tasks-list.html shows it.
+ *  localStorage can throw (private mode, blocked site data) or return junk;
+ *  both fall back to that default. */
+function readStoredViewMode(unsorted: boolean): ViewMode {
+  const fallback: ViewMode = unsorted ? 'outline' : 'list'
   try {
-    const stored = localStorage.getItem(VIEW_MODE_KEY)
-    return stored === 'outline' ? 'outline' : 'list'
+    const stored = localStorage.getItem(`${VIEW_MODE_KEY}.${unsorted ? 'unsorted' : 'list'}`)
+    return stored === 'outline' || stored === 'list' ? stored : fallback
   } catch {
-    return 'list'
+    return fallback
   }
 }
 
@@ -146,11 +150,19 @@ export function TasksListDetailPage() {
   // directly in `handleDeleteTask` below, not read back out of this map).
   const undoToastIdsRef = useRef<Map<string, string>>(new Map())
 
-  const [viewMode, setViewModeState] = useState<ViewMode>(readStoredViewMode)
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => readStoredViewMode(isUnsorted))
+  // Moving between Unsorted and a real list reuses this component, so pick
+  // up the other kind's remembered mode during render rather than keeping
+  // whichever one the previous page had.
+  const [viewModeKind, setViewModeKind] = useState(isUnsorted)
+  if (viewModeKind !== isUnsorted) {
+    setViewModeKind(isUnsorted)
+    setViewModeState(readStoredViewMode(isUnsorted))
+  }
   const setViewMode = (mode: ViewMode) => {
     setViewModeState(mode)
     try {
-      localStorage.setItem(VIEW_MODE_KEY, mode)
+      localStorage.setItem(`${VIEW_MODE_KEY}.${isUnsorted ? 'unsorted' : 'list'}`, mode)
     } catch {
       // Best-effort persistence only — the toggle itself still works for
       // the rest of this session even if it can't be remembered.
