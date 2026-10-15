@@ -30,6 +30,7 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.18.0 | 2026-10-15 | Tasks: Nudge (push + bell, no schema), composer Reminder (`remind_at`, 15-min cron) and Checklist, Upcoming Fortnight/Month, habits every N days (`interval_days`), tracked time with a timer (`tracked_minutes`); two Backspace focus-race specs fixed (#267–#273) |
 | v3.17.0 | 2026-10-15 | Tasks production pass: every page to mockup parity — fixed-column rows, Outline scoped to its list, subtask leak, assignee edit/reschedule access, habit stat fixes, Upcoming board/week nav, Assigned/Completed/Habits rebuilt (#265) |
 | v3.16.1 | 2026-10-12 | All tasks rows on a fixed-column grid; titles wrap (#264) |
 | v3.16.0 | 2026-10-12 | All tasks page adopts the mockup with every control live; quick add opens the New task modal; self-assign; drag from Waiting for a date (#261–#262) |
@@ -1037,3 +1038,16 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
   - Agents running in parallel must not run Playwright, because they share port 5173.
   - The CI "empty `[WebServer] ERROR`" crash is the server process being killed (the uploaded wrangler log just stops). The upload path was fixed in #265 to include `/github/home`; the out-of-memory root cause is filed as a follow-up.
 
+## 2026-10-15 — Tasks sign-off items, shipped as v3.18.0 (PRs #267–#273)
+
+- The five items left out of v3.17.0 for owner sign-off, one PR and one e2e spec each:
+  - **#268 Nudge** (`e2e/115`): `POST /tasks/:id/nudge`, owner-only, once per task per day. Stored as a `push_sent_log` row (kind `nudge:<taskId>`, keyed on the assignee), so there is **no schema change**. `notificationsFor()` reads it back for the push and the bell. `pushToUser()` is now shared by the digest, nudges and reminders.
+  - **#271 Reminder + Checklist** (`e2e/116`): migration 0029 `tasks.remind_at`. A `*/15` cron runs `runReminders()`, and `scheduled()` now dispatches on the exact cron string. The Checklist act creates the parent, then its children, and the detail modal gained a checklist section. FEAT-055 and FEAT-056 are archived.
+  - **#272 Upcoming Fortnight/Month** (`e2e/113`): a `?range=` param; no schema or API change.
+  - **#269 Habits every N days** (`e2e/114`): migration 0030 `habits.interval_days`, on a fixed cycle anchored at `created_at`.
+  - **#270 Tracked time** (`e2e/117`): migration 0031 `tasks.tracked_minutes` and `timer_started_at`. Timer start/stop endpoints, manual minutes, and a per-day "Xh Ym of tracked work" on Completed.
+- **#267, #273:** `01-tasks` and `08-task-undo` pressed Backspace before the new outliner row had focus. The row renders before `focusId` is set, which only happens after `addTask`'s rebalance. Both specs now wait for `:focus`.
+- **Process lessons:**
+  - Agent worktrees under `.claude/worktrees/` make a bare `npm run lint` in the main checkout fail on parse errors. Lint with `--ignore-pattern '.claude/**'` while they exist.
+  - One local D1 shared across branch checkouts drifts the schema-parity gate. `rm -rf .wrangler/state/v3/d1 && npm run d1:migrate` before the gate.
+  - The wrangler `Network connection lost` / `ECONNREFUSED :5173` server death hit 1–3 shards on most CI runs today, on `main` too. It reproduced locally only intermittently. Every instance was confirmed by a local re-run and cleared by `rerun --failed`.
