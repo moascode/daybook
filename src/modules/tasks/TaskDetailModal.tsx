@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Button } from '@/components/ui/Button'
@@ -8,6 +8,8 @@ import { api } from '@/lib/api'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
 import { useToastStore } from '@/stores/toast.store'
+import { TaskSubtasks } from '@/modules/tasks/TaskSubtasks'
+import { useSubtasks } from '@/modules/tasks/useSubtasks'
 import type { TaskList } from '@/hooks/useTaskLists'
 import type { Task, TaskPriority, TaskRecurrenceFrequency } from '@/types/tasks.types'
 
@@ -78,6 +80,10 @@ export function TaskDetailModal({
   const [current, setCurrent] = useState<Task | null>(task)
   const [nameDraft, setNameDraft] = useState(task?.content ?? '')
   const [noteDraft, setNoteDraft] = useState(task?.note ?? '')
+  // FEAT-055: the reminder's day and time are edited as two fields but saved
+  // as one value, so each keeps its own draft until BOTH are set.
+  const [remindDate, setRemindDate] = useState(task?.remindAt?.slice(0, 10) ?? '')
+  const [remindTime, setRemindTime] = useState(task?.remindAt?.slice(11, 16) ?? '')
   const [syncedTaskId, setSyncedTaskId] = useState(task?.id ?? null)
   const [syncedOpen, setSyncedOpen] = useState(open)
   const taskChanged = task && task.id !== syncedTaskId
@@ -87,6 +93,8 @@ export function TaskDetailModal({
     setCurrent(task)
     setNameDraft(task.content)
     setNoteDraft(task.note)
+    setRemindDate(task.remindAt?.slice(0, 10) ?? '')
+    setRemindTime(task.remindAt?.slice(11, 16) ?? '')
   }
   if (open !== syncedOpen) setSyncedOpen(open)
 
@@ -101,6 +109,15 @@ export function TaskDetailModal({
     deleteTaskById,
   } = useTasks()
   const assignees = useAssignees(coMembers ?? [])
+
+  // Counts reported by the checklist section feed back into `current` and the
+  // caller's list, so a row's "1 of 3" badge follows an add/tick made here.
+  const subtasks = useSubtasks(current?.id ?? null, open, (total, done) => {
+    if (!current) return
+    const updated = { ...current, subtaskTotal: total, subtaskDone: done }
+    setCurrent(updated)
+    onSaved?.(updated)
+  })
 
   if (!task || !current) {
     return <Modal open={false} onOpenChange={onOpenChange} title="Task" children={null} />
@@ -201,6 +218,29 @@ export function TaskDetailModal({
     }
   }
 
+  // Reminder: a direct PATCH like recurrence above. Saves only when day AND
+  // time are both present; clearing sends null and empties both drafts.
+  const saveRemindAt = async (date: string, time: string) => {
+    if (!date || !time) return
+    try {
+      const row = await api.patch<{ remind_at?: string | null }>(`/tasks/${current.id}`, { remindAt: `${date}T${time}` })
+      commit({ ...current, remindAt: row.remind_at ?? `${date}T${time}` })
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not save that reminder — please try again.') })
+    }
+  }
+
+  const clearRemindAt = async () => {
+    try {
+      await api.patch(`/tasks/${current.id}`, { remindAt: null })
+      setRemindDate('')
+      setRemindTime('')
+      commit({ ...current, remindAt: null })
+    } catch (err) {
+      addToast({ message: errorMessage(err, 'Could not clear that reminder — please try again.') })
+    }
+  }
+
   /**
    * "Delete task" — undo-toast, never a confirm dialog (CD-20). Restores via
    * a direct POST (the same shape `TasksListDetailPage.tsx`'s `undoDelete`
@@ -246,6 +286,7 @@ export function TaskDetailModal({
                 recurrenceData: snapshot.recurrenceData ?? null,
                 recurrenceParentId: snapshot.recurrenceParentId ?? null,
                 walletRef: snapshot.walletRef ?? null,
+                remindAt: snapshot.remindAt ?? null,
                 createdAt: snapshot.createdAt,
                 updatedAt: snapshot.updatedAt,
               })
@@ -332,6 +373,50 @@ export function TaskDetailModal({
         </div>
 
         <div className="flex flex-col gap-1.5">
+          <label htmlFor="task-detail-remind-date" className="text-sm font-medium text-fg-muted">
+            Remind me on
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="task-detail-remind-date"
+              type="date"
+              data-testid="task-detail-remind-date"
+              value={remindDate}
+              onChange={(e) => {
+                setRemindDate(e.target.value)
+                void saveRemindAt(e.target.value, remindTime)
+              }}
+              className={fieldInputClass}
+            />
+            <input
+              type="time"
+              aria-label="Remind me at"
+              data-testid="task-detail-remind-time"
+              value={remindTime}
+              onChange={(e) => {
+                setRemindTime(e.target.value)
+                void saveRemindAt(remindDate, e.target.value)
+              }}
+              className={fieldInputClass}
+            />
+            {(remindDate || remindTime || current.remindAt) && (
+              <button
+                type="button"
+                aria-label="Clear reminder"
+                data-testid="task-detail-remind-clear"
+                onClick={() => void clearRemindAt()}
+                className="flex-shrink-0 rounded p-1 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {(remindDate !== '') !== (remindTime !== '') && (
+            <p className="text-xs text-fg-subtle">Set both a day and a time to save the reminder.</p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
           <label htmlFor="task-detail-priority" className="text-sm font-medium text-fg-muted">
             Priority
           </label>
@@ -406,6 +491,14 @@ export function TaskDetailModal({
             </select>
           </div>
         )}
+
+        <TaskSubtasks
+          items={subtasks.items}
+          loading={subtasks.loading}
+          loadError={subtasks.loadError}
+          onAdd={subtasks.addItem}
+          onToggle={(id) => void subtasks.toggleItem(id)}
+        />
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="task-detail-note" className="text-sm font-medium text-fg-muted">

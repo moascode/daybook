@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
-import { updateRow, todayStr, nowStr, businessDateOf, daysBetween, ownsAllRefs } from '../lib.ts'
+import { updateRow, todayStr, nowStr, businessDateOf, daysBetween, ownsAllRefs, isValidRemindAt } from '../lib.ts'
 import { pushToUser } from '../lib/pushToUser.ts'
 import { isGroupMember, visibleListIds, writableListIds } from '../lib/sharing.ts'
 
@@ -39,6 +39,8 @@ const TASK_COLS: Record<string, string> = {
   // comment); that path is self-scoped (`user_id = caller`), so the only
   // thing a client could skew by lying here is their own turnaround stats.
   assignedAt: 'assigned_at',
+  // FEAT-055: 'YYYY-MM-DDTHH:MM' business time, validated in POST/PATCH below.
+  remindAt: 'remind_at',
   // FEAT-028 (docs/backlog/EP-07-tasks-depth/FEAT-028-task-recurrence.md).
   // recurrenceParentId is deliberately NOT here — it is only ever set by
   // POST /tasks/recurring/process below, never client-writable.
@@ -166,8 +168,13 @@ tasks.get('/tasks', async (c) => {
 
   switch (view) {
     case 'today':
-      conditions.push('t.is_completed = 0', 't.due_date IS NOT NULL', 't.due_date <= ?')
-      whereParams.push(today)
+      // FEAT-055: an undated task whose reminder falls today belongs here too —
+      // it carries no due date on purpose, so it can never be overdue.
+      conditions.push(
+        't.is_completed = 0',
+        "((t.due_date IS NOT NULL AND t.due_date <= ?) OR (t.due_date IS NULL AND substr(t.remind_at, 1, 10) = ?))",
+      )
+      whereParams.push(today, today)
       break
     case 'upcoming':
       conditions.push('t.is_completed = 0', 't.due_date IS NOT NULL', 't.due_date > ?')
@@ -281,16 +288,20 @@ tasks.post('/tasks', async (c) => {
     return c.json({ error: 'recurrence: custom requires at least one weekday' }, 400)
   }
 
+  if (b.remindAt != null && !isValidRemindAt(b.remindAt)) {
+    return c.json({ error: 'remindAt must be YYYY-MM-DDTHH:MM' }, 400)
+  }
+
   const row = await c.env.DB.prepare(
     `INSERT INTO tasks
        (id, user_id, parent_id, content, note, is_completed, is_collapsed, sort_order, due_date,
         list_id, priority, due_time, assignee_id, assigned_at, recurrence, recurrence_data,
-        recurrence_parent_id, wallet_ref, created_at, updated_at)
+        recurrence_parent_id, wallet_ref, remind_at, created_at, updated_at)
      VALUES
        (COALESCE(?, lower(hex(randomblob(16)))), ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, COALESCE(?, 'none'), ?, ?, ?,
-        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
         COALESCE(?, datetime('now')), COALESCE(?, datetime('now')))
      ON CONFLICT (id) DO NOTHING
      RETURNING *`,
@@ -298,7 +309,7 @@ tasks.post('/tasks', async (c) => {
     // id, userId, parentId, content, note,
     // isCompleted, isCollapsed, sortOrder, dueDate,
     // listId, priority, dueTime, assigneeId, assignedAt,
-    // recurrence, recurrenceData, recurrenceParentId, walletRef, createdAt, updatedAt
+    // recurrence, recurrenceData, recurrenceParentId, walletRef, remindAt, createdAt, updatedAt
     .bind(
       b.id ?? null,
       userId,
@@ -327,6 +338,7 @@ tasks.post('/tasks', async (c) => {
         : b.recurrenceData ?? null,
       b.recurrenceParentId ?? null,
       b.walletRef ?? null,
+      b.remindAt ?? null,
       b.createdAt ?? null,
       b.updatedAt ?? null,
     )
@@ -383,6 +395,12 @@ tasks.patch('/tasks/:id', async (c) => {
     body.assignedAt = body.assigneeId ? nowStr() : null
   }
 
+  // FEAT-055: strict shape, null clears. A loose value would never compare
+  // correctly against the business clock and the reminder would silently never fire.
+  if ('remindAt' in body && body.remindAt != null && !isValidRemindAt(body.remindAt)) {
+    return c.json({ error: 'remindAt must be YYYY-MM-DDTHH:MM' }, 400)
+  }
+
   // FEAT-032: a walletRef must be `<kind>:<id>` for a kind this app knows,
   // and that id must belong to the caller — otherwise a task could show
   // another user's bill or goal on its chip.
@@ -436,6 +454,34 @@ tasks.patch('/tasks/:id', async (c) => {
   const row = await updateRow(c.env.DB, 'tasks', id, userId, TASK_COLS, body, { scopeToOwner: false })
   if (!row) return c.json({ error: 'task not found' }, 404)
   return c.json(row)
+})
+
+// A task's direct children, for the detail modal's checklist section
+// (FEAT-056). The flat views deliberately hide undated, unassigned subtasks
+// (see GET /tasks above), so this is the one way to read them by parent.
+// Readable by anyone who can act on the parent or can see its list.
+tasks.get('/tasks/:id/children', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+  const parent = await c.env.DB.prepare(
+    'SELECT id, user_id, assignee_id, list_id FROM tasks WHERE id = ?',
+  )
+    .bind(id)
+    .first<{ id: string; user_id: string; assignee_id: string | null; list_id: string | null }>()
+  if (!parent) return c.json({ error: 'task not found' }, 404)
+
+  const writable = await writableListIds(c.env.DB, userId)
+  const visible = parent.list_id ? await visibleListIds(c.env.DB, userId) : []
+  if (!canActOnTask(parent, userId, writable) && !(parent.list_id && visible.includes(parent.list_id))) {
+    return c.json({ error: 'task not found' }, 404)
+  }
+
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM tasks WHERE parent_id = ? ORDER BY sort_order ASC, rowid ASC',
+  )
+    .bind(id)
+    .all()
+  return c.json(results)
 })
 
 // Toggle completion, deriving completed_at along with is_completed — the

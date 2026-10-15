@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-22 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-15 · **Filed:** 2026-09-22 · **Shipped:** 2026-10-15 · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-056 — Tasks: composer "Checklist" shortcut
 
@@ -21,6 +21,15 @@ promised.
 **Out of scope.** FEAT-054 ships Today's composer without this shortcut.
 Reworking the outliner's own subtask UX (unaffected either way).
 
-**Still needed?** Probably — but sequence it after (or alongside) adding
+**Shipped (2026-10-15).** No schema: the composer's Checklist act takes a
+title plus an item list (Enter adds an item, Backspace on an empty one removes
+it) and creates the parent, then each child via `parentId`; a partial failure
+toasts how many items failed and keeps them in the composer for retry.
+`TaskDetailModal` gained the blocker this item named — a Checklist section
+listing the task's children (tick each, "New subtask" input), backed by
+`GET /tasks/:id/children`. E2E:
+`e2e/116-tasks-composer-reminder-checklist.spec.ts`.
+
+**Still needed? (historical)** Probably — but sequence it after (or alongside) adding
 subtask-add support to `TaskDetailModal.tsx` itself, since that's the actual
 blocker, not the composer button.

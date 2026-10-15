@@ -1,4 +1,4 @@
-import { todayStr, businessDatePlus } from '../lib.ts'
+import { todayStr, businessDatePlus, businessMinuteStr } from '../lib.ts'
 import { EFFECTIVE_AMOUNT_SQL } from './sharing.ts'
 
 // What Daybook is willing to interrupt you about (v3 P4).
@@ -95,6 +95,34 @@ async function tasksDue(db: D1Database, userId: string): Promise<Notification | 
     kind: 'tasks',
     title: n === 1 ? '1 task due' : `${n} tasks due`,
     body: n === 1 ? 'One thing is due today or overdue.' : `${n} things are due today or overdue.`,
+    url: '/tasks',
+    attention: true,
+  }
+}
+
+/**
+ * Reminders whose time has come (FEAT-055): `remind_at` is in the past but on
+ * today's date, task still open. Yesterday's missed ones are not re-announced —
+ * a reminder is a nudge for a moment, not a debt. Goes to the owner, or the
+ * assignee when the task was handed to someone (same rule runReminders uses).
+ */
+async function dueReminders(db: D1Database, userId: string): Promise<Notification | null> {
+  const { results } = await db
+    .prepare(
+      `SELECT content FROM tasks
+        WHERE COALESCE(assignee_id, user_id) = ? AND is_completed = 0
+          AND remind_at IS NOT NULL AND remind_at <= ? AND substr(remind_at, 1, 10) = ?
+        ORDER BY remind_at ASC`,
+    )
+    .bind(userId, businessMinuteStr(), todayStr())
+    .all<{ content: string }>()
+  const n = results.length
+  if (n === 0) return null
+  const first = results[0].content || 'Untitled task'
+  return {
+    kind: 'reminders',
+    title: n === 1 ? `Reminder: ${first}` : `${n} reminders`,
+    body: n === 1 ? 'A reminder you set has come up.' : `${n} reminders you set have come up.`,
     url: '/tasks',
     attention: true,
   }
@@ -289,7 +317,7 @@ export async function notificationsFor(
   userId: string,
   slot?: Slot,
 ): Promise<Notification[]> {
-  const morning = [nudges, captureSilence, pendingInvites, openClaims, capturesWaiting, billsDue, budgetThreshold, tasksDue]
+  const morning = [dueReminders, nudges, captureSilence, pendingInvites, openClaims, capturesWaiting, billsDue, budgetThreshold, tasksDue]
   const evening = [todaySpend]
   const checks = slot === 'morning' ? morning : slot === 'evening' ? evening : [...morning, ...evening]
 

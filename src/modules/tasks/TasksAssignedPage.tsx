@@ -16,6 +16,7 @@ import { useNudges } from '@/modules/tasks/useNudges'
 import { TaskDetailModal } from '@/modules/tasks/TaskDetailModal'
 import { TaskComposer, type TaskComposerDraft } from '@/modules/tasks/composer/TaskComposer'
 import { TaskFormModal, type TaskFormDraft } from '@/modules/tasks/composer/TaskFormModal'
+import { upsertTasks } from '@/modules/tasks/composer/upsertTasks'
 import type { Task } from '@/types/tasks.types'
 import type { GroupMember } from '@/types/household.types'
 
@@ -622,6 +623,7 @@ export function TasksAssignedPage() {
         lists={taskLists}
         coMembers={coMembers}
         onCreateTask={handleCreateTask}
+        onTasksCreated={(created) => setAllOpen((prev) => upsertTasks(prev, created))}
         onOpenHabitModal={handleOpenHabitModal}
         onOpenTaskForm={handleOpenTaskForm}
         onOpenAssignForm={handleOpenAssignForm}

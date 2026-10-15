@@ -36,6 +36,7 @@ import {
   usualWeek,
   weekDatesFrom,
 } from '@/modules/tasks/upcoming/weekMath'
+import { upsertTasks } from '@/modules/tasks/composer/upsertTasks'
 import {
   gridDates,
   parseRange,
@@ -470,6 +471,7 @@ export function TasksUpcomingPage() {
         lists={taskLists}
         coMembers={coMembers}
         onCreateTask={handleCreateTask}
+        onTasksCreated={(created) => setTasks((prev) => upsertTasks(prev, created))}
         onOpenHabitModal={handleOpenHabitModal}
         onOpenTaskForm={handleOpenTaskForm}
         onOpenAssignForm={handleOpenAssignForm}

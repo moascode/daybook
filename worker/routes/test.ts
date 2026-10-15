@@ -1,6 +1,8 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../types.ts'
 import { readSession } from '../session.ts'
+import { runReminders } from '../scheduled.ts'
+import { isValidRemindAt } from '../lib.ts'
 
 // Test-only routes. Mounted only when DAYBOOK_TEST === '1' (set in
 // wrangler.toml's [env.dev]). The e2e suite achieves per-test isolation by
@@ -193,4 +195,15 @@ test.post('/test/mock-ai-response', async (c) => {
     .run()
 
   return c.json({ status: 'mocked' })
+})
+
+// Runs the reminder cron's sweep on demand so e2e never waits for a real
+// schedule. `now` ('YYYY-MM-DDTHH:MM', business time) overrides the clock.
+// Sweeps EVERY user's due reminders, exactly as the cron does.
+test.post('/test/run-reminders', async (c) => {
+  const b = await c.req.json<{ now?: unknown }>().catch(() => ({}) as { now?: unknown })
+  if (b.now !== undefined && !isValidRemindAt(b.now)) {
+    return c.json({ error: 'now must be YYYY-MM-DDTHH:MM' }, 400)
+  }
+  return c.json(await runReminders(c.env, typeof b.now === 'string' ? b.now : undefined))
 })

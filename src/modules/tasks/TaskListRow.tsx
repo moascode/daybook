@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, FolderInput, UserRound, Trash2, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { ReminderChip } from '@/modules/tasks/ReminderChip'
 import { cn, todayISO } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
 import { useAssignees } from '@/hooks/useAssignees'
@@ -251,6 +252,7 @@ export function TaskListRow({
                 {task.subtaskDone} of {task.subtaskTotal}
               </span>
             )}
+            <ReminderChip task={task} testId="all-tasks-row-reminder" />
             {recurrence && (
               <span className="chip chip-mute inline-flex items-center gap-1" data-testid="all-tasks-row-recurrence">
                 <Repeat className="h-3 w-3" aria-hidden="true" />

@@ -1,4 +1,4 @@
-> **Status:** Open · **Filed:** 2026-09-22 · **Epic:** [EP-07](README.md)
+> **Status:** Archived · **Last verified:** 2026-10-15 · **Filed:** 2026-09-22 · **Shipped:** 2026-10-15 · **Epic:** [EP-07](../../backlog/EP-07-tasks-depth/README.md)
 
 # FEAT-055 — Tasks: composer "Reminder" shortcut
 
@@ -22,7 +22,18 @@ shortcut. Push-notification delivery for reminders (P4 already needs its own
 two secrets set per `docs/guides/push-setup.md` before it does anything at
 all).
 
-**Still needed?** Question it — depends on whether "a task with no
+**Shipped (2026-10-15) — owner decision: a `remind_at` column.** Any task can
+carry `tasks.remind_at` (`'YYYY-MM-DDTHH:MM'`, business time; migration
+`0029_task_remind_at.sql`), set from the detail modal's "Remind me" fields or
+from the composer's Reminder act, which creates an undated task so missing it
+never makes it overdue. Rows show a clock chip; Today also lists an undated
+task whose reminder is today. Delivery: a `*/15` cron (`runReminders`,
+`worker/scheduled.ts`) pushes once per reminder (`push_sent_log`
+`reminder:<id>`), and `notificationsFor` lists due reminders in the in-app
+notifications. This supersedes the "Out of scope" push note above. E2E:
+`e2e/116-tasks-composer-reminder-checklist.spec.ts`.
+
+**Still needed? (historical)** Question it — depends on whether "a task with no
 consequence for missing it" is a real enough distinction from a task to
 justify a new concept, or whether a `!none`-priority, no-due-date-badge task
 already covers the case. Worth a short product conversation before scoping

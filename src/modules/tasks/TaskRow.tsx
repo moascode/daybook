@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Repeat, MoreHorizontal, Pencil, CalendarClock, Trash2, X } from 'lucide-react'
+import { ReminderChip } from '@/modules/tasks/ReminderChip'
 import { cn } from '@/lib/utils'
 import { useTasks } from '@/hooks/useTasks'
 import { avatarClass } from '@/lib/avatar'
@@ -184,6 +185,7 @@ export function TaskRow({
               </span>
             )}
 
+            <ReminderChip task={task} testId="today-task-row-reminder" />
             {recurrence && (
               <span className="chip chip-mute inline-flex items-center gap-1" data-testid="today-task-row-recurrence" title={recurrence}>
                 <Repeat className="h-3 w-3" aria-hidden="true" />

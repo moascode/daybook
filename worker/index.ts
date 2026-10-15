@@ -15,7 +15,7 @@ import { captureTokens } from './routes/capture-tokens.ts'
 import { captures } from './routes/captures.ts'
 import { notifications } from './routes/notifications.ts'
 import { search } from './routes/search.ts'
-import { runDigest } from './scheduled.ts'
+import { runDigest, runReminders } from './scheduled.ts'
 import { test } from './routes/test.ts'
 
 // ─────────────────────────────────────────────────────────────
@@ -148,8 +148,20 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    // 00:10 UTC = 08:10 MYT, 13:10 UTC = 21:10 MYT.
-    const slot = event.cron.startsWith('10 0') ? 'morning' : 'evening'
-    ctx.waitUntil(runDigest(env, slot))
+    // Dispatch on the EXACT cron string (wrangler.toml) — a new schedule must
+    // never fall through into the evening digest by default.
+    switch (event.cron) {
+      case '10 0 * * *': // 00:10 UTC = 08:10 MYT
+        ctx.waitUntil(runDigest(env, 'morning'))
+        break
+      case '10 13 * * *': // 13:10 UTC = 21:10 MYT
+        ctx.waitUntil(runDigest(env, 'evening'))
+        break
+      case '*/15 * * * *': // task reminders (FEAT-055)
+        ctx.waitUntil(runReminders(env))
+        break
+      default:
+        console.error('scheduled: unknown cron', event.cron)
+    }
   },
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useTasks } from '@/hooks/useTasks'
 import { useTaskLists } from '@/hooks/useTaskLists'
+import { upsertTasks } from '@/modules/tasks/composer/upsertTasks'
 import type { TaskList } from '@/hooks/useTaskLists'
 import { useWalletRefChips } from '@/hooks/useWalletRefChips'
 import { useToastStore } from '@/stores/toast.store'
@@ -535,6 +536,7 @@ export function TasksListDetailPage() {
           recurrenceData: t.recurrenceData ?? null,
           recurrenceParentId: t.recurrenceParentId ?? null,
           walletRef: t.walletRef ?? null,
+          remindAt: t.remindAt ?? null,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
         })
@@ -773,6 +775,8 @@ export function TasksListDetailPage() {
                 lists={taskLists}
                 coMembers={coMembers}
                 onCreateTask={handleCreateTask}
+                onTasksCreated={(created) => setOpenTasks((prev) => upsertTasks(prev, created))}
+                defaultListId={isUnsorted ? null : listId}
                 onOpenHabitModal={handleOpenHabitModal}
                 onOpenTaskForm={handleOpenTaskForm}
                 onOpenAssignForm={handleOpenAssignForm}

@@ -39,7 +39,7 @@ migrations_dir = "worker/migrations"
 # Cron Triggers (v3 P4). UTC — these are 08:10 and 21:10 Asia/Kuala_Lumpur.
 # Off-the-hour on purpose: every scheduler on the planet fires at :00.
 [triggers]
-crons = ["10 0 * * *", "10 13 * * *"]
+crons = ["10 0 * * *", "10 13 * * *", "*/15 * * * *"]
 
 [vars]
 # Blocker 4.2: signup is closed in production. Both users are already
