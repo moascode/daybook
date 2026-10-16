@@ -43,8 +43,28 @@ export async function cancelSplit(id: string): Promise<void> {
  * The badge refresh is part of the action, not an afterthought: the sidebar
  * polls once a minute, so rejecting the last outstanding claim would otherwise
  * leave the badge lit for up to a minute after the queue is empty.
+ *
+ * `proposedAmount`, when given, is the debtor's counter-offer — a lower
+ * figure than the original share. Omitted entirely rather than sent as
+ * `undefined`, since the server validates it as a provided value (> 0 and
+ * < the transaction's gross) only when the key is present.
  */
-export async function rejectSplit(id: string, reason: string): Promise<void> {
-  await api.post(`/transactions/splits/${id}/reject`, { reason })
+export async function rejectSplit(id: string, reason: string, proposedAmount?: number): Promise<void> {
+  await api.post(`/transactions/splits/${id}/reject`, {
+    reason,
+    ...(proposedAmount != null ? { proposedAmount } : {}),
+  })
+  await refreshClaimBadge()
+}
+
+/**
+ * The payer accepts a debtor's counter-offer on a rejected claim: that
+ * split's share becomes the proposed amount and it rests at 'approved'
+ * (paying — or here, agreeing to a revised figure — implies agreeing,
+ * CLAUDE.md §3 Money). Payer-only; the server 404s/409s for anyone else or
+ * a claim with nothing standing to accept.
+ */
+export async function acceptProposal(id: string): Promise<void> {
+  await api.post(`/transactions/splits/${id}/accept-proposal`, {})
   await refreshClaimBadge()
 }

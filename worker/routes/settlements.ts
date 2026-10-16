@@ -39,6 +39,7 @@ export async function outstandingSplitsFor(
   debtorId: string,
   creditorId: string,
   scope: DateScope = {},
+  ids?: string[],
 ): Promise<OutstandingSplit[]> {
   // Scoped on the TRANSACTION date, not the split's created_at: that is the date
   // the row shows, and the date the Shared page's filter already means. Absent
@@ -47,6 +48,16 @@ export async function outstandingSplitsFor(
   let dateClause = ''
   if (scope.dateFrom) { dateClause += ' AND t.date >= ?'; binds.push(scope.dateFrom) }
   if (scope.dateTo) { dateClause += ' AND t.date <= ?'; binds.push(scope.dateTo) }
+
+  // POST /settlements' optional shareIds: narrow to an explicit selection
+  // instead of every outstanding split. Appended after the date clause in both
+  // the SQL text and the bind order, so it cannot disturb the positional binds
+  // every existing caller already relies on.
+  let idsClause = ''
+  if (ids && ids.length > 0) {
+    idsClause = ` AND ts.id IN (${ids.map(() => '?').join(', ')})`
+    binds.push(...ids)
+  }
 
   const { results } = await db
     .prepare(
@@ -61,7 +72,7 @@ export async function outstandingSplitsFor(
            SELECT l.share_id FROM settlement_split_lines l
            JOIN settlements sx ON sx.id = l.settlement_id
            WHERE sx.status = 'awaiting_confirmation'
-         )${dateClause}
+         )${dateClause}${idsClause}
        ORDER BY ts.created_at ASC`,
     )
     .bind(...binds)
@@ -335,7 +346,6 @@ settlements.post('/settlements', async (c) => {
 
   const groupId = String(b.groupId ?? '')
   const note = String(b.note ?? '')
-  const scope = readScope(b)
   // The caller's own account — whichever leg they are booking. Historically
   // named by role (fromAccountId = debtor side, toAccountId = creditor side);
   // both are still accepted, and the caller only ever names one.
@@ -357,6 +367,46 @@ settlements.post('/settlements', async (c) => {
     return c.json({ error: 'amount must be a non-negative number' }, 400)
   }
 
+  // Optional selected-rows settlement: settle exactly these splits rather than
+  // the group's net. Shape-checked here, up front, before anything touches the
+  // database.
+  const rawShareIds = b.shareIds
+  // Capped well under D1's 100-bound-parameter limit per statement: this id
+  // list is bound again inside outstandingSplitsFor's IN(...) alongside
+  // groupId/debtorId/creditorId (and any date binds), so 500 ids could blow the
+  // cap on its own. 90 leaves headroom for everything else bound alongside it.
+  const MAX_SHARE_IDS = 90
+  if (rawShareIds !== undefined) {
+    if (!Array.isArray(rawShareIds) || rawShareIds.length === 0) {
+      return c.json({ error: 'shareIds must be a non-empty array of strings' }, 400)
+    }
+    if (rawShareIds.length > MAX_SHARE_IDS) {
+      return c.json({ error: `select at most ${MAX_SHARE_IDS} rows to settle at once` }, 400)
+    }
+    if (!rawShareIds.every((v) => typeof v === 'string' && v.length > 0)) {
+      return c.json({ error: 'shareIds must be a non-empty array of strings' }, 400)
+    }
+    if (new Set(rawShareIds).size !== rawShareIds.length) {
+      return c.json({ error: 'shareIds must not contain duplicates' }, 400)
+    }
+    // A selection is the debtor naming which of their OWN claims to pay, so it
+    // only makes sense from the debtor's side. fromUserId means the creditor is
+    // recording a receipt on the debtor's behalf — there is no "which of my
+    // claims" for them to have chosen.
+    if (rawFrom && rawFrom !== callerId) {
+      return c.json(
+        { error: 'only the payer of a debt can settle selected rows' },
+        400,
+      )
+    }
+  }
+  const shareIds = rawShareIds as string[] | undefined
+
+  // dateFrom/dateTo narrow the group's whole outstanding balance, which a
+  // selected-rows settlement does not compute — the selection already says
+  // exactly what is being settled.
+  const scope = shareIds ? {} : readScope(b)
+
   const [callerIn, otherIn] = await Promise.all([
     isGroupMember(db, callerId, groupId),
     isGroupMember(db, counterpartyId, groupId),
@@ -369,17 +419,58 @@ settlements.post('/settlements', async (c) => {
   // Everything the write set depends on is read here, before any write. Nothing
   // below this point queries for a value it then writes back.
 
-  const n = await computeNetting(db, groupId, callerId, counterpartyId, scope)
-  // Something has to be owed SOMEWHERE. The old guard asked only about one
-  // direction, which is what made the RM30-owed/RM15-owing case unsettleable:
-  // the net was RM15, one payment cleared it, and from then on every further
-  // settlement was refused while both claims sat half-open forever.
-  if (n.theyOweYou < 0.005 && n.youOweThem < 0.005) {
-    return c.json({ error: 'no outstanding balance owed in this group' }, 400)
+  let n: Netting
+  if (shareIds) {
+    // Selected-rows settlement: read exactly those splits (narrowed to the
+    // caller-as-debtor direction only — see outstandingSplitsFor's new `ids`
+    // param) and skip the reverse-direction query entirely. Netting is
+    // deliberately disabled: this is "pay these specific claims", not "clear
+    // the balance", so nothing is offset against what the counterparty owes.
+    const eligible = (
+      await outstandingSplitsFor(db, groupId, callerId, counterpartyId, {}, shareIds)
+    ).filter((s) => cents(s.share_amount - s.settled_amount) > 0.005)
+    const uniqueCount = new Set(shareIds).size
+    if (eligible.length !== uniqueCount) {
+      return c.json(
+        {
+          error:
+            `${uniqueCount - eligible.length} of the selected rows are not eligible to settle ` +
+            '(not yours to pay, not owed to this counterparty, outside this group, already ' +
+            'settled, rejected, or already claimed by another payment)',
+        },
+        400,
+      )
+    }
+    const total = cents(eligible.reduce((sum, s) => sum + (s.share_amount - s.settled_amount), 0))
+    if (rawAmount !== undefined && rawAmount > total + 0.005) {
+      return c.json(
+        { error: `amount cannot exceed the outstanding total of ${total.toFixed(2)} for the selected rows` },
+        400,
+      )
+    }
+    n = {
+      theirSplits: [],
+      mySplits: eligible,
+      theyOweYou: 0,
+      youOweThem: total,
+      offset: 0,
+      net: cents(-total),
+      payerId: callerId,
+    }
+  } else {
+    n = await computeNetting(db, groupId, callerId, counterpartyId, scope)
+    // Something has to be owed SOMEWHERE. The old guard asked only about one
+    // direction, which is what made the RM30-owed/RM15-owing case unsettleable:
+    // the net was RM15, one payment cleared it, and from then on every further
+    // settlement was refused while both claims sat half-open forever.
+    if (n.theyOweYou < 0.005 && n.youOweThem < 0.005) {
+      return c.json({ error: 'no outstanding balance owed in this group' }, 400)
+    }
   }
 
   // Default to clearing the whole net — that is what makes "settle everything"
-  // one click. U-13's cap still applies to anything larger.
+  // one click. U-13's cap still applies to anything larger (shareIds already
+  // refused anything over its own total above).
   const wanted = rawAmount === undefined ? Math.abs(n.net) : cents(rawAmount)
   const cash = cents(Math.min(wanted, Math.abs(n.net)))
   const offset = n.offset

@@ -36,6 +36,7 @@ export function mapSplitClaim(r: Raw): SplitClaim {
     settlementId: r.settlement_id ? String(r.settlement_id) : null,
     rejectedReason: String(r.rejected_reason ?? ''),
     rejectedAt: r.rejected_at ? String(r.rejected_at) : null,
+    proposedAmount: r.proposed_amount != null ? Number(r.proposed_amount) : null,
     createdAt: String(r.created_at ?? ''),
     date: String(r.date ?? ''),
     merchant: String(r.merchant ?? ''),

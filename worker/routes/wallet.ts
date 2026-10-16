@@ -2037,7 +2037,8 @@ wallet.get('/transactions/:id/splits', async (c) => {
 
   const { results } = await c.env.DB.prepare(
     `SELECT ts.id, ts.transaction_id, ts.user_id, ts.share_amount, ts.note, ts.settled_at,
-            ts.created_at, ts.status, ts.rejected_reason, ts.rejected_at, u.username
+            ts.created_at, ts.status, ts.rejected_reason, ts.rejected_at, ts.proposed_amount,
+            u.username
      FROM transaction_splits ts
      JOIN users u ON u.id = ts.user_id
      WHERE ts.transaction_id = ?
@@ -2149,7 +2150,8 @@ wallet.get('/transactions/splits/mine', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT ts.id, ts.transaction_id, ts.share_amount, ts.settled_amount, ts.offset_amount,
             ts.note,
-            ts.status, ts.rejected_reason, ts.rejected_at, ts.settled_at, ts.created_at,
+            ts.status, ts.rejected_reason, ts.rejected_at, ts.proposed_amount, ts.settled_at,
+            ts.created_at,
             ${CLAIM_STATE_SQL} AS claim_state,
             ${OPEN_CLAIM} AS settlement_id,
             t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
@@ -2304,10 +2306,16 @@ wallet.post('/transactions/splits/:id/reject', async (c) => {
   const reason = typeof b.reason === 'string' ? b.reason.slice(0, 500) : ''
 
   const split = await c.env.DB.prepare(
-    'SELECT id, user_id, status, settled_amount FROM transaction_splits WHERE id = ?',
+    'SELECT id, user_id, status, settled_amount, share_amount FROM transaction_splits WHERE id = ?',
   )
     .bind(id)
-    .first<{ id: string; user_id: string; status: string; settled_amount: number }>()
+    .first<{
+      id: string
+      user_id: string
+      status: string
+      settled_amount: number
+      share_amount: number
+    }>()
   // 404 rather than 403 for someone else's split — the same non-disclosure rule
   // the group routes use, so an id cannot be probed for existence.
   if (!split || split.user_id !== userId) {
@@ -2333,22 +2341,224 @@ wallet.post('/transactions/splits/:id/reject', async (c) => {
     )
   }
 
+  // The debtor's counter-offer: "I don't owe my whole share, but I do owe this
+  // much." Optional — a plain rejection still means "I owe nothing". Bounded by
+  // THIS split's own share_amount, not the transaction's gross: a multi-way
+  // split's gross is shared with other, unrelated claims, and a proposal over
+  // this debtor's own share is not a counter-offer, it is the claim as billed.
+  let proposedAmount: number | null = null
+  if (b.proposedAmount !== undefined && b.proposedAmount !== null) {
+    const raw = Number(b.proposedAmount)
+    if (!Number.isFinite(raw)) {
+      return c.json({ error: 'proposedAmount must be a finite number' }, 400)
+    }
+    proposedAmount = Math.round(raw * 100) / 100
+    if (proposedAmount <= 0 || proposedAmount >= split.share_amount) {
+      return c.json(
+        {
+          error:
+            `proposed amount must be greater than 0 and less than your current share ` +
+            `(RM ${split.share_amount.toFixed(2)})`,
+        },
+        400,
+      )
+    }
+  }
+
   const row = await c.env.DB.prepare(
     // Rejecting stays reachable from 'approved': approval is reversible until
     // money moves, and a recipient who agreed to a claim and then found it wrong
     // must not be locked into it. The preflight above already refuses once
     // anything has been paid.
     `UPDATE transaction_splits
-     SET status = 'rejected', rejected_reason = ?, rejected_at = datetime('now')
+     SET status = 'rejected', rejected_reason = ?, rejected_at = datetime('now'),
+         proposed_amount = ?
      WHERE id = ? AND status IN ('pending', 'approved')
      RETURNING *`,
   )
-    .bind(reason, id)
+    .bind(reason, proposedAmount, id)
     .first()
   // The guard above and this WHERE can disagree only if another request moved
   // the row in between; report that rather than a misleading success.
   if (!row) return c.json({ error: 'split is no longer open' }, 409)
 
+  return c.json(row)
+})
+
+// POST /transactions/splits/:id/accept-proposal — the payer agrees to the
+// debtor's counter-offer from a rejection.
+//
+// The debtor proposed the smaller amount when they rejected the claim;
+// accepting it is the payer agreeing to be owed less, not the debtor agreeing
+// to anything new, so the row rests at 'approved' straight away — the same
+// "paying implies agreeing" rule the settlement path uses (CLAUDE.md §3),
+// applied one step earlier because here it is the payer, not money, doing the
+// agreeing.
+wallet.post('/transactions/splits/:id/accept-proposal', async (c) => {
+  const userId = c.get('userId')
+  const id = c.req.param('id')
+
+  const split = await c.env.DB.prepare(
+    `SELECT ts.id, ts.transaction_id, ts.user_id, ts.status, ts.settled_amount,
+            ts.proposed_amount, ts.rejected_reason, ts.rejected_at,
+            t.user_id AS owner_id, t.amount AS transaction_amount
+       FROM transaction_splits ts
+       JOIN transactions t ON t.id = ts.transaction_id
+      WHERE ts.id = ?`,
+  )
+    .bind(id)
+    .first<{
+      id: string
+      transaction_id: string
+      user_id: string
+      status: string
+      settled_amount: number
+      proposed_amount: number | null
+      rejected_reason: string
+      rejected_at: string | null
+      owner_id: string
+      transaction_amount: number
+    }>()
+  // 404 for someone else's transaction, or an id that does not exist — the same
+  // non-disclosure rule every other split route uses; the caller here is the
+  // payer (the transaction owner), not the debtor who made the claim.
+  if (!split || split.owner_id !== userId) return c.json({ error: 'split not found' }, 404)
+
+  if (split.status !== 'rejected' || split.proposed_amount === null) {
+    return c.json({ error: 'this split has no counter-offer to accept' }, 409)
+  }
+  if (split.settled_amount > 0.005) {
+    return c.json(
+      { error: 'this split has been (partly) settled; undo the settlement first' },
+      409,
+    )
+  }
+
+  // The payer DOES usually have a row of their own on this transaction — every
+  // mode but 'none' writes one (POST /transactions/:id/split, "equal"/"custom"
+  // branches) — and accepting a smaller debtor share has to shrink it, or the
+  // rows stop summing to the transaction's gross the moment this commits. Only
+  // when no payer row exists ('none' mode — a single recipient owing the whole
+  // amount) is there nothing to adjust, and one is inserted instead.
+  const gross = Math.abs(split.transaction_amount)
+  const payerRow = await c.env.DB.prepare(
+    'SELECT 1 AS ok FROM transaction_splits WHERE transaction_id = ? AND user_id = ?',
+  )
+    .bind(split.transaction_id, split.owner_id)
+    .first()
+
+  // Preflight only — a clear 409 in the common case. The actual guard that
+  // decides whether anything is written lives in the UPDATE's WHERE below,
+  // because this JS read can go stale between here and the batch committing
+  // (two concurrent accepts on two different debtor rows of the same
+  // multi-share transaction). Excludes the payer's own row: it is the
+  // remainder, not one of the claims being summed against the gross.
+  const others = await c.env.DB.prepare(
+    `SELECT COALESCE(SUM(share_amount), 0) AS total
+       FROM transaction_splits
+      WHERE transaction_id = ? AND id != ? AND user_id != ? AND status != 'rejected'`,
+  )
+    .bind(split.transaction_id, id, split.owner_id)
+    .first<{ total: number }>()
+  const othersTotal = others?.total ?? 0
+  if (othersTotal + split.proposed_amount >= gross - 0.005) {
+    return c.json(
+      { error: 'accepting this proposal would leave the payer nothing left to keep' },
+      409,
+    )
+  }
+
+  // The debtor row. Guarded in the WHERE by the SAME invariant checked above,
+  // but recomputed from live data at commit time rather than trusting the JS
+  // read — the only way two concurrent accept-proposal calls against different
+  // debtor rows of one multi-share transaction cannot jointly push the total
+  // past the gross. If this matches 0 rows, nothing below in this batch is
+  // allowed to apply either (see the payer-row write's own EXISTS guard).
+  const debtorUpdate = c.env.DB.prepare(
+    `UPDATE transaction_splits
+        SET share_amount = proposed_amount, status = 'approved', approved_at = datetime('now'),
+            rejected_reason = '', rejected_at = NULL, proposed_amount = NULL
+      WHERE id = ? AND status = 'rejected' AND proposed_amount IS NOT NULL
+        AND settled_amount < 0.005
+        AND (
+          SELECT COALESCE(SUM(share_amount), 0) FROM transaction_splits
+           WHERE transaction_id = ? AND id != ? AND user_id != ? AND status != 'rejected'
+        ) + proposed_amount < (SELECT ABS(amount) FROM transactions WHERE id = ?) - 0.005
+      RETURNING *`,
+  ).bind(id, split.transaction_id, id, split.owner_id, split.transaction_id)
+
+  // The payer's row (or its absence). Guarded on the debtor row just above
+  // having actually landed as 'approved' — statements in one batch() run
+  // sequentially inside the same atomic transaction, so by the time this one
+  // executes it sees whatever the debtor UPDATE just committed. If that UPDATE
+  // matched 0 rows the debtor row is still 'rejected' and this EXISTS is
+  // false, so neither the UPDATE nor the INSERT variant below writes anything
+  // — the two legs succeed or fail together without a separate compensation
+  // pass for the common case.
+  const payerWrite = payerRow
+    ? c.env.DB.prepare(
+        `UPDATE transaction_splits
+            SET share_amount = (SELECT ABS(amount) FROM transactions WHERE id = ?)
+                                - (SELECT COALESCE(SUM(share_amount), 0) FROM transaction_splits
+                                    WHERE transaction_id = ? AND user_id != ? AND status != 'rejected')
+          WHERE transaction_id = ? AND user_id = ?
+            AND EXISTS (SELECT 1 FROM transaction_splits WHERE id = ? AND status = 'approved')`,
+      ).bind(
+        split.transaction_id, split.transaction_id, split.owner_id,
+        split.transaction_id, split.owner_id, id,
+      )
+    : // 'none' mode: no payer row exists yet. Insert one with the same shape
+      // splitInsert() uses (id/transaction_id/user_id/share_amount/note/
+      // created_at), only reachable when this debtor row is the transaction's
+      // sole non-owner split (otherwise a payer row would already exist from
+      // the 'equal'/'custom' re-split branch), so there is no concurrent
+      // second insert to worry about.
+      c.env.DB.prepare(
+        `INSERT INTO transaction_splits (id, transaction_id, user_id, share_amount, note, created_at)
+         SELECT lower(hex(randomblob(16))), ?, ?,
+                (SELECT ABS(amount) FROM transactions WHERE id = ?)
+                  - (SELECT COALESCE(SUM(share_amount), 0) FROM transaction_splits
+                      WHERE transaction_id = ? AND user_id != ? AND status != 'rejected'),
+                '', datetime('now')
+          WHERE EXISTS (SELECT 1 FROM transaction_splits WHERE id = ? AND status = 'approved')
+            AND NOT EXISTS (
+              SELECT 1 FROM transaction_splits WHERE transaction_id = ? AND user_id = ?
+            )`,
+      ).bind(
+        split.transaction_id, split.owner_id, split.transaction_id,
+        split.transaction_id, split.owner_id, id,
+        split.transaction_id, split.owner_id,
+      )
+
+  const [debtorResult, payerResult] = await c.env.DB.batch([debtorUpdate, payerWrite])
+  const debtorChanges = debtorResult.meta?.changes ?? 0
+  const payerChanges = payerResult.meta?.changes ?? 0
+
+  // The preflight above and the WHERE can disagree only if another request
+  // moved this row, or a sibling share on the same transaction, in between;
+  // report that rather than a misleading success.
+  if (debtorChanges !== 1) {
+    return c.json({ error: 'this split is no longer open to a counter-offer' }, 409)
+  }
+  // Defensive only: the payer write's own guard means this should never fire
+  // when the debtor update above succeeded. If it somehow does, undo the
+  // debtor row rather than leave the two halves of this transaction
+  // inconsistent — the same CAS-plus-compensation idiom POST /settlements uses
+  // for its own guarded batch (settlements.ts).
+  if (payerChanges !== 1) {
+    await c.env.DB.prepare(
+      `UPDATE transaction_splits
+          SET status = 'rejected', proposed_amount = ?, rejected_reason = ?, rejected_at = ?,
+              approved_at = NULL
+        WHERE id = ?`,
+    )
+      .bind(split.proposed_amount, split.rejected_reason, split.rejected_at, id)
+      .run()
+    console.warn(`accept-proposal ${id} rolled back: payer-row write did not take effect`)
+    return c.json({ error: 'could not update the payer’s share; please retry' }, 409)
+  }
+
+  const row = debtorResult.results?.[0]
   return c.json(row)
 })
 

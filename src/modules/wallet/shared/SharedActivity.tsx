@@ -8,10 +8,13 @@ import { Modal } from '@/components/ui/Modal'
 import { MultiSelect } from '@/components/ui/MultiSelect'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useToastStore } from '@/stores/toast.store'
-import { approveSplit, approveSplits, cancelSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
+import { acceptProposal, approveSplit, approveSplits, cancelSplit, rejectSplit, unapproveSplit } from '@/hooks/useSplits'
 import { cn, errorMessage, formatMYR } from '@/lib/utils'
 import { CategoryIcon, categoryTint, resolveCategoryIconKey } from '@/lib/categoryIcon'
 import { SplitDetailModal } from './SplitDetailModal'
+import { RejectClaimModal } from './RejectClaimModal'
+import { computeSettleEligibility } from './bulkSettleEligibility'
+import { SettleUpDialog } from '@/modules/wallet/SettleUpDialog'
 import type { TransactionFormData } from '@/modules/wallet/TransactionForm'
 import type { ClaimState, SplitClaim } from '@/types/household.types'
 import type { Account, Category } from '@/types/wallet.types'
@@ -48,7 +51,7 @@ interface ActivityRow extends SplitClaim {
   counterpartyUsername: string
 }
 
-type StatusFilter = 'open' | 'settled' | 'all'
+type StatusFilter = 'open' | 'settled' | 'rejected' | 'all'
 
 const AVATAR_PALETTE = [
   { bg: 'var(--calm-bg)', fg: 'var(--calm-fg)' },
@@ -93,6 +96,7 @@ export function SharedActivity({
   currentUserId,
   accounts,
   categories,
+  groupIdFor,
   onUpdateTransaction,
   onChanged,
 }: {
@@ -101,6 +105,14 @@ export function SharedActivity({
   currentUserId: string
   accounts: Account[]
   categories: Category[]
+  /**
+   * A claim's own API shape carries no group id, so Settle Up's "same group"
+   * requirement (POST /settlements needs a real groupId) is answered by the
+   * caller instead — SharedPage already fetches every group's membership
+   * list for other reasons and can say which group, if any, the viewer
+   * shares with a given counterparty. Null means no shared group was found.
+   */
+  groupIdFor: (userId: string) => string | null
   onUpdateTransaction: (id: string, data: TransactionFormData) => Promise<unknown>
   onChanged: () => void
 }) {
@@ -114,9 +126,19 @@ export function SharedActivity({
   const [rejecting, setRejecting] = useState<ActivityRow[] | null>(null)
   const [cancelling, setCancelling] = useState<ActivityRow[] | null>(null)
   const [detailRow, setDetailRow] = useState<ActivityRow | null>(null)
-  const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [visibleCount, setVisibleCount] = useState(20)
+  // Snapshot for the bulk-settle flow: which splits, who, and the sum to
+  // prefill — captured at "Settle" click time so the dialog below renders
+  // off a stable value rather than recomputing from a selection that keeps
+  // changing underneath it (e.g. as rows are removed by onChanged refreshes).
+  const [bulkSettle, setBulkSettle] = useState<{
+    shareIds: string[]
+    counterpartyId: string
+    counterpartyUsername: string
+    groupId: string | null
+    total: number
+  } | null>(null)
 
   const rows: ActivityRow[] = useMemo(() => {
     const debtorRows: ActivityRow[] = claimsIOwe.map((c) => ({
@@ -143,12 +165,19 @@ export function SharedActivity({
   const filtered = rows.filter((r) => {
     if (memberFilter.length > 0 && !memberFilter.includes(r.counterpartyId)) return false
     if (status === 'settled') return r.state === 'settled'
+    if (status === 'rejected') return r.state === 'rejected'
     if (status === 'open') return r.state === 'pending' || r.state === 'approved' || r.state === 'awaiting_confirmation'
     return true
   })
   const visible = filtered.slice(0, visibleCount)
   const openCount = rows.filter((r) => r.state === 'pending' || r.state === 'approved' || r.state === 'awaiting_confirmation').length
   const settledCount = rows.filter((r) => r.state === 'settled').length
+  const rejectedCount = rows.filter((r) => r.state === 'rejected').length
+  const emptyMessage =
+    status === 'rejected' ? 'No rejected splits.'
+      : status === 'settled' ? 'Nothing settled yet.'
+        : status === 'open' ? "Nothing open — you're all caught up."
+          : 'Nothing here.'
 
   // Selectable whenever anything at all could be done with it in bulk — not
   // just approvable, so a mixed selection of pending/approved rows across
@@ -163,6 +192,24 @@ export function SharedActivity({
   const selectedApprovable = selectedRows.filter((r) => claimPermissions(r).canApprove)
   const selectedRejectable = selectedRows.filter((r) => claimPermissions(r).canReject)
   const selectedCancellable = selectedRows.filter((r) => claimPermissions(r).canCancel)
+
+  // Whether the current selection can go straight to Settle Up — see
+  // bulkSettleEligibility.ts for the actual rule (same debt direction, same
+  // open state, same counterparty, and a group the viewer actually shares
+  // with that counterparty).
+  const settleEligibility = computeSettleEligibility(selectedRows, groupIdFor)
+
+  function openBulkSettle() {
+    if (!settleEligibility.ok || selectedRows.length === 0) return
+    const first = selectedRows[0]
+    setBulkSettle({
+      shareIds: selectedRows.map((r) => r.id),
+      counterpartyId: first.counterpartyId,
+      counterpartyUsername: first.counterpartyUsername,
+      groupId: groupIdFor(first.counterpartyId),
+      total: Math.round(selectedRows.reduce((s, r) => s + r.outstanding, 0) * 100) / 100,
+    })
+  }
 
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -180,6 +227,10 @@ export function SharedActivity({
   async function handleApprove(row: ActivityRow) {
     try {
       await approveSplit(row.id)
+      // Closes the detail popup on success only — on failure it stays open
+      // with the error toasted, so the user can see what they were acting on
+      // and try again rather than being dropped back to the list.
+      setDetailRow(null)
       onChanged()
       addToast({ message: `Agreed: ${row.merchant || 'split'}`, duration: 4000 })
     } catch (err: unknown) {
@@ -190,10 +241,25 @@ export function SharedActivity({
   async function handleUndoApprove(row: ActivityRow) {
     try {
       await unapproveSplit(row.id)
+      setDetailRow(null)
       onChanged()
       addToast({ message: `Undone: ${row.merchant || 'split'}`, duration: 4000 })
     } catch (err: unknown) {
       addToast({ message: errorMessage(err, 'Could not undo that.'), duration: 5000 })
+    }
+  }
+
+  /** Payer accepts a debtor's counter-offer — works from either the row's own
+   * Accept action or a different participant's row inside the detail modal,
+   * so it is keyed by split id rather than a whole ActivityRow. */
+  async function handleAcceptProposal(splitId: string, proposedAmount: number | null) {
+    try {
+      await acceptProposal(splitId)
+      setDetailRow(null)
+      onChanged()
+      addToast({ message: `Accepted — share is now ${formatMYR(proposedAmount ?? 0)}`, duration: 4000 })
+    } catch (err: unknown) {
+      addToast({ message: errorMessage(err, 'Could not accept that proposal.'), duration: 5000 })
     }
   }
 
@@ -216,7 +282,6 @@ export function SharedActivity({
   function openReject(rowsToReject: ActivityRow[]) {
     setDetailRow(null)
     setRejecting(rowsToReject)
-    setReason('')
   }
 
   function openCancel(rowsToCancel: ActivityRow[]) {
@@ -227,21 +292,24 @@ export function SharedActivity({
   // No bulk reject/cancel endpoint exists server-side — this loops the same
   // per-claim call the single-row path uses (Promise.allSettled so one
   // failure in the batch doesn't hide the rest, mirroring MarkAllSettled's
-  // partial-failure handling).
-  async function confirmReject() {
+  // partial-failure handling). The reason/proposedAmount validation itself
+  // lives in RejectClaimModal, which only calls this once both are settled.
+  async function confirmReject(reason: string, proposedAmount?: number) {
     if (!rejecting || rejecting.length === 0) return
     setBusy(true)
     try {
-      const results = await Promise.allSettled(rejecting.map((r) => rejectSplit(r.id, reason)))
+      const results = await Promise.allSettled(rejecting.map((r) => rejectSplit(r.id, reason, proposedAmount)))
       const failed = results.filter((r) => r.status === 'rejected').length
+      const rejectedCount = rejecting.length
       setRejecting(null)
-      setReason('')
       setSelected(new Set())
       onChanged()
       if (failed > 0) {
-        addToast({ message: `${failed} of ${rejecting.length} couldn't be rejected. The rest were.`, duration: 5000 })
+        addToast({ message: `${failed} of ${rejectedCount} couldn't be rejected. The rest were.`, duration: 5000 })
+      } else if (proposedAmount != null) {
+        addToast({ message: `Rejected — proposed ${formatMYR(proposedAmount)}`, duration: 4000 })
       } else {
-        addToast({ message: rejecting.length === 1 ? 'Split rejected' : `${rejecting.length} splits rejected`, duration: 4000 })
+        addToast({ message: rejectedCount === 1 ? 'Split rejected' : `${rejectedCount} splits rejected`, duration: 4000 })
       }
     } finally {
       setBusy(false)
@@ -280,9 +348,9 @@ export function SharedActivity({
             testId="activity-member-filter"
           />
           <div className="segment" role="tablist">
-            {(['open', 'settled', 'all'] as const).map((s) => (
+            {(['open', 'settled', 'rejected', 'all'] as const).map((s) => (
               <button key={s} type="button" role="tab" aria-selected={status === s} onClick={() => setStatus(s)}>
-                {s === 'open' ? 'Open' : s === 'settled' ? 'Settled' : 'All'}
+                {s === 'open' ? 'Open' : s === 'settled' ? 'Settled' : s === 'rejected' ? 'Rejected' : 'All'}
               </button>
             ))}
           </div>
@@ -300,11 +368,14 @@ export function SharedActivity({
         </div>
 
         {visible.length === 0 && (
-          <p className="px-2 py-6 text-center text-xs text-fg-faint" data-testid="split-list-empty">Nothing here.</p>
+          <p className="px-2 py-6 text-center text-xs text-fg-faint" data-testid="split-list-empty">{emptyMessage}</p>
         )}
 
         {visible.map((row) => {
           const { canApprove, canUndoApprove, canReject, canCancel } = claimPermissions(row)
+          // Payer-only, and only once the debtor has put a counter-offer on
+          // the table — the claim's own role+state says who is looking at it.
+          const canAcceptProposal = row.role === 'creditor' && row.state === 'rejected' && row.proposedAmount != null
           const participants = (participantsByTxn.get(row.transactionId) ?? 0) + 1
           const isNegative = row.role === 'debtor'
           const title = row.merchant || row.description || '(no merchant)'
@@ -341,6 +412,14 @@ export function SharedActivity({
                     <span className="tname min-w-0" data-testid="split-row-link">{title}</span>
                     <StatusChip state={row.state} />
                   </div>
+                  {/* The debtor's counter-offer on a rejected claim — shown to
+                      whichever side is reading it; only the payer also gets
+                      the Accept action (trailing column, canAcceptProposal). */}
+                  {row.state === 'rejected' && row.proposedAmount != null && (
+                    <p className="tsub" data-testid="split-row-proposed-amount">
+                      Proposed {formatMYR(row.proposedAmount)}
+                    </p>
+                  )}
                   {/* A merchant and an amount are not enough to judge a claim
                       by — shown whenever it differs from the title above, so
                       it is never silently dropped just because a merchant
@@ -396,6 +475,15 @@ export function SharedActivity({
                     <Ban className="h-3.5 w-3.5 text-red-600" />
                   </RowActionIcon>
                 )}
+                {canAcceptProposal && (
+                  <RowActionIcon
+                    label={`Accept proposed ${formatMYR(row.proposedAmount ?? 0)}`}
+                    testId="claim-accept-proposal"
+                    onClick={() => handleAcceptProposal(row.id, row.proposedAmount)}
+                  >
+                    <Check className="h-3.5 w-3.5 text-positive-600" />
+                  </RowActionIcon>
+                )}
               </div>
             </div>
           )
@@ -404,7 +492,7 @@ export function SharedActivity({
         <div className="divider" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', paddingBottom: 'var(--s3)' }}>
           <span style={{ fontSize: 'var(--t-sm)', color: 'rgb(var(--fg-subtle))' }}>
-            {openCount} open · {settledCount} settled
+            {openCount} open · {settledCount} settled · {rejectedCount} rejected
           </span>
           {filtered.length > visible.length && (
             <Button variant="secondary" style={{ marginLeft: 'auto' }} onClick={() => setVisibleCount((n) => n + 20)}>
@@ -450,42 +538,34 @@ export function SharedActivity({
               <Ban className="h-3.5 w-3.5" /> Cancel {selectedCancellable.length}
             </Button>
           )}
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              onClick={openBulkSettle}
+              disabled={!settleEligibility.ok || busy}
+              title={settleEligibility.ok ? undefined : settleEligibility.reason}
+              aria-describedby={settleEligibility.ok ? undefined : 'split-bulk-settle-reason'}
+              data-testid="split-bulk-settle"
+            >
+              Settle {selectedRows.length}
+            </Button>
+            {/* Visible, not just a hover tooltip (CLAUDE.md §2 rule 10) — a
+                disabled button with no reason reads as "nothing happened". */}
+            {!settleEligibility.ok && (
+              <span id="split-bulk-settle-reason" className="max-w-[16rem] text-xs text-fg-faint" data-testid="split-bulk-settle-reason">
+                {settleEligibility.reason}
+              </span>
+            )}
+          </div>
         </BulkActionBar>
       )}
 
-      <Modal
-        open={!!rejecting}
-        onOpenChange={(next) => { if (!next) setRejecting(null) }}
-        title={rejecting && rejecting.length > 1 ? `Reject ${rejecting.length} splits?` : 'Reject this split?'}
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-fg-muted">
-            {rejecting && (rejecting.length === 1
-              ? <>{formatMYR(rejecting[0].outstanding)} from {rejecting[0].ownerUsername} for <span className="font-medium">{rejecting[0].merchant || '(no merchant)'}</span>.</>
-              : <>{formatMYR(rejecting.reduce((s, r) => s + r.outstanding, 0))} total across {rejecting.length} splits.</>
-            )}
-          </p>
-          <div>
-            <label htmlFor="reject-reason" className="mb-1 block text-xs font-medium text-fg-muted">
-              Reason (optional{rejecting && rejecting.length > 1 ? ' — applied to all' : ''})
-            </label>
-            <textarea
-              id="reject-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={2}
-              maxLength={500}
-              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:border-brand-400 focus:outline-none"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setRejecting(null)}>Cancel</Button>
-            <Button variant="danger" size="sm" onClick={confirmReject} disabled={busy} data-testid="claim-reject-confirm">
-              {rejecting && rejecting.length > 1 ? `Reject ${rejecting.length} splits` : 'Reject split'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <RejectClaimModal
+        rejecting={rejecting}
+        busy={busy}
+        onConfirm={confirmReject}
+        onClose={() => setRejecting(null)}
+      />
 
       <Modal
         open={!!cancelling}
@@ -530,8 +610,35 @@ export function SharedActivity({
         onUndoApprove={() => detailRow && handleUndoApprove(detailRow)}
         onReject={() => detailRow && openReject([detailRow])}
         onCancel={() => detailRow && openCancel([detailRow])}
+        onAcceptProposal={(splitId, proposedAmount) => handleAcceptProposal(splitId, proposedAmount)}
         onUpdateTransaction={onUpdateTransaction}
         onClose={() => setDetailRow(null)}
+      />
+
+      <SettleUpDialog
+        groupId={bulkSettle?.groupId ?? ''}
+        balance={bulkSettle ? {
+          fromUserId: currentUserId,
+          fromUsername: '',
+          toUserId: bulkSettle.counterpartyId,
+          toUsername: bulkSettle.counterpartyUsername,
+          amount: bulkSettle.total,
+        } : null}
+        currentUserId={currentUserId}
+        accounts={accounts.map((a) => ({ ...a, sharedByUsername: a.sharedByUsername ?? undefined }))}
+        shareIds={bulkSettle?.shareIds}
+        totalOutstanding={bulkSettle?.total}
+        onClose={() => setBulkSettle(null)}
+        onSettled={() => {
+          // Recording is a claim, not a clearance (W4) — the counterparty
+          // still has to confirm the money arrived, so "Settled" overstates
+          // what just happened.
+          const name = bulkSettle?.counterpartyUsername ?? ''
+          setBulkSettle(null)
+          setSelected(new Set())
+          onChanged()
+          addToast({ message: `Payment recorded — waiting for ${name} to confirm`, duration: 4000 })
+        }}
       />
     </section>
   )

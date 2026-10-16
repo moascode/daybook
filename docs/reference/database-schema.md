@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-15
+> **Status:** Live · **Last verified:** 2026-10-16
 
 # Database schema
 
@@ -254,6 +254,20 @@ CREATE INDEX IF NOT EXISTS idx_settlements_group        ON settlements(group_id)
 > batch (restoring only splits still holding *our* value) and the caller gets
 > 409. Verified by fault injection. Do not "simplify" this into a plain batch.
 
+> **Optional `shareIds: string[]` on `POST /settlements`** settles exactly
+> those splits instead of the group's net: debtor-initiated only (`toUserId`,
+> not `fromUserId`), ≤90 de-duplicated ids (well under D1's 100-bound-parameter
+> limit per statement, since this list is bound again inside the outstanding
+> read alongside groupId/debtorId/creditorId), every one must be the caller's own
+> outstanding split on the named counterparty within `groupId` — else 400
+> naming how many are ineligible, no partial acceptance. Netting is disabled
+> (`offset` is 0, the reverse-direction query is skipped entirely) and
+> `dateFrom`/`dateTo` are ignored — the selection already says what is being
+> settled. `amount` defaults to the selection's outstanding total; a larger
+> value is a 400, not a silent cap. Reuses `allocate()`/the CAS batch/the
+> compensation path unmodified — it only changes which rows the hoisted read
+> covers.
+
 > **Paying implies agreeing (D-1).** Every post-settlement and rollback resting
 > state is `approved`, which is why undo needs no memory of the prior status. The
 > trap that cost a session: a debtor-side CAS probe wrote `status='pending'` as a
@@ -460,6 +474,47 @@ ALTER TABLE recurring_transactions ADD COLUMN amount_changed_at TEXT;    -- null
   actually changes `amount` (old value, today's date) — this is price-rise
   source (b); source (a) matches a real charge against the rule and never
   touches these columns.
+
+### Split rejection counter-offer (migration `0032_split_proposed_amount.sql` / `0031_` on the server)
+
+```sql
+ALTER TABLE transaction_splits ADD COLUMN proposed_amount REAL DEFAULT NULL;
+```
+
+- The debtor's counter-offer, set only by `POST /transactions/splits/:id/reject`
+  when the body includes `proposedAmount`: a finite number, rounded to 2dp,
+  strictly greater than 0 and strictly less than **this split's own
+  `share_amount`** (not the transaction's gross — a multi-way split's gross is
+  shared with other, unrelated claims), else 400. NULL on every row rejected
+  without one, and on every pre-existing row.
+- `POST /transactions/splits/:id/accept-proposal` is the payer agreeing to it:
+  caller must own the transaction (404 otherwise, the usual non-disclosure
+  rule); the split must be `status='rejected'` with `proposed_amount` set and
+  `settled_amount` ~0, else 409.
+  **The payer usually does have a row of their own** — every split mode but
+  `'none'` writes one (`POST /transactions/:id/split`'s `equal`/`custom`
+  branches) — and accepting a smaller debtor share shrinks it in the same
+  `batch()`, recomputed as `gross − SUM(other non-rejected, non-owner shares)`
+  so the rows keep summing to the gross; only `'none'` mode (no payer row) gets
+  one inserted instead. There is no route that "enforces" this as a rule the
+  caller must satisfy beforehand — this route computes and writes the correct
+  payer figure itself.
+  The invariant actually checked (JS preflight for a clear 409, then folded
+  into the debtor UPDATE's own `WHERE` as a live subquery so it is re-verified
+  against current data at commit time, not the possibly-stale JS read) is: the
+  sum of every other non-rejected, non-owner share plus this `proposed_amount`
+  must stay below the gross, so the payer's remainder stays positive. The
+  payer-row write is guarded on the debtor row having actually landed as
+  `approved` (statements in one `batch()` run sequentially inside one atomic
+  transaction, so it sees that write); a mismatch after the batch is
+  compensated by reverting the debtor row, the same CAS-plus-compensation
+  idiom `POST /settlements` uses for its own guarded batch.
+  The debtor row's guarded write sets `share_amount = proposed_amount`,
+  `status = 'approved'` (paying implies agreeing, applied here one step early —
+  see the Paying implies agreeing note below), clears `rejected_reason`,
+  `rejected_at` and `proposed_amount`.
+- Exposed on `GET /transactions/splits/mine` and `GET /transactions/:id/splits`
+  alongside the existing rejection fields.
 
 ### Tasks tracked time (migration `0031_task_tracked_time.sql` / `0030_` on the server)
 

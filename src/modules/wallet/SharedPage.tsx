@@ -53,6 +53,13 @@ export function SharedPage() {
   const [totals, setTotals] = useState({ owedToMe: 0, iOwe: 0 })
   const [claimsIOwe, setClaimsIOwe] = useState<SplitClaim[]>([])
   const [claimsOwedToMe, setClaimsOwedToMe] = useState<SplitClaim[]>([])
+  // A claim's own shape carries no group id (GET /transactions/splits/mine
+  // doesn't return one), but SharedActivity's bulk-settle needs to know
+  // whether the viewer actually shares a group with a given counterparty —
+  // POST /settlements requires a real groupId. Built from the per-group
+  // member lists below, which this page already fetches for the plan/chain
+  // cards; first group found wins for a given person.
+  const [groupIdByCounterparty, setGroupIdByCounterparty] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [settleTarget, setSettleTarget] = useState<
@@ -141,11 +148,20 @@ export function SharedPage() {
       }
       nextPairings.sort((a, b) => (b.balance?.amount ?? 0) - (a.balance?.amount ?? 0))
 
+      const nextGroupIdByCounterparty: Record<string, string> = {}
+      for (const { group, members } of perGroup) {
+        for (const member of members as GroupMember[]) {
+          if (member.userId === currentUserId) continue
+          if (!nextGroupIdByCounterparty[member.userId]) nextGroupIdByCounterparty[member.userId] = group.id
+        }
+      }
+
       const allBalances = perGroup.flatMap((p) => p.balances)
       setGroups(mapped)
       setPairings(nextPairings)
       setClaimsIOwe(claimsAgainstMe)
       setClaimsOwedToMe(claimsIHold)
+      setGroupIdByCounterparty(nextGroupIdByCounterparty)
       setHistoryByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.history])))
       setMemberCountByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.members.length])))
       setSettlePlanByGroup(Object.fromEntries(perGroup.map((p) => [p.group.id, p.settlePlan])))
@@ -261,6 +277,8 @@ export function SharedPage() {
   }
 
   const settleablePairings = pairings.filter((p): p is Pairing & { balance: GroupBalance } => !!p.balance && p.balance.amount > 0.005 && !pendingSettlementByCounterparty[p.counterpartyId] && !inChainWithCounterparty[p.counterpartyId])
+
+  const groupIdFor = (userId: string): string | null => groupIdByCounterparty[userId] ?? null
 
   // SettleUpDialog/ConfirmReceiptDialog's SettleAccount type predates useWallet's
   // typed Account (sharedByUsername: string | null) — normalize null to undefined
@@ -438,6 +456,7 @@ export function SharedPage() {
             currentUserId={currentUserId}
             accounts={accounts}
             categories={categories}
+            groupIdFor={groupIdFor}
             onUpdateTransaction={handleUpdateTransaction}
             onChanged={loadAll}
           />
