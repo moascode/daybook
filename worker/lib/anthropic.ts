@@ -147,8 +147,15 @@ function buildPhotoImportUserMessage(kind: PhotoImportKind, categoryNames: strin
  * the connection itself — e.g. an IP-range block — happening before their
  * server had a chance to stamp a request-id). `cf-ray` is included too,
  * since this Worker's own edge hop is the other half of that same question.
+ *
+ * A 403 with no request-id gets a plain-language prefix ahead of the
+ * diagnostic text: that combination is exactly the signature of the Worker
+ * itself running in an Anthropic-unsupported Cloudflare colo (e.g. Hong
+ * Kong — see the `[placement]` pin in wrangler.toml), which rejects the
+ * connection before Anthropic's servers see it, let alone stamp a
+ * request-id. Exported for the unit test in anthropic.test.ts.
  */
-async function anthropicErrorFromResponse(res: Response): Promise<Error> {
+export async function anthropicErrorFromResponse(res: Response): Promise<Error> {
   const requestId = res.headers.get('request-id') ?? res.headers.get('anthropic-request-id')
   const cfRay = res.headers.get('cf-ray')
   const body = await res.text().catch(() => '')
@@ -169,6 +176,9 @@ async function anthropicErrorFromResponse(res: Response): Promise<Error> {
   let text = `Anthropic API responded ${res.status}${type ? ` (${type})` : ''}${detail ? `: ${detail}` : ''}`
   if (requestId) text += ` [request-id ${requestId}]`
   if (cfRay) text += ` [cf-ray ${cfRay}]`
+  if (res.status === 403 && !requestId) {
+    text = `Blocked before reaching Anthropic — likely a region block on the server's network location; retry shortly. ${text}`
+  }
   return new Error(text)
 }
 
