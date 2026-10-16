@@ -18,7 +18,7 @@ import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { newAppPage, fillAccountForm } from './helpers'
+import { newAppPage, fillAccountForm, businessToday } from './helpers'
 
 const API = '/api'
 const PHOTO1 = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'photo1.png')
@@ -285,13 +285,11 @@ test('a batch of 2 photos with one unreadable shows the partial-failure notice a
   await expect(page.getByTestId('csv-review-row')).toHaveCount(1)
   await expect(page.getByRole('textbox', { name: /^Merchant for row/ })).toHaveValue('Village Grocer')
 
-  // Source photo column (filename, not a thumbnail) is showing for this
-  // photo-mode review, alongside Description (always shown; empty here since
-  // this batch used the receipt kind, which never populates it). Both photos
-  // upload concurrently, so whichever one's request reaches the mocked route
-  // first is the one that "succeeds" — match either name, not a fixed one.
-  await expect(page.locator('th', { hasText: 'Source photo' })).toBeVisible()
-  await expect(page.locator('th', { hasText: 'Description' })).toBeVisible()
+  // Source photo (filename, not a thumbnail) shows as a link under the
+  // Merchant cell for this photo-mode review — it no longer has its own
+  // column (review-table-layout rework). Both photos upload concurrently, so
+  // whichever one's request reaches the mocked route first is the one that
+  // "succeeds" — match either name, not a fixed one.
   await expect(page.getByRole('link', { name: /photo[12]\.png/ })).toBeVisible()
 })
 
@@ -354,4 +352,99 @@ test('a truncated statement photo shows the cut-off notice and still imports the
   await expect(page.getByRole('textbox', { name: /^Description for row/ }).first()).toHaveValue(
     'GRABPAY-EC *PETALING JAYA',
   )
+})
+
+// ── Amounts from AI parsing are always positive (worker/lib/anthropic.ts's
+// toPhotoImportRows) — a negative amount is Math.abs'd rather than rejected,
+// and infers "expense" when the model also omits type. Uses the real
+// Worker->mock path (mockPhotoAiResponse / DAYBOOK_TEST), not a page.route
+// interception, so this exercises the actual normalisation in
+// toPhotoImportRows rather than a canned browser response. Never calls the
+// real Anthropic API.
+
+test('a negative amount from the AI is normalised to positive and imports cleanly', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await setApiKey(page, 'sk-ant-test-dummy')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Negative Amount Bank', type: 'bank' })
+  await mockPhotoAiResponse(
+    page,
+    JSON.stringify({
+      rows: [
+        {
+          date: businessToday(),
+          merchant: 'Hotlink',
+          description: 'HOTLINK TOP UP',
+          amount: -45,
+          type: 'expense',
+          categoryGuess: null,
+        },
+      ],
+    }),
+  )
+  await page.goto('/wallet')
+
+  await page.getByTestId('import-csv-btn').click()
+  await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Photo' }).click()
+  await page.getByRole('tab', { name: 'Bank statement' }).click()
+
+  const fileInput = page.locator('input[type=file][accept="image/*"]')
+  await fileInput.setInputFiles([PHOTO1])
+  await expect(page.getByText('photo1.png')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Extract transactions' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 15_000 })
+
+  await expect(page.getByTestId('csv-review-row')).toHaveCount(1)
+  await expect(page.getByTestId('csv-row-amount')).toHaveValue('45')
+
+  await page.getByTestId('import-confirm-btn').click()
+  await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByText('1 transaction imported')).toBeVisible()
+})
+
+// ── The sign always wins over a model-returned `type` (worker/lib/anthropic.ts's
+// toPhotoImportRows) — a negative amount is always 'expense' even if the AI
+// also answered "income" for it, since the sign usually comes straight off
+// the statement's own debit/credit column while `type` is an inference on
+// top of it. Same real Worker->mock path as the test above.
+
+test('a negative amount wins over an AI-claimed income type', async ({ browser }) => {
+  const page = await newAppPage(browser, '/wallet/accounts')
+  await setApiKey(page, 'sk-ant-test-dummy')
+  await page.getByRole('button', { name: 'Add Account' }).first().click()
+  await fillAccountForm(page, { name: 'Sign Wins Bank', type: 'bank' })
+  await mockPhotoAiResponse(
+    page,
+    JSON.stringify({
+      rows: [
+        {
+          date: businessToday(),
+          merchant: 'Hotlink',
+          description: 'HOTLINK TOP UP',
+          amount: -12.5,
+          type: 'income',
+          categoryGuess: null,
+        },
+      ],
+    }),
+  )
+  await page.goto('/wallet')
+
+  await page.getByTestId('import-csv-btn').click()
+  await expect(page.getByRole('dialog').filter({ hasText: 'Import transactions' })).toBeVisible()
+  await page.getByRole('tab', { name: 'Photo' }).click()
+  await page.getByRole('tab', { name: 'Bank statement' }).click()
+
+  const fileInput = page.locator('input[type=file][accept="image/*"]')
+  await fileInput.setInputFiles([PHOTO1])
+  await expect(page.getByText('photo1.png')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Extract transactions' }).click()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 15_000 })
+
+  await expect(page.getByTestId('csv-review-row')).toHaveCount(1)
+  await expect(page.getByTestId('csv-row-amount')).toHaveValue('12.5')
+  await expect(page.getByTestId('csv-row-type')).toHaveValue('expense')
 })
