@@ -393,8 +393,10 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.18.0`** (2026-10-15). The full table with dates and contents
-is in [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
+**Latest tag: `v3.18.0`** (2026-10-15): Tasks nudge, composer Reminder and
+Checklist, Upcoming Fortnight/Month, every-N-day habits and tracked time, plus
+migrations 0029–0031. The full table with dates and contents is in
+[`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
 > three times by being updated only by whichever PR happened to touch this
@@ -483,22 +485,28 @@ follow the theme. The launch *image* does, since v3 P5. See
 ### Next, in rough order of value
 
 1. **Rate limiting** for the public URL ([BUG-001](docs/backlog/EP-05-production-hardening/BUG-001-no-rate-limiting.md)).
-2. **Watch the netting paths with real use.** Every new column defaults to 0 and
+2. **Set the two P4 push secrets** (`docs/guides/push-setup.md`). Since `v3.18.0`
+   the Tasks nudge and reminders are built on push. Without the secrets they only
+   reach the in-app bell, and the toasts say so; nothing reaches a phone.
+3. **Watch the netting paths with real use.** Every new column defaults to 0 and
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
-3. **Ready to build, no sign-off needed:**
-   [EP-06](docs/backlog/EP-06-wallet-depth/README.md)'s remaining FEAT-025 (split rules).
+4. **Ready to build, no sign-off needed:**
+   [EP-06](docs/backlog/EP-06-wallet-depth/README.md)'s remaining FEAT-025 (split rules);
+   [EP-07](docs/backlog/EP-07-tasks-depth/README.md)'s last open item, FEAT-062
+   (list detail page design adoption). The rest of EP-07, including FEAT-055/056
+   (Reminder, Checklist), shipped by `v3.18.0`.
    EP-04's two money-figure bugs and FEAT-024 (three-way settlement) shipped in
    `v3.15.0`. The old deferred F1–F3 waves **already shipped**;
    [EP-03](docs/backlog/EP-03-consistency-remainder/README.md) carries the evidence.
    EP-02 (Wallet UX remainder) **shipped 2026-09-18** — PRs #209–#211, see
    [`docs/archive/ep-02-wallet-ux-remainder/`](docs/archive/ep-02-wallet-ux-remainder/README.md).
-4. **Needs a product decision, not an estimate:**
+5. **Needs a product decision, not an estimate:**
    [EP-01](docs/backlog/EP-01-business-module/README.md) (business module — build,
    shrink to invoicing, or drop), [EP-08](docs/backlog/EP-08-trips-module/README.md)
    (Trips — try trips-as-a-tag first), [EP-09](docs/backlog/EP-09-day-module/README.md)
    (Day — would you actually close your day in the app?).
-5. **Needs owner sign-off:** each remaining [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) AI item (the list shrank — four
+6. **Needs owner sign-off:** each remaining [`docs/reference/feature-specs.md` §AI](docs/reference/feature-specs.md) AI item (the list shrank — four
    features already ship); D-5 auto-approve as a per-group "we trust each other"
    setting; the parked D-items/C9 in `docs/archive/phase-5c-wallet-ux.md` §D.
 
@@ -532,6 +540,23 @@ follow the theme. The launch *image* does, since v3 P5. See
   lossless and allowed with owner sign-off. Applied in lexicographic order.
 - e2e uses a fresh DB per context; CI shards across 10 jobs.
 - Pre-existing lint: 35 warnings (react-hooks, test-only shims).
+- **Agent worktrees break a bare `npm run lint`.** While `.claude/worktrees/`
+  holds agent checkouts, `eslint .` in the main checkout fails with
+  "multiple candidate TSConfigRootDirs" parse errors. Use
+  `npx eslint . --ignore-pattern '.claude/**'` until they are removed.
+- **Reset local D1 when switching between branches with different migrations.**
+  The schema-parity gate compares against one shared `.wrangler` state, so
+  columns from another branch show up as drift:
+  `rm -rf .wrangler/state/v3/d1 && npm run d1:migrate`.
+- **Crons:** `wrangler.toml` runs the digest at 08:10 and 21:10 MYT, plus
+  `*/15 * * * *` for task reminders. `scheduled()` in `worker/index.ts` matches
+  the exact cron string, so a new cron needs its own `case` or it only logs.
+- **The `wrangler dev` crash is frequent on CI right now.** On 2026-10-15 it
+  hit 1–3 shards on most runs, on `main` too. The signature is a run of
+  consecutive failures and `ECONNREFUSED :5173`; the wrangler log says
+  ProxyWorker `Network connection lost.` Confirm locally with
+  `--shard=N/10`, then `rerun --failed`. The out-of-memory root cause is
+  still open.
 - **Docs were restructured 2026-09-16** (PRs #201–#206): `docs/{guides,reference,backlog,archive}`,
   no `roadmap/`. Every doc has a `Status` header; links and backlog consistency
   are CI-gated. One gate for everything: `bash scripts/flow-checks.sh`.
