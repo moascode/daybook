@@ -2154,6 +2154,7 @@ wallet.get('/transactions/splits/mine', async (c) => {
             ${OPEN_CLAIM} AS settlement_id,
             t.date, t.merchant, t.description, t.amount AS transaction_amount, t.type,
             t.category_id, cat.icon AS category_icon, cat.color AS category_color,
+            cat.name AS category_name, t.tag,
             u.username AS owner_username, t.user_id AS owner_id,
             du.username AS debtor_username, ts.user_id AS debtor_id
      FROM transaction_splits ts

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Ban, Check, Receipt, Undo2, X } from 'lucide-react'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { Modal } from '@/components/ui/Modal'
@@ -310,6 +311,10 @@ export function SharedActivity({
           const paletteIdx = memberOptions.findIndex((m) => m.value === row.counterpartyId)
           const palette = AVATAR_PALETTE[Math.max(0, paletteIdx) % AVATAR_PALETTE.length]
           const category = row.categoryId ? categories.find((c) => c.id === row.categoryId) : null
+          // The claim carries the owner's category name, so a debtor-side row is
+          // labelled too; the local lookup only covers the viewer's own categories.
+          const categoryName = row.categoryName ?? category?.name ?? null
+          const categoryColor = row.categoryColor ?? category?.color ?? null
 
           return (
             <div
@@ -343,9 +348,17 @@ export function SharedActivity({
                   {row.description && row.description !== title && (
                     <p className="tsub" data-testid="split-row-description">{row.description}</p>
                   )}
-                  <div className="tsub">
-                    {row.date && format(parseISO(row.date), 'dd MMM yyyy')}
-                    {row.note && <span className="italic" data-testid="split-row-note"> · &ldquo;{row.note}&rdquo;</span>}
+                  <div className="tsub flex min-w-0 items-center gap-1.5">
+                    <span className="shrink-0">{row.date && format(parseISO(row.date), 'dd MMM yyyy')}</span>
+                    {categoryName && (
+                      <Badge color={categoryColor ?? undefined} className="shrink-0 px-1.5 text-[10px]" data-testid="split-row-category">
+                        {categoryName}
+                      </Badge>
+                    )}
+                    {row.tags.map((tag) => (
+                      <Badge key={tag} className="shrink-0 px-1.5 text-[10px]" data-testid="split-row-tag">{tag}</Badge>
+                    ))}
+                    {row.note && <span className="truncate italic" data-testid="split-row-note">&ldquo;{row.note}&rdquo;</span>}
                   </div>
                 </div>
               </div>
@@ -500,6 +513,9 @@ export function SharedActivity({
           id: detailRow.id,
           transactionId: detailRow.transactionId,
           ownerId: detailRow.ownerId,
+          ownerUsername: detailRow.ownerUsername,
+          categoryName: detailRow.categoryName ?? categories.find((c) => c.id === detailRow.categoryId)?.name ?? null,
+          categoryColor: detailRow.categoryColor ?? categories.find((c) => c.id === detailRow.categoryId)?.color ?? null,
           merchant: detailRow.merchant,
           description: detailRow.description,
           date: detailRow.date,

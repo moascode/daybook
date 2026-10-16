@@ -91,6 +91,10 @@ export interface SplitClaim {
   // creditor side. Optional/nullable: no category, or an older cached shape.
   categoryIcon?: string | null
   categoryColor?: string | null
+  // Same provenance as categoryIcon: the owner's category name, so the debtor
+  // side can label a claim with a category it has no row for.
+  categoryName?: string | null
+  tags: string[]               // the underlying transaction's tags
   ownerId: string              // the payer — the one owed
   ownerUsername: string
   debtorId: string             // the one who owes

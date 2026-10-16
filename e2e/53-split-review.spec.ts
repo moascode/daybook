@@ -679,25 +679,51 @@ test.describe('53 — Split review (R1: unified list)', () => {
     await f.recipCtx.close()
   })
 
-  // Every row leads back to its transaction. The link carries view=all&range=all
-  // because the list defaults to the current month and to your own rows — a
-  // claim from an earlier month, on someone else's transaction, would otherwise
-  // land on an empty page, which is the bug this workstream started from.
-  test('a claim row links to the transaction behind it', async ({ browser }) => {
-    const f = await splitFixture(browser, 'deeplink', priorMonthDate(), 100)
+  // A debtor reviewing a claim sees the transaction behind it in place. It used
+  // to be a link to /wallet, which dropped them out of the review mid-way.
+  test('a debtor views the transaction behind a claim without leaving the page', async ({ browser }) => {
+    const f = await splitFixture(browser, 'viewtxn', priorMonthDate(), 100)
 
     await f.recip.goto('/wallet/shared')
     await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
     await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
-    // The debtor's row opens the detail modal, which links out to the
-    // transaction (recip does not own it, so no "Edit transaction" here).
     await f.recip.getByTestId('split-row').click()
-    await f.recip.getByRole('link', { name: 'View transaction' }).click()
+    // Not a link any more — a link would navigate away.
+    await expect(f.recip.getByRole('link', { name: 'View transaction' })).toHaveCount(0)
+    await f.recip.getByRole('button', { name: 'View transaction' }).click()
 
-    // Lands on a populated list — not the empty state a month filter would give.
-    const row = f.recip.locator('[data-testid="transaction-row"]').filter({ hasText: f.merchant })
-    await expect(row).toBeVisible({ timeout: 15_000 })
-    await expect(row).toHaveAttribute('data-highlighted', 'true')
+    const details = f.recip.getByTestId('split-detail-transaction')
+    await expect(details).toBeVisible({ timeout: 10_000 })
+    await expect(details).toContainText(f.merchant)
+    await expect(details).toContainText('100.00')
+    await expect(f.recip).toHaveURL(/\/wallet\/shared/)
+
+    await f.recip.getByRole('button', { name: 'Hide transaction' }).click()
+    await expect(details).toHaveCount(0)
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  // Category and tags are what a merchant name alone does not say. The debtor
+  // has no row for the payer's category, so its name must come with the claim.
+  test('a claim row shows the transaction category and tags beside the date', async ({ browser }) => {
+    const f = await splitFixture(browser, 'labels', priorMonthDate(), 100)
+    const cat = await f.payer.request.post(`${API}/categories`, {
+      data: { name: 'Groceries_lbl', type: 'expense', icon: 'tag', color: '#378ADD' },
+    }).then((r) => r.json()) as { id: string }
+    const patch = await f.payer.request.patch(`${API}/transactions/${f.txn.id}`, {
+      data: { categoryId: cat.id, tag: JSON.stringify(['weekly', 'costco']) },
+    })
+    expect(patch.ok()).toBeTruthy()
+
+    for (const page of [f.recip, f.payer]) {
+      await page.goto('/wallet/shared')
+      await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
+      const row = page.getByTestId('split-row').filter({ hasText: f.merchant })
+      await expect(row.getByTestId('split-row-category')).toHaveText('Groceries_lbl', { timeout: 10_000 })
+      await expect(row.getByTestId('split-row-tag')).toHaveText(['weekly', 'costco'])
+    }
 
     await f.payerCtx.close()
     await f.recipCtx.close()
