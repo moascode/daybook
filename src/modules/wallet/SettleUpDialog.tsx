@@ -48,6 +48,15 @@ interface SettleUpDialogProps {
   accounts: SettleAccount[]
   /** The period on screen. Inherited so the dialog settles what you were looking at. */
   range?: { dateFrom: string; dateTo: string }
+  /**
+   * Bulk-settle mode (FEAT: multi-select settle from Shared activity):
+   * settles exactly these splits — debtor-side only, since the caller picked
+   * specific owed rows. When set, the netting preview and date-scope are
+   * skipped (a fixed id list needs neither — the splits are already named),
+   * and the amount is capped at `totalOutstanding` rather than freely typed.
+   */
+  shareIds?: string[]
+  totalOutstanding?: number
   onClose: () => void
   onSettled: () => void
 }
@@ -57,20 +66,26 @@ interface SettleUpDialogProps {
  * real transfer transactions on both ledgers (their side only when a shared
  * account is chosen).
  */
-export function SettleUpDialog({ groupId, balance, currentUserId, accounts, range, onClose, onSettled }: SettleUpDialogProps) {
+export function SettleUpDialog({ groupId, balance, currentUserId, accounts, range, shareIds, totalOutstanding, onClose, onSettled }: SettleUpDialogProps) {
   const [form, setForm] = useState({ myAccountId: '', amount: '', note: '' })
   const [settling, setSettling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const isBulkSelection = !!shareIds && shareIds.length > 0
+  const selectionCap = Math.round((totalOutstanding ?? 0) * 100) / 100
 
   useEffect(() => {
     if (balance) {
       setError(null) // eslint-disable-line react-hooks/set-state-in-effect
       setNotice(null)
-      setForm({ myAccountId: '', amount: String(Math.round(balance.amount * 100) / 100), note: '' })
+      setForm({
+        myAccountId: '',
+        amount: String(isBulkSelection ? selectionCap : Math.round(balance.amount * 100) / 100),
+        note: '',
+      })
     }
-  }, [balance])
+  }, [balance, isBulkSelection, selectionCap])
 
   // balance semantics: fromUserId owes toUserId. Direction from the caller's view:
   const iAmCreditor = !!balance && balance.toUserId === currentUserId
@@ -94,7 +109,10 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
   const dateTo = range?.dateTo
 
   const loadPreview = useCallback(async () => {
-    if (!balance) { setPreview(null); return }
+    // Bulk selection already names its exact splits — there is nothing for a
+    // FIFO/netting preview to say that "Settling N selected transactions"
+    // doesn't, and the date range is deliberately ignored in this mode.
+    if (!balance || isBulkSelection) { setPreview(null); return }
     try {
       // No amount floor any more: a zero-net pair is a real settlement — the two
       // piles cancel and nothing moves — so the preview has to load for it too.
@@ -110,7 +128,7 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
       // A preview is an aid, not a gate: if it fails the dialog still settles.
       setPreview(null)
     }
-  }, [balance, counterpartyId, form.amount, groupId, dateFrom, dateTo])
+  }, [balance, counterpartyId, form.amount, groupId, dateFrom, dateTo, isBulkSelection])
 
   useEffect(() => {
     // Debounced so typing an amount does not fire a request per keystroke.
@@ -134,9 +152,11 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
         amount: Number(form.amount),
         note: form.note,
         // The scope the figures above were computed over. Sending it is what
-        // makes "settle this month" mean the month you were looking at.
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
+        // makes "settle this month" mean the month you were looking at — not
+        // meaningful for a fixed selection, which ignores date scope entirely.
+        dateFrom: isBulkSelection ? undefined : (dateFrom || undefined),
+        dateTo: isBulkSelection ? undefined : (dateTo || undefined),
+        ...(isBulkSelection ? { shareIds } : {}),
         ...(iAmCreditor
           ? { toAccountId: form.myAccountId }
           : { fromAccountId: form.myAccountId }),
@@ -160,10 +180,12 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
   return (
     <Modal open={!!balance} onOpenChange={onClose} title="Settle Up">
       <div className="space-y-4">
-        <p className="text-sm text-fg-muted">
-          {iAmCreditor
-            ? <>Recording that <strong>{balance.fromUsername}</strong> paid you</>
-            : <>Recording your payment to <strong>{balance.toUsername}</strong></>
+        <p className="text-sm text-fg-muted" data-testid="settle-description">
+          {isBulkSelection
+            ? <>Settling {shareIds!.length} selected transaction{shareIds!.length === 1 ? '' : 's'} with <strong>{balance.toUsername}</strong></>
+            : iAmCreditor
+              ? <>Recording that <strong>{balance.fromUsername}</strong> paid you</>
+              : <>Recording your payment to <strong>{balance.toUsername}</strong></>
           }
         </p>
         {/* The netting, stated rather than hidden. Only when there is any: with
@@ -200,10 +222,24 @@ export function SettleUpDialog({ groupId, balance, currentUserId, accounts, rang
           <Input
             type="number"
             step="0.01"
+            max={isBulkSelection ? selectionCap : undefined}
             value={form.amount}
-            onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+            onChange={(e) => {
+              const raw = e.target.value
+              // Capped, not just validated-on-submit: a selection names exact
+              // splits, so there is nothing for an amount above their total to
+              // mean (CLAUDE.md §2 rule 10 — a cap enforced only server-side
+              // would read as accepted until the submit failed).
+              if (isBulkSelection && raw !== '' && Number(raw) > selectionCap) {
+                setForm((f) => ({ ...f, amount: String(selectionCap) }))
+                return
+              }
+              setForm((f) => ({ ...f, amount: raw }))
+            }}
           />
-          <p className="mt-1 text-xs text-fg-faint">Pay less than the full amount to settle part of it.</p>
+          <p className="mt-1 text-xs text-fg-faint">
+            {isBulkSelection ? `Capped at ${formatMYR(selectionCap)}, the selected total.` : 'Pay less than the full amount to settle part of it.'}
+          </p>
         </div>
 
         {preview && preview.lines.length > 0 && (

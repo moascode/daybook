@@ -1174,3 +1174,53 @@ test.describe('53 — Split review (R3: bulk + rejection loop)', () => {
     await f.recipCtx.close()
   })
 })
+
+// ── Client R: popup auto-close + a dedicated Rejected tab ───────────────────
+//
+// Two small review-flow additions: agreeing from the detail popup should not
+// leave the popup open on a claim that no longer needs reviewing, and a
+// rejected claim should have its own tab rather than being buried in "All"
+// alongside everything else.
+test.describe('53 — Split review (Client R: popup close + Rejected tab)', () => {
+  test('agreeing from the detail popup closes the popup', async ({ browser }) => {
+    const f = await splitFixture(browser, 'popupclose', priorMonthDate(), 100)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
+
+    await f.recip.getByTestId('split-row').click()
+    const dialog = f.recip.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Agree' }).click()
+    await expect(dialog).toHaveCount(0, { timeout: 10_000 })
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+
+  test('a rejected claim has its own Rejected tab and is not under Open', async ({ browser }) => {
+    const f = await splitFixture(browser, 'rejectedtab', priorMonthDate(), 100)
+
+    await f.recip.goto('/wallet/shared')
+    await expect(f.recip.locator('main')).toBeVisible({ timeout: 20_000 })
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
+
+    await f.recip.getByTestId('claim-reject').click()
+    await f.recip.getByTestId('claim-reject-confirm').click()
+
+    // Gone from "Open" (the default tab)…
+    await expect(f.recip.getByTestId('split-list-empty')).toBeVisible({ timeout: 10_000 })
+    // …and present, with the "Rejected" status, under its own "Rejected" tab.
+    await f.recip.getByRole('tab', { name: 'Rejected' }).click()
+    const row = f.recip.getByTestId('split-row')
+    await expect(row).toHaveCount(1, { timeout: 10_000 })
+    await expect(row.getByTestId('activity-row-status')).toHaveText('Rejected')
+    // Still reachable from "All" too — the new tab narrows, it doesn't replace.
+    await f.recip.getByRole('tab', { name: 'All' }).click()
+    await expect(f.recip.getByTestId('split-row')).toHaveCount(1, { timeout: 10_000 })
+
+    await f.payerCtx.close()
+    await f.recipCtx.close()
+  })
+})

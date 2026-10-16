@@ -77,6 +77,11 @@ export interface SplitClaim {
   settlementId: string | null  // set only while state === 'awaiting_confirmation'
   rejectedReason: string
   rejectedAt: string | null
+  // A debtor's counter-offer on a rejected claim — a lower figure they are
+  // proposing instead of the original share. Set only while state ===
+  // 'rejected' and a proposal is standing; cleared by accept-proposal (which
+  // folds it into shareAmount) or by a fresh split superseding this row.
+  proposedAmount: number | null
   createdAt: string
   date: string
   merchant: string

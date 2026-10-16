@@ -21,6 +21,9 @@ interface Participant {
   rejected_reason: string
   rejected_at: string | null
   settled_at: string | null
+  // The debtor's counter-offer on a rejected split — set only while this
+  // participant's status is 'rejected' and nobody has accepted it yet.
+  proposed_amount: number | null
 }
 
 interface RowInfo {
@@ -95,6 +98,7 @@ export function SplitDetailModal({
   onUndoApprove,
   onReject,
   onCancel,
+  onAcceptProposal,
   onUpdateTransaction,
   onClose,
 }: {
@@ -106,6 +110,10 @@ export function SplitDetailModal({
   onUndoApprove: () => void
   onReject: () => void
   onCancel: () => void
+  /** Payer accepts a specific participant's counter-offer — keyed by that
+   * participant's split id, which may differ from `row.id` when this modal
+   * is showing a multi-way split's full participant list. */
+  onAcceptProposal: (splitId: string, proposedAmount: number) => void
   /** Reuses useWallet's updateTransaction so the shared wallet store (read by
    * Overview/Transactions) stays in sync — a raw PUT here would leave those
    * pages showing stale merchant/amount/etc. until their own next refetch. */
@@ -243,6 +251,32 @@ export function SplitDetailModal({
                       {p.status === 'rejected' && p.rejected_reason && (
                         <p className="mt-1 text-xs text-red-600">Rejected &mdash; &ldquo;{p.rejected_reason}&rdquo;</p>
                       )}
+                      {/* The debtor's counter-offer. Only the payer (isOwner)
+                          gets to accept it — anyone else is just reading. */}
+                      {p.status === 'rejected' && p.proposed_amount != null && (() => {
+                        // Narrowed once into a local: `p.proposed_amount` is
+                        // `number | null` on the Participant type, and TS
+                        // cannot carry the `!= null` guard above through the
+                        // closure below without a non-null assertion there.
+                        const proposedAmount = p.proposed_amount
+                        return (
+                          <div className="mt-1.5 flex items-center justify-between gap-2">
+                            <span className="text-xs text-fg-muted" data-testid="detail-proposed-amount">
+                              Proposed {formatMYR(proposedAmount)}
+                            </span>
+                            {isOwner && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => onAcceptProposal(p.id, proposedAmount)}
+                                data-testid="detail-accept-proposal"
+                              >
+                                <Check className="mr-1 h-3.5 w-3.5" />Accept {formatMYR(proposedAmount)}
+                              </Button>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </li>
                   )
                 })}
