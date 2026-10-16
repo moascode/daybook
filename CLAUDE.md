@@ -393,9 +393,9 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.18.0`** (2026-10-15): Tasks nudge, composer Reminder and
-Checklist, Upcoming Fortnight/Month, every-N-day habits and tracked time, plus
-migrations 0029–0031. The full table with dates and contents is in
+**Latest tag: `v3.19.0`** (2026-10-16): Shared activity rows show the
+transaction's category and tags, and a debtor views the transaction in place.
+The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
 > **The release list is derived from `git tag`, not from memory.** It drifted
