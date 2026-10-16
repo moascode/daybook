@@ -61,6 +61,31 @@ app.use(
 app.route('/api', health)
 app.route('/api', auth)
 
+// /assets/* (hashed Vite chunks) is normally served straight off Cloudflare's
+// asset pipeline without ever reaching this Worker — wrangler.toml's
+// `run_worker_first` now includes it too, for exactly this one case: a tab
+// left open across a deploy still has the old index.html, which references a
+// chunk hash no longer in `dist/`. `not_found_handling =
+// "single-page-application"` on the [assets] binding serves index.html (200,
+// text/html) for ANY unmatched path — including one under /assets/ that was
+// obviously meant to be a script — so the browser refuses to execute it
+// ("'text/html' is not a valid JavaScript MIME type") and React Router showed
+// its raw error screen. Turning that into a real 404 lets src/main.tsx's
+// chunk-load listener recognise the failure and offer a one-time reload
+// instead (fix/import-chunk-and-account-badge).
+app.get('/assets/*', async (c) => {
+  const res = await c.env.ASSETS.fetch(c.req.raw)
+  if (res.headers.get('content-type')?.includes('text/html')) {
+    return c.text('not found', 404)
+  }
+  // The [assets] binding's Response has immutable headers — the
+  // `secureHeaders()` middleware above (registered for '*') tries to set
+  // them on every response and throws ("Can't modify immutable headers")
+  // for this one specifically. Re-wrapping gives it a fresh, mutable
+  // Headers instance without touching the body or status.
+  return new Response(res.body, res)
+})
+
 // Test-only routes, mounted before the auth guard because /test/reset must run
 // without a session.
 //
@@ -120,7 +145,8 @@ protectedApi.route('/', search)
 
 app.route('/api', protectedApi)
 
-// Any /api path that matched no route. Non-API paths never reach the Worker.
+// Any /api path that matched no route. Non-API, non-/assets/ paths never
+// reach the Worker at all.
 app.notFound((c) => c.json({ error: 'not found' }, 404))
 
 // Single error handler so every failure returns the same `{error}` JSON shape

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { CheckCircle2, ChevronDown, Check } from 'lucide-react'
@@ -39,7 +39,7 @@ interface ImportLocationState {
 export function CsvImport() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { accounts, categories, importTransactions, setFilters } = useWallet()
+  const { accounts, categories, importTransactions, setFilters, loadAccounts, loadCategories } = useWallet()
   const { addToast } = useToastStore()
   const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
 
@@ -59,6 +59,22 @@ export function CsvImport() {
   const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
   const [resolvingMerchants, setResolvingMerchants] = useState(false)
   const [merchantAiMessage, setMerchantAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
+
+  // Every other wallet page loads its own accounts/categories on mount
+  // (WalletPage, Dashboard, GoalsPage, ...) — this page never did, because it
+  // was only ever reached by client-side navigation from one of those, which
+  // left the store already populated. A hard reload or a direct deep link to
+  // this route (e.g. the browser restoring the tab, or the chunk-reload in
+  // main.tsx) mounts the app with an empty Zustand store and nothing else on
+  // this route fetches it, so `accounts` stayed `[]` forever: the "Import
+  // into account" badge rendered with no name and the dropdown opened with
+  // zero options — reported as "the dropdown isn't showing". Loading here,
+  // same as the other pages, is what makes the badge (and `selectedAccountId`
+  // below) converge once the fetch resolves.
+  useEffect(() => {
+    loadAccounts()
+    loadCategories()
+  }, [loadAccounts, loadCategories])
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
@@ -211,7 +227,14 @@ export function CsvImport() {
   }, [importRows])
 
   const handleImport = useCallback(async () => {
-    if (!selectedAccountId) return
+    // Rule 10 (never fail silently): this used to return bare, so a click
+    // while the account badge above hadn't resolved yet (the accounts fetch
+    // still in flight right after mount) looked identical to the button
+    // doing nothing at all.
+    if (!selectedAccountId) {
+      addToast({ message: "Still loading your accounts — try again in a moment.", duration: 4000 })
+      return
+    }
     const toImport = importRows.filter((r) => r.included)
 
     const badTransfer = importRows.findIndex(
