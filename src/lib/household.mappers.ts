@@ -2,6 +2,17 @@ import type { ClaimState, Group, GroupDetail, GroupInvite, GroupMember, Settleme
 
 type Raw = Record<string, unknown>
 
+/** `transactions.tag` is a JSON array in a TEXT column; anything else is no tags. */
+function parseTags(raw: unknown): string[] {
+  if (typeof raw !== 'string' || !raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    return [raw]
+  }
+}
+
 /**
  * One row from GET /transactions/splits/mine.
  *
@@ -33,6 +44,8 @@ export function mapSplitClaim(r: Raw): SplitClaim {
     categoryId: r.category_id ? String(r.category_id) : null,
     categoryIcon: r.category_icon ? String(r.category_icon) : null,
     categoryColor: r.category_color ? String(r.category_color) : null,
+    categoryName: r.category_name ? String(r.category_name) : null,
+    tags: parseTags(r.tag),
     ownerId: String(r.owner_id ?? ''),
     ownerUsername: String(r.owner_username ?? ''),
     debtorId: String(r.debtor_id ?? ''),

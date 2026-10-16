@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { format, parseISO } from 'date-fns'
-import { AlertTriangle, Check, ExternalLink, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Check, Eye, EyeOff, Undo2, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { TransactionForm, type TransactionFormData } from '@/modules/wallet/TransactionForm'
+import { TransactionDetailsPanel } from './TransactionDetailsPanel'
 import { api } from '@/lib/api'
 import { cn, formatMYR } from '@/lib/utils'
 import { mapTransaction, type TransactionRow } from '@/hooks/useWallet'
@@ -26,6 +27,9 @@ interface RowInfo {
   id: string
   transactionId: string
   ownerId: string
+  ownerUsername: string
+  categoryName: string | null
+  categoryColor: string | null
   merchant: string
   description: string
   date: string
@@ -74,8 +78,10 @@ function statusLabelFor(p: Participant, ownerId: string): { label: string; cls: 
  *
  * "Edit transaction" opens the real TransactionForm in place too, for the
  * owner only (editing someone else's transaction was never authorised —
- * the server rejects it, so a debtor-side row gets a plain "View transaction"
- * link instead of a button promising an edit that would just fail). There is
+ * the server rejects it, so a debtor-side row gets a read-only "View
+ * transaction" panel instead of a button promising an edit that would just
+ * fail — in place, not a link to /wallet, so reviewing a claim never drops the
+ * debtor out of the review they are in the middle of). There is
  * no GET /transactions/:id — the transaction is located via the day it fell
  * on (dateFrom=dateTo=the claim's own date) and matched by id, since that is
  * the only filter the existing list endpoint offers.
@@ -110,6 +116,9 @@ export function SplitDetailModal({
   const [loadError, setLoadError] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [editLoading, setEditLoading] = useState(false)
+  const [viewing, setViewing] = useState<Transaction | null>(null)
+  const [viewLoading, setViewLoading] = useState(false)
+  const [viewError, setViewError] = useState(false)
 
   function loadParticipants(transactionId: string) {
     setLoadError(false)
@@ -119,18 +128,38 @@ export function SplitDetailModal({
   }
 
   useEffect(() => {
-    if (!row) { setParticipants(null); return } // eslint-disable-line react-hooks/set-state-in-effect
+    setViewing(null) // eslint-disable-line react-hooks/set-state-in-effect
+    setViewError(false)
+    if (!row) { setParticipants(null); return }
     loadParticipants(row.transactionId)
   }, [row])
+
+  async function fetchTransaction(r: RowInfo): Promise<Transaction> {
+    const rows = await api.get<TransactionRow[]>(`/transactions?dateFrom=${r.date}&dateTo=${r.date}`)
+    const match = rows.find((t) => t.id === r.transactionId)
+    if (!match) throw new Error('Transaction not found')
+    return mapTransaction(match)
+  }
+
+  async function toggleView() {
+    if (!row) return
+    if (viewing) { setViewing(null); return }
+    setViewLoading(true)
+    setViewError(false)
+    try {
+      setViewing(await fetchTransaction(row))
+    } catch {
+      setViewError(true)
+    } finally {
+      setViewLoading(false)
+    }
+  }
 
   async function openEdit() {
     if (!row) return
     setEditLoading(true)
     try {
-      const rows = await api.get<TransactionRow[]>(`/transactions?dateFrom=${row.date}&dateTo=${row.date}`)
-      const match = rows.find((r) => r.id === row.transactionId)
-      if (!match) throw new Error('Transaction not found')
-      setEditingTransaction(mapTransaction(match))
+      setEditingTransaction(await fetchTransaction(row))
       // Deliberately not onClose(): the detail Modal stays mounted with `row`
       // intact underneath, gated open only by `!editingTransaction` below —
       // so cancelling or finishing the edit form returns to this view instead
@@ -180,6 +209,19 @@ export function SplitDetailModal({
 
             {loadError && <p className="text-sm text-red-600">Something went wrong loading this split.</p>}
 
+            {viewing && (
+              <TransactionDetailsPanel
+                transaction={viewing}
+                ownerUsername={row.ownerUsername}
+                categoryName={row.categoryName}
+                categoryColor={row.categoryColor}
+                accounts={accounts}
+              />
+            )}
+            {viewError && (
+              <p className="text-sm text-red-600" role="alert">Couldn&rsquo;t load this transaction. Try again.</p>
+            )}
+
             {participants && (
               <ul className="divide-y divide-line-subtle rounded-lg border border-line-subtle">
                 {participants.map((p) => {
@@ -213,13 +255,10 @@ export function SplitDetailModal({
                   {editLoading ? 'Opening…' : 'Edit transaction'}
                 </Button>
               ) : (
-                <Link
-                  to={`/wallet?txn=${row.transactionId}&view=all&range=all`}
-                  className="flex items-center gap-1 text-xs font-medium text-brand-600 hover:underline"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  View transaction
-                </Link>
+                <Button variant="secondary" size="sm" onClick={toggleView} disabled={viewLoading} aria-expanded={!!viewing}>
+                  {viewing ? <EyeOff className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}
+                  {viewLoading ? 'Loading…' : viewing ? 'Hide transaction' : 'View transaction'}
+                </Button>
               )}
               <div className="flex gap-2">
                 {row.canApprove && <Button size="sm" onClick={onApprove}><Check className="mr-1 h-3.5 w-3.5" />Agree</Button>}
