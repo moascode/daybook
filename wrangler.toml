@@ -21,7 +21,10 @@ compatibility_date = "2026-07-22"
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
+# /assets/* also goes through the Worker (worker/index.ts) so a missing
+# hashed chunk — the stale-tab-after-deploy case — can be turned into a real
+# 404 instead of the SPA's index.html fallback (fix/import-chunk-and-account-badge).
+run_worker_first = ["/api/*", "/assets/*"]
 
 # ── D1 ───────────────────────────────────────────────────────
 # Replaces the better-sqlite3 file at DAYBOOK_HOME/shared/data/daybook.db.
@@ -72,7 +75,7 @@ migrations_dir = "worker/migrations"
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
+run_worker_first = ["/api/*", "/assets/*"]
 
 # Observability: keep logs available for the cutover period without a paid plan.
 [observability]

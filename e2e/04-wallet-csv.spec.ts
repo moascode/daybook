@@ -92,6 +92,24 @@ test('account selector (shared by both import types) shows Import Account, on th
   await selectReviewAccount(page, 'Import Account')
 })
 
+// Regression for a bug reported shortly after v3.19.0: CsvImport.tsx never
+// fetched accounts itself — every other wallet page calls `loadAccounts()`
+// on mount, but this one relied entirely on the store already being
+// populated by whichever page the user came from. `location.state` (the CSV
+// rows) survives a hard reload via the History API, but the Zustand wallet
+// store does not, so a reload on the review page left `accounts` empty
+// forever: the "Import into account" badge rendered with no name and the
+// dropdown opened with zero options. Fixed by giving CsvImport.tsx its own
+// `loadAccounts()`/`loadCategories()` mount effect, same as every other page.
+test('review account badge survives a hard reload on the review page', async () => {
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByLabel('Import into account')).toContainText('Import Account', { timeout: 10_000 })
+  await expect(page.getByTestId('csv-review-row')).toHaveCount(4)
+  // The dropdown itself must still offer the account, not just the badge text.
+  await selectReviewAccount(page, 'Import Account')
+})
+
 test('review page shows all 4 rows from the CSV', async () => {
   const rows = page.getByTestId('csv-review-row')
   await expect(rows).toHaveCount(4)

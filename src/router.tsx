@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { WalletLayout } from '@/modules/wallet/WalletLayout'
 import { SettingsLayout } from '@/modules/settings/SettingsLayout'
 import { RouteFallback } from '@/components/layout/RouteFallback'
+import { RouteErrorBoundary } from '@/components/layout/RouteErrorBoundary'
 
 /**
  * Every page is code-split (v3 P3). Before this the whole app — all four
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <AppShell />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <Navigate to="/day" replace /> },
       { path: 'day', element: lazyRoute(DayPage) },
