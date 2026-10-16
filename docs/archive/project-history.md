@@ -30,6 +30,8 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.19.0 | 2026-10-16 | Shared activity rows show the transaction's category and tags beside the date (both sides of a claim); a debtor's "View transaction" opens a read-only panel in the split modal instead of leaving for /wallet (#276) |
+| v3.18.1 | 2026-10-16 | Docs only: CLAUDE.md status for v3.18.0 (#275) |
 | v3.18.0 | 2026-10-15 | Tasks: Nudge (push + bell, no schema), composer Reminder (`remind_at`, 15-min cron) and Checklist, Upcoming Fortnight/Month, habits every N days (`interval_days`), tracked time with a timer (`tracked_minutes`); two Backspace focus-race specs fixed (#267–#273) |
 | v3.17.0 | 2026-10-15 | Tasks production pass: every page to mockup parity — fixed-column rows, Outline scoped to its list, subtask leak, assignee edit/reschedule access, habit stat fixes, Upcoming board/week nav, Assigned/Completed/Habits rebuilt (#265) |
 | v3.16.1 | 2026-10-12 | All tasks rows on a fixed-column grid; titles wrap (#264) |
@@ -1051,3 +1053,10 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
   - Agent worktrees under `.claude/worktrees/` make a bare `npm run lint` in the main checkout fail on parse errors. Lint with `--ignore-pattern '.claude/**'` while they exist.
   - One local D1 shared across branch checkouts drifts the schema-parity gate. `rm -rf .wrangler/state/v3/d1 && npm run d1:migrate` before the gate.
   - The wrangler `Network connection lost` / `ECONNREFUSED :5173` server death hit 1–3 shards on most CI runs today, on `main` too. It reproduced locally only intermittently. Every instance was confirmed by a local re-run and cleared by `rerun --failed`.
+
+## 2026-10-16 — Shared claim labels and in-place view, shipped as v3.19.0 (PR #276)
+
+- **Owner-reported:** a claim on the Shared page was hard to judge without its category and tags, and "View transaction" sent the debtor to `/wallet`, out of the review they were doing.
+- `GET /transactions/splits/mine` now also returns `category_name` and `t.tag`. The debtor has no row for the payer's category, so the name has to come with the claim, like `category_icon` and `category_color` already did. No schema change.
+- The debtor's "View transaction" toggles `TransactionDetailsPanel` inside `SplitDetailModal`. It is fetched the same way as the owner's edit path (`/transactions?dateFrom=dateTo=` and matched by id), because the default `all` view already includes transactions split with the viewer.
+- `e2e/53`'s navigate-away deep-link spec was replaced by two specs: labels on both sides, and the in-place view.
