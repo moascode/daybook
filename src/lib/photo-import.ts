@@ -146,13 +146,21 @@ export async function photoResultsToImportRows(
   const rows: ImportRow[] = []
   for (const result of succeeded) {
     for (const photoRow of result.rows) {
-      const hash = await computeImportHash(photoRow.date, photoRow.amount, photoRow.merchant)
+      // Client-side safety net mirroring worker/lib/anthropic.ts's
+      // toPhotoImportRows — the server already normalises AI amounts to
+      // positive, but this keeps the invariant true even against an older
+      // deployed Worker or a response shape that changes underneath this
+      // client. The hash is computed from the normalised amount so a
+      // negative/positive sign flip can never produce two different
+      // duplicate-detection hashes for the same real transaction.
+      const amount = Math.abs(photoRow.amount)
+      const hash = await computeImportHash(photoRow.date, amount, photoRow.merchant)
       const category = photoRow.categoryGuess
         ? categories.find((c) => c.name === photoRow.categoryGuess && (c.type === photoRow.type || c.type === 'both'))
         : undefined
       rows.push({
         date: photoRow.date,
-        amount: photoRow.amount,
+        amount,
         merchant: photoRow.merchant,
         description: photoRow.description,
         type: photoRow.type,

@@ -93,7 +93,7 @@ function buildMerchantUserMessage(items: Array<{ raw: string; guess: string }>):
 const COMPOSER_SYSTEM_PROMPT = `You parse free-text transaction entries for a personal finance app used in Malaysia.
 Given one line of free text describing a transaction, extract as much of the following as you are reasonably confident about:
 - merchant: who the money went to/came from
-- amount: the numeric amount (no currency symbol)
+- amount: the numeric amount (no currency symbol), always a positive number — express direction through type, never a minus sign
 - type: one of "income", "expense", "transfer" — default to "expense" if the text gives no signal either way
 - account: the account name, chosen ONLY from the exact account names given below — never invent one
 - category: the category name, chosen ONLY from the exact category names given below — never invent one
@@ -113,6 +113,7 @@ const PHOTO_RECEIPT_SYSTEM_PROMPT = `You extract a single transaction from a pho
 Read the photo and extract exactly one transaction: the date, the merchant name (the business itself, not the payment processor), the total amount paid, and a category guess.
 The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
 Always set type to "expense" — nothing about a receipt implies income.
+amount is always a positive number — express direction through type, never a minus sign.
 Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
 If the date is not legible, use an empty string for date rather than guessing. If the amount or merchant cannot be read at all, return an empty rows array rather than inventing a value.
 Reply with the raw JSON object and nothing else — no markdown code fence, no commentary before or after it.`
@@ -121,6 +122,7 @@ const PHOTO_STATEMENT_SYSTEM_PROMPT = `You extract every transaction line item f
 Read the photo and extract every line item visible as a separate row: date, merchant, description, amount, and a category guess.
 For merchant, give a cleaned-up display name in Title Case (e.g. "Hotlink", not "2608280057180715 T170704333326 *HOTLINK TOP UP") — strip reference numbers, card/account numbers, dates, and payment-rail prefixes (DUITNOW, QR, MAE, POS, FPX, etc). For description, copy the line exactly as printed on the statement — do not clean it up.
 Infer type per line from the sign or column — a "-RM45.00" or debit line is "expense", a "+RM2,300.00" or credit line is "income" — a statement legitimately mixes both, unlike a receipt.
+amount is always a positive number — express direction through type, never a minus sign.
 The category guess MUST be one of the exact category names provided, or null if you are not reasonably confident.
 Return JSON: {"rows":[{"date":"YYYY-MM-DD","merchant":"...","description":"...","amount":0,"type":"expense","categoryGuess":"..."}]}
 If a line's date is not legible, use an empty string for date rather than guessing. Omit a line entirely if you cannot read its amount at all.
@@ -500,7 +502,12 @@ function parseComposerResult(text: string): ComposerParseResult {
   const result: ComposerParseResult = {}
 
   if (typeof obj.merchant === 'string') result.merchant = obj.merchant
-  if (typeof obj.amount === 'number' && Number.isFinite(obj.amount)) result.amount = obj.amount
+  // Same "amount is always positive" normalisation as toPhotoImportRows, but
+  // unlike that function this one does NOT also flip `type` off the sign —
+  // the composer always gets an explicit type field from its own prompt (it
+  // defaults to "expense" when the text gives no signal, per the prompt
+  // above), so there's no missing-type case here for the sign to resolve.
+  if (typeof obj.amount === 'number' && Number.isFinite(obj.amount)) result.amount = Math.abs(obj.amount)
   if (obj.type === 'income' || obj.type === 'expense' || obj.type === 'transfer') result.type = obj.type
   if (typeof obj.account === 'string') result.account = obj.account
   if (typeof obj.category === 'string') result.category = obj.category
@@ -533,19 +540,44 @@ export async function parseComposerWithAI(
   return parseComposerResult(resultText)
 }
 
+/**
+ * Amounts from AI parsing are always meant to be positive — the prompts say
+ * so — but a model is free to have an off day, same as the JSON-fence trap
+ * above, and a bank statement screenshot's debit/credit columns are exactly
+ * the kind of thing that nudges a model toward a sign it was told not to
+ * use. Rather than discard a row whose sign slipped, the sign WINS as the
+ * direction signal: a negative amount is always read as an expense, even if
+ * the model also returned `type: 'income'` for it — the sign is the more
+ * reliable signal, since it usually comes straight from the statement's own
+ * debit/credit column while `type` is an inference layered on top. A
+ * positive amount keeps whatever type the model gave, and is dropped only
+ * when that type is missing or invalid, since a positive number alone
+ * carries no directional information to infer from. A zero amount is kept
+ * rather than dropped — the user sees it in review and can fix or exclude it
+ * there; silently discarding it would be the invisible-degradation CLAUDE.md
+ * rule 10 forbids.
+ */
 function toPhotoImportRows(rows: unknown[]): PhotoImportRow[] {
   const result: PhotoImportRow[] = []
   for (const item of rows) {
     if (typeof item !== 'object' || item === null) continue
     const row = item as Record<string, unknown>
     if (typeof row.merchant !== 'string' || typeof row.amount !== 'number' || !Number.isFinite(row.amount)) continue
-    if (row.type !== 'income' && row.type !== 'expense') continue
+    const validType = row.type === 'income' || row.type === 'expense'
+    let type: 'income' | 'expense'
+    if (row.amount < 0) {
+      // The sign always wins, regardless of what type the model answered.
+      type = 'expense'
+    } else {
+      if (!validType) continue
+      type = row.type as 'income' | 'expense'
+    }
     result.push({
       date: typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date) ? row.date : '',
       merchant: row.merchant,
       description: typeof row.description === 'string' ? row.description : '',
-      amount: row.amount,
-      type: row.type,
+      amount: Math.abs(row.amount),
+      type,
       categoryGuess: typeof row.categoryGuess === 'string' ? row.categoryGuess : null,
     })
   }
