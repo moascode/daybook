@@ -26,6 +26,19 @@ not_found_handling = "single-page-application"
 # 404 instead of the SPA's index.html fallback (fix/import-chunk-and-account-badge).
 run_worker_first = ["/api/*", "/assets/*"]
 
+# ── Placement ────────────────────────────────────────────────
+# Anthropic's API 403s any request that reaches it from an unsupported
+# region, and that block happens at the network edge — before Anthropic's
+# servers ever stamp a request-id (see anthropicErrorFromResponse in
+# worker/lib/anthropic.ts). Without a placement hint the Worker runs at
+# whichever Cloudflare colo is closest to the request's ISP, which for a
+# Malaysian user can be Hong Kong — not an Anthropic-supported region.
+# Malaysia and Singapore are supported, so pin execution to Singapore.
+# Static assets are served by Cloudflare's asset pipeline, not the Worker
+# (see [assets] below), so this has no effect on asset latency.
+[placement]
+region = "aws:ap-southeast-1"
+
 # ── D1 ───────────────────────────────────────────────────────
 # Replaces the better-sqlite3 file at DAYBOOK_HOME/shared/data/daybook.db.
 # Schema is applied via `wrangler d1 migrations` in Phase 2.
@@ -76,6 +89,10 @@ directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/assets/*"]
+
+# Same region pin as the top-level [placement] — dev doesn't inherit it.
+[env.dev.placement]
+region = "aws:ap-southeast-1"
 
 # Observability: keep logs available for the cutover period without a paid plan.
 [observability]

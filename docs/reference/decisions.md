@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-09-16
+> **Status:** Live · **Last verified:** 2026-10-16
 
 # Known decisions and rationale
 
@@ -29,5 +29,6 @@ Choices that were made deliberately, with the reason, so they are not relitigate
 | Phase 4 architecture | Local Node.js backend + SQLite file | Home network multi-user requires a real server — PGlite is per-browser only. SQLite file keeps it simple before committing to Postgres |
 | AI key location | Per user, in `settings`, read server-side only | The key never reaches the browser: `GET /api/settings` masks it to `'set'`/`''`. One user's spend can never land on the other's bill. |
 | Cloud (Phase 6) ordering | Shipped **before** AI | Reversed in practice: Phase 6 landed first and AI began afterwards on top of it, so the one AI feature is Worker-native and `server/` never needed touching. |
+| Worker placement (2026-10-16) | `[placement] region = "aws:ap-southeast-1"` in `wrangler.toml` | Production photo import 403'd with `cf-ray …-HKG` and no `request-id` — the Worker ran in Cloudflare's Hong Kong colo, which is not an Anthropic-supported region, so the outbound fetch was blocked at the network edge before Anthropic's servers saw it. Without a pin the Worker runs at whichever colo is closest to the requesting ISP. Pinned to Singapore (Malaysia and Singapore are both supported); static assets are unaffected since they bypass the Worker ([assets] in `wrangler.toml`). |
 
 ---
