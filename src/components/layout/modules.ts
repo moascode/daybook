@@ -69,9 +69,10 @@ export interface ModuleDescriptor {
   disabled?: boolean
   /** Short subtitle shown under the module name in ModuleSidebar's header. */
   headSub: string
-  /** One-line description shown on this module's row in AccountMenu's
-   *  MODULE SETTINGS group. No per-module settings page exists yet — every row
-   *  in R2 is a description, not a link to a page. */
+  /** One-line description shown under this module's row in AccountMenu's
+   *  "Module settings" group and in the Settings nav's Modules group (both
+   *  read `src/modules/settings/sections.ts`, which sources this field
+   *  rather than duplicating it). */
   settingsBlurb: string
   navGroups: ModuleNavGroup[]
 }
@@ -151,7 +152,7 @@ export const modules: ModuleDescriptor[] = [
     icon: CheckSquare,
     path: '/tasks',
     headSub: 'Household & personal',
-    settingsBlurb: 'Lists, due dates and the outliner.',
+    settingsBlurb: 'Lists, due dates and reminders.',
     navGroups: [
       {
         items: [
@@ -198,7 +199,7 @@ export const modules: ModuleDescriptor[] = [
     icon: Wallet,
     path: '/wallet',
     headSub: 'Household ledger',
-    settingsBlurb: 'Accounts, categories, budgets and recurring rules.',
+    settingsBlurb: 'Cards, categories and import.',
     navGroups: [
       {
         items: [

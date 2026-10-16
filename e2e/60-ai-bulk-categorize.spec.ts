@@ -424,7 +424,7 @@ test.describe('bulk edit dialog: Ask AI', () => {
 
 test.describe('Settings page: AI categorisation section', () => {
   test('save shows Clear and hides the raw value; clear removes it', async ({ browser }) => {
-    const page = await newAppPage(browser, '/settings')
+    const page = await newAppPage(browser, '/settings/ai')
 
     await expect(page.getByTestId('anthropic-api-key-input')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByTestId('anthropic-api-key-clear')).not.toBeVisible()
@@ -444,7 +444,7 @@ test.describe('Settings page: AI categorisation section', () => {
   })
 
   test('saving an empty value is rejected client-side', async ({ browser }) => {
-    const page = await newAppPage(browser, '/settings')
+    const page = await newAppPage(browser, '/settings/ai')
     await expect(page.getByTestId('anthropic-api-key-input')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('anthropic-api-key-save').click()
     await expect(page.getByTestId('anthropic-api-key-error')).toBeVisible()

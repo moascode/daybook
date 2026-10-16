@@ -28,9 +28,10 @@ interface AppState {
   onboardingDismissed: Record<string, boolean>
   // Whether an anthropic_api_key is saved for this user — GET /settings masks
   // the value itself to 'set'/'', so this is the presence flag, not the key.
-  // Loaded at boot alongside onboardingDismissed; SettingsPage updates it
-  // directly on save/clear so the bulk-edit "Ask AI" button reacts without a
-  // reload (docs/archive/ai-bulk-categorize-feature.md §3).
+  // Loaded at boot alongside onboardingDismissed; Settings → AI assistant
+  // (AiSettings.tsx) updates it directly on save/clear so the bulk-edit
+  // "Ask AI" button reacts without a reload
+  // (docs/archive/ai-bulk-categorize-feature.md §3).
   hasAnthropicKey: boolean
 
   setTheme: (theme: ThemePreference) => void

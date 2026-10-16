@@ -96,8 +96,8 @@ test.describe('account menu', () => {
     await expect(page.getByRole('button', { name: 'Settings & privacy' })).toBeVisible()
 
     await page.getByTestId('account-menu-settings').click()
-    await expect(page.getByText('Module settings')).toBeVisible()
-    await expect(page.getByText('Preferences')).toBeVisible()
+    await expect(page.getByText('Modules', { exact: true })).toBeVisible()
+    await expect(page.getByText('Profile & security')).toBeVisible()
 
     await page.getByRole('button', { name: 'Back' }).click()
     await expect(page.getByText('Log out')).toBeVisible()

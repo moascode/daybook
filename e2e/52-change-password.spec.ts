@@ -25,7 +25,7 @@ async function signUpAndOpenSettings(
   await page.request.post('/api/auth/signup', {
     data: { username, password: ORIGINAL },
   })
-  await page.goto('/settings')
+  await page.goto('/settings/profile')
   await waitForApp(page)
   return { page, username }
 }

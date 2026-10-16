@@ -124,7 +124,7 @@ test.describe('capture tokens', () => {
   })
 
   test('UI: creates a token, reveals it once, and lists the device', async ({ browser }) => {
-    const page = await newAppPage(browser, '/settings')
+    const page = await newAppPage(browser, '/settings/devices')
 
     await page.getByTestId('capture-token-label').fill('Kitchen iPad')
     await page.getByTestId('capture-token-create').click()
@@ -145,7 +145,7 @@ test.describe('capture tokens', () => {
   })
 
   test('UI: revoking asks first, then removes the device', async ({ browser }) => {
-    const page = await newAppPage(browser, '/settings')
+    const page = await newAppPage(browser, '/settings/devices')
     await page.getByTestId('capture-token-label').fill('Old phone')
     await page.getByTestId('capture-token-create').click()
     await expect(page.getByTestId('capture-token-row')).toHaveCount(1)

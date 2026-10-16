@@ -128,7 +128,7 @@ test.describe('day headers and category management', () => {
     // Wallet, its single canonical location — as part of the mockup-parity
     // rebuild of the Transactions page. Either way, it must be reachable
     // without opening any filter.
-    await page.goto('/settings')
+    await page.goto('/settings/wallet')
     const button = page.getByTestId('manage-categories')
     await expect(button).toBeVisible()
     await button.click()

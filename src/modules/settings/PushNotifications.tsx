@@ -19,6 +19,15 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 const supported =
   typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 
+interface PushNotificationsProps {
+  /** Called once, from the config fetch, when push is disabled/unconfigured
+   *  on THIS deployment (not merely unsupported in this browser — that case
+   *  still renders the section, with its own explanation). Lets a caller
+   *  (NotificationsSettings) show a fallback without a second fetch of the
+   *  same `/notifications/config` endpoint. */
+  onUnavailable?: () => void
+}
+
 /**
  * The notifications toggle (v3 P4).
  *
@@ -30,7 +39,7 @@ const supported =
  * tab reports PushManager as missing, which is why the unsupported state
  * explains itself rather than hiding.
  */
-export function PushNotifications() {
+export function PushNotifications({ onUnavailable }: PushNotificationsProps = {}) {
   const { addToast } = useToastStore()
   const [config, setConfig] = useState<PushConfig | null>(null)
   const [subscribed, setSubscribed] = useState(false)
@@ -45,7 +54,11 @@ export function PushNotifications() {
         if (cancelled) return
         setConfig(cfg)
         setLoadError(null)
-        if (!cfg.enabled || !supported) return
+        if (!cfg.enabled) {
+          onUnavailable?.()
+          return
+        }
+        if (!supported) return
         const reg = await navigator.serviceWorker.ready
         const sub = await reg.pushManager.getSubscription()
         if (cancelled) return
