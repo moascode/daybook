@@ -11,6 +11,8 @@ export interface Account {
   creditLimit: number | null
   /** Card accounts only — day of month (1-31) the statement closes. Drives the "Statement <date>" foot-row label. null when not set. */
   statementDay: number | null
+  /** Last 4 digits of the card/account number, or '' when unset. Used to auto-resolve a captured payment to this account by matching the end of the issuer's card string. */
+  last4: string
   createdAt: string
   // Sharing — populated when the account is shared-in from another user
   isShared?: boolean
@@ -121,4 +123,26 @@ export interface DailyGroup {
   transactions: Transaction[]
   totalIncome: number
   totalExpense: number
+}
+
+/**
+ * A caller's own ordered auto-categorise/auto-tag/auto-split rule
+ * (worker/routes/rules.ts, migration 0033_account_last4_rules.sql). Matching
+ * against an incoming/review-table row is pure client logic — see
+ * `matchRule` in `src/lib/rules.ts`.
+ */
+export interface TransactionRule {
+  id: string
+  name: string
+  position: number
+  enabled: boolean
+  matchAccountId: string | null
+  matchCategoryId: string | null
+  matchMerchant: string
+  setCategoryId: string | null
+  addTags: string[]
+  splitUserId: string | null
+  splitPercent: number | null
+  createdAt: string
+  updatedAt: string
 }

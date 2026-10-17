@@ -56,6 +56,7 @@ const ACCOUNT_COLS: Record<string, string> = {
   openingBalance: 'opening_balance',
   creditLimit: 'credit_limit',
   statementDay: 'statement_day',
+  last4: 'last4',
 }
 
 const ACCOUNT_TYPES = new Set(['cash', 'card', 'e-wallet', 'bank', 'investment', 'other'])
@@ -89,7 +90,35 @@ function accountInputError(b: Record<string, unknown>, partial: boolean): string
     const n = typeof b.statementDay === 'number' || typeof b.statementDay === 'string' ? Number(b.statementDay) : NaN
     if (!Number.isInteger(n) || n < 1 || n > 31) return 'statementDay must be an integer 1-31, or null to clear it'
   }
+  if (has('last4') && b.last4 !== '' && !(typeof b.last4 === 'string' && /^\d{4}$/.test(b.last4))) {
+    return 'last 4 digits must be exactly 4 digits'
+  }
   return null
+}
+
+/**
+ * True if another account OWNED by this user already carries this non-empty
+ * last4. `excludeId` lets PATCH skip the row being edited. Cross-user
+ * collisions are allowed — only the caller's own accounts must stay distinct,
+ * since last4 exists purely to disambiguate the caller's own cards.
+ */
+async function last4TakenByAnother(
+  db: D1Database,
+  userId: string,
+  last4: string,
+  excludeId?: string,
+): Promise<boolean> {
+  if (!last4) return false
+  const row = excludeId
+    ? await db
+        .prepare('SELECT 1 AS ok FROM accounts WHERE user_id = ? AND last4 = ? AND id != ?')
+        .bind(userId, last4, excludeId)
+        .first()
+    : await db
+        .prepare('SELECT 1 AS ok FROM accounts WHERE user_id = ? AND last4 = ?')
+        .bind(userId, last4)
+        .first()
+  return !!row
 }
 
 /** Body reader shared by every write route here. */
@@ -130,15 +159,21 @@ wallet.post('/accounts', async (c) => {
   const err = accountInputError(b, false)
   if (err) return c.json({ error: err }, 400)
 
+  const userId = c.get('userId')
+  const last4 = typeof b.last4 === 'string' ? b.last4 : ''
+  if (await last4TakenByAnother(c.env.DB, userId, last4)) {
+    return c.json({ error: 'Another of your accounts already uses ••' + last4 }, 409)
+  }
+
   const row = await c.env.DB.prepare(
     `INSERT INTO accounts
-       (id, user_id, name, description, currency, type, color, icon, opening_balance, credit_limit, statement_day, created_at)
-     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       (id, user_id, name, description, currency, type, color, icon, opening_balance, credit_limit, statement_day, last4, created_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
      RETURNING *`,
   )
-    // userId, name, description, currency, type, color, icon, openingBalance, creditLimit, statementDay
+    // userId, name, description, currency, type, color, icon, openingBalance, creditLimit, statementDay, last4
     .bind(
-      c.get('userId'),
+      userId,
       b.name,
       b.description ?? '',
       b.currency ?? 'MYR',
@@ -148,6 +183,7 @@ wallet.post('/accounts', async (c) => {
       normalizeBind(b.openingBalance ?? 0),
       normalizeBind(b.creditLimit ?? null),
       normalizeBind(b.statementDay ?? null),
+      last4,
     )
     .first()
 
@@ -158,6 +194,12 @@ wallet.patch('/accounts/:id', async (c) => {
   const b = await body(c)
   const err = accountInputError(b, true)
   if (err) return c.json({ error: err }, 400)
+
+  if ('last4' in b && typeof b.last4 === 'string' && b.last4) {
+    if (await last4TakenByAnother(c.env.DB, c.get('userId'), b.last4, c.req.param('id'))) {
+      return c.json({ error: 'Another of your accounts already uses ••' + b.last4 }, 409)
+    }
+  }
 
   // accounts has no updated_at column.
   const row = await updateRow(

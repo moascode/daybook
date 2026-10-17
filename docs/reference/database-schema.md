@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-16
+> **Status:** Live · **Last verified:** 2026-10-17
 
 # Database schema
 
@@ -550,6 +550,70 @@ ALTER TABLE habits ADD COLUMN interval_days INTEGER DEFAULT NULL; -- every N day
 - `target_per_week` is derived as `ceil(7 / interval_days)` when an interval is
   set, so the weekly ring has a sensible denominator.
 
+### Account last4 + transaction rules (migration `0033_account_last4_rules.sql` / `0032_` on the server)
+
+```sql
+ALTER TABLE accounts ADD COLUMN last4 TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS transaction_rules (
+  id                TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id           TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  position          INTEGER NOT NULL DEFAULT 0,
+  enabled           INTEGER NOT NULL DEFAULT 1,
+  match_account_id  TEXT DEFAULT NULL,
+  match_category_id TEXT DEFAULT NULL,
+  match_merchant    TEXT NOT NULL DEFAULT '',
+  set_category_id   TEXT DEFAULT NULL,
+  add_tags          TEXT NOT NULL DEFAULT '[]',
+  split_user_id     TEXT DEFAULT NULL,
+  split_percent     REAL DEFAULT NULL,
+  created_at        TEXT DEFAULT (datetime('now')),
+  updated_at        TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_transaction_rules_user ON transaction_rules(user_id, position);
+```
+
+- `accounts.last4` disambiguates two cards on the same issuer in the UI, without
+  storing a full card number. `''` means "not set". `POST`/`PATCH /accounts`
+  (`worker/routes/wallet.ts`) reject anything else that isn't exactly 4 digits
+  ("last 4 digits must be exactly 4 digits", 400), and reject a non-empty value
+  that collides with another account **owned by the same caller**
+  ("Another of your accounts already uses ••NNNN", 409) — a collision across
+  different users is fine. `GET /accounts` returns it on both owned and
+  shared-in rows via its existing `SELECT *`.
+- `transaction_rules` is a caller's own ordered list of auto-categorise/
+  auto-tag/auto-split rules (`worker/routes/rules.ts`; `GET`/`POST /rules`,
+  `PATCH`/`DELETE /rules/:id`). **Deliberately no FK** from
+  `match_account_id`/`match_category_id`/`set_category_id` to
+  `accounts`/`categories`: those tables cascade-delete their own children, and
+  a rule referencing one is not that row's child — an FK would silently
+  delete the rule the moment the referenced account/category is removed.
+  Instead the API treats a dangling reference as "this condition/action no
+  longer applies", and the rule itself survives.
+  - A rule needs **at least one condition** (`matchAccountId`,
+    `matchCategoryId`, or a non-empty `matchMerchant`) and **at least one
+    action** (`setCategoryId`, a non-empty `addTags`, or a
+    `splitUserId`+`splitPercent` pair) — checked against the MERGED row on a
+    PATCH, so clearing a rule's only condition/action in an otherwise-valid
+    partial update is still rejected.
+  - `addTags` is 1–10 strings, each 1–40 characters, stored as a JSON array
+    in `add_tags` (same convention as `transactions.tag` — see §6 above).
+  - `matchAccountId` must be an account the caller can write to (own or a
+    writable share); `matchCategoryId`/`setCategoryId` must be categories the
+    caller can see (categories have no sharing, so this is ownership);
+    `splitUserId` must be a co-group member other than the caller, paired
+    with `splitPercent` strictly between 0 and 100 — both present or both
+    absent.
+  - `GET /rules` returns raw DB rows (snake_case, `enabled`/`split_percent`
+    etc. as stored, `add_tags` as its JSON-array *text*, unparsed) ordered by
+    `position, created_at` — the same convention `GET /budgets` and
+    `GET /recurring-transactions` use. New rules append at `position =
+    max(position) + 1`.
+  - `POST /transactions/:id/split`'s `recipientId` check for "co-group member"
+    (`coGroupUserIds`, `worker/lib/sharing.ts`) is the same helper
+    `splitUserId` is validated against here.
+
 ### `push_sent_log` kinds (no DDL change)
 
 `push_sent_log (user_id, kind, sent_on)` (PK on all three, migration
@@ -593,6 +657,7 @@ export interface Account {
   color: string
   icon: string
   openingBalance: number                 // starting balance; included in the computed balance
+  last4: string                          // '' or exactly 4 digits; unique among the owner's OWN accounts
   createdAt: string
   // Sharing (Phase 5b) — populated only on accounts shared in from another user:
   isShared?: boolean

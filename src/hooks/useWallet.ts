@@ -27,6 +27,7 @@ interface AccountRow {
   opening_balance: number
   credit_limit: number | null
   statement_day: number | null
+  last4?: string
   created_at: string
   // Sharing fields (only present on shared-in accounts)
   is_shared?: number
@@ -89,6 +90,7 @@ function mapAccount(row: AccountRow): Account {
     openingBalance: row.opening_balance ?? 0,
     creditLimit: row.credit_limit ?? null,
     statementDay: row.statement_day ?? null,
+    last4: row.last4 ?? '',
     createdAt: row.created_at,
     isShared: !!row.is_shared,
     sharedByUserId: row.shared_by_user_id ?? null,
@@ -215,6 +217,7 @@ interface AccountInput {
   openingBalance?: number
   creditLimit?: number | null
   statementDay?: number | null
+  last4?: string
 }
 
 interface TransactionInput {
@@ -508,8 +511,8 @@ export function useWallet() {
 
   const importTransactions = useCallback(async (
     transactions: TransactionInput[]
-  ): Promise<number> => {
-    if (transactions.length === 0) return 0
+  ): Promise<Transaction[]> => {
+    if (transactions.length === 0) return []
 
     const payload = transactions.map((data) => ({
       ...data,
@@ -518,11 +521,16 @@ export function useWallet() {
     }))
     const rows = await api.post<TransactionRow[]>('/transactions/import', payload)
 
-    for (const row of rows) {
-      useWalletStore.getState().addTransaction(mapTransaction(row))
+    const mapped = rows.map(mapTransaction)
+    for (const t of mapped) {
+      useWalletStore.getState().addTransaction(t)
     }
 
-    return rows.length
+    // The batch preserves statement order (D1 `batch()` runs sequentially and
+    // RETURNING rows back in the order submitted), so index i of the response
+    // is the transaction created from inputs[i] — callers that need to attach
+    // a side effect (e.g. a rule-driven split) per imported row rely on this.
+    return mapped
   }, [])
 
   // ── Budget CRUD ─────────────────────────────────

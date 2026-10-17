@@ -205,11 +205,12 @@ export async function selectAllVisibleTransactions(page: Page) {
 /** Fill the AccountForm modal and submit it */
 export async function fillAccountForm(
   page: Page,
-  fields: { name: string; type?: string },
+  fields: { name: string; type?: string; last4?: string },
 ) {
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Account Name').fill(fields.name)
   if (fields.type) await dialog.getByLabel('Type').selectOption(fields.type)
+  if (fields.last4 !== undefined) await dialog.getByLabel('Last 4 digits').fill(fields.last4)
   await dialog.getByRole('button', { name: /Create Account|Save Changes/ }).click()
   await expect(dialog).toBeHidden()
 }

@@ -6,15 +6,20 @@ import { Button } from '@/components/ui/Button'
 import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useWallet } from '@/hooks/useWallet'
+import { useRules } from '@/hooks/useRules'
 import { useToastStore } from '@/stores/toast.store'
 import { useAppStore } from '@/stores/app.store'
 import { suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
 import { resolveMerchants } from '@/lib/csv'
-import { errorMessage } from '@/lib/utils'
+import { splitShares } from '@/lib/rules'
+import { api } from '@/lib/api'
+import { mapMember } from '@/lib/household.mappers'
+import { errorMessage, formatMYR } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
 import type { TruncatedPhoto } from '@/lib/photo-import'
+import type { GroupMember } from '@/types/household.types'
 
 interface ImportLocationState {
   rows: ImportRow[]
@@ -40,6 +45,10 @@ export function CsvImport() {
   const navigate = useNavigate()
   const location = useLocation()
   const { accounts, categories, importTransactions, setFilters, loadAccounts, loadCategories } = useWallet()
+  const { rules, loadRules } = useRules()
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
+  const [rulesLoadError, setRulesLoadError] = useState<string | null>(null)
+  const currentUserId = useAppStore((s) => s.user?.id ?? '')
   const { addToast } = useToastStore()
   const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
 
@@ -54,7 +63,7 @@ export function CsvImport() {
   const [truncatedPhotos, setTruncatedPhotos] = useState(state?.truncatedPhotos ?? [])
   const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number } | null>(null)
+  const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number; splitCount: number } | null>(null)
   const [askingAI, setAskingAI] = useState(false)
   const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
   const [resolvingMerchants, setResolvingMerchants] = useState(false)
@@ -71,10 +80,30 @@ export function CsvImport() {
   // zero options — reported as "the dropdown isn't showing". Loading here,
   // same as the other pages, is what makes the badge (and `selectedAccountId`
   // below) converge once the fetch resolves.
+  const loadRuleContext = useCallback(() => {
+    // Rule 10: a failure here must say so, not just leave rules/groupMembers
+    // empty (indistinguishable from "no rules yet, no group members yet").
+    // The error is cleared only on a NEW outcome (not pre-emptively here) —
+    // calling setState synchronously at the top of this function would fire
+    // on every render that calls it from an effect body (react-hooks lint).
+    Promise.all([
+      loadRules(),
+      api.get<Record<string, unknown>[]>('/groups/members'),
+    ])
+      .then(([, rows]) => {
+        setGroupMembers(rows.map(mapMember).filter((m) => m.userId !== currentUserId))
+        setRulesLoadError(null)
+      })
+      .catch((err: unknown) => {
+        setRulesLoadError(errorMessage(err, "Couldn't load your rules — rule suggestions are off for this import."))
+      })
+  }, [loadRules, currentUserId])
+
   useEffect(() => {
     loadAccounts()
     loadCategories()
-  }, [loadAccounts, loadCategories])
+    loadRuleContext()
+  }, [loadAccounts, loadCategories, loadRuleContext])
 
   const importableAccounts = accounts.filter((a) => !a.isShared || a.canWrite === 1)
   const destinationAccounts = importableAccounts.filter((a) => a.id !== selectedAccountId)
@@ -258,21 +287,58 @@ export function CsvImport() {
       type: r.type,
       categoryId: r.categoryId,
       destinationAccountId: r.type === 'transfer' ? r.destinationAccountId : null,
-      tags: [],
+      tags: r.tags ?? [],
       importHash: r.importHash,
     }))
 
     try {
-      const imported = await importTransactions(inputs)
+      const created = await importTransactions(inputs)
       const skipped = importRows.filter((r) => r.isDuplicate).length
       const excluded = importRows.filter((r) => !r.included && !r.isDuplicate).length
-      setResult({ imported, skipped, excluded })
+
+      // The batch preserves order, so toImport[i] created created[i] — attach
+      // a rule-driven split to each row that asked for one. #4 defensive
+      // re-check: a split action never applies outside an expense row, even
+      // if stale state somehow carried a ruleSplit onto one.
+      const splitTargets = toImport
+        .map((r, i) => ({ row: r, transactionId: created[i]?.id }))
+        .filter((t): t is { row: ImportRow; transactionId: string } =>
+          !!t.row.ruleSplit && t.row.type === 'expense' && !!t.transactionId)
+
+      const failures: { merchant: string; amount: number; message: string }[] = []
+      for (const { row, transactionId } of splitTargets) {
+        try {
+          const [payerShare, partnerShare] = splitShares(row.amount, row.ruleSplit!.percent)
+          const ruleName = rules.find((r) => r.id === row.ruleId)?.name ?? 'rule'
+          await api.post(`/transactions/${transactionId}/split`, {
+            recipientId: row.ruleSplit!.userId,
+            splitMode: 'custom',
+            shareAmounts: [payerShare, partnerShare],
+            note: `Auto-split by rule: ${ruleName}`,
+          })
+        } catch (err) {
+          failures.push({ merchant: row.merchant || 'Unnamed', amount: row.amount, message: errorMessage(err, 'unknown error') })
+        }
+      }
+
+      setResult({ imported: created.length, skipped, excluded, splitCount: splitTargets.length - failures.length })
+      // Rule 10 — a split that silently failed must say so, by name, so the
+      // user knows exactly which transactions to open and fix by hand. The
+      // success case is said once, on the result screen below — not here too.
+      if (failures.length > 0) {
+        const named = failures.slice(0, 3).map((f) => `${f.merchant} (${formatMYR(f.amount)})`).join(', ')
+        const more = failures.length > 3 ? ` +${failures.length - 3} more` : ''
+        addToast({
+          message: `${failures.length} split${failures.length !== 1 ? 's' : ''} couldn't be created for ${named}${more} — ${failures[0].message}`,
+          duration: 7000,
+        })
+      }
     } catch {
       addToast({ message: 'Import failed — no transactions were saved.', duration: 4000 })
     } finally {
       setImporting(false)
     }
-  }, [importRows, selectedAccountId, importTransactions, addToast])
+  }, [importRows, selectedAccountId, importTransactions, addToast, rules])
 
   // No rows in router state — reached directly (bookmark, refresh, back
   // button). Send the user back to start a fresh import from the composer
@@ -298,6 +364,7 @@ export function CsvImport() {
           <p><span className="font-semibold text-fg">{result.imported}</span> transaction{result.imported !== 1 ? 's' : ''} imported</p>
           {result.skipped > 0 && <p>{result.skipped} duplicate{result.skipped !== 1 ? 's' : ''} skipped</p>}
           {result.excluded > 0 && <p>{result.excluded} excluded by you</p>}
+          {result.splitCount > 0 && <p>{result.splitCount} split by rule{result.splitCount !== 1 ? 's' : ''}</p>}
         </div>
         <div className="mt-7 flex justify-center gap-3">
           <Button variant="secondary" size="sm" onClick={() => navigate('/wallet', { state: { openImport: true } })}>Import Another</Button>
@@ -423,6 +490,17 @@ export function CsvImport() {
         </div>
       )}
 
+      {rulesLoadError && (
+        <div className="notice notice-fail mb-4" data-testid="rules-load-error">
+          <div>
+            <div className="notice-title">{rulesLoadError}</div>
+          </div>
+          <Button variant="secondary" size="sm" className="ml-auto flex-shrink-0" onClick={loadRuleContext}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* CsvReviewTable renders its own "Suggested a category…" banner
           (csv-suggestions-banner) — do not duplicate it here. */}
       <CsvReviewTable
@@ -440,6 +518,9 @@ export function CsvImport() {
         resolvingMerchants={resolvingMerchants}
         merchantAiMessage={merchantAiMessage}
         onResolveMerchantsAI={() => void handleResolveMerchantsAI()}
+        rules={rules}
+        ruleAccountId={selectedAccountId}
+        groupMembers={groupMembers}
       />
 
       {selectedCount > 0 && (

@@ -1,12 +1,14 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { AlertTriangle, Inbox, X } from 'lucide-react'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { Badge } from '@/components/ui/Badge'
 import { cn, formatMYR } from '@/lib/utils'
+import { matchRule } from '@/lib/rules'
 import type { ImportRow } from '@/lib/csv'
-import type { Account, Category } from '@/types/wallet.types'
+import type { Account, Category, TransactionRule } from '@/types/wallet.types'
+import type { GroupMember } from '@/types/household.types'
 
 interface CsvReviewTableProps {
   rows: ImportRow[]
@@ -46,6 +48,16 @@ interface CsvReviewTableProps {
   resolvingMerchants: boolean
   merchantAiMessage: { tone: 'error' | 'info'; text: string } | null
   onResolveMerchantsAI: () => void
+  /**
+   * Transaction rules (FEAT: account last4 + rules). Omitted = no rule chip
+   * is ever rendered (e.g. nowhere else uses this table yet). The account
+   * used for matching is the row's own `accountId` when present (capture
+   * inbox — one account per row) else `ruleAccountId` (CSV/photo — one
+   * account for the whole batch).
+   */
+  rules?: TransactionRule[]
+  ruleAccountId?: string
+  groupMembers?: GroupMember[]
 }
 
 export function CsvReviewTable({
@@ -64,7 +76,108 @@ export function CsvReviewTable({
   resolvingMerchants,
   merchantAiMessage,
   onResolveMerchantsAI,
+  rules,
+  ruleAccountId,
+  groupMembers,
 }: CsvReviewTableProps) {
+  function matchContextFor(row: ImportRow) {
+    return { accountId: row.accountId ?? ruleAccountId ?? null, categoryId: row.categoryId, merchant: row.merchant }
+  }
+
+  function matchedRuleFor(row: ImportRow): TransactionRule | null {
+    if (!rules || rules.length === 0) return null
+    return matchRule(rules, matchContextFor(row))
+  }
+
+  /** The rule currently applied to this row — looked up by id, not by
+   *  re-matching, so a ticked chip can always be unticked even after the row
+   *  no longer matches the rule that set it (see the auto-untick effect below). */
+  function appliedRuleFor(row: ImportRow): TransactionRule | null {
+    if (!row.ruleApplied || !row.ruleId || !rules) return null
+    return rules.find((r) => r.id === row.ruleId) ?? null
+  }
+
+  /** What unticking (by hand or automatically) undoes. #3: the category is
+   *  only restored if it still equals what the rule set — a user who picked a
+   *  different category after ticking keeps their own choice. */
+  function restoreUpdates(row: ImportRow, rule: TransactionRule | null, removedNote: boolean): Partial<ImportRow> {
+    const categoryId =
+      rule && rule.setCategoryId && row.categoryId === rule.setCategoryId
+        ? row.preRuleCategoryId ?? null
+        : row.categoryId
+    return {
+      ruleApplied: false,
+      ruleId: undefined,
+      categoryId,
+      preRuleCategoryId: undefined,
+      tags: [],
+      ruleSplit: null,
+      ruleSplitSkipped: false,
+      ruleRemovedNote: removedNote,
+    }
+  }
+
+  // Ticking applies the rule's actions; unticking restores exactly what the
+  // chip changed. Never auto-applied — the chip always starts unticked, even
+  // when a rule matches on load (rule 13: no click, no change).
+  function toggleRule(index: number, row: ImportRow, rule: TransactionRule) {
+    if (row.ruleApplied) {
+      onRowChange(index, restoreUpdates(row, rule, false))
+      return
+    }
+    const updates: Partial<ImportRow> = {
+      ruleApplied: true,
+      ruleId: rule.id,
+      preRuleCategoryId: row.categoryId ?? null,
+      ruleRemovedNote: false,
+      ruleSplitSkipped: false,
+    }
+    if (rule.setCategoryId) {
+      const cat = categories.find((c) => c.id === rule.setCategoryId)
+      // Only when the category fits the row's direction (matches TransactionForm/RecurringPage) —
+      // otherwise every other action still applies, category is just left alone.
+      if (cat && (cat.type === 'both' || cat.type === row.type)) {
+        updates.categoryId = rule.setCategoryId
+        // Caption swap (#13): a rule-set category is never "common merchant" —
+        // clear the stale suggestion provenance so the caption/tint read correctly.
+        updates.suggestedFrom = undefined
+        updates.suggestionApplied = false
+      }
+    }
+    if (rule.addTags.length > 0) {
+      const existing = row.tags ?? []
+      updates.tags = [...existing, ...rule.addTags.filter((t) => !existing.includes(t))]
+    }
+    if (rule.splitUserId && rule.splitPercent != null) {
+      // #4: a split only ever applies to an expense row — income/transfer rows
+      // still get category/tags from the same tick, just not the split leg.
+      if (row.type === 'expense') {
+        const partner = groupMembers?.find((m) => m.userId === rule.splitUserId)
+        updates.ruleSplit = { userId: rule.splitUserId, percent: rule.splitPercent, name: partner?.username ?? '' }
+      } else {
+        updates.ruleSplitSkipped = true
+      }
+    }
+    onRowChange(index, updates)
+  }
+
+  // #2: if a row's merchant/account/category/type changes after its rule was
+  // ticked such that the SAME rule no longer matches, auto-untick it rather
+  // than silently leaving tags/a split applied with no visible ticked chip.
+  useEffect(() => {
+    if (!rules || rules.length === 0) return
+    rows.forEach((row, index) => {
+      if (!row.ruleApplied || !row.ruleId) return
+      const rule = rules.find((r) => r.id === row.ruleId) ?? null
+      const stillMatches = !!rule && matchRule([rule], matchContextFor(row))?.id === rule.id
+      if (stillMatches) return
+      onRowChange(index, restoreUpdates(row, rule, true))
+    })
+    // onRowChange is a stable useCallback from the host; categories only
+    // affects the one-time apply path above, not re-matching.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, rules, ruleAccountId])
+
   // Category options valid for a row's direction — an income category must not
   // be selectable on an expense row (matches TransactionForm/RecurringPage).
   const categoryOptionsFor = (type: 'income' | 'expense') => [
@@ -420,6 +533,51 @@ export function CsvReviewTable({
                     )}
                   </div>
                 )}
+
+                {/* Rule chip (FEAT: account last4 + rules) — unticked by default,
+                    never auto-applied. While applied, rendered from the APPLIED
+                    rule (by id), never by re-matching, so it can always be
+                    unticked (#2) — the effect above auto-unticks and leaves
+                    ruleRemovedNote instead. */}
+                {(() => {
+                  const rule = appliedRuleFor(row) ?? (!row.ruleApplied ? matchedRuleFor(row) : null)
+                  if (!rule) {
+                    return row.ruleRemovedNote ? (
+                      <p className="mt-1 text-[11px] text-amber-600" data-testid="row-rule-removed">
+                        Rule removed — row no longer matches
+                      </p>
+                    ) : null
+                  }
+                  return (
+                    <div className="mt-1" data-testid="row-rule-chip">
+                      <label className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+                        <input
+                          type="checkbox"
+                          checked={!!row.ruleApplied}
+                          onChange={() => toggleRule(index, row, rule)}
+                          disabled={!row.included}
+                          className="h-3.5 w-3.5 rounded border-line-strong text-brand-500 focus:ring-brand-500"
+                          aria-label={`Apply rule (row ${index + 1})`}
+                        />
+                        Rule: {rule.name}
+                      </label>
+                      {row.ruleApplied && (row.tags?.length || row.ruleSplit || row.ruleSplitSkipped) && (
+                        <p className="mt-0.5 pl-5 text-[11px] text-fg-faint">
+                          {[
+                            row.tags && row.tags.length > 0 ? row.tags.map((t) => `#${t}`).join(' ') : null,
+                            row.ruleSplit
+                              ? `split ${row.ruleSplit.percent}% with ${row.ruleSplit.name || 'partner'}`
+                              : row.ruleSplitSkipped
+                                ? 'split skipped — not an expense'
+                                : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
               </td>
 
               {/* Amount */}
@@ -548,7 +706,11 @@ export function CsvReviewTable({
                     {row.accountUnmapped && (
                       <span
                         className="flex shrink-0 items-center text-amber-600"
-                        title={`"${row.rawCard || 'Unknown card'}" isn't mapped to an account yet — check this one`}
+                        title={
+                          row.last4SharedMatch
+                            ? `Matched ••${row.last4SharedMatch} on a shared account — check this one`
+                            : `"${row.rawCard || 'Unknown card'}" isn't mapped to an account yet — check this one`
+                        }
                         data-testid="capture-row-unmapped"
                       >
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />

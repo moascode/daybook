@@ -6,15 +6,19 @@ import { BulkActionBar } from '@/components/ui/BulkActionBar'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import { useWallet } from '@/hooks/useWallet'
+import { useRules } from '@/hooks/useRules'
 import { useToastStore } from '@/stores/toast.store'
 import { useAppStore } from '@/stores/app.store'
-import { errorMessage } from '@/lib/utils'
+import { errorMessage, formatMYR } from '@/lib/utils'
 import { resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
 import { acceptCaptures, dismissCaptures, listCaptures, captureToRow, parseCardMap, CARD_MAP_KEY } from '@/lib/captures'
+import { splitShares } from '@/lib/rules'
+import { mapMember } from '@/lib/household.mappers'
 import { api } from '@/lib/api'
 import { CsvReviewTable } from './CsvReviewTable'
 import type { ImportRow } from '@/lib/csv'
+import type { GroupMember } from '@/types/household.types'
 
 /** Broadcast so the sidebar badge re-counts without polling. */
 export const CAPTURES_CHANGED = 'daybook:captures-changed'
@@ -41,10 +45,14 @@ const LOAD_FAILED = 'Could not load your capture inbox.'
 export function CaptureInbox() {
   const navigate = useNavigate()
   const { accounts, categories, loadAccounts, loadCategories } = useWallet()
+  const { rules, loadRules } = useRules()
   const { addToast } = useToastStore()
   const hasAnthropicKey = useAppStore((s) => s.hasAnthropicKey)
+  const currentUserId = useAppStore((s) => s.user?.id ?? '')
 
   const [rows, setRows] = useState<ImportRow[]>([])
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
+  const [rulesLoadError, setRulesLoadError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
@@ -112,8 +120,27 @@ export function CaptureInbox() {
     }
   }, [buildRows])
 
+  const loadRuleContext = useCallback(() => {
+    // Rule 10: no silent catch — an empty rules/groupMembers list must never
+    // look identical to "we couldn't check". The error is cleared only on a
+    // new outcome, not pre-emptively (see CsvImport.tsx's identical helper
+    // for why — avoids a synchronous setState-in-effect lint error).
+    Promise.all([
+      loadRules(),
+      api.get<Record<string, unknown>[]>('/groups/members'),
+    ])
+      .then(([, memberRows]) => {
+        setGroupMembers(memberRows.map(mapMember).filter((m) => m.userId !== currentUserId))
+        setRulesLoadError(null)
+      })
+      .catch((err: unknown) => {
+        setRulesLoadError(errorMessage(err, "Couldn't load your rules — rule suggestions are off for this inbox."))
+      })
+  }, [loadRules, currentUserId])
+
   useEffect(() => {
     loadCategories()
+    loadRuleContext()
     let cancelled = false
     buildRows()
       .then((built) => {
@@ -131,7 +158,7 @@ export function CaptureInbox() {
     return () => {
       cancelled = true
     }
-  }, [buildRows, loadCategories])
+  }, [buildRows, loadCategories, loadRuleContext])
 
   const updateRow = useCallback((index: number, updates: Partial<ImportRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)))
@@ -236,7 +263,7 @@ export function CaptureInbox() {
 
     setWorking(true)
     try {
-      await acceptCaptures(
+      const { accepted, transactions } = await acceptCaptures(
         selected.map((r) => ({
           id: r.captureId!,
           accountId: r.accountId!,
@@ -247,9 +274,46 @@ export function CaptureInbox() {
           amount: r.amount,
           type: r.type,
           categoryId: r.categoryId,
+          tag: r.tags ?? [],
         })),
       )
-      addToast({ message: `${selected.length} transaction${selected.length !== 1 ? 's' : ''} added.` })
+
+      // Accept preserves order (worker/routes/captures.ts batches one INSERT
+      // per row in the submitted order), so selected[i] created transactions[i].
+      // #4 defensive re-check: a split action never applies outside an expense row.
+      const splitTargets = selected
+        .map((r, i) => ({ row: r, transactionId: (transactions[i] as { id?: string } | undefined)?.id }))
+        .filter((t): t is { row: ImportRow; transactionId: string } =>
+          !!t.row.ruleSplit && t.row.type === 'expense' && !!t.transactionId)
+
+      const failures: { merchant: string; amount: number; message: string }[] = []
+      for (const { row, transactionId } of splitTargets) {
+        try {
+          const [payerShare, partnerShare] = splitShares(row.amount, row.ruleSplit!.percent)
+          const ruleName = rules.find((r) => r.id === row.ruleId)?.name ?? 'rule'
+          await api.post(`/transactions/${transactionId}/split`, {
+            recipientId: row.ruleSplit!.userId,
+            splitMode: 'custom',
+            shareAmounts: [payerShare, partnerShare],
+            note: `Auto-split by rule: ${ruleName}`,
+          })
+        } catch (err) {
+          failures.push({ merchant: row.merchant || 'Unnamed', amount: row.amount, message: errorMessage(err, 'unknown error') })
+        }
+      }
+
+      if (failures.length > 0) {
+        const named = failures.slice(0, 3).map((f) => `${f.merchant} (${formatMYR(f.amount)})`).join(', ')
+        const more = failures.length > 3 ? ` +${failures.length - 3} more` : ''
+        addToast({
+          message: `${accepted} accepted · ${failures.length} split${failures.length !== 1 ? 's' : ''} couldn't be created for ${named}${more} — ${failures[0].message}`,
+          duration: 7000,
+        })
+      } else if (splitTargets.length > 0) {
+        addToast({ message: `Accepted ${accepted} · ${splitTargets.length} split${splitTargets.length !== 1 ? 's' : ''}.` })
+      } else {
+        addToast({ message: `${accepted} transaction${accepted !== 1 ? 's' : ''} added.` })
+      }
       window.dispatchEvent(new Event(CAPTURES_CHANGED))
       await refresh()
     } catch (err) {
@@ -310,6 +374,17 @@ export function CaptureInbox() {
         </span>
       </div>
 
+      {rulesLoadError && (
+        <div className="notice notice-fail mb-4" data-testid="rules-load-error">
+          <div>
+            <div className="notice-title">{rulesLoadError}</div>
+          </div>
+          <Button variant="secondary" size="sm" className="ml-auto flex-shrink-0" onClick={loadRuleContext}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       <CsvReviewTable
         rows={rows}
         categories={categories}
@@ -325,6 +400,8 @@ export function CaptureInbox() {
         resolvingMerchants={resolvingMerchants}
         merchantAiMessage={merchantAiMessage}
         onResolveMerchantsAI={() => void handleResolveMerchantsAI()}
+        rules={rules}
+        groupMembers={groupMembers}
       />
 
       {selected.length > 0 && (

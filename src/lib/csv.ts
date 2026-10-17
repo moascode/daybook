@@ -85,6 +85,23 @@ export interface ImportRow {
   captureId?: string
   /** The raw issuer card string the capture arrived with, for the flag's copy. */
   rawCard?: string
+  /** Set to the matched digits when the ONLY last4 match for this card is a shared-in (not own) account — still pre-selected, but flagged for a second look with its own title. */
+  last4SharedMatch?: string
+  /**
+   * Transaction rules (FEAT: account last4 + rules). Set only once the
+   * review-table "Apply rule" chip is ticked — never auto-applied on load.
+   */
+  ruleId?: string
+  ruleApplied?: boolean
+  /** Rule-added tags, present only while `ruleApplied`. */
+  tags?: string[]
+  ruleSplit?: { userId: string; percent: number; name: string } | null
+  /** True when the applied rule had a split action but this row isn't an expense — the split leg never applies outside expense rows. */
+  ruleSplitSkipped?: boolean
+  /** True after the chip was auto-unticked because the row changed enough that its applied rule no longer matches — shows a small note in place of the chip. */
+  ruleRemovedNote?: boolean
+  /** The category this row had before the rule's chip was ticked, restored when unticked. */
+  preRuleCategoryId?: string | null
 }
 
 // ── Date patterns for auto-detection ────────────────

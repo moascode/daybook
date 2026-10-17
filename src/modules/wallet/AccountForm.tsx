@@ -28,6 +28,7 @@ export interface AccountFormData {
   openingBalance: number
   creditLimit: number | null
   statementDay: number | null
+  last4: string
 }
 
 const ACCOUNT_TYPES = [
@@ -68,6 +69,7 @@ function getInitialState(account?: Account | null): AccountFormData {
     openingBalance: account?.openingBalance ?? 0,
     creditLimit: account?.creditLimit ?? null,
     statementDay: account?.statementDay ?? null,
+    last4: account?.last4 ?? '',
   }
 }
 
@@ -75,6 +77,8 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
   const { addToast } = useToastStore()
   const [form, setForm] = useState<AccountFormData>(getInitialState(account))
   const [error, setError] = useState('')
+  const [last4Error, setLast4Error] = useState('')
+  const [formError, setFormError] = useState('')
   const [prevOpen, setPrevOpen] = useState(open)
   const [prevAccount, setPrevAccount] = useState(account)
   const [shares, setShares] = useState<AccountShare[]>([])
@@ -110,6 +114,8 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
     if (open) {
       setForm(getInitialState(account))
       setError('')
+      setLast4Error('')
+      setFormError('')
       // Stale sharing data from a previous account shouldn't render under
       // this one while the fresh fetch above is still in flight (or fails).
       setShares([])
@@ -124,13 +130,36 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
       setError('Account name is required')
       return
     }
+    if (form.last4 && !/^\d{4}$/.test(form.last4)) {
+      setLast4Error('last 4 digits must be exactly 4 digits')
+      return
+    }
+    setLast4Error('')
+    setFormError('')
 
-    await onSubmit({
-      ...form,
-      name: form.name.trim(),
-      description: form.description.trim(),
-    })
-    onOpenChange(false)
+    try {
+      await onSubmit({
+        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
+      })
+      onOpenChange(false)
+    } catch (err: unknown) {
+      // Rule 10 (never fail silently) — the server's message is shown inline
+      // rather than swallowed, and the dialog is left open so it can be
+      // corrected without retyping the rest of the form. Routed to the field
+      // it's actually about: last4's own 400 ("last 4 digits must be exactly
+      // 4 digits") or 409 ("Another of your accounts already uses ••NNNN")
+      // under the Last 4 digits input, anything else as a form-level error —
+      // otherwise an unrelated failure (e.g. a network error) would show up
+      // next to a field the user never touched.
+      const message = (err as Error)?.message || 'Could not save this account.'
+      if (/last 4 digits|••\d{4}/.test(message)) {
+        setLast4Error(message)
+      } else {
+        setFormError(message)
+      }
+    }
   }
 
   const isEdit = !!account
@@ -184,6 +213,25 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
           />
           <p className="mt-1 text-xs text-fg-subtle">
             Starting balance — included in the computed balance. Can be negative.
+          </p>
+        </div>
+
+        <div>
+          <Input
+            label="Last 4 digits"
+            id="account-last4"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="1234"
+            value={form.last4}
+            error={last4Error}
+            onChange={(e) => {
+              setLast4Error('')
+              setForm((f) => ({ ...f, last4: e.target.value.replace(/\D/g, '').slice(0, 4) }))
+            }}
+          />
+          <p className="mt-1 text-xs text-fg-subtle">
+            From your card or account number — used to match captured payments.
           </p>
         </div>
 
@@ -352,6 +400,8 @@ export function AccountForm({ open, onOpenChange, account, onSubmit }: AccountFo
             </div>
           </div>
         )}
+
+        {formError && <p className="text-sm text-red-600">{formError}</p>}
 
         <div className="flex justify-end gap-3 pt-2">
           <Button
