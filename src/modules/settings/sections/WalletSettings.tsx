@@ -1,19 +1,74 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Globe, Tag, Upload } from 'lucide-react'
+import { Globe, Tag, Upload, CreditCard } from 'lucide-react'
 import { useWallet } from '@/hooks/useWallet'
 import { Button } from '@/components/ui/Button'
+import { AccountForm } from '@/modules/wallet/AccountForm'
 import { CategoryManager } from '@/modules/wallet/CategoryManager'
 import { CaptureCardMap } from '../CaptureCardMap'
+import { RulesSettings } from '../RulesSettings'
+import type { AccountFormData } from '@/modules/wallet/AccountForm'
+import type { Account } from '@/types/wallet.types'
 
 /**
- * Settings → Wallet: card-to-account mapping, category management, the
- * import/merchant-cleanup entry points, and the static MYR currency line.
- * Moved out of the old monolithic SettingsPage (module-based settings) with
- * no behaviour change — same testids. The "Import CSV" button mirrors
- * exactly what AccountMenu's own Import CSV row does
- * (`navigate('/wallet', { state: { openImport: true } })`), since both
- * routes to the same CSV-import entry point.
+ * Own accounts + their last4, each with an "Add/Edit" link into the real
+ * AccountForm (reusing it rather than a bespoke inline-PATCH form, per the
+ * spec's "pick the simpler that reuses AccountForm").
+ */
+function AccountsLast4List() {
+  const { accounts, loadAccounts, updateAccount } = useWallet()
+  const [editing, setEditing] = useState<Account | null>(null)
+
+  useEffect(() => { loadAccounts() }, [loadAccounts])
+
+  const ownAccounts = accounts.filter((a) => !a.isShared)
+
+  // #10: no toast here — AccountForm itself shows the server's message
+  // inline (last4-field or form-level, depending on what it's about) and
+  // keeps the dialog open. A toast on top of that said the same thing twice.
+  async function handleEdit(data: AccountFormData) {
+    if (!editing) return
+    await updateAccount(editing.id, data)
+  }
+
+  if (ownAccounts.length === 0) return null
+
+  return (
+    <div className="mb-4">
+      <ul className="divide-y divide-line-subtle border-b border-line-subtle">
+        {ownAccounts.map((a) => (
+          <li key={a.id} className="flex items-center justify-between gap-3 py-2.5" data-testid="account-last4-row">
+            <span className="min-w-0 flex-1 truncate text-sm text-fg">
+              {a.name}
+              {a.last4 && <span className="ml-1.5 text-fg-subtle">••{a.last4}</span>}
+            </span>
+            <button
+              type="button"
+              className="flex-shrink-0 text-xs text-brand-600 hover:underline"
+              onClick={() => setEditing(a)}
+              data-testid="account-last4-edit"
+            >
+              {a.last4 ? 'Edit' : 'Add last 4 digits'}
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <AccountForm
+        open={!!editing}
+        onOpenChange={(open) => { if (!open) setEditing(null) }}
+        account={editing}
+        onSubmit={handleEdit}
+      />
+    </div>
+  )
+}
+
+/**
+ * Settings → Wallet: cards/account-number mapping and rules, category
+ * management, the import/merchant-cleanup entry points, and the static MYR
+ * currency line. Moved out of the old monolithic SettingsPage (module-based
+ * settings) with no behaviour change to the untouched sections — same testids.
  */
 export function WalletSettings() {
   const navigate = useNavigate()
@@ -29,7 +84,17 @@ export function WalletSettings() {
       <h1 className="page-title mb-6">Wallet</h1>
 
       <div className="space-y-5">
-        <CaptureCardMap />
+        {/* Cards & account numbers — own accounts' last4, then card-name overrides. */}
+        <section className="rounded-xl border border-line bg-surface p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <CreditCard className="h-4 w-4 text-fg-faint" />
+            <h3 className="text-sm font-semibold text-fg">Cards &amp; account numbers</h3>
+          </div>
+          <AccountsLast4List />
+          <CaptureCardMap />
+        </section>
+
+        <RulesSettings />
 
         {/* Categories */}
         <section className="rounded-xl border border-line bg-surface p-5">

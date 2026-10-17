@@ -82,6 +82,26 @@ interface AcceptRow {
   amount?: unknown
   type?: unknown
   categoryId?: unknown
+  tag?: unknown
+}
+
+/**
+ * Normalise a tag list: trimmed, non-empty, de-duplicated, order preserved —
+ * null on a malformed shape. Mirrors wallet.ts's own `cleanTags` (POST
+ * /transactions' tag normaliser) byte-for-byte; not imported from there
+ * because this file is locked to touching `worker/routes/wallet.ts` for the
+ * accounts endpoints only, so a shared export would mean editing wallet.ts
+ * outside that scope. Kept in sync by hand if either changes.
+ */
+function cleanCaptureTags(values: unknown): string[] | null {
+  if (!Array.isArray(values)) return null
+  const out: string[] = []
+  for (const v of values) {
+    if (typeof v !== 'string') return null
+    const t = v.trim()
+    if (t && !out.includes(t)) out.push(t)
+  }
+  return out
 }
 
 // Accept — the ONLY path from the inbox into the ledger, and it runs through
@@ -142,6 +162,9 @@ captures.post('/captures/accept', async (c) => {
     if (r.categoryId != null && !ownedCategories.has(String(r.categoryId))) {
       return c.json({ error: `${where}: invalid category reference` }, 400)
     }
+    if (r.tag !== undefined && cleanCaptureTags(r.tag) === null) {
+      return c.json({ error: `${where}: tag must be an array of strings` }, 400)
+    }
     // A transfer with no destination cannot be a ledger row at all — it is
     // flagged in the inbox rather than silently downgraded to an expense
     // (spec §13.7, rule 13).
@@ -173,7 +196,7 @@ captures.post('/captures/accept', async (c) => {
           amount: r.amount,
           type: r.type,
           categoryId: r.categoryId ?? null,
-          tag: [],
+          tag: r.tag !== undefined ? cleanCaptureTags(r.tag) ?? [] : [],
           importHash: '',
         },
         userId,

@@ -1,6 +1,9 @@
 import { api } from '@/lib/api'
+import { extractLast4 } from '@/lib/cardMatch'
 import type { ImportRow } from '@/lib/csv'
 import type { Account } from '@/types/wallet.types'
+
+export { extractLast4 }
 
 /** A row as the server stores it — raw, unenriched. */
 export interface PendingCapture {
@@ -62,10 +65,18 @@ export interface AcceptRowInput {
   amount: number
   type: string
   categoryId: string | null
+  /** Rule-driven tags (FEAT: account last4 + transaction rules). Omitted/[] keeps the existing no-tags behaviour. */
+  tag?: string[]
 }
 
-export function acceptCaptures(rows: AcceptRowInput[]): Promise<{ accepted: number }> {
-  return api.post<{ accepted: number }>('/captures/accept', { rows })
+export interface AcceptCapturesResult {
+  accepted: number
+  /** The created transaction rows, in the same order as `rows` — used to attach a rule-driven split per accepted row. */
+  transactions: Record<string, unknown>[]
+}
+
+export function acceptCaptures(rows: AcceptRowInput[]): Promise<AcceptCapturesResult> {
+  return api.post<AcceptCapturesResult>('/captures/accept', { rows })
 }
 
 /**
@@ -76,19 +87,45 @@ export function acceptCaptures(rows: AcceptRowInput[]): Promise<{ accepted: numb
  * (spec §5.2). An unmapped card falls back to `fallbackAccountId` and is
  * FLAGGED; it is never silently filed.
  */
+export interface CardResolution {
+  accountId: string
+  /** The matched last4 digits, set only when the match came from a last4 lookup whose only hit was a shared-in (not own) account. */
+  sharedLast4: string | null
+}
+
+/**
+ * Resolves a raw card string to an account id: an exact card-map entry first,
+ * then (new) the account whose own `last4` equals the 4 digits at the end of
+ * the raw string — e.g. a capture's "Visa 9876" lands on the account whose
+ * last4 is "9876" even before anyone has mapped that exact card string by
+ * hand. Own accounts are preferred over shared-in ones when both match
+ * (which the server already prevents happening within one user's own
+ * accounts, but a last4 is never unique ACROSS users); a shared-in-only match
+ * is still returned (pre-selected) but flagged via `sharedLast4`. `''`
+ * accountId when nothing resolves.
+ */
+export function resolveCard(raw: string, cardMap: CardMap, writableAccounts: Account[]): CardResolution {
+  const mapped = cardMap[raw]
+  if (mapped && writableAccounts.some((a) => a.id === mapped)) return { accountId: mapped, sharedLast4: null }
+
+  const digits = extractLast4(raw)
+  if (digits) {
+    const matches = writableAccounts.filter((a) => a.last4 && a.last4 === digits)
+    const own = matches.find((a) => !a.isShared)
+    if (own) return { accountId: own.id, sharedLast4: null }
+    if (matches.length > 0) return { accountId: matches[0].id, sharedLast4: digits }
+  }
+  return { accountId: '', sharedLast4: null }
+}
+
 export function captureToRow(
   capture: PendingCapture,
   cardMap: CardMap,
   writableAccounts: Account[],
   fallbackAccountId: string,
 ): ImportRow {
-  const mapped = cardMap[capture.raw_card]
-  const usable = mapped && writableAccounts.some((a) => a.id === mapped) ? mapped : ''
-  const mappedDestination = cardMap[capture.raw_destination_card]
-  const usableDestination =
-    mappedDestination && writableAccounts.some((a) => a.id === mappedDestination)
-      ? mappedDestination
-      : null
+  const resolved = resolveCard(capture.raw_card, cardMap, writableAccounts)
+  const resolvedDestination = resolveCard(capture.raw_destination_card, cardMap, writableAccounts)
 
   return {
     date: capture.occurred_at,
@@ -97,7 +134,7 @@ export function captureToRow(
     description: '',
     type: capture.type,
     categoryId: null,
-    destinationAccountId: usableDestination,
+    destinationAccountId: resolvedDestination.accountId || null,
     importHash: '',
     // A duplicate_key match is the same confidence layer 2 auto-excludes on,
     // so an already-banked payment arrives pre-excluded and badged rather
@@ -105,8 +142,12 @@ export function captureToRow(
     isDuplicate: Number(capture.already_in_ledger ?? 0) === 1,
     included: Number(capture.already_in_ledger ?? 0) !== 1,
     originalRow: {},
-    accountId: usable || fallbackAccountId,
-    accountUnmapped: !usable,
+    accountId: resolved.accountId || fallbackAccountId,
+    // A shared-only last4 match is still pre-selected but gets the SAME
+    // visual flag as "no match" — it isn't the owner's own account, so it's
+    // still worth a second look — just with a different title (CsvReviewTable).
+    accountUnmapped: !resolved.accountId || !!resolved.sharedLast4,
+    last4SharedMatch: resolved.sharedLast4 ?? undefined,
     captureId: capture.id,
     rawCard: capture.raw_card,
   }

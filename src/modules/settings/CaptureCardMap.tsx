@@ -5,7 +5,7 @@ import { errorMessage } from '@/lib/utils'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
 import { Select } from '@/components/ui/Select'
-import { parseCardMap, CARD_MAP_KEY, type CardMap } from '@/lib/captures'
+import { parseCardMap, resolveCard, extractLast4, CARD_MAP_KEY, type CardMap } from '@/lib/captures'
 
 interface CaptureStatus {
   pending: number
@@ -95,7 +95,7 @@ export function CaptureCardMap() {
     <section className="rounded-xl border border-line bg-surface p-5" data-testid="capture-cards-section">
       <div className="mb-4 flex items-center gap-2">
         <CreditCard className="h-4 w-4 text-fg-faint" />
-        <h3 className="text-sm font-semibold text-fg">Captured cards</h3>
+        <h3 className="text-sm font-semibold text-fg">Other card names</h3>
       </div>
 
       {loadError ? (
@@ -119,22 +119,38 @@ export function CaptureCardMap() {
             </p>
           ) : (
             <ul className="mt-4 divide-y divide-line-subtle border-t border-line-subtle">
-              {knownCards.map((card) => (
-                <li key={card} className="flex items-center gap-3 py-2.5" data-testid="capture-card-row">
-                  <span className="min-w-0 flex-1 truncate text-sm text-fg">{card}</span>
-                  <Select
-                    value={map[card] ?? ''}
-                    onChange={(e) => void assign(card, e.target.value)}
-                    options={[
-                      { value: '', label: 'Not mapped' },
-                      ...writable.map((a) => ({ value: a.id, label: a.name })),
-                    ]}
-                    className="w-44 text-xs"
-                    aria-label={`Account for ${card}`}
-                    data-testid="capture-card-account"
-                  />
-                </li>
-              ))}
+              {knownCards.map((card) => {
+                // #14: a card with no EXPLICIT map entry can still resolve via
+                // last4 (same resolveCard logic the inbox itself uses) — don't
+                // call that "Not mapped", which would read as "nothing is
+                // happening" when something in fact is.
+                const auto = !map[card] ? resolveCard(card, map, writable) : null
+                const autoAccount = auto?.accountId ? writable.find((a) => a.id === auto.accountId) : null
+                const digits = autoAccount ? extractLast4(card) : null
+                return (
+                  <li key={card} className="flex items-center gap-3 py-2.5" data-testid="capture-card-row">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-fg">{card}</span>
+                      {autoAccount && digits && (
+                        <span className="block truncate text-xs text-fg-subtle" data-testid="capture-card-auto-match">
+                          Matched by ••{digits} → {autoAccount.name}
+                        </span>
+                      )}
+                    </div>
+                    <Select
+                      value={map[card] ?? ''}
+                      onChange={(e) => void assign(card, e.target.value)}
+                      options={[
+                        { value: '', label: autoAccount ? 'Override' : 'Not mapped' },
+                        ...writable.map((a) => ({ value: a.id, label: a.name })),
+                      ]}
+                      className="w-44 text-xs"
+                      aria-label={`Account for ${card}`}
+                      data-testid="capture-card-account"
+                    />
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>

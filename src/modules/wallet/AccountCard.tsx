@@ -114,7 +114,10 @@ export function AccountCard({
             <IconComponent className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="acct-name">{account.name}</h3>
+            <h3 className="acct-name">
+              {account.name}
+              {account.last4 && <span className="ml-1.5 font-normal opacity-70">••{account.last4}</span>}
+            </h3>
             <span className="acct-sub">
               <span data-testid="account-card-type">{ACCOUNT_TYPE_LABELS[account.type]}</span>
               {' · '}
