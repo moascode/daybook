@@ -17,7 +17,7 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/settings')
+  page = await newAppPage(browser, '/settings/appearance')
 })
 
 test.afterAll(async () => {
@@ -45,9 +45,10 @@ test('app starts in light mode by default', async () => {
 })
 
 // R2: the standalone top-bar theme toggle is gone — light/dark switching now
-// happens only through the Settings page's Theme select (SettingsPage.tsx),
-// which was always the second, independent path CLAUDE.md §18 rule 4 already
-// documents ("shared by the Settings select and the TopBar toggle"). This
+// happens only through Settings → Appearance's Theme select
+// (AppearanceSettings.tsx), which was always the second, independent path
+// CLAUDE.md §18 rule 4 already documents ("shared by the Settings select and
+// the TopBar toggle"). This
 // test replaces the removed toggle-click test and keeps the same coverage
 // (both D-2 markers move together, the token layer actually repaints) — and
 // leaves the page in dark mode for the reload/pre-boot tests below, same as
@@ -83,7 +84,7 @@ test('dark mode is applied before the app boots, with no white flash', async () 
   // late — after the white paint this test exists to prevent.
   const fresh = await page.context().newPage()
   await fresh.route('**/*.js', (route) => route.abort())
-  await fresh.goto('/settings', { waitUntil: 'domcontentloaded' })
+  await fresh.goto('/settings/appearance', { waitUntil: 'domcontentloaded' })
 
   expect(await htmlIsDark(fresh)).toBe(true)
   // Both markers must be set pre-paint by the inline script, not just the class.

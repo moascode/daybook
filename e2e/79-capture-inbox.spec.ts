@@ -157,7 +157,7 @@ test.describe('capture inbox', () => {
     const { page, token, anon } = await setup(browser, baseURL)
     await capture(anon, token, { merchant: 'Anything', amount: 4, card: 'Amex 9999' })
 
-    await page.goto('/settings')
+    await page.goto('/settings/wallet')
     const row = page.getByTestId('capture-card-row')
     await expect(row).toHaveCount(1)
     await expect(row).toContainText('Amex 9999')

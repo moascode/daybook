@@ -45,7 +45,14 @@ const ReportsPage = page(() => import('@/modules/wallet/ReportsPage'), 'ReportsP
 const CsvImport = page(() => import('@/modules/wallet/CsvImport'), 'CsvImport')
 const CaptureInbox = page(() => import('@/modules/wallet/CaptureInbox'), 'CaptureInbox')
 const CanonicalizeMerchantsPage = page(() => import('@/modules/wallet/CanonicalizeMerchantsPage'), 'CanonicalizeMerchantsPage')
-const SettingsPage = page(() => import('@/modules/settings/SettingsPage'), 'SettingsPage')
+const ProfileSettings = page(() => import('@/modules/settings/sections/ProfileSettings'), 'ProfileSettings')
+const AppearanceSettings = page(() => import('@/modules/settings/sections/AppearanceSettings'), 'AppearanceSettings')
+const NotificationsSettings = page(() => import('@/modules/settings/sections/NotificationsSettings'), 'NotificationsSettings')
+const DevicesSettings = page(() => import('@/modules/settings/sections/DevicesSettings'), 'DevicesSettings')
+const AiSettings = page(() => import('@/modules/settings/sections/AiSettings'), 'AiSettings')
+const DaySettings = page(() => import('@/modules/settings/sections/DaySettings'), 'DaySettings')
+const TasksSettings = page(() => import('@/modules/settings/sections/TasksSettings'), 'TasksSettings')
+const WalletSettings = page(() => import('@/modules/settings/sections/WalletSettings'), 'WalletSettings')
 const SharingPage = page(() => import('@/modules/settings/SharingPage'), 'SharingPage')
 const HelpPage = page(() => import('@/modules/help/HelpPage'), 'HelpPage')
 const UATPage = page(() => import('@/modules/uat/UATPage'), 'UATPage')
@@ -99,8 +106,20 @@ export const router = createBrowserRouter([
         path: 'settings',
         element: <SettingsLayout />,
         children: [
-          { index: true, element: lazyRoute(SettingsPage) },
+          // Below md, SettingsLayout itself renders the index list at
+          // exactly /settings and hides the Outlet's section — this
+          // wrapper is what keeps Profile's own content out of that view
+          // while still rendering it for the md+ two-column layout.
+          { index: true, element: <div className="hidden md:block">{lazyRoute(ProfileSettings)}</div> },
+          { path: 'profile', element: lazyRoute(ProfileSettings) },
+          { path: 'appearance', element: lazyRoute(AppearanceSettings) },
+          { path: 'notifications', element: lazyRoute(NotificationsSettings) },
+          { path: 'devices', element: lazyRoute(DevicesSettings) },
+          { path: 'ai', element: lazyRoute(AiSettings) },
           { path: 'sharing', element: lazyRoute(SharingPage) },
+          { path: 'day', element: lazyRoute(DaySettings) },
+          { path: 'tasks', element: lazyRoute(TasksSettings) },
+          { path: 'wallet', element: lazyRoute(WalletSettings) },
         ],
       },
       { path: 'help', element: lazyRoute(HelpPage) },

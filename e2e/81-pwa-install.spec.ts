@@ -106,7 +106,7 @@ test.describe('PWA install surface', () => {
     await page.request.post('/api/auth/signup', {
       data: { username: `e2e_pwa_${Date.now()}`, password: 'test-password' },
     })
-    await page.goto('/settings')
+    await page.goto('/settings/devices')
     await expect(page.locator('main')).toBeVisible({ timeout: 20_000 })
 
     const input = page.getByTestId('capture-token-label')

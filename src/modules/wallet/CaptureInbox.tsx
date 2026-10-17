@@ -296,7 +296,7 @@ export function CaptureInbox() {
         icon={<Inbox className="h-10 w-10" />}
         title="Nothing waiting"
         description="Transactions sent by a connected device land here for you to check before they reach your accounts. Set one up in Settings → Connected devices."
-        action={<Button size="sm" variant="secondary" onClick={() => navigate('/settings')}>Open Settings</Button>}
+        action={<Button size="sm" variant="secondary" onClick={() => navigate('/settings/devices')}>Open Settings</Button>}
       />
     )
   }

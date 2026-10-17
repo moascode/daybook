@@ -1,6 +1,9 @@
 /**
  * Settings page — e2e tests.
- * Tests the /settings page added in the Tier-1 UX pass.
+ * Tests the /settings tree. Module-based settings (one registry, three entry
+ * points) split the old single page into per-section routes — see
+ * e2e/122-settings-sections.spec.ts for the registry-wide coverage. This
+ * file keeps the original, narrower checks against their new homes.
  */
 
 import { test, expect } from '@playwright/test'
@@ -12,7 +15,7 @@ test.describe.configure({ mode: 'serial' })
 let page: Page
 
 test.beforeAll(async ({ browser }: { browser: Browser }) => {
-  page = await newAppPage(browser, '/settings')
+  page = await newAppPage(browser, '/settings/appearance')
 })
 
 test.afterAll(async () => {
@@ -25,32 +28,29 @@ test('Settings is reachable via the account menu', async () => {
   // R2: the module sidebar renders nothing on /settings itself (it's not one
   // of the four primary modules — design spec §4's own allowance), so
   // Settings' discoverability now runs through the account menu instead.
-  // Close again without navigating, so the shared `page` stays on /settings
-  // for the tests that follow.
   await page.getByTestId('account-menu-button').click()
   await expect(page.getByTestId('account-menu-settings')).toBeVisible()
   await page.keyboard.press('Escape')
 })
 
-test('the account menu actually navigates to /settings', async () => {
+test('the account menu actually navigates to /settings/profile', async () => {
   // Prove the real path works (not just that the shared `page` already
   // happens to be there from beforeAll): leave, then come back via
-  // Settings & privacy → Preferences, ending back on /settings for the
-  // tests below.
+  // Settings & privacy → Profile & security.
   await page.goto('/tasks')
   await waitForApp(page)
   await page.getByTestId('account-menu-button').click()
   await page.getByTestId('account-menu-settings').click()
-  await page.getByRole('button', { name: 'Preferences' }).click()
-  await expect(page).toHaveURL(/\/settings$/)
+  await page.getByRole('button', { name: 'Profile & security' }).click()
+  await expect(page).toHaveURL(/\/settings\/profile$/)
+  await page.goto('/settings/appearance')
+  await waitForApp(page)
 })
 
 // ── Page content ───────────────────────────────────────────────────────
 
-test('settings page heading is visible', async () => {
-  // The TopBar renders an h1 "SETTINGS"; the page body renders an h2 "Settings".
-  // Use the h2 content heading (the human-readable one, not the uppercase banner).
-  await expect(page.getByRole('heading', { name: 'Settings', level: 2 })).toBeVisible()
+test('appearance section heading is visible', async () => {
+  await expect(page.getByRole('heading', { name: 'Appearance', level: 1 })).toBeVisible()
 })
 
 test('Theme selector offers Light, Dark and System', async () => {
@@ -61,8 +61,12 @@ test('Theme selector offers Light, Dark and System', async () => {
   await expect(select.locator('option[value="system"]')).toBeAttached()
 })
 
-test('currency is shown as MYR (single-currency app, no picker)', async () => {
+test('currency is shown as MYR on the Wallet section (single-currency app, no picker)', async () => {
+  await page.goto('/settings/wallet')
+  await waitForApp(page)
   await expect(page.getByText('Malaysian Ringgit (MYR)')).toBeVisible()
+  await page.goto('/settings/appearance')
+  await waitForApp(page)
 })
 
 // ── Persist ────────────────────────────────────────────────────────────

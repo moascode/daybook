@@ -122,7 +122,7 @@ export function CsvReviewTable({
                   {!hasAnthropicKey && (
                     <>
                       {' — set an '}
-                      <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                      <a href="/settings/ai" className="underline">Anthropic API key in Settings</a>
                       {' to ask AI'}
                     </>
                   )}
@@ -174,7 +174,7 @@ export function CsvReviewTable({
                   {!hasAnthropicKey && (
                     <>
                       {' — set an '}
-                      <a href="/settings" className="underline">Anthropic API key in Settings</a>
+                      <a href="/settings/ai" className="underline">Anthropic API key in Settings</a>
                       {' to ask AI'}
                     </>
                   )}

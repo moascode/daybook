@@ -307,7 +307,7 @@ test('icon-only controls have at least a 40x40px tap target on mobile viewport',
   // first pass missed `flex-wrap`/`shrink-0` on the row — 8 swatches at 40px
   // each overflow a narrow modal's flex row and silently get squashed back
   // down unless the row wraps).
-  await page.goto('/settings')
+  await page.goto('/settings/wallet')
   await waitForApp(page)
   await page.getByRole('button', { name: 'Manage categories' }).click()
   const categorySwatchBox = await page

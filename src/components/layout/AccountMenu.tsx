@@ -9,8 +9,6 @@ import {
   HelpCircle,
   LogOut,
   Settings,
-  Shield,
-  SlidersHorizontal,
   Tag,
   Upload,
   Users,
@@ -20,7 +18,8 @@ import { api } from '@/lib/api'
 import { useAppStore } from '@/stores/app.store'
 import { useHouseholdStore } from '@/stores/household.store'
 import { useToastStore } from '@/stores/toast.store'
-import { modules } from './modules'
+import { settingsSections, SETTINGS_GROUP_ORDER } from '@/modules/settings/sections'
+import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 
 type Pane = 'root' | 'settings'
 
@@ -76,7 +75,8 @@ export function AccountMenu() {
   )
 
   const handleLogout = useCallback(async () => {
-    // Same call SettingsPage's logout button makes — one logout path, not two.
+    // Same call Settings → Profile & security's logout button makes — one
+    // logout path, not two.
     await api.post('/auth/logout')
     setDbReady(false)
     setUser(null)
@@ -203,24 +203,51 @@ export function AccountMenu() {
             <span className="title">Settings &amp; privacy</span>
           </div>
 
-          <button type="button" className="menu-wide" onClick={() => goTo('/settings')}>
-            <span className="bubble">
-              <SlidersHorizontal className="icon" />
-            </span>
-            Preferences
-          </button>
-          <button type="button" className="menu-wide" onClick={() => goTo('/settings')}>
-            <span className="bubble">
-              <Shield className="icon" />
-            </span>
-            Privacy &amp; data
-          </button>
-          <button type="button" className="menu-wide" onClick={() => goTo('/settings/sharing')}>
-            <span className="bubble">
-              <Users className="icon" />
-            </span>
-            Household
-          </button>
+          {SETTINGS_GROUP_ORDER.map((group) => (
+            <div key={group}>
+              <div className="menu-label">{group}</div>
+              {settingsSections
+                .filter((s) => s.group === group)
+                .map((section) => {
+                  const Icon = section.icon
+                  return section.disabled ? (
+                    // Trips has no settings page yet — a description, not a
+                    // link to a page, same allowance as its own disabled nav
+                    // items (ModuleSidebar, AppBar's disabled module tab).
+                    <div key={section.id} className="menu-wide opacity-60" aria-disabled="true">
+                      <span className="bubble">
+                        <Icon className="icon" />
+                      </span>
+                      <div>
+                        <div>{section.label}</div>
+                        <div className="sub">{section.blurb}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      key={section.id}
+                      type="button"
+                      className="menu-wide"
+                      onClick={() => goTo(section.path)}
+                      data-testid={`account-menu-settings-${section.id}`}
+                    >
+                      <span className="bubble">
+                        <Icon className="icon" />
+                      </span>
+                      {section.blurb ? (
+                        <div>
+                          <div>{section.label}</div>
+                          <div className="sub">{section.blurb}</div>
+                        </div>
+                      ) : (
+                        section.label
+                      )}
+                      {section.id === 'sharing' && <InvitationsBadge />}
+                    </button>
+                  )
+                })}
+            </div>
+          ))}
 
           <div className="menu-hr" />
           {/* D-14 + design spec §4: "Import CSV leaves the sidebar... becomes
@@ -228,7 +255,8 @@ export function AccountMenu() {
               the profile menu" — the Transactions-page button is a separate,
               out-of-scope-for-R2 page change, but without this group
               /wallet/import and /wallet/canonicalize-merchants would have NO
-              UI entry point at all once the sidebar link is gone. */}
+              UI entry point at all once the sidebar link is gone. Kept last,
+              after the registry-driven groups above. */}
           <div className="menu-label">Import &amp; export data</div>
           {/* Opens the unified Import modal from Transactions (R2's own note
               above: /wallet/import is now review-only, reached from within
@@ -246,22 +274,6 @@ export function AccountMenu() {
             </span>
             Merchant names
           </button>
-
-          <div className="menu-hr" />
-          <div className="menu-label">Module settings</div>
-          {modules.map((m) => (
-            // No per-module settings page exists yet (out of scope) — every
-            // row lands on the general Settings page rather than 404ing.
-            <button key={m.id} type="button" className="menu-wide" onClick={() => goTo('/settings')}>
-              <span className="bubble">
-                <m.icon className="icon" />
-              </span>
-              <div>
-                <div>{m.label}</div>
-                <div className="sub">{m.settingsBlurb}</div>
-              </div>
-            </button>
-          ))}
         </div>
       </div>
       )}

@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { FlaskConical, Settings, X, Inbox, StickyNote, Plus } from 'lucide-react'
 import { cn, TEST_HOOKS_ENABLED, errorMessage } from '@/lib/utils'
 import { modules } from './modules'
+import { settingsPathForModule } from '@/modules/settings/sections'
 import { ModuleSwitcher } from './ModuleSwitcher'
 import { InvitationsBadge } from '@/modules/settings/InvitationsBadge'
 import { PendingClaimsBadge } from '@/modules/wallet/PendingClaimsBadge'
@@ -255,9 +256,15 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
         <div className="sidebar-spacer" />
 
         <div className="nav-group">
-          <NavLink to="/settings" end={false} onClick={onClose} data-testid="nav-settings" className={navItemClass}>
+          <NavLink
+            to={settingsPathForModule(activeModule.id)}
+            end={false}
+            onClick={onClose}
+            data-testid="nav-settings"
+            className={navItemClass}
+          >
             <Settings className="icon" size={16} />
-            Settings
+            {activeModule.label} settings
             <InvitationsBadge />
           </NavLink>
           {TEST_HOOKS_ENABLED && (
