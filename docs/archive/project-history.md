@@ -22,7 +22,7 @@ narrative; `CLAUDE.md` is the standing instruction. If the two ever disagree,
 
 ## Release record
 
-Reconciled against `git tag` on 2026-10-12. Regenerate with:
+Reconciled against `git tag` on 2026-10-17. Regenerate with:
 
 ```
 git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:short) %(subject)' refs/tags
@@ -30,6 +30,9 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.21.0 | 2026-10-17 | Compact review table + positive AI amounts (#281); module-based settings pages (#282); account last-4 digits and transaction rules, opt-in in the review table — migration 0033 (#283) |
+| v3.20.1 | 2026-10-16 | Worker placement pinned to Singapore for Anthropic calls (#280) |
+| v3.20.0 | 2026-10-16 | Split counter-offers, bulk settle, rejected tab (#278); recover from stale chunks, load import accounts (#279) |
 | v3.19.0 | 2026-10-16 | Shared activity rows show the transaction's category and tags beside the date (both sides of a claim); a debtor's "View transaction" opens a read-only panel in the split modal instead of leaving for /wallet (#276) |
 | v3.18.1 | 2026-10-16 | Docs only: CLAUDE.md status for v3.18.0 (#275) |
 | v3.18.0 | 2026-10-15 | Tasks: Nudge (push + bell, no schema), composer Reminder (`remind_at`, 15-min cron) and Checklist, Upcoming Fortnight/Month, habits every N days (`interval_days`), tracked time with a timer (`tracked_minutes`); two Backspace focus-race specs fixed (#267–#273) |
@@ -1060,3 +1063,9 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
 - `GET /transactions/splits/mine` now also returns `category_name` and `t.tag`. The debtor has no row for the payer's category, so the name has to come with the claim, like `category_icon` and `category_color` already did. No schema change.
 - The debtor's "View transaction" toggles `TransactionDetailsPanel` inside `SplitDetailModal`. It is fetched the same way as the owner's edit path (`/transactions?dateFrom=dateTo=` and matched by id), because the default `all` view already includes transactions split with the viewer.
 - `e2e/53`'s navigate-away deep-link spec was replaced by two specs: labels on both sides, and the in-place view.
+
+## 2026-10-17 — Review table, module settings, account last-4 and rules, shipped as v3.21.0 (PRs #281–#283)
+
+- **#281:** the review table (inbox, CSV, photo) lost its horizontal scroll: Date · Merchant · Amount · Type · Category · Account, with description, source photo and flags folded under the merchant, and a CSS-only card layout below `md`. AI photo import always yields positive amounts — the sign decides the type.
+- **#282:** Settings split into `/settings/<section>` (You / Household / Modules). One registry (`src/modules/settings/sections.ts`) drives the Settings sidebar, the profile menu and each module's "<Module> settings" link.
+- **#283:** `accounts.last4` and `transaction_rules` (worker 0033 / server 0032). Captured cards resolve by card map, then by a standalone trailing 4-digit token (own accounts preferred). Rules only suggest: an unticked chip in the review table; splits apply to expense rows and are created through the existing split route. Covers most of FEAT-025; its staleness signal is not built.
