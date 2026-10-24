@@ -33,7 +33,7 @@ export function AppShell() {
       <div className="shell">
         <ModuleSidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
         <div className="main-col">
-          <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+          <main className="min-w-0 flex-1 p-4 md:p-6">
             <Outlet />
           </main>
         </div>
