@@ -393,8 +393,8 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.19.0`** (2026-10-16): Shared activity rows show the
-transaction's category and tags, and a debtor views the transaction in place.
+**Latest tag: `v3.21.0`** (2026-10-17): Compact review table, module-based
+settings pages, and account last-4 digits with opt-in transaction rules.
 The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
@@ -492,7 +492,7 @@ follow the theme. The launch *image* does, since v3 P5. See
    one-directional debt takes the old code path exactly, so nothing changes
    until two users genuinely owe each other both ways.
 4. **Ready to build, no sign-off needed:**
-   [EP-06](docs/backlog/EP-06-wallet-depth/README.md)'s remaining FEAT-025 (split rules);
+   [EP-06](docs/backlog/EP-06-wallet-depth/README.md)'s FEAT-025 staleness signal (the rules themselves shipped in `v3.21.0`);
    [EP-07](docs/backlog/EP-07-tasks-depth/README.md)'s last open item, FEAT-062
    (list detail page design adoption). The rest of EP-07, including FEAT-055/056
    (Reminder, Checklist), shipped by `v3.18.0`.
