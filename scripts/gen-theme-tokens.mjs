@@ -393,12 +393,10 @@ a:not([data-allow-callout]) {
   -webkit-touch-callout: none;
 }
 
-/* Keeps a scrolled list from rubber-banding the whole page behind it. */
-.overflow-x-auto,
-.overflow-y-auto,
-.overflow-auto {
-  overscroll-behavior: contain;
-}
+/* No global overscroll-behavior rule. One keyed on .overflow-*-auto used to
+   live here, and it also matched scroll containers with nothing to scroll —
+   <main> above all — so the wheel was swallowed instead of chaining to the
+   page. Overlays opt in with Tailwind's overscroll-contain instead. */
 `
 
 fs.writeFileSync(path.join(root, 'src/index.css'), css)

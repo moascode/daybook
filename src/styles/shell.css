@@ -172,8 +172,8 @@
 }
 
 @media (max-width: 680px) {
-  /* R2: the document (not <main>) is the scroll container here — .shell has
-     no height constraint, so <main>'s own overflow-y-auto never engages.
+  /* R2: the document (not <main>) is the scroll container — .shell has no
+     height constraint, so <main> never scrolls on its own.
      Without this, the fixed .tabbar permanently covers the last ~50px of
      every page (last row, last button) with no way to scroll it clear.
      132px, not 64px: the .fab sits ABOVE the tabbar (bottom: 72px, 52px

@@ -121,7 +121,7 @@ export function MultiSelect({
               />
             </div>
           )}
-          <div className="max-h-56 overflow-y-auto py-1">
+          <div className="max-h-56 overflow-y-auto overscroll-contain py-1">
             {filteredOptions.length === 0 && (
               <p className="px-3 py-2 text-sm text-fg-faint">No matches</p>
             )}

@@ -143,7 +143,7 @@ export function TagInput({
         />
       </div>
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-lg border border-line bg-surface shadow-lg">
+        <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-auto overscroll-contain rounded-lg border border-line bg-surface shadow-lg">
           {filteredSuggestions.map((s, i) => (
             <button
               key={s}
