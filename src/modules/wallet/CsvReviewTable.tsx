@@ -58,6 +58,8 @@ interface CsvReviewTableProps {
   rules?: TransactionRule[]
   ruleAccountId?: string
   groupMembers?: GroupMember[]
+  /** CSV review only: offers "update the existing entry" on a possible-duplicate row. */
+  allowOverwrite?: boolean
 }
 
 export function CsvReviewTable({
@@ -79,6 +81,7 @@ export function CsvReviewTable({
   rules,
   ruleAccountId,
   groupMembers,
+  allowOverwrite,
 }: CsvReviewTableProps) {
   function matchContextFor(row: ImportRow) {
     return { accountId: row.accountId ?? ruleAccountId ?? null, categoryId: row.categoryId, merchant: row.merchant }
@@ -534,11 +537,30 @@ export function CsvReviewTable({
                             phone, and an icon nobody reads is how these pairs got
                             imported twice. Worded without "duplicate" so it can't
                             collide with getByText('Duplicate') on the badge. */}
-                        <span className="ml-1 max-w-[16rem] truncate text-xs">
-                          Already recorded? {row.possibleDuplicateOf[0].merchant} · {row.possibleDuplicateOf[0].date}
+                        <span className="ml-1 max-w-[22rem] truncate text-xs">
+                          Already recorded? {row.possibleDuplicateOf[0].merchant} · {formatMYR(row.possibleDuplicateOf[0].amount)} · {row.possibleDuplicateOf[0].date}
                           {row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1})` : ''}
                         </span>
                       </span>
+                    )}
+                    {/* The bank's line usually carries a fuller description than a
+                        capture did — let the statement row update the existing
+                        entry instead of becoming a second one. */}
+                    {allowOverwrite && !row.isDuplicate && row.type !== 'transfer' && row.possibleDuplicateOf && row.possibleDuplicateOf.length > 0 && (
+                      <label className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+                        <input
+                          type="checkbox"
+                          checked={!!row.replaceExistingId}
+                          onChange={(e) =>
+                            onRowChange(index, { replaceExistingId: e.target.checked ? row.possibleDuplicateOf![0].id : undefined })
+                          }
+                          disabled={!row.included}
+                          className="h-3.5 w-3.5 rounded border-line-strong text-brand-500 focus:ring-brand-500"
+                          aria-label={`Update existing entry instead (row ${index + 1})`}
+                          data-testid="csv-replace-existing"
+                        />
+                        Update the existing entry instead of adding this
+                      </label>
                     )}
                   </div>
                 )}

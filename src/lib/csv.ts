@@ -63,6 +63,12 @@ export interface ImportRow {
    */
   possibleDuplicateOf?: { id: string; merchant: string; date: string; amount: number; fromCapture?: boolean }[]
   /**
+   * Set when the user chose to update the matched ledger entry (the first
+   * `possibleDuplicateOf`) with this row's details instead of importing it as
+   * a new transaction. CSV review only.
+   */
+  replaceExistingId?: string
+  /**
    * A capture still WAITING in the inbox that matches this row (R18 gap 1).
    * Deliberately distinct from `possibleDuplicateOf`: that one means "might
    * already be in your ledger", while this means "you are about to import
