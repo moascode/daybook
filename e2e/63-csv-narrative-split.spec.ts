@@ -149,12 +149,13 @@ test('imported transaction shows the canonical merchant and preserves the raw na
 // ── Person-to-person transfers (Maybank wording) ────────────────────────
 //
 // Maybank words a transfer from the BANK's side: "TRANSFER FR A/C" on a
-// debit (money out) and "TRANSFER TO A/C" on a credit (money in). Two bugs
-// shipped from that: every "TRANSFER FR A/C <anyone>" cleaned to the same
-// name (the "/" cut the narrative at "TRANSFER FR A"), so one AI answer was
-// stamped on every counterparty; and the wording was trusted over the sign.
-// The cleaned name must keep the counterparty and take To/From from the row's
-// own type, never from the narrative.
+// debit (money out) and "TRANSFER TO A/C" on a credit (money in). Every
+// "TRANSFER FR A/C <anyone>" used to clean to the same name (the "/" cut the
+// narrative at "TRANSFER FR A"), so one AI answer was stamped on every
+// counterparty.
+// The cleaned name must keep the counterparty. Direction is the row's own
+// Income/Expense type, so it is not put in the name (that would split one
+// person into "To X" and "From X" for rules, totals and history).
 
 test.describe('person-to-person transfer narratives', () => {
   test.describe.configure({ mode: 'serial' })
@@ -182,15 +183,14 @@ test.describe('person-to-person transfer narratives', () => {
     await transferPage.context().close()
   })
 
-  test('each counterparty keeps its own name, with To/From taken from the sign', async () => {
+  test('each counterparty keeps its own name, with no To/From prefix', async () => {
     const merchantInputs = transferPage.getByRole('textbox', { name: /^Merchant for row/ })
     await expect(merchantInputs).toHaveCount(3)
     const values = await merchantInputs.evaluateAll((els) =>
       els.map((e) => (e as HTMLInputElement).value).sort(),
     )
-    // "TRANSFER TO A/C" on a credit is money IN -> From; "TRANSFER FR A/C" on a
-    // debit is money OUT -> To. Distinct names, never one shared "Transfer ..." label.
-    expect(values).toEqual(['From Mohammad Ali', 'To Grace Wong Ling San', 'To Ranajowel'])
+    // Distinct names, never one shared "Transfer ..." label.
+    expect(values).toEqual(['Grace Wong Ling San', 'Mohammad Ali', 'Ranajowel'])
   })
 
   test('the raw narrative is still kept in the description', async () => {

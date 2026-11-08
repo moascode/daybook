@@ -3729,7 +3729,7 @@ interface MerchantLadderResult {
 async function resolveMerchantLadder(
   env: Env,
   userId: string,
-  items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>,
+  items: Array<{ raw: string; guess: string }>,
   // `useAI` gates Stage 3 only — Stages 1-2 (corrections cache + own history)
   // are free/deterministic and always run. Mirrors A4's category-suggestion
   // split (docs/reference/ai-usage.md): the rules pass runs
@@ -3740,7 +3740,7 @@ async function resolveMerchantLadder(
 ): Promise<MerchantLadderResult> {
   // Dedupe by normalised guess before any lookup or AI call — keep one
   // representative raw narrative per key.
-  const repByKey = new Map<string, { raw: string; guess: string; type?: 'income' | 'expense' }>()
+  const repByKey = new Map<string, { raw: string; guess: string }>()
   // Distinct raw narratives that collapsed onto one key. When several do, one
   // representative's AI answer would be spread over all of them (and memoised
   // for good) — the bug that renamed every "TRANSFER FR A/C <anyone>" alike.
@@ -3897,7 +3897,7 @@ wallet.post('/merchants/resolve', async (c) => {
   const userId = c.get('userId')
   const b = await body(c)
   const input: unknown[] = Array.isArray(b.items) ? b.items : []
-  const items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }> = []
+  const items: Array<{ raw: string; guess: string }> = []
   for (const it of input) {
     if (
       typeof it === 'object' &&
@@ -3905,12 +3905,7 @@ wallet.post('/merchants/resolve', async (c) => {
       typeof (it as { raw?: unknown }).raw === 'string' &&
       typeof (it as { guess?: unknown }).guess === 'string'
     ) {
-      const type = (it as { type?: unknown }).type
-      items.push({
-        raw: (it as { raw: string }).raw,
-        guess: (it as { guess: string }).guess,
-        ...(type === 'income' || type === 'expense' ? { type } : {}),
-      })
+      items.push({ raw: (it as { raw: string }).raw, guess: (it as { guess: string }).guess })
     }
   }
   if (items.length === 0) return c.json({ resolutions: [], failedGuesses: [] })

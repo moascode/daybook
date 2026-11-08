@@ -404,7 +404,7 @@ export interface MerchantResolveResult {
  * `useAI: true` for whatever rules left unresolved.
  */
 export async function resolveMerchants(
-  items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>,
+  items: Array<{ raw: string; guess: string }>,
   useAI: boolean,
 ): Promise<MerchantResolveResult> {
   if (items.length === 0) return { resolutions: [], failedGuesses: [] }
@@ -540,7 +540,7 @@ export async function buildImportRows(
     // preserve raw text in description.
     let narrativeRaw: string | undefined
     if (isNarrativeColumn && merchant) {
-      const canonical = canonicalizeMerchantForDisplay(merchant, type)
+      const canonical = canonicalizeMerchantForDisplay(merchant)
       if (canonical) {
         narrativeRaw = merchant // keep the raw text for the AI resolution ladder
         description = merchant // raw text → description
