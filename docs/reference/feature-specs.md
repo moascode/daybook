@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-09-16
+> **Status:** Live · **Last verified:** 2026-11-08
 
 # Feature specifications
 
@@ -88,7 +88,14 @@ Nested tree DnD (Task → child → grandchild + reorder within level) requires 
 1. User uploads CSV file → PapaParse reads it
 2. Auto-detect columns (date, amount, description/merchant)
 3. For each row, compute `import_hash = SHA-256(date + '|' + amount + '|' + merchant)`
-4. **Duplicate check:** query DB for existing `import_hash` values; mark matching rows as "already imported" and skip them by default
+4. **Duplicate check** (`POST /transactions/check-duplicates`): an exact
+   `import_hash` or canonical `duplicate_key` match is "already imported" and
+   pre-unchecked. Softer matches only flag the row, never exclude it: same
+   amount on the same date (±3 days against a captured row), and same amount
+   within ±3 days of a capture still waiting in the inbox. The capture inbox
+   runs the mirror check against the ledger (`GET /captures` →
+   `possible_matches`). Design:
+   [`duplicate-detection.md`](../archive/design-adoption/duplicate-detection.md)
 5. **Merchant name resolution** (shipped, §6/[`feature-specs.md` §AI](feature-specs.md)): for rows whose merchant was
    split out of a single narrative column, `POST /merchants/resolve` runs the
    regex → corrections cache → history → AI ladder and rewrites `merchant` to
