@@ -145,6 +145,7 @@ test('unchecking a row reduces the selected count', async () => {
 
 test('clicking the floating Import button triggers import and shows success screen', async () => {
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 })
 

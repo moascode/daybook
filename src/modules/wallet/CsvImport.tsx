@@ -16,6 +16,7 @@ import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { errorMessage, formatMYR } from '@/lib/utils'
 import { CsvReviewTable } from './CsvReviewTable'
+import { ImportAccountConfirm } from './import/ImportAccountConfirm'
 import type { ImportRow } from '@/lib/csv'
 import type { TransactionInput } from '@/hooks/useWallet'
 import type { TruncatedPhoto } from '@/lib/photo-import'
@@ -63,6 +64,7 @@ export function CsvImport() {
   const [truncatedPhotos, setTruncatedPhotos] = useState(state?.truncatedPhotos ?? [])
   const photoMode = !!state?.photoMode
   const [importing, setImporting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number; splitCount: number } | null>(null)
   const [askingAI, setAskingAI] = useState(false)
   const [aiMessage, setAiMessage] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
@@ -557,7 +559,7 @@ export function CsvImport() {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => void handleImport()}
+            onClick={() => setConfirmOpen(true)}
             disabled={importing || includedCount === 0}
             data-testid="import-confirm-btn"
           >
@@ -565,6 +567,16 @@ export function CsvImport() {
           </Button>
         </BulkActionBar>
       )}
+
+      <ImportAccountConfirm
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        accounts={importableAccounts}
+        accountId={selectedAccountId}
+        onAccountChange={setSelectedAccountId}
+        count={includedCount}
+        onConfirm={() => { setConfirmOpen(false); void handleImport() }}
+      />
     </div>
   )
 }

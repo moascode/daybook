@@ -104,6 +104,7 @@ test('review table merchant inputs hold the clean Payee text, not the raw narrat
 
 test('click Import button triggers import and shows success screen', async () => {
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 })
 

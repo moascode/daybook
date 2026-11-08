@@ -633,6 +633,7 @@ test.describe('124 — Transaction rules (UI)', () => {
     await expect(netflixRow).toContainText('split skipped — not an expense')
 
     await page.getByTestId('import-confirm-btn').click()
+    await page.getByTestId('import-final-confirm-btn').click()
     await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByText('1 split by rule')).toBeVisible()
 
