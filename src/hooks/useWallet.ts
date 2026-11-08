@@ -510,7 +510,8 @@ export function useWallet() {
   // ── Batch import ────────────────────────────────
 
   const importTransactions = useCallback(async (
-    transactions: TransactionInput[]
+    transactions: TransactionInput[],
+    batch?: { sourceName: string; kind: 'csv' | 'photo' },
   ): Promise<Transaction[]> => {
     if (transactions.length === 0) return []
 
@@ -519,7 +520,7 @@ export function useWallet() {
       date: data.date ?? todayISO(),
       tag: JSON.stringify(data.tags ?? []),
     }))
-    const rows = await api.post<TransactionRow[]>('/transactions/import', payload)
+    const rows = await api.post<TransactionRow[]>('/transactions/import', batch ? { rows: payload, batch } : payload)
 
     const mapped = rows.map(mapTransaction)
     for (const t of mapped) {

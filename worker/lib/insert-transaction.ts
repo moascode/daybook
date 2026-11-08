@@ -24,6 +24,8 @@ export function insertTransactionStmt(
   b: Record<string, unknown>,
   userId: string,
   id: string = newId(),
+  /** Set only by POST /transactions/import — never read from a request body. */
+  importBatchId: string | null = null,
 ) {
   const amount = Number(b.amount)
   const duplicateKey = buildDuplicateKey(String(b.date ?? ''), amount, String(b.type ?? ''), String(b.merchant ?? ''))
@@ -31,13 +33,13 @@ export function insertTransactionStmt(
     .prepare(
       `INSERT INTO transactions
          (id, user_id, account_id, destination_account_id, date, merchant, description,
-          amount, type, category_id, tag, import_hash, duplicate_key, created_at, updated_at)
+          amount, type, category_id, tag, import_hash, duplicate_key, import_batch_id, created_at, updated_at)
        VALUES
-         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+         (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
        RETURNING *`,
     )
     // id, userId, accountId, destinationAccountId, date, merchant, description,
-    // amount, type, categoryId, tag, importHash, duplicateKey
+    // amount, type, categoryId, tag, importHash, duplicateKey, importBatchId
     .bind(
       id,
       userId,
@@ -52,5 +54,6 @@ export function insertTransactionStmt(
       Array.isArray(b.tag) ? JSON.stringify(b.tag) : (b.tag ?? '[]'),
       b.importHash ?? '',
       duplicateKey,
+      importBatchId,
     )
 }

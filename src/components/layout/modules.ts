@@ -6,6 +6,7 @@ import {
   Wallet,
   Plane,
   List,
+  Download,
   BarChart3,
   CreditCard,
   Users,
@@ -205,6 +206,7 @@ export const modules: ModuleDescriptor[] = [
         items: [
           { to: '/wallet/dashboard', label: 'Overview', icon: BarChart3, end: false, testid: 'nav-dashboard' },
           { to: '/wallet', label: 'Transactions', icon: List, end: true, testid: 'nav-transactions' },
+          { to: '/wallet/imports', label: 'Imports', icon: Download, end: false, testid: 'nav-imports' },
           { to: '/wallet/accounts', label: 'Accounts', icon: CreditCard, end: false, testid: 'nav-accounts' },
           { to: '/wallet/shared', label: 'Shared', icon: Users, end: false, testid: 'nav-shared' },
           { to: '/wallet/inbox', label: 'Inbox', icon: Inbox, end: false, testid: 'nav-capture-inbox' },

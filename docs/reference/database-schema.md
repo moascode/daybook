@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-10-17
+> **Status:** Live · **Last verified:** 2026-11-08
 
 # Database schema
 
@@ -613,6 +613,30 @@ CREATE INDEX IF NOT EXISTS idx_transaction_rules_user ON transaction_rules(user_
   - `POST /transactions/:id/split`'s `recipientId` check for "co-group member"
     (`coGroupUserIds`, `worker/lib/sharing.ts`) is the same helper
     `splitUserId` is validated against here.
+
+### Import history (migration `0034_import_batches.sql` / `0033_` on the server)
+
+```sql
+CREATE TABLE IF NOT EXISTS import_batches (
+  id          TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  account_id  TEXT NOT NULL,
+  source_name TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL DEFAULT 'csv',   -- 'csv' | 'photo'
+  moved_at    TEXT DEFAULT NULL,
+  created_at  TEXT DEFAULT (datetime('now'))
+);
+ALTER TABLE transactions ADD COLUMN import_batch_id TEXT DEFAULT NULL;
+```
+
+One row per committed import, written by `POST /transactions/import` when the
+body carries `batch`. Row count and totals are derived from
+`transactions.import_batch_id`, never stored. `worker/routes/imports.ts` lists
+batches (`GET /imports`), moves one (`POST /imports/:id/move` — only rows still
+in the batch's account move) and undoes one (`DELETE /imports/:id`, refused
+once any split on its rows is settled). `import_batch_id` has no FK: removing a
+batch row must never cascade into deleting transactions. Imports made before
+this migration have no batch.
 
 ### `push_sent_log` kinds (no DDL change)
 

@@ -88,172 +88,176 @@ export function ModuleSidebar({ open, onClose }: ModuleSidebarProps) {
           </button>
         </div>
 
-        {activeModule.navGroups.map((group, i) => (
-          <Fragment key={group.label ?? `group-${i}`}>
-            <div className="nav-group">
-              {group.label && <span className="u-label">{group.label}</span>}
-              {group.items.map((item) =>
-                item.disabled ? (
-                  // Real <button aria-disabled>, not the native `disabled`
-                  // attribute (which would also suppress :hover and the
-                  // tooltip it reveals) — mirrors AppBar's disabled module tab.
+        {/* Only the nav scrolls, so Settings below stays pinned on screen however
+            many items a module has (21-mobile-responsive.spec.ts). */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {activeModule.navGroups.map((group, i) => (
+            <Fragment key={group.label ?? `group-${i}`}>
+              <div className="nav-group">
+                {group.label && <span className="u-label">{group.label}</span>}
+                {group.items.map((item) =>
+                  item.disabled ? (
+                    // Real <button aria-disabled>, not the native `disabled`
+                    // attribute (which would also suppress :hover and the
+                    // tooltip it reveals) — mirrors AppBar's disabled module tab.
+                    <button
+                      key={item.to}
+                      type="button"
+                      aria-disabled="true"
+                      onClick={(e) => e.preventDefault()}
+                      className={cn('nav-item', 'opacity-40 cursor-not-allowed')}
+                      aria-label={`${item.label} — ${item.disabledReason ?? 'Coming soon'}`}
+                      data-testid={item.testid}
+                    >
+                      <item.icon className="icon" size={16} />
+                      {item.label}
+                      <span className="tip-label" aria-hidden="true">
+                        {item.disabledReason ?? 'Coming soon'}
+                      </span>
+                    </button>
+                  ) : (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.end}
+                      onClick={onClose}
+                      data-testid={item.testid}
+                      className={navItemClass}
+                    >
+                      <item.icon className="icon" size={16} />
+                      {item.label}
+                      {item.to === '/wallet/shared' && <PendingClaimsBadge />}
+                      {item.to === '/wallet/inbox' && <CaptureInboxBadge />}
+                      {item.to === '/tasks' && <TasksNavBadge kind="today" />}
+                      {item.to === '/tasks/assigned' && <TasksNavBadge kind="assigned" />}
+                    </NavLink>
+                  ),
+                )}
+              </div>
+
+              {/* Dynamic "Show on the timeline" toggle group (R6,
+                  docs/archive/design-adoption/day-design-adoption.md §Sidebar) — checkboxes, not
+                  links, so they can't be plain ModuleNavItems; state lives in
+                  day.store.ts since ModuleSidebar and DayPage are siblings.
+                  Sits between the primary destinations group and Review, per
+                  docs/archive/design-adoption/03-app-shell.md's IA — hence injected
+                  right after group 0 rather than appended at the end. */}
+              {/* Dynamic per-user "Lists" group (docs/archive/design-adoption/tasks-design-adoption.md
+                  §Sidebar) — one item per task_lists row plus a fixed trailing
+                  "Unsorted" bucket so orphaned (list_id NULL) tasks always have
+                  a home. Injected right after group 0 (mirrors the Day
+                  module's "Show on the timeline" group below), matching the
+                  mockup's Lists-before-Review order — product-owner review of
+                  FEAT-054 confirmed the app previously sat it after Review
+                  instead. */}
+              {isTasksModule && i === 0 && (
+                <div className="nav-group">
+                  <div className="flex items-center justify-between">
+                    <span className="u-label">Lists</span>
+                    <button
+                      type="button"
+                      aria-label="New list"
+                      data-testid="new-list-btn"
+                      onClick={() => setShowNewList(true)}
+                      className="rounded p-0.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {taskLists.map((list) => (
+                    <NavLink
+                      key={list.id}
+                      to={`/tasks/lists/${list.id}`}
+                      end
+                      onClick={onClose}
+                      data-testid={`nav-tasks-list-${list.id}`}
+                      className={navItemClass}
+                    >
+                      {/* Per-list colour is user data (D-10), not a semantic token —
+                          an inline style is the correct, documented exception. */}
+                      <span
+                        className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
+                        style={{ background: list.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{list.name}</span>
+                      {list.openCount > 0 && <span className="nav-badge">{list.openCount}</span>}
+                    </NavLink>
+                  ))}
+                  <NavLink
+                    to="/tasks/lists/unsorted"
+                    end
+                    onClick={onClose}
+                    data-testid="nav-tasks-list-unsorted"
+                    className={navItemClass}
+                  >
+                    <Inbox className="icon" size={16} />
+                    Unsorted
+                  </NavLink>
+                </div>
+              )}
+
+              {isDayModule && i === 0 && (
+                <div className="nav-group">
+                  <span className="u-label">Show on the timeline</span>
+                  <label className="nav-item cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showTasks}
+                      onChange={() => toggle('showTasks')}
+                      className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
+                      data-testid="day-toggle-tasks"
+                    />
+                    Tasks &amp; habits
+                  </label>
+                  <label className="nav-item cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showMoney}
+                      onChange={() => toggle('showMoney')}
+                      className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
+                      data-testid="day-toggle-money"
+                    />
+                    Money
+                  </label>
+                  {/* Disabled, not a live no-op checkbox: R6 ships no
+                      "scheduled" row kind in the merge at all, so a working
+                      checkbox here would be a click that changes nothing and
+                      explains nothing (CLAUDE.md rule 13). */}
                   <button
-                    key={item.to}
                     type="button"
                     aria-disabled="true"
                     onClick={(e) => e.preventDefault()}
-                    className={cn('nav-item', 'opacity-40 cursor-not-allowed')}
-                    aria-label={`${item.label} — ${item.disabledReason ?? 'Coming soon'}`}
-                    data-testid={item.testid}
+                    className="nav-item opacity-40 cursor-not-allowed"
+                    aria-label="Scheduled & bills — no scheduled rows yet"
+                    data-testid="day-toggle-scheduled"
                   >
-                    <item.icon className="icon" size={16} />
-                    {item.label}
+                    Scheduled &amp; bills
                     <span className="tip-label" aria-hidden="true">
-                      {item.disabledReason ?? 'Coming soon'}
+                      No scheduled rows yet
                     </span>
                   </button>
-                ) : (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={onClose}
-                    data-testid={item.testid}
-                    className={navItemClass}
-                  >
-                    <item.icon className="icon" size={16} />
-                    {item.label}
-                    {item.to === '/wallet/shared' && <PendingClaimsBadge />}
-                    {item.to === '/wallet/inbox' && <CaptureInboxBadge />}
-                    {item.to === '/tasks' && <TasksNavBadge kind="today" />}
-                    {item.to === '/tasks/assigned' && <TasksNavBadge kind="assigned" />}
-                  </NavLink>
-                ),
-              )}
-            </div>
-
-            {/* Dynamic "Show on the timeline" toggle group (R6,
-                docs/archive/design-adoption/day-design-adoption.md §Sidebar) — checkboxes, not
-                links, so they can't be plain ModuleNavItems; state lives in
-                day.store.ts since ModuleSidebar and DayPage are siblings.
-                Sits between the primary destinations group and Review, per
-                docs/archive/design-adoption/03-app-shell.md's IA — hence injected
-                right after group 0 rather than appended at the end. */}
-            {/* Dynamic per-user "Lists" group (docs/archive/design-adoption/tasks-design-adoption.md
-                §Sidebar) — one item per task_lists row plus a fixed trailing
-                "Unsorted" bucket so orphaned (list_id NULL) tasks always have
-                a home. Injected right after group 0 (mirrors the Day
-                module's "Show on the timeline" group below), matching the
-                mockup's Lists-before-Review order — product-owner review of
-                FEAT-054 confirmed the app previously sat it after Review
-                instead. */}
-            {isTasksModule && i === 0 && (
-              <div className="nav-group">
-                <div className="flex items-center justify-between">
-                  <span className="u-label">Lists</span>
                   <button
                     type="button"
-                    aria-label="New list"
-                    data-testid="new-list-btn"
-                    onClick={() => setShowNewList(true)}
-                    className="rounded p-0.5 text-fg-faint hover:bg-surface-hover hover:text-fg-muted"
+                    aria-disabled="true"
+                    onClick={(e) => e.preventDefault()}
+                    className="nav-item opacity-40 cursor-not-allowed"
+                    aria-label="Notes on the timeline — Coming in R15"
+                    data-testid="day-toggle-notes"
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <StickyNote className="icon" size={16} />
+                    Notes
+                    <span className="tip-label" aria-hidden="true">
+                      Coming in R15
+                    </span>
                   </button>
                 </div>
-                {taskLists.map((list) => (
-                  <NavLink
-                    key={list.id}
-                    to={`/tasks/lists/${list.id}`}
-                    end
-                    onClick={onClose}
-                    data-testid={`nav-tasks-list-${list.id}`}
-                    className={navItemClass}
-                  >
-                    {/* Per-list colour is user data (D-10), not a semantic token —
-                        an inline style is the correct, documented exception. */}
-                    <span
-                      className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-                      style={{ background: list.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{list.name}</span>
-                    {list.openCount > 0 && <span className="nav-badge">{list.openCount}</span>}
-                  </NavLink>
-                ))}
-                <NavLink
-                  to="/tasks/lists/unsorted"
-                  end
-                  onClick={onClose}
-                  data-testid="nav-tasks-list-unsorted"
-                  className={navItemClass}
-                >
-                  <Inbox className="icon" size={16} />
-                  Unsorted
-                </NavLink>
-              </div>
-            )}
+              )}
+            </Fragment>
+          ))}
 
-            {isDayModule && i === 0 && (
-              <div className="nav-group">
-                <span className="u-label">Show on the timeline</span>
-                <label className="nav-item cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showTasks}
-                    onChange={() => toggle('showTasks')}
-                    className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
-                    data-testid="day-toggle-tasks"
-                  />
-                  Tasks &amp; habits
-                </label>
-                <label className="nav-item cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showMoney}
-                    onChange={() => toggle('showMoney')}
-                    className="h-4 w-4 rounded border-line-strong text-brand-600 cursor-pointer"
-                    data-testid="day-toggle-money"
-                  />
-                  Money
-                </label>
-                {/* Disabled, not a live no-op checkbox: R6 ships no
-                    "scheduled" row kind in the merge at all, so a working
-                    checkbox here would be a click that changes nothing and
-                    explains nothing (CLAUDE.md rule 13). */}
-                <button
-                  type="button"
-                  aria-disabled="true"
-                  onClick={(e) => e.preventDefault()}
-                  className="nav-item opacity-40 cursor-not-allowed"
-                  aria-label="Scheduled & bills — no scheduled rows yet"
-                  data-testid="day-toggle-scheduled"
-                >
-                  Scheduled &amp; bills
-                  <span className="tip-label" aria-hidden="true">
-                    No scheduled rows yet
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  aria-disabled="true"
-                  onClick={(e) => e.preventDefault()}
-                  className="nav-item opacity-40 cursor-not-allowed"
-                  aria-label="Notes on the timeline — Coming in R15"
-                  data-testid="day-toggle-notes"
-                >
-                  <StickyNote className="icon" size={16} />
-                  Notes
-                  <span className="tip-label" aria-hidden="true">
-                    Coming in R15
-                  </span>
-                </button>
-              </div>
-            )}
-          </Fragment>
-        ))}
-
-        <div className="sidebar-spacer" />
+          <div className="sidebar-spacer" />
+        </div>
 
         <div className="nav-group">
           <NavLink

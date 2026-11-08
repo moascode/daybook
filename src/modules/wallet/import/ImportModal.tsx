@@ -29,6 +29,8 @@ type ImportType = 'csv' | 'photo'
 type PhotoKind = 'receipt' | 'statement'
 
 export interface ImportReadyMeta {
+  /** File name (or "N statement photos") recorded on the import batch. */
+  sourceName?: string
   photoMode?: boolean
   failedPhotos?: { fileName: string; failureReason?: string }[]
   truncatedPhotos?: TruncatedPhoto[]
@@ -221,14 +223,15 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
         }
       }
 
+      const sourceName = file?.name ?? ''
       resetAll()
       onOpenChange(false)
-      onReady(rows)
+      onReady(rows, { sourceName })
     } catch {
       addToast({ message: 'Could not prepare the import — please try again.', duration: 4000 })
       setView('map')
     }
-  }, [rawRows, mapping, addToast, onReady, onOpenChange, resetAll])
+  }, [rawRows, mapping, file, addToast, onReady, onOpenChange, resetAll])
 
   // Client-side fan-out (spec §3.1): N photos is N independent calls to
   // POST /transactions/import-photo via Promise.allSettled inside
@@ -247,6 +250,7 @@ export function ImportModal({ open, onOpenChange, accounts, categories, hasAnthr
       onOpenChange(false)
       onReady(rows, {
         photoMode: true,
+        sourceName: photoFiles.length === 1 ? photoFiles[0].name : `${photoFiles.length} photos`,
         failedPhotos: failed.map((f) => ({ fileName: f.fileName, failureReason: f.failureReason })),
         truncatedPhotos: truncated,
       })
