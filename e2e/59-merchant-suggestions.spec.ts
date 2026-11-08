@@ -380,6 +380,7 @@ test('a failed suggestion call still allows the import to proceed', async ({ bro
   await expect(page.getByText('Could not load category suggestions')).toBeVisible()
 
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 
   await page.context().close()
@@ -422,6 +423,7 @@ test('re-importing the same file after suggestions still detects duplicates (G11
   await expect(page.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('KFC · common merchant')).toBeVisible() // suggestion did apply
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
 
   await navigateToImportCsv(page)

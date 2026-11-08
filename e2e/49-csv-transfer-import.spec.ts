@@ -70,6 +70,7 @@ test('type select offers Transfer and swaps category for a destination dropdown'
 
 test('importing a transfer row without a destination is blocked with a toast', async () => {
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(
     page.getByText(/a transfer needs a destination account different from the import account/),
   ).toBeVisible()
@@ -81,6 +82,7 @@ test('selecting a destination and importing succeeds', async () => {
   const destSelect = page.getByRole('combobox', { name: /^Destination account for row/ })
   await destSelect.selectOption('Credit Card')
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 15_000 })
   await expect(page.getByText('4 transactions imported')).toBeVisible()
 })

@@ -32,6 +32,7 @@ test('possible duplicate shows the amount and can update the existing entry', as
 
   await page.getByTestId('csv-replace-existing').check()
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText(/imported/i).first()).toBeVisible({ timeout: 10_000 })
 
   const all = (await (await page.request.get(`${API}/transactions`)).json()) as {

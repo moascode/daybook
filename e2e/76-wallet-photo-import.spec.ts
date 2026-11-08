@@ -400,6 +400,7 @@ test('a negative amount from the AI is normalised to positive and imports cleanl
   await expect(page.getByTestId('csv-row-amount')).toHaveValue('45')
 
   await page.getByTestId('import-confirm-btn').click()
+  await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText('Import Complete')).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('1 transaction imported')).toBeVisible()
 })
