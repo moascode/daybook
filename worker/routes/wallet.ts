@@ -23,6 +23,7 @@ import { builtinCategory } from '../lib/merchant-map.ts'
 import { overRateLimit } from '../lib/rate-limit.ts'
 import { isValidIsoDate } from '../lib/iso-date.ts'
 import { insertTransactionStmt } from '../lib/insert-transaction.ts'
+import { CAPTURE_DATE_WINDOW_DAYS } from '../lib/duplicate-window.ts'
 import {
   suggestCategoriesWithAI,
   resolveMerchantsWithAI,
@@ -890,9 +891,6 @@ interface PossibleDuplicateCandidate {
 // single-table statements (userId + chunk = chunk+1 params apiece) rather
 // than one UNION query binding userId twice, matching the layer-1 approach
 // this replaces (that shape hit the cap on any import over ~49 rows).
-// R18 gap 2 (docs/archive/design-adoption/feature-capture-inbox.md §5.3). Bank posting dates
-// trail the payment date; three days covers a Friday charge posting on Monday.
-const CAPTURE_DATE_WINDOW_DAYS = 3
 
 wallet.post('/transactions/check-duplicates', async (c) => {
   const b = await body(c)
@@ -1064,6 +1062,40 @@ wallet.post('/transactions/check-duplicates', async (c) => {
   for (const item of withKey) {
     const hits = pendingByKey.get(item.duplicateKey)
     if (hits && hits.length > 0) pendingCaptureMatches[item.hash] = hits
+  }
+
+  // ── Soft waiting-capture match ──
+  // The exact-key read above misses most real pairs: Apple's clean name ("ABC
+  // Food Corner") and the bank's narrative ("ABC FOODS CORNER KUALA LUMPUR MY
+  // 17/09/2026 …") rarely fold to one key. A waiting capture with the same
+  // amount within the posting window is still worth a flag — the same posture
+  // as layer 3: surfaced, never excluded. Every pending row IS a capture, so
+  // the widened window always applies.
+  const softItems = withKey.filter((i) => !duplicateHashSet.has(i.hash) && !pendingCaptureMatches[i.hash])
+  const softPairs = new Map<string, { date: string; amount: number }>()
+  for (const i of softItems) softPairs.set(pairKey(i.date, i.amount), { date: i.date, amount: i.amount })
+  if (softPairs.size > 0) {
+    const pairs = [...softPairs.values()]
+    const softResults = await c.env.DB.batch<{ id: string; merchant: string; date: string; amount: number }>(
+      pairs.map((p) =>
+        c.env.DB
+          .prepare(
+            `SELECT id, raw_merchant AS merchant, occurred_at AS date, amount
+               FROM pending_captures
+              WHERE user_id = ? AND status = 'pending' AND amount = ?
+                AND occurred_at BETWEEN date(?, '-${CAPTURE_DATE_WINDOW_DAYS} day') AND date(?, '+${CAPTURE_DATE_WINDOW_DAYS} day')`,
+          )
+          .bind(userId, p.amount, p.date, p.date),
+      ),
+    )
+    const byPair = new Map<string, PendingCaptureMatch[]>()
+    pairs.forEach((p, idx) => byPair.set(pairKey(p.date, p.amount), softResults[idx].results.map((r) => ({
+      id: r.id, merchant: r.merchant ?? '', date: r.date ?? '', amount: Number(r.amount ?? 0),
+    }))))
+    for (const item of softItems) {
+      const hits = byPair.get(pairKey(item.date, item.amount))
+      if (hits && hits.length > 0) pendingCaptureMatches[item.hash] = hits
+    }
   }
 
   return c.json({ duplicateHashes, possibleDuplicates, pendingCaptureMatches })

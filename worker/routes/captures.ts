@@ -3,6 +3,7 @@ import type { AppEnv } from '../types.ts'
 import { newId, ownedIdSet } from '../lib.ts'
 import { writableAccountIds } from '../lib/sharing.ts'
 import { insertTransactionStmt } from '../lib/insert-transaction.ts'
+import { CAPTURE_DATE_WINDOW_DAYS } from '../lib/duplicate-window.ts'
 
 // Reading and acting on the capture inbox is the OWNER's job, done in the
 // browser — so this is cookie-authenticated and mounted on protectedApi. A
@@ -21,21 +22,66 @@ captures.get('/captures', async (c) => {
   //
   // Evaluated live rather than stored: the CSV import that creates the collision
   // usually happens AFTER the capture row was written.
-  const { results } = await c.env.DB.prepare(
-    `SELECT pc.id, pc.source, pc.raw_merchant, pc.raw_card, pc.raw_destination_card,
-            pc.amount, pc.type, pc.occurred_at, pc.duplicate_key, pc.status, pc.created_at,
-            EXISTS (
-              SELECT 1 FROM transactions t
-               WHERE t.user_id = pc.user_id AND t.duplicate_key = pc.duplicate_key
-            ) AS already_in_ledger
-       FROM pending_captures pc
-      WHERE pc.user_id = ? AND pc.status = 'pending'
-      ORDER BY pc.occurred_at DESC, pc.created_at DESC`,
+  //
+  // `possible_matches` is the soft layer beside it — the inbox's mirror of
+  // check-duplicates' layer 3. Apple's clean name ("ABC Food Corner") and the
+  // bank's narrative ("ABC FOODS CORNER KUALA LUMPUR MY 17/09/2026 …") rarely
+  // canonicalize to the same key, so the exact check above misses most real
+  // pairs. Same amount within ±CAPTURE_DATE_WINDOW_DAYS is surfaced as a hint,
+  // never auto-excluded. The window only widens past the exact date for rows
+  // NOT themselves created from a capture: two RM12 Grab rides captured on
+  // consecutive days are two rides, not a statement trailing a tap.
+  const userId = c.get('userId')
+  const [captureRows, matchRows] = await c.env.DB.batch<Record<string, unknown>>([
+    c.env.DB.prepare(
+      `SELECT pc.id, pc.source, pc.raw_merchant, pc.raw_card, pc.raw_destination_card,
+              pc.amount, pc.type, pc.occurred_at, pc.duplicate_key, pc.status, pc.created_at,
+              EXISTS (
+                SELECT 1 FROM transactions t
+                 WHERE t.user_id = pc.user_id AND t.duplicate_key = pc.duplicate_key
+              ) AS already_in_ledger
+         FROM pending_captures pc
+        WHERE pc.user_id = ? AND pc.status = 'pending'
+        ORDER BY pc.occurred_at DESC, pc.created_at DESC`,
+    ).bind(userId),
+    // A join rather than a per-row subquery: SQLite cannot reference the outer
+    // row from inside a FROM-clause subquery, which a LIMIT per capture needs.
+    // The cap is applied while grouping below instead.
+    c.env.DB.prepare(
+      `SELECT pc.id AS capture_id, t.id, t.merchant, t.date, t.amount
+         FROM pending_captures pc
+         JOIN transactions t
+           ON t.user_id = pc.user_id AND t.amount = pc.amount
+          AND t.duplicate_key <> pc.duplicate_key
+          AND t.date BETWEEN date(pc.occurred_at, '-${CAPTURE_DATE_WINDOW_DAYS} day')
+                         AND date(pc.occurred_at, '+${CAPTURE_DATE_WINDOW_DAYS} day')
+          AND (t.date = pc.occurred_at
+               OR NOT EXISTS (SELECT 1 FROM pending_captures o WHERE o.transaction_id = t.id))
+        WHERE pc.user_id = ? AND pc.status = 'pending'
+        ORDER BY abs(julianday(t.date) - julianday(pc.occurred_at)), t.date`,
+    ).bind(userId),
+  ])
+  const matchesByCapture = new Map<string, PossibleMatch[]>()
+  for (const r of matchRows.results) {
+    const captureId = String(r.capture_id)
+    const list = matchesByCapture.get(captureId) ?? []
+    if (list.length >= MAX_POSSIBLE_MATCHES) continue
+    list.push({ id: String(r.id), merchant: String(r.merchant ?? ''), date: String(r.date ?? ''), amount: Number(r.amount ?? 0) })
+    matchesByCapture.set(captureId, list)
+  }
+  return c.json(
+    captureRows.results.map((r) => ({ ...r, possible_matches: matchesByCapture.get(String(r.id)) ?? [] })),
   )
-    .bind(c.get('userId'))
-    .all()
-  return c.json(results)
 })
+
+const MAX_POSSIBLE_MATCHES = 5
+
+interface PossibleMatch {
+  id: string
+  merchant: string
+  date: string
+  amount: number
+}
 
 // Status for Settings: how many are waiting, and — the important one — when a
 // capture was LAST received, across every status.

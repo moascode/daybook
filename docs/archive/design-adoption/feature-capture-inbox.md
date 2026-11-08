@@ -1,4 +1,4 @@
-> **Status:** Archived · **Last verified:** 2026-09-16
+> **Status:** Archived · **Last verified:** 2026-11-08
 
 # R18 — Machine capture: token auth + pending inbox
 
@@ -323,6 +323,13 @@ needed: "was this transaction created from a capture" is
 
 Still never an auto-exclude, and the hint shows the date difference so the human
 can judge.
+
+**Gap 3 — names that never fold together (v3.22.0).** Gaps 1 and 2 still keyed
+the *pending* side on `duplicate_key`, and Apple's clean name rarely shares one
+with the bank's narrative. Both directions now also match on amount within the
+±3-day window: `GET /captures` returns `possible_matches`, and
+`check-duplicates` soft-matches waiting captures. See
+[`duplicate-detection.md` §5](duplicate-detection.md).
 
 ### 5.4 Card → account mapping
 

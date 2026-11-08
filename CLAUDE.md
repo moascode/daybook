@@ -393,8 +393,9 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.21.1`** (2026-10-24): Wheel scrolling over page content
-works again — `<main>` no longer swallows it.
+**Latest tag: `v3.22.0`** (2026-11-08): Possible duplicates between a wallet
+capture and its bank-statement row are flagged in review even when the merchant
+names differ.
 The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
@@ -560,6 +561,10 @@ follow the theme. The launch *image* does, since v3 P5. See
 - **Docs were restructured 2026-09-16** (PRs #201–#206): `docs/{guides,reference,backlog,archive}`,
   no `roadmap/`. Every doc has a `Status` header; links and backlog consistency
   are CI-gated. One gate for everything: `bash scripts/flow-checks.sh`.
+- **CI pins Node `22.23.3`, not `22`** (`ci.yml`, `release.yml`). 22.23.4
+  shipped without a `better-sqlite3` prebuild, and the Playwright container has
+  no `make` to compile one, so `npm ci` failed on every shard. Unpin once a
+  `better-sqlite3` release covers the newer Node.
 - **Never `gh pr merge --delete-branch` on a stacked PR.** Deleting the base
   branch closes every PR targeting it (it closed #202). Retarget children to
   `main` first; delete branches only after the whole stack is merged.

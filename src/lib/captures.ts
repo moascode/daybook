@@ -22,6 +22,10 @@ export interface PendingCapture {
    *  the same payment reached the ledger another way (usually a bank CSV
    *  imported after the capture arrived). R18 gap 1, reverse direction. */
   already_in_ledger?: number
+  /** Ledger rows with the same amount within the posting window but a merchant
+   *  that does not canonicalize to this capture's — the bank's narrative for
+   *  the same payment, usually. A hint only; never pre-excludes the row. */
+  possible_matches?: { id: string; merchant: string; date: string; amount: number }[]
 }
 
 /** settings key holding the card→account map. A plain JSON object so it can be
@@ -141,6 +145,10 @@ export function captureToRow(
     // than quietly waiting to be double-counted.
     isDuplicate: Number(capture.already_in_ledger ?? 0) === 1,
     included: Number(capture.already_in_ledger ?? 0) !== 1,
+    possibleDuplicateOf:
+      Number(capture.already_in_ledger ?? 0) !== 1 && capture.possible_matches && capture.possible_matches.length > 0
+        ? capture.possible_matches
+        : undefined,
     originalRow: {},
     accountId: resolved.accountId || fallbackAccountId,
     // A shared-only last4 match is still pre-selected but gets the SAME

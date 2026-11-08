@@ -65,7 +65,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Pinned, not '22': 22.23.4 shipped before better-sqlite3 published a
+          # prebuilt binary for it, and the Playwright container has no `make`
+          # to compile one, so `npm ci` failed on every shard (2026-11-08).
+          # Return to '22' once a better-sqlite3 release covers the new minor.
+          node-version: '22.23.3'
           cache: npm
 
       - name: Install dependencies

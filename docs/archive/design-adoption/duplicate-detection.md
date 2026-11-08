@@ -1,4 +1,4 @@
-> **Status:** Archived · **Last verified:** 2026-09-16
+> **Status:** Archived · **Last verified:** 2026-11-08
 
 # Cross-source duplicate detection
 
@@ -63,3 +63,30 @@ fall back to layer 3's soft candidate check instead, which still surfaces
 them, just without the auto-exclude. Editing a transaction's merchant/date/
 amount/type does not recompute `duplicate_key` either, matching the existing
 `import_hash` precedent (also never recomputed on edit).
+
+## 5. Fuzzy capture ↔ statement pairs (v3.22.0, PR #286)
+
+Production showed the layers above still let the commonest real pair through:
+a payment captured from the wallet API under Apple's clean name ("NILAI MASYHUR
+SDN BHD", "ABC Food Corner") and the same payment imported from the bank
+statement under its narrative ("SHELL - NILAI MASYHUR MUKIM PETALIN MY
+10/09/2026 …", "ABC FOODS CORNER KUALA LUMPUR MY …"). The two rarely fold to
+one `duplicate_key`, and the soft layer only ever compared against
+`transactions` — so whichever side arrived while the other was still waiting
+in the capture inbox went unflagged.
+
+Same amount within ±3 days (`CAPTURE_DATE_WINDOW_DAYS`, now shared from
+`worker/lib/duplicate-window.ts`) is now a soft hint in both directions:
+
+- **Inbox side** — `GET /captures` returns `possible_matches` per pending
+  capture: ledger rows with the same amount in the window and a different
+  `duplicate_key`. Past the exact date, only rows *not* themselves created
+  from a capture qualify (two captured RM12 rides on consecutive days are two
+  rides). The review row shows "Already recorded? …" and stays ticked.
+- **Import side** — `check-duplicates` also matches *waiting* captures by
+  amount within the window when no exact-key match exists, and photo/PDF
+  statement imports now carry the waiting-capture flag (only CSV did).
+
+Neither ever auto-excludes. The review table shows both hints as text rather
+than an icon with a hover tooltip, which never appears on a phone. Spec:
+`e2e/80-capture-duplicates.spec.ts`.

@@ -507,17 +507,19 @@ export function CsvReviewTable({
                         does not have this row, your inbox does. */}
                     {!row.isDuplicate && row.pendingCaptureOf && row.pendingCaptureOf.length > 0 && (
                       <span
-                        className="flex shrink-0 items-center text-amber-600"
+                        className="flex min-w-0 items-center text-amber-600"
                         data-testid="csv-pending-capture-match"
                         title={`A capture for ${row.pendingCaptureOf[0].merchant || 'this payment'} on ${row.pendingCaptureOf[0].date} is already waiting in your inbox — importing this as well would count it twice`}
                       >
-                        <Inbox className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span className="sr-only">A matching capture is waiting in your inbox</span>
+                        <Inbox className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="ml-1 max-w-[16rem] truncate text-xs">
+                          Waiting in inbox: {row.pendingCaptureOf[0].merchant || 'capture'} · {row.pendingCaptureOf[0].date}
+                        </span>
                       </span>
                     )}
                     {!row.isDuplicate && row.possibleDuplicateOf && row.possibleDuplicateOf.length > 0 && (
                       <span
-                        className="flex shrink-0 items-center text-amber-600"
+                        className="flex min-w-0 items-center text-amber-600"
                         data-testid="csv-possible-duplicate"
                         title={`${
                           row.possibleDuplicateOf[0].fromCapture
@@ -527,8 +529,15 @@ export function CsvReviewTable({
                           row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1} more)` : ''
                         } — check before importing`}
                       >
-                        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                        <span className="sr-only">Possible duplicate — not auto-excluded</span>
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        {/* Visible, not tooltip-only: a hover title never shows on a
+                            phone, and an icon nobody reads is how these pairs got
+                            imported twice. Worded without "duplicate" so it can't
+                            collide with getByText('Duplicate') on the badge. */}
+                        <span className="ml-1 max-w-[16rem] truncate text-xs">
+                          Already recorded? {row.possibleDuplicateOf[0].merchant} · {row.possibleDuplicateOf[0].date}
+                          {row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1})` : ''}
+                        </span>
                       </span>
                     )}
                   </div>
