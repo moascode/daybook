@@ -579,7 +579,11 @@ export async function buildImportRows(
       continue
     }
     const candidates = possibleDuplicates.get(importRow.importHash)
-    if (candidates && candidates.length > 0) importRow.possibleDuplicateOf = candidates
+    if (candidates && candidates.length > 0) {
+      importRow.possibleDuplicateOf = candidates
+      // Default to updating the existing entry; the review table can untick it.
+      if (importRow.type !== 'transfer') importRow.replaceExistingId = candidates[0].id
+    }
     const waiting = pendingCaptureMatches.get(importRow.importHash)
     if (waiting && waiting.length > 0) importRow.pendingCaptureOf = waiting
   }

@@ -30,7 +30,7 @@ test('possible duplicate shows the amount and can update the existing entry', as
   await expect(hint).toContainText('Zed Cafe')
   await expect(hint).toContainText('22.90')
 
-  await page.getByTestId('csv-replace-existing').check()
+  await expect(page.getByTestId('csv-replace-existing')).toBeChecked()
   await page.getByTestId('import-confirm-btn').click()
   await page.getByTestId('import-final-confirm-btn').click()
   await expect(page.getByText(/imported/i).first()).toBeVisible({ timeout: 10_000 })
