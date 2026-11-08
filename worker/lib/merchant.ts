@@ -62,25 +62,22 @@ export function canonicalMerchant(raw: string): string | null {
 
 // ── Canonicalize merchant name for display ───────────
 // ONE implementation, shared by CSV import (src/lib/csv.ts) and the bulk
-// cleanup route. `type` is only known on import; without it a transfer gets
-// the counterparty's name alone, with no To/From.
+// cleanup route.
 // Strips bank-appended noise (card masks, dates, country codes, payment-rail
 // prefixes, domains, entity types, trailing digits, outlet suffixes) to extract
 // a clean merchant name. Used during CSV import when a single narrative column is
 // split into merchant (canonical) + description (raw). Returns title-case for display.
 // Pure string manipulation.
 
-export function canonicalizeMerchantForDisplay(raw: string, type?: 'income' | 'expense'): string | null {
+export function canonicalizeMerchantForDisplay(raw: string): string | null {
   // Person-to-person transfers share one prefix, so without a payee-specific
   // name they all collapsed into the same guess ("Transfer Fr A") and one
-  // answer was memoised for every counterparty. Keep the counterparty and
-  // name the direction by the row's own type, not the narrative's wording.
+  // answer was memoised for every counterparty. Keep the counterparty only:
+  // the direction is the row's own type, and the bank words it from its side.
   const TRANSFER_PREFIX = /^(?:TRANSFER\s+(?:FR|FROM|TO)\s+A\/C|MBB\s+CT-?|DUITNOW\s+QR)\s+/i
   const transferMatch = TRANSFER_PREFIX.exec(raw.trim())
   if (transferMatch) {
-    const payee = canonicalizeMerchantForDisplay(raw.trim().slice(transferMatch[0].length))
-    if (!payee || !type) return payee
-    return `${type === 'income' ? 'From' : 'To'} ${payee}`
+    return canonicalizeMerchantForDisplay(raw.trim().slice(transferMatch[0].length))
   }
 
   // Masked card/account tokens: digits mixed with a run of 4+ X's (e.g.
@@ -174,7 +171,6 @@ export function correctionKey(guess: string): string {
  */
 export function buildDuplicateKey(date: string, amount: number, type: string, merchant: string): string {
   const cents = Math.round(amount * 100)
-  // Import names a transfer "To X"/"From X"; a capture or photo row says just "X".
-  const key = correctionKey((canonicalMerchant(merchant) ?? merchant).replace(/^(?:TO|FROM)\s+(?=\S)/i, ''))
+  const key = correctionKey(canonicalMerchant(merchant) ?? merchant)
   return `${date}|${cents}|${type}|${key}`
 }

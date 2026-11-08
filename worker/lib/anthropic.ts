@@ -83,12 +83,11 @@ const MERCHANT_SYSTEM_PROMPT = `You clean up bank transaction narratives for a p
 For each raw bank narrative, return the merchant's clean display name in Title Case (e.g. 'Grab Food', not 'GRABFOOD' or 'grab food').
 Strip card/account numbers, reference codes, dates, country/city codes, and payment-rail prefixes (POS, DUITNOW, IBG, FPX, etc).
 If the raw text gives no better signal than the guess already provided, return the guess unchanged.
-The bank words transfers from its own side: 'TRANSFER FR A/C' means the account holder PAID OUT, 'TRANSFER TO A/C' means money CAME IN. Ignore that wording. Use the item's type instead: for a person-to-person transfer name the counterparty 'To <name>' when type is expense and 'From <name>' when type is income. Keep guesses that already start with To/From as they are.
 Return JSON: {"resolutions":[{"guess":"<verbatim guess input>","name":"<clean title-case name>"}]}
 Reply with raw JSON only — no markdown fence, no commentary.`
 
-function buildMerchantUserMessage(items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>): string {
-  return `Items:\n${items.map((item) => `- guess: "${item.guess}" | raw: "${item.raw}"${item.type ? ` | type: ${item.type}` : ''}`).join('\n')}`
+function buildMerchantUserMessage(items: Array<{ raw: string; guess: string }>): string {
+  return `Items:\n${items.map((item) => `- guess: "${item.guess}" | raw: "${item.raw}"`).join('\n')}`
 }
 
 const COMPOSER_SYSTEM_PROMPT = `You parse free-text transaction entries for a personal finance app used in Malaysia.
@@ -208,7 +207,7 @@ async function fetchClaudeText(apiKey: string, categoryNames: string[], merchant
   return text
 }
 
-async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>): Promise<string> {
+async function fetchClaudeMerchantText(apiKey: string, items: Array<{ raw: string; guess: string }>): Promise<string> {
   const res = await fetch(ANTHROPIC_API_URL, {
     method: 'POST',
     headers: {
@@ -467,7 +466,7 @@ export async function resolveMerchantsWithAI(
   env: Env,
   userId: string,
   apiKey: string,
-  items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>,
+  items: Array<{ raw: string; guess: string }>,
 ): Promise<MerchantResolution[]> {
   const text =
     env.DAYBOOK_TEST === '1'
