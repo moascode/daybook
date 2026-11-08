@@ -44,7 +44,7 @@ interface ImportLocationState {
 export function CsvImport() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { accounts, categories, importTransactions, setFilters, loadAccounts, loadCategories } = useWallet()
+  const { accounts, categories, importTransactions, updateTransaction, setFilters, loadAccounts, loadCategories } = useWallet()
   const { rules, loadRules } = useRules()
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([])
   const [rulesLoadError, setRulesLoadError] = useState<string | null>(null)
@@ -264,7 +264,8 @@ export function CsvImport() {
       addToast({ message: "Still loading your accounts — try again in a moment.", duration: 4000 })
       return
     }
-    const toImport = importRows.filter((r) => r.included)
+    const toReplace = importRows.filter((r) => r.included && r.replaceExistingId)
+    const toImport = importRows.filter((r) => r.included && !r.replaceExistingId)
 
     const badTransfer = importRows.findIndex(
       (r) => r.included && r.type === 'transfer' && (!r.destinationAccountId || r.destinationAccountId === selectedAccountId),
@@ -292,6 +293,32 @@ export function CsvImport() {
     }))
 
     try {
+      // Updates first and one by one: PATCH owns the split-rescale and
+      // permission rules. A failed one is named below and NOT re-added as a
+      // new row, which would count the payment twice.
+      const replaceFailures: { merchant: string; message: string }[] = []
+      for (const r of toReplace) {
+        try {
+          await updateTransaction(r.replaceExistingId!, {
+            date: r.date,
+            merchant: r.merchant,
+            description: r.description,
+            amount: r.amount,
+            ...(r.importHash ? { importHash: r.importHash } : {}),
+          })
+        } catch (err) {
+          replaceFailures.push({ merchant: r.merchant || 'Unnamed', message: errorMessage(err, 'unknown error') })
+        }
+      }
+      const replaced = toReplace.length - replaceFailures.length
+      if (replaceFailures.length > 0) {
+        const named = replaceFailures.slice(0, 3).map((f) => f.merchant).join(', ')
+        addToast({
+          message: `Couldn't update ${replaceFailures.length} existing entr${replaceFailures.length !== 1 ? 'ies' : 'y'} (${named}) — ${replaceFailures[0].message}`,
+          duration: 7000,
+        })
+      }
+
       const created = await importTransactions(inputs)
       const skipped = importRows.filter((r) => r.isDuplicate).length
       const excluded = importRows.filter((r) => !r.included && !r.isDuplicate).length
@@ -321,7 +348,7 @@ export function CsvImport() {
         }
       }
 
-      setResult({ imported: created.length, skipped, excluded, splitCount: splitTargets.length - failures.length })
+      setResult({ imported: created.length + replaced, skipped, excluded, splitCount: splitTargets.length - failures.length })
       // Rule 10 — a split that silently failed must say so, by name, so the
       // user knows exactly which transactions to open and fix by hand. The
       // success case is said once, on the result screen below — not here too.
@@ -338,7 +365,7 @@ export function CsvImport() {
     } finally {
       setImporting(false)
     }
-  }, [importRows, selectedAccountId, importTransactions, addToast, rules])
+  }, [importRows, selectedAccountId, importTransactions, updateTransaction, addToast, rules])
 
   // No rows in router state — reached directly (bookmark, refresh, back
   // button). Send the user back to start a fresh import from the composer
@@ -521,6 +548,7 @@ export function CsvImport() {
         rules={rules}
         ruleAccountId={selectedAccountId}
         groupMembers={groupMembers}
+        allowOverwrite
       />
 
       {selectedCount > 0 && (

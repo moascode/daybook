@@ -536,6 +536,8 @@ const TRANSACTION_COLS: Record<string, string> = {
   type: 'type',
   categoryId: 'category_id',
   tag: 'tag',
+  // So a statement row that replaces an existing entry keeps re-import dedup.
+  importHash: 'import_hash',
 }
 
 // C2: transaction payload validation. `partial` (PATCH) only checks fields
