@@ -80,7 +80,7 @@ test.describe('capture duplicate reconciliation', () => {
     expect(Number(inbox[0].already_in_ledger)).toBe(1)
 
     await page.goto('/wallet/inbox')
-    await expect(page.getByTestId('csv-review-row').getByText('Duplicate')).toBeVisible()
+    await expect(page.getByTestId('csv-review-row').getByText('Duplicate', { exact: true })).toBeVisible()
     // Pre-excluded, so the action bar offers nothing to accept by default.
     await expect(page.getByTestId('capture-action-bar')).toHaveCount(0)
 
@@ -177,7 +177,7 @@ test.describe('capture duplicate reconciliation', () => {
     await page.goto('/wallet/inbox')
     const hint = page.getByTestId('csv-possible-duplicate')
     await expect(hint).toBeVisible()
-    await expect(hint).toContainText('Already recorded?')
+    await expect(hint).toContainText('Duplicate?')
     // A hint, not a verdict: the row stays ticked, so Accept is still offered.
     await expect(page.getByTestId('capture-action-bar')).toBeVisible()
 

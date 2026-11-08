@@ -535,10 +535,9 @@ export function CsvReviewTable({
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         {/* Visible, not tooltip-only: a hover title never shows on a
                             phone, and an icon nobody reads is how these pairs got
-                            imported twice. Worded without "duplicate" so it can't
-                            collide with getByText('Duplicate') on the badge. */}
+                            imported twice. */}
                         <span className="ml-1 max-w-[22rem] truncate text-xs">
-                          Already recorded? {row.possibleDuplicateOf[0].merchant} · {formatMYR(row.possibleDuplicateOf[0].amount)} · {row.possibleDuplicateOf[0].date}
+                          Duplicate? {row.possibleDuplicateOf[0].merchant} · {formatMYR(row.possibleDuplicateOf[0].amount)} · {row.possibleDuplicateOf[0].date}
                           {row.possibleDuplicateOf.length > 1 ? ` (+${row.possibleDuplicateOf.length - 1})` : ''}
                         </span>
                       </span>
