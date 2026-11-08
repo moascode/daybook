@@ -393,8 +393,8 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.21.0`** (2026-10-17): Compact review table, module-based
-settings pages, and account last-4 digits with opt-in transaction rules.
+**Latest tag: `v3.21.1`** (2026-10-24): Wheel scrolling over page content
+works again — `<main>` no longer swallows it.
 The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
