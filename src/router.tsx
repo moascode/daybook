@@ -43,6 +43,8 @@ const RecurringPage = page(() => import('@/modules/wallet/RecurringPage'), 'Recu
 const GoalsPage = page(() => import('@/modules/wallet/GoalsPage'), 'GoalsPage')
 const ReportsPage = page(() => import('@/modules/wallet/ReportsPage'), 'ReportsPage')
 const CsvImport = page(() => import('@/modules/wallet/CsvImport'), 'CsvImport')
+const ImportsPage = page(() => import('@/modules/wallet/imports/ImportsPage'), 'ImportsPage')
+const ImportBatchPage = page(() => import('@/modules/wallet/imports/ImportBatchPage'), 'ImportBatchPage')
 const CaptureInbox = page(() => import('@/modules/wallet/CaptureInbox'), 'CaptureInbox')
 const CanonicalizeMerchantsPage = page(() => import('@/modules/wallet/CanonicalizeMerchantsPage'), 'CanonicalizeMerchantsPage')
 const ProfileSettings = page(() => import('@/modules/settings/sections/ProfileSettings'), 'ProfileSettings')
@@ -96,6 +98,8 @@ export const router = createBrowserRouter([
           { path: 'goals', element: lazyRoute(GoalsPage) },
           { path: 'reports', element: lazyRoute(ReportsPage) },
           { path: 'import', element: lazyRoute(CsvImport) },
+          { path: 'imports', element: lazyRoute(ImportsPage) },
+          { path: 'imports/:id', element: lazyRoute(ImportBatchPage) },
           { path: 'inbox', element: lazyRoute(CaptureInbox) },
           { path: 'canonicalize-merchants', element: lazyRoute(CanonicalizeMerchantsPage) },
         ],

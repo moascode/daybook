@@ -11,6 +11,7 @@ import { settlements } from './routes/settlements.ts'
 import { settlementChains } from './routes/settlement-chains.ts'
 import { wallet } from './routes/wallet.ts'
 import { rules } from './routes/rules.ts'
+import { imports } from './routes/imports.ts'
 import { capture } from './routes/capture.ts'
 import { captureTokens } from './routes/capture-tokens.ts'
 import { captures } from './routes/captures.ts'
@@ -137,6 +138,7 @@ protectedApi.route('/', settlements)
 protectedApi.route('/', settlementChains)
 protectedApi.route('/', wallet)
 protectedApi.route('/', rules)
+protectedApi.route('/', imports)
 // Managing capture tokens is the OWNER's job, done in the browser — so it is
 // cookie-authenticated like everything else here. A capture token can never
 // mint or revoke another (spec §4.2).

@@ -32,6 +32,9 @@ interface ImportLocationState {
    *  already included in `rows` above and are safe to import; this is only
    *  the "there may be more, crop and re-upload" notice. */
   truncatedPhotos?: TruncatedPhoto[]
+  sourceName?: string
+  /** Preselected on the Imports page; still confirmed before saving. */
+  accountId?: string
 }
 
 /**
@@ -59,10 +62,11 @@ export function CsvImport() {
   // review is where the user is already checking everything else before
   // committing, so this is the one place the account should be both visible
   // and changeable (per the owner's ask, 2026-09-06).
-  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [selectedAccountId, setSelectedAccountId] = useState(state?.accountId ?? '')
   const [failedPhotos, setFailedPhotos] = useState(state?.failedPhotos ?? [])
   const [truncatedPhotos, setTruncatedPhotos] = useState(state?.truncatedPhotos ?? [])
   const photoMode = !!state?.photoMode
+  const sourceName = state?.sourceName ?? ''
   const [importing, setImporting] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [result, setResult] = useState<{ imported: number; skipped: number; excluded: number; splitCount: number } | null>(null)
@@ -112,7 +116,7 @@ export function CsvImport() {
 
   // Converging conditional adjusted during render (no effect needed) — same
   // pattern ImportModal.tsx used for this before the account field moved here.
-  if (importableAccounts.length > 0 && !selectedAccountId) {
+  if (importableAccounts.length > 0 && !importableAccounts.some((a) => a.id === selectedAccountId)) {
     setSelectedAccountId(importableAccounts[0].id)
   }
 
@@ -321,7 +325,7 @@ export function CsvImport() {
         })
       }
 
-      const created = await importTransactions(inputs)
+      const created = await importTransactions(inputs, { sourceName, kind: photoMode ? 'photo' : 'csv' })
       const skipped = importRows.filter((r) => r.isDuplicate).length
       const excluded = importRows.filter((r) => !r.included && !r.isDuplicate).length
 
@@ -367,7 +371,7 @@ export function CsvImport() {
     } finally {
       setImporting(false)
     }
-  }, [importRows, selectedAccountId, importTransactions, updateTransaction, addToast, rules])
+  }, [importRows, selectedAccountId, importTransactions, updateTransaction, addToast, rules, sourceName, photoMode])
 
   // No rows in router state — reached directly (bookmark, refresh, back
   // button). Send the user back to start a fresh import from the composer
@@ -396,7 +400,7 @@ export function CsvImport() {
           {result.splitCount > 0 && <p>{result.splitCount} split by rule{result.splitCount !== 1 ? 's' : ''}</p>}
         </div>
         <div className="mt-7 flex justify-center gap-3">
-          <Button variant="secondary" size="sm" onClick={() => navigate('/wallet', { state: { openImport: true } })}>Import Another</Button>
+          <Button variant="secondary" size="sm" onClick={() => navigate('/wallet/imports')}>See in Imports</Button>
           <Button size="sm" onClick={() => { setFilters({ dateFrom: '', dateTo: '' }); navigate('/wallet') }}>View Transactions</Button>
         </div>
       </div>

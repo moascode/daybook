@@ -146,3 +146,22 @@ export interface TransactionRule {
   createdAt: string
   updatedAt: string
 }
+
+/** One committed import (worker/routes/imports.ts, migration 0034_import_batches.sql). */
+export interface ImportBatch {
+  id: string
+  accountId: string
+  accountName: string
+  accountColor: string
+  accountLast4: string
+  sourceName: string
+  kind: 'csv' | 'photo'
+  movedAt: string | null
+  /** SQLite UTC `YYYY-MM-DD HH:MM:SS`. */
+  createdAt: string
+  rowCount: number
+  /** Gross income minus expense, as on the statement — transfers excluded. */
+  net: number
+  dateFrom: string | null
+  dateTo: string | null
+}

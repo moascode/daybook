@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import type { AppEnv, Env } from '../types.ts'
 import {
   businessDatePlus,
+  newId,
   normalizeBind,
   ownedIdSet,
   ownsAllRefs,
@@ -709,6 +710,10 @@ function applyFilters(
 
   const dateTo = str(c.req.query('dateTo'))
   if (dateTo) { conditions.push(`${col('date')} <= ?`); binds.push(dateTo) }
+
+  // The Imports page's batch detail (worker/routes/imports.ts).
+  const importBatchId = str(c.req.query('importBatchId'))
+  if (importBatchId) { conditions.push(`${col('import_batch_id')} = ?`); binds.push(importBatchId) }
 
   // Multi-select: a transaction matching ANY selected type is returned.
   const types = multiFrom(c, 'type').filter((t) => t !== 'all')
@@ -1577,9 +1582,17 @@ wallet.post('/transactions/import-photo', async (c) => {
 })
 
 // Bulk insert (CSV import). Returns the created rows.
+//
+// Body is `{ rows, batch: { sourceName, kind } }` — the batch becomes an
+// import_batches row (migration 0034) every inserted row points at, so the
+// Imports page can list it and move it as one. A bare array is still
+// accepted and records no batch.
 wallet.post('/transactions/import', async (c) => {
-  const parsed = await c.req.json().catch(() => [])
-  const items: Record<string, unknown>[] = Array.isArray(parsed) ? parsed : []
+  const parsed: unknown = await c.req.json().catch(() => [])
+  const envelope = !Array.isArray(parsed) && parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  const raw = envelope ? envelope.rows : parsed
+  const items: Record<string, unknown>[] = Array.isArray(raw) ? raw : []
+  const batchMeta = envelope?.batch && typeof envelope.batch === 'object' ? (envelope.batch as Record<string, unknown>) : null
   const userId = c.get('userId')
 
   for (let i = 0; i < items.length; i++) {
@@ -1622,12 +1635,31 @@ wallet.post('/transactions/import', async (c) => {
 
   if (items.length === 0) return c.json([], 201)
 
+  // One batch per import needs one account; a mixed import (only possible
+  // through the API) simply records no batch rather than a misleading one.
+  const accountIds = new Set(items.map((b) => String(b.accountId)))
+  const batchId = batchMeta && accountIds.size === 1 ? newId() : null
+  const batchStmt = batchId
+    ? [
+        c.env.DB.prepare(
+          'INSERT INTO import_batches (id, user_id, account_id, source_name, kind) VALUES (?, ?, ?, ?, ?)',
+        ).bind(
+          batchId,
+          userId,
+          [...accountIds][0],
+          String(batchMeta?.sourceName ?? '').slice(0, 200),
+          batchMeta?.kind === 'photo' ? 'photo' : 'csv',
+        ),
+      ]
+    : []
+
   // S2 measured 5,000 rows in a single batch with ~10x headroom, and a real
   // statement is 50-500 rows — so one batch is enough.
-  const results = await c.env.DB.batch(
-    items.map((b) => insertTransactionStmt(c.env.DB, b, userId)),
-  )
-  return c.json(results.flatMap((r) => r.results), 201)
+  const results = await c.env.DB.batch([
+    ...batchStmt,
+    ...items.map((b) => insertTransactionStmt(c.env.DB, b, userId, undefined, batchId)),
+  ])
+  return c.json(results.slice(batchStmt.length).flatMap((r) => r.results), 201)
 })
 
 wallet.post('/transactions', async (c) => {
