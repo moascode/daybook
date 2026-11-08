@@ -366,7 +366,7 @@ export function CaptureInbox() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl pb-24">
+    <div className="content pb-24">
       <div className="page-head justify-between">
         <h1 className="page-title">Capture inbox</h1>
         <span className="text-sm text-fg-subtle" data-testid="capture-inbox-count">

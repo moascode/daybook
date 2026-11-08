@@ -54,7 +54,7 @@ export function ImportsPage() {
   )
 
   return (
-    <div className="mx-auto max-w-5xl pb-24">
+    <div className="content pb-24">
       <div className="page-head">
         <h1 className="page-title">Imports</h1>
       </div>

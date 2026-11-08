@@ -271,7 +271,7 @@ export function GoalsPage() {
   }, [addTransaction, addToast, reloadBalances, reloadFlows, reloadMonthTxns])
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="content">
       <div className="page-head">
         <h2 className="page-title">Goals</h2>
         <span className="page-sub hide-mobile" data-testid="goals-subtitle">

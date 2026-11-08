@@ -331,7 +331,7 @@ export function SharedPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="content">
       <div className="page-head">
         <h1 className="page-title">Shared</h1>
         <span className="page-sub hide-mobile">{groupSubtitle}</span>

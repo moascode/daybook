@@ -435,7 +435,7 @@ export function Dashboard() {
 
   if (transactions.length === 0 && accounts.length === 0) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="content">
         <EmptyState
           icon={<LayoutDashboard className="h-12 w-12" />}
           title="No data yet"
@@ -457,7 +457,7 @@ export function Dashboard() {
     : `Wallet · ${rangeLabel}`
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="content">
       <div className="page-head">
         <h1 className="page-title">Overview</h1>
         <span className="page-sub hide-mobile">{headerSub}</span>

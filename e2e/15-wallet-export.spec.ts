@@ -215,6 +215,9 @@ test('export modal only shows transactions matching the active type filter', asy
   // Close and reset filter — scoped to the dialog: the bulk-action bar has
   // its own "Clear selection" control, and this must not clear it too.
   await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+  // The selection is still live, so the fixed bulk-action bar would sit over
+  // the popup's lower controls (it does, now the page starts lower) — drop it.
+  await page.getByRole('button', { name: 'Clear selection' }).click()
   // The Filters popup closes on any outside click (including the Export
   // button/dialog interactions just above) — reopen it before touching its
   // fields again.
@@ -244,6 +247,8 @@ test('exported file with an active type filter contains only matching rows', asy
   const content = await downloadContent('export-csv-btn')
   expect(content).toMatch(/Test Merchant/)
   expect(content).not.toMatch(/Income Source/)
+  // Same as above: the live selection's bar would cover the popup's controls.
+  await page.getByRole('button', { name: 'Clear selection' }).click()
   await ensureFiltersOpen(page)
   await clearFilterOption(page, 'filter-type')
 })

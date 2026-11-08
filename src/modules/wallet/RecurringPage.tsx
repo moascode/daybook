@@ -290,7 +290,7 @@ export function RecurringPage() {
   const lockedInMonthly = useMemo(() => lockedIn(recurringTransactions), [recurringTransactions])
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="content">
       <div className="page-head">
         <h2 className="page-title">Recurring</h2>
         <span className="page-sub hide-mobile" data-testid="recurring-subtitle">
