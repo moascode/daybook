@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { canonicalizeMerchantForDisplay } from '../../worker/lib/merchant.ts'
 import { api } from '@/lib/api'
 
 // ── Types ───────────────────────────────────────────
@@ -113,82 +114,6 @@ const AMOUNT_KEYWORDS = ['amount', 'sum', 'value', 'debit', 'credit', 'transacti
 // (no identity column at all) still uses Description, which is correct.
 const MERCHANT_KEYWORDS = ['merchant', 'payee', 'vendor', 'description', 'name', 'detail', 'details', 'narrative', 'particular', 'particulars', 'reference']
 const DESCRIPTION_KEYWORDS = ['description', 'memo', 'note', 'remarks', 'remark', 'detail', 'details', 'narrative', 'particular', 'particulars', 'reference']
-
-// ── Canonicalize merchant name for display ───────────
-// Strips bank-appended noise (card masks, dates, country codes, payment-rail
-// prefixes, domains, entity types, trailing digits, outlet suffixes) to extract
-// a clean merchant name. Used during CSV import when a single narrative column is
-// split into merchant (canonical) + description (raw). Returns title-case for display.
-// Pure string manipulation.
-
-function canonicalizeMerchantForCsv(raw: string): string | null {
-  // Masked card/account tokens: digits mixed with a run of 4+ X's (e.g.
-  // "4123XXXXXXXX8891"). Bounded by whitespace/string edges (lookaround, not
-  // \b) because a digit run butts directly against the X run with no word
-  // boundary between them — \b alone would never fire there.
-  const MASKED_TOKEN = /(?<=^|\s)[\dXx]*[Xx]{4,}[\dXx]*(?=\s|$)/g
-  const BULLET_MASK = /(?<=^|\s)[\d•*·]*[•*·]{3,}[\d•*·]*(?=\s|$)/g
-  // Unmasked reference/card/account numbers — most Malaysian bank narratives
-  // print the PAN or txn ref in full rather than masking it. A standalone
-  // 6+ digit token is never part of a real merchant name.
-  const DIGIT_TOKEN = /\b\d{6,}\b/g
-  const DATE_TAIL = /\s\d{1,2}[/-]\d{1,2}[/-]\d{2,4}.*$/
-  const COUNTRY = /\s+(?:MY|SG|US|CA|GB|AU|TH|ID|JP|HK|CN|IN|NL|DE|IE)\s*$/
-  // Payment rail prefixes that appear at the start of bank narratives
-  const RAIL_PREFIX = /^(?:POS\s+DEBIT|POS\s+PURCHASE|PURCHASE|DUITNOW|TRANSFER\s+(?:DEBIT|CREDIT)|MEPS|IBG|FPX)\s+/i
-  const DOMAIN_TAIL = /\.(?:COM\.MY|COM|NET|CO|MY)\b.*$/i
-  // Use multiple spaces or explicit separators, not single spaces (which appear
-  // inside merchant names like "FAMILY MART" or "GIANT SUPERMARKET").
-  const SEPARATOR = /\s{2,}|[-*/|]/
-  const SEPARATOR_ALL = /\s{2,}|[-*/|]/g
-  const ENTITY_TAIL = /\s+(?:SDN\s+BHD|SDN|BHD|PLT|ENTERPRISE|TRADING|HOLDINGS|GROUP)\s*$/i
-  const DIGIT_TAIL = /\s*\d{3,}\s*$/
-  // Reference/transaction indicators appended by the bank (stripped after
-  // digit tokens are removed, so "REF 029385" becomes "REF  " → "REF")
-  const REF_TAIL = /\s+(?:REF|TRANSACTION\s+REF|MY\s+REF)\s*$/i
-  // Location/outlet indicators appended by the bank (descriptor + optional city code)
-  // Matches "STATION KL", "PLAZA", "MALL PJ", etc.; stops at a common outlet descriptor
-  const LOCATION_TAIL = /\s+(?:STATION|PLAZA|MALL|PAVILION)(?:\s+[A-Z]{2,})?\s*$/i
-
-  function trimTails(s: string): string | null {
-    const out = s
-      .replace(REF_TAIL, '')
-      .replace(LOCATION_TAIL, '')
-      .replace(ENTITY_TAIL, '')
-      .replace(DIGIT_TAIL, '')
-      .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
-      .trim()
-    if (out.length < 2) return null
-    return out
-  }
-
-  function titleCase(s: string): string {
-    return s
-      .toLowerCase()
-      .split(/\s+/)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')
-  }
-
-  let s = raw.replace(/\s+/g, ' ').trim()
-  if (!s) return null
-  s = s.replace(RAIL_PREFIX, '')
-  s = s.replace(DATE_TAIL, '').replace(COUNTRY, '')
-  // Strip masked and unmasked card/reference number tokens before splitting,
-  // so a middle-of-string PAN never survives into the merchant head.
-  s = s.replace(MASKED_TOKEN, ' ').replace(BULLET_MASK, ' ').replace(DIGIT_TOKEN, ' ')
-  s = s.replace(DOMAIN_TAIL, '').replace(/[.']/g, '')
-  s = s.replace(/\s+/g, ' ').trim()
-
-  // Split on separators: the head is the merchant, the tail is the outlet/location.
-  const head = trimTails(s.split(SEPARATOR)[0])
-  if (head) return titleCase(head)
-
-  // If the head is unusable, the separator was internal (e.g. "7-ELEVEN" splits to "7").
-  // Fall back to the whole string with separators normalised to spaces.
-  const fallback = trimTails(s.replace(SEPARATOR_ALL, ' ').replace(/\s+/g, ' ').trim())
-  return fallback ? titleCase(fallback) : null
-}
 
 // ── Parse CSV file ──────────────────────────────────
 
@@ -479,7 +404,7 @@ export interface MerchantResolveResult {
  * `useAI: true` for whatever rules left unresolved.
  */
 export async function resolveMerchants(
-  items: Array<{ raw: string; guess: string }>,
+  items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>,
   useAI: boolean,
 ): Promise<MerchantResolveResult> {
   if (items.length === 0) return { resolutions: [], failedGuesses: [] }
@@ -615,7 +540,7 @@ export async function buildImportRows(
     // preserve raw text in description.
     let narrativeRaw: string | undefined
     if (isNarrativeColumn && merchant) {
-      const canonical = canonicalizeMerchantForCsv(merchant)
+      const canonical = canonicalizeMerchantForDisplay(merchant, type)
       if (canonical) {
         narrativeRaw = merchant // keep the raw text for the AI resolution ladder
         description = merchant // raw text → description

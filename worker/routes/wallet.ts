@@ -3729,7 +3729,7 @@ interface MerchantLadderResult {
 async function resolveMerchantLadder(
   env: Env,
   userId: string,
-  items: Array<{ raw: string; guess: string }>,
+  items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }>,
   // `useAI` gates Stage 3 only — Stages 1-2 (corrections cache + own history)
   // are free/deterministic and always run. Mirrors A4's category-suggestion
   // split (docs/reference/ai-usage.md): the rules pass runs
@@ -3740,10 +3740,17 @@ async function resolveMerchantLadder(
 ): Promise<MerchantLadderResult> {
   // Dedupe by normalised guess before any lookup or AI call — keep one
   // representative raw narrative per key.
-  const repByKey = new Map<string, { raw: string; guess: string }>()
+  const repByKey = new Map<string, { raw: string; guess: string; type?: 'income' | 'expense' }>()
+  // Distinct raw narratives that collapsed onto one key. When several do, one
+  // representative's AI answer would be spread over all of them (and memoised
+  // for good) — the bug that renamed every "TRANSFER FR A/C <anyone>" alike.
+  const rawsByKey = new Map<string, Set<string>>()
   for (const item of items) {
     const key = correctionKey(item.guess)
     if (!repByKey.has(key)) repByKey.set(key, item)
+    const raws = rawsByKey.get(key) ?? new Set<string>()
+    raws.add(item.raw)
+    rawsByKey.set(key, raws)
   }
   const keys = [...repByKey.keys()]
   const resolutions: MerchantLadderResult['resolutions'] = new Map()
@@ -3852,7 +3859,10 @@ async function resolveMerchantLadder(
           const name = byGuessKey.get(key)
           if (name) {
             resolutions.set(key, { name, source: 'ai' })
-            toPersist.push({ key, name })
+            // Memoise only an answer that is safe to reuse: not one that
+            // renamed a key shared by several different narratives.
+            const shared = (rawsByKey.get(key)?.size ?? 0) > 1
+            if (!shared || correctionKey(name) === key) toPersist.push({ key, name })
           } else {
             failedKeys.push(key)
           }
@@ -3887,7 +3897,7 @@ wallet.post('/merchants/resolve', async (c) => {
   const userId = c.get('userId')
   const b = await body(c)
   const input: unknown[] = Array.isArray(b.items) ? b.items : []
-  const items: Array<{ raw: string; guess: string }> = []
+  const items: Array<{ raw: string; guess: string; type?: 'income' | 'expense' }> = []
   for (const it of input) {
     if (
       typeof it === 'object' &&
@@ -3895,7 +3905,12 @@ wallet.post('/merchants/resolve', async (c) => {
       typeof (it as { raw?: unknown }).raw === 'string' &&
       typeof (it as { guess?: unknown }).guess === 'string'
     ) {
-      items.push({ raw: (it as { raw: string }).raw, guess: (it as { guess: string }).guess })
+      const type = (it as { type?: unknown }).type
+      items.push({
+        raw: (it as { raw: string }).raw,
+        guess: (it as { guess: string }).guess,
+        ...(type === 'income' || type === 'expense' ? { type } : {}),
+      })
     }
   }
   if (items.length === 0) return c.json({ resolutions: [], failedGuesses: [] })
