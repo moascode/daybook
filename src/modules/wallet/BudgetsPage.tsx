@@ -321,7 +321,7 @@ export function BudgetsPage() {
     : expenseCategories.filter((c) => !usedCategoryIds.has(c.id))
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="content">
       {/* Header */}
       <div className="page-head">
         <h1 className="page-title">Budgets</h1>

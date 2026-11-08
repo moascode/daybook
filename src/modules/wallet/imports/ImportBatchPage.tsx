@@ -85,20 +85,20 @@ export function ImportBatchPage() {
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="content">
         {back}
         <EmptyState title="Couldn't load this import" description={loadError} action={<Button size="sm" onClick={load}>Retry</Button>} />
       </div>
     )
   }
-  if (!batch) return <p className="mx-auto max-w-5xl text-sm text-fg-subtle">Loading…</p>
+  if (!batch) return <p className="content text-sm text-fg-subtle">Loading…</p>
 
   const moneyOut = rows.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const moneyIn = rows.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const moveTargets = accounts.filter((a) => a.id !== batch.accountId && (!a.isShared || a.canWrite === 1))
 
   return (
-    <div className="mx-auto max-w-5xl pb-24">
+    <div className="content pb-24">
       {back}
       <div className="page-head">
         <div className="min-w-0">

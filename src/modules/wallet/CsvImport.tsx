@@ -410,7 +410,7 @@ export function CsvImport() {
   const selectedAccount = importableAccounts.find((a) => a.id === selectedAccountId)
 
   return (
-    <div className="mx-auto max-w-5xl pb-24">
+    <div className="content pb-24">
       <div className="page-head justify-between">
         <h1 className="page-title">Review transactions</h1>
         <DropdownMenu.Root>

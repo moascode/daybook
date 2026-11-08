@@ -791,7 +791,7 @@ export function WalletPage() {
 
   return (
     <div
-      className="max-w-5xl mx-auto wallet-transactions"
+      className="content wallet-transactions"
       style={{ '--tx-filterbar-h': `${filterBarHeight}px` } as React.CSSProperties}
     >
       {/* Literal port of proposal-v2/transactions.html's page-head: a plain
