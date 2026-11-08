@@ -178,7 +178,7 @@ export async function photoResultsToImportRows(
     }
   }
 
-  const { duplicateHashes, possibleDuplicates } = await checkDuplicates(rows)
+  const { duplicateHashes, possibleDuplicates, pendingCaptureMatches } = await checkDuplicates(rows)
   rows.forEach((row) => {
     if (duplicateHashes.has(row.importHash)) {
       row.isDuplicate = true
@@ -187,6 +187,10 @@ export async function photoResultsToImportRows(
     }
     const candidates = possibleDuplicates.get(row.importHash)
     if (candidates && candidates.length > 0) row.possibleDuplicateOf = candidates
+    // A photographed statement overlaps the capture inbox exactly as a CSV
+    // does, so it gets the same waiting-capture flag (csv.ts buildImportRows).
+    const waiting = pendingCaptureMatches.get(row.importHash)
+    if (waiting && waiting.length > 0) row.pendingCaptureOf = waiting
   })
 
   return { rows, failed, truncated }

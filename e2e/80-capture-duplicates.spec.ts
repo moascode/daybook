@@ -155,4 +155,72 @@ test.describe('capture duplicate reconciliation', () => {
     expect((await res.json()).duplicateHashes).toEqual(['csv-hash-4'])
     await anon.dispose()
   })
+
+  // ── Fuzzy pairs: the bank's narrative never folds to Apple's clean name ──
+  // "SHELL - NILAI MASYHUR MUKIM PETALIN MY" and "NILAI MASYHUR SDN BHD" are
+  // the same RM167.09 fill-up, but share no duplicate_key — the exact layers
+  // above miss them in both directions. Real pairs from production.
+
+  test('inbox: a capture whose payment the statement already brought in (other name) is hinted, not excluded', async ({ browser, baseURL }) => {
+    const { page, token, anon, accountId } = await setup(browser, baseURL)
+    const paid = businessToday()
+    await page.request.post(`${API}/transactions`, {
+      data: { accountId, date: businessDatePlus(2), merchant: 'SHELL - NILAI MASYHUR MUKIM PETALIN MY', amount: 167.09, type: 'expense' },
+    })
+    await capture(anon, token, { merchant: 'NILAI MASYHUR SDN BHD', amount: 167.09, occurredAt: paid })
+
+    const inbox = await (await page.request.get(`${API}/captures`)).json()
+    expect(Number(inbox[0].already_in_ledger)).toBe(0)
+    expect(inbox[0].possible_matches).toHaveLength(1)
+    expect(inbox[0].possible_matches[0].merchant).toBe('SHELL - NILAI MASYHUR MUKIM PETALIN MY')
+
+    await page.goto('/wallet/inbox')
+    const hint = page.getByTestId('csv-possible-duplicate')
+    await expect(hint).toBeVisible()
+    await expect(hint).toContainText('Already recorded?')
+    // A hint, not a verdict: the row stays ticked, so Accept is still offered.
+    await expect(page.getByTestId('capture-action-bar')).toBeVisible()
+
+    await anon.dispose()
+  })
+
+  test('inbox stays quiet: two captured same-amount payments on consecutive days are NOT hinted', async ({ browser, baseURL }) => {
+    const { page, token, anon, accountId } = await setup(browser, baseURL)
+    const first = businessToday()
+    await capture(anon, token, { merchant: 'Grab', amount: 12, occurredAt: first })
+    const [pending] = await (await page.request.get(`${API}/captures`)).json()
+    const accepted = await page.request.post(`${API}/captures/accept`, {
+      data: {
+        rows: [{
+          id: pending.id, accountId, destinationAccountId: null,
+          date: first, merchant: 'Grab', description: '', amount: 12,
+          type: 'expense', categoryId: null,
+        }],
+      },
+    })
+    expect(accepted.status()).toBe(201)
+
+    // Next day's ride, captured the same way under a different string.
+    await capture(anon, token, { merchant: 'Grab Rides', amount: 12, occurredAt: businessDatePlus(1) })
+    const inbox = await (await page.request.get(`${API}/captures`)).json()
+    expect(inbox).toHaveLength(1)
+    expect(inbox[0].possible_matches).toEqual([])
+
+    await anon.dispose()
+  })
+
+  test('import: a statement row matching a WAITING capture under another name is flagged', async ({ browser, baseURL }) => {
+    const { page, token, anon } = await setup(browser, baseURL)
+    await capture(anon, token, { merchant: 'NILAI MASYHUR SDN BHD', amount: 167.09, occurredAt: businessToday() })
+
+    const res = await checkDuplicates(page, [
+      { hash: 'csv-hash-5', date: businessDatePlus(2), amount: 167.09, merchant: 'SHELL - NILAI MASYHUR MUKIM PETALIN MY', type: 'expense' },
+    ])
+    const body = await res.json()
+    expect(body.duplicateHashes).toEqual([])
+    expect(body.pendingCaptureMatches['csv-hash-5']).toHaveLength(1)
+    expect(body.pendingCaptureMatches['csv-hash-5'][0].merchant).toBe('NILAI MASYHUR SDN BHD')
+
+    await anon.dispose()
+  })
 })
