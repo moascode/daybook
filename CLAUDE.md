@@ -393,9 +393,9 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.22.0`** (2026-11-08): Possible duplicates between a wallet
-capture and its bank-statement row are flagged in review even when the merchant
-names differ.
+**Latest tag: `v3.23.0`** (2026-11-08): Import asks which account before
+saving, and Wallet → Imports lists every import as a batch that can be moved to
+another account or undone.
 The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 

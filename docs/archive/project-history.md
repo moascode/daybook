@@ -30,6 +30,9 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.23.0 | 2026-11-08 | Import confirms the target account (with last-4) before saving (#290); Wallet → Imports: every import recorded as a batch, listed with its account, movable to another account in one go or undone — migration 0034; only the sidebar nav scrolls now, so Settings stays pinned (#291); a possible-duplicate row shows the matched amount and can update that entry instead of adding a second (#289) |
+| v3.22.2 | 2026-11-08 | Transfer merchant names drop the To/From prefix — the row's type already carries the direction (#288) |
+| v3.22.1 | 2026-11-08 | Transfers are named by counterparty: narratives were cut at the "/" in "A/C", so every counterparty got the same name (#287) |
 | v3.22.0 | 2026-11-08 | Possible duplicates between wallet captures and bank-statement rows are flagged in review when the merchant names differ: same amount within ±3 days, in the capture inbox and on CSV/photo import, as visible text, never auto-excluded. CI pins Node 22.23.3 (no `better-sqlite3` prebuild for 22.23.4); spec 103's calendar check skips in the first ten days of a month (#286) |
 | v3.21.1 | 2026-10-24 | Wheel/trackpad scrolling over page content works again in Chrome and Safari: `<main>` dropped its never-engaging `overflow-y-auto`, and the global `overscroll-behavior: contain` on `.overflow-*-auto` became an explicit `overscroll-contain` on modals and dropdown lists; Wallet day headers now stick under the app bar on desktop (#285) |
 | v3.21.0 | 2026-10-17 | Compact review table + positive AI amounts (#281); module-based settings pages (#282); account last-4 digits and transaction rules, opt-in in the review table — migration 0033 (#283) |
@@ -1081,3 +1084,14 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
 - **#286:** captured payments and their bank-statement rows were both landing in the ledger: Apple's clean merchant name and the bank's narrative almost never share a `duplicate_key`, and the soft same-amount layer never looked at captures still waiting in the inbox. `GET /captures` now returns `possible_matches` (same amount, ±3 days, different key; past the exact date only non-capture rows), and `check-duplicates` soft-matches waiting captures the same way. Photo/PDF imports gained the waiting-capture flag. Both hints became visible text in the review table. Never auto-excluded. The first version of the inbox query 500'd: SQLite cannot reference the outer row from a `FROM`-clause subquery, so it became a join grouped in JS. See `duplicate-detection.md` §5.
 - **CI:** every E2E shard, `main` included, died in `npm ci`: Node 22.23.4 had no `better-sqlite3` prebuild and the Playwright container has no `make`. `ci.yml` and `release.yml` pin `22.23.3` until a `better-sqlite3` release covers it.
 - **Spec 103:** its calendar test put fixture dates up to 10 days before today, which in the first ten days of a month land in last month's muted cells. The header had accepted that risk; it now skips instead of failing.
+
+## 2026-11-08 — Transfer naming fixes, shipped as v3.22.1 and v3.22.2 (PRs #287, #288)
+
+- **#287:** transfer narratives were cut at the "/" in "A/C", so every counterparty resolved to the same cleaned name. Transfers are now named by counterparty.
+- **#288:** the "To X" / "From X" prefix from #287 is dropped; the row's Income/Expense type already says the direction, and the prefix split one person into two names for rules.
+
+## 2026-11-08 — Import account confirm and import history, shipped as v3.23.0 (PRs #289–#291)
+
+- **#289:** CSV review's possible-duplicate hint shows the matched entry's amount, and a checkbox updates that entry (merchant, description, amount, import hash) instead of importing a second row.
+- **#290:** "Import N transactions" opens `ImportAccountConfirm`, restating the target account (name ··last4) with a select to switch it. Motivated by statements repeatedly imported into the default (first) account. Spec: `e2e/126-import-account-confirm.spec.ts`.
+- **#291:** `import_batches` + `transactions.import_batch_id` (worker 0034 / server 0033, no FK). `POST /transactions/import` takes `{ rows, batch }`; `worker/routes/imports.ts` lists, moves (rows still in the batch's account only; 409 if a transfer would point at itself) and undoes (refused once a split is settled). Wallet → Imports and `/wallet/imports/:id`; the move dialog preselects the account named in the file. Imports from before this release have no batch. CI caught the extra nav item pushing Settings off a 600px drawer — the whole sidebar had been scrolling, so only the nav groups scroll now. Spec: `e2e/127-import-history.spec.ts`.
