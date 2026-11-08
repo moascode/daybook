@@ -200,10 +200,13 @@ export function CsvImport() {
   // own history); this button is the sole place AI is reached for merchant
   // cleanup, for whatever the rules pass left unresolved.
   const handleResolveMerchantsAI = useCallback(async () => {
-    const pending = new Map<string, string>() // guess (current merchant text) -> raw narrative
+    const pending = new Map<string, { raw: string; type: 'income' | 'expense' }>() // guess (current merchant text) -> raw narrative
     for (const row of importRows) {
       if (row.included && row.merchantUnresolved && row.narrativeRaw) {
-        pending.set(row.merchant, row.narrativeRaw)
+        pending.set(row.merchant, {
+          raw: row.narrativeRaw,
+          type: row.type === 'income' ? 'income' : 'expense',
+        })
       }
     }
     if (pending.size === 0) return
@@ -212,7 +215,7 @@ export function CsvImport() {
     setMerchantAiMessage(null)
     try {
       const { resolutions, failureReason } = await resolveMerchants(
-        [...pending.entries()].map(([guess, raw]) => ({ raw, guess })),
+        [...pending.entries()].map(([guess, { raw, type }]) => ({ raw, guess, type })),
         true,
       )
       // Derived from the response, not from a counter mutated inside the

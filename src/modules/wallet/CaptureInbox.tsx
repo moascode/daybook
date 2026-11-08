@@ -211,12 +211,19 @@ export function CaptureInbox() {
 
   // A5 — the merchant-cleanup mirror of A4.
   const handleResolveMerchantsAI = useCallback(async () => {
-    const targets = [...new Set(rows.filter((r) => r.included && r.merchantUnresolved && r.merchant).map((r) => r.merchant))]
+    const unresolved = rows.filter((r) => r.included && r.merchantUnresolved && r.merchant)
+    const targets = [...new Set(unresolved.map((r) => r.merchant))]
     if (targets.length === 0) return
     setResolvingMerchants(true)
     setMerchantAiMessage(null)
     try {
-      const { resolutions, failureReason } = await resolveMerchants(targets.map((m) => ({ raw: m, guess: m })), true)
+      const { resolutions, failureReason } = await resolveMerchants(
+        targets.map((m) => {
+          const type = unresolved.find((r) => r.merchant === m)?.type
+          return { raw: m, guess: m, type: type === 'income' || type === 'expense' ? type : undefined }
+        }),
+        true,
+      )
       const byGuess = new Map(resolutions.map((r) => [r.guess, r.name]))
       setRows((prev) =>
         prev.map((row) => {

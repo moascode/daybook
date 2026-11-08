@@ -212,11 +212,12 @@ test('a merchant unchanged by regex alone resolves via AI, and the preview shows
 
   const rawMerchant = 'IBG FROM DODO KOREA SDN BHD REF 883921'
   // canonicalizeMerchantForDisplay() strips the IBG rail prefix, the ref
-  // number, and "SDN BHD" but has no rule for a leading "FROM" or a trailing
-  // "REF" left after those strips — a genuine regex miss, distinct from the
-  // raw string, so the ladder's history stage (which would otherwise
-  // self-match a guess identical to the raw merchant) cannot short-circuit it.
-  const regexGuess = 'From Dodo Korea Sdn Bhd Ref'
+  // number, "REF" and "SDN BHD" but has no rule for a leading "FROM" (IBG is
+  // not a person-to-person transfer prefix) — so the guess is still not a
+  // real name, and it is distinct from the raw string, so the ladder's
+  // history stage (which would otherwise self-match a guess identical to the
+  // raw merchant) cannot short-circuit it.
+  const regexGuess = 'From Dodo Korea'
   const aiName = 'Dodo Korea Restaurant'
 
   await isoPage.request.put('/api/settings/anthropic_api_key', { data: { value: 'sk-ant-test-dummy' } })

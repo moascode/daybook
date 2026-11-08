@@ -6,7 +6,7 @@
  * fallback assigns the description-keyword column straight to
  * `mapping.merchant` and leaves `mapping.description` null (src/lib/csv.ts).
  * `buildImportRows()` then recognises this as a narrative column
- * (`isNarrativeColumn`) and splits it: `canonicalizeMerchantForCsv()` strips
+ * (`isNarrativeColumn`) and splits it: `canonicalizeMerchantForDisplay()` strips
  * the payment-rail prefix, the masked/unmasked card or reference number, and
  * the outlet/location tail, then title-cases what's left for `merchant` —
  * while the untouched raw narrative is preserved verbatim in `description`.
@@ -105,7 +105,7 @@ test('review table merchant inputs hold the canonicalized name, not the raw narr
   const values = await merchantInputs.evaluateAll((els) =>
     els.map((e) => (e as HTMLInputElement).value).sort(),
   )
-  // canonicalizeMerchantForCsv() strips the "POS PURCHASE"/"POS DEBIT"/
+  // canonicalizeMerchantForDisplay() strips the "POS PURCHASE"/"POS DEBIT"/
   // "PURCHASE" rail prefix, the embedded card/reference number, and the
   // outlet/location tail, then title-cases what remains — the raw
   // "POS PURCHASE 4123456789008891 GRABFOOD*MY KUALA LUMPUR MY REF 029384"
@@ -144,4 +144,56 @@ test('imported transaction shows the canonical merchant and preserves the raw na
   // alongside the merchant — confirming the split kept both pieces instead
   // of overwriting or dropping one.
   await expect(grabRow.getByText(/POS PURCHASE/)).toBeVisible()
+})
+
+// ── Person-to-person transfers (Maybank wording) ────────────────────────
+//
+// Maybank words a transfer from the BANK's side: "TRANSFER FR A/C" on a
+// debit (money out) and "TRANSFER TO A/C" on a credit (money in). Two bugs
+// shipped from that: every "TRANSFER FR A/C <anyone>" cleaned to the same
+// name (the "/" cut the narrative at "TRANSFER FR A"), so one AI answer was
+// stamped on every counterparty; and the wording was trusted over the sign.
+// The cleaned name must keep the counterparty and take To/From from the row's
+// own type, never from the narrative.
+
+test.describe('person-to-person transfer narratives', () => {
+  test.describe.configure({ mode: 'serial' })
+
+  let transferPage: Page
+  const TRANSFER_CSV_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'maybank-transfers.csv')
+
+  test.beforeAll(async ({ browser }: { browser: Browser }) => {
+    transferPage = await newAppPage(browser, '/wallet/accounts')
+    await transferPage.getByRole('button', { name: 'Add Account' }).first().click()
+    await fillAccountForm(transferPage, { name: 'Transfer Narrative Account', type: 'bank' })
+    await expect(accountCardFor(transferPage, 'Transfer Narrative Account')).toBeVisible()
+    await navigateToImportCsv(transferPage)
+    const csvContent = await import('node:fs/promises').then((fs) => fs.readFile(TRANSFER_CSV_PATH, 'utf-8'))
+    await transferPage.evaluate(async (content) => {
+      const file = new File([content], 'maybank-transfers.csv', { type: 'text/csv' })
+      await window.__testCsvFileSelect(file)
+    }, csvContent)
+    await expect(transferPage.getByText('maybank-transfers.csv')).toBeVisible({ timeout: 10_000 })
+    await transferPage.getByRole('button', { name: 'Review rows' }).click()
+    await expect(transferPage.getByRole('heading', { name: 'Review transactions' })).toBeVisible({ timeout: 10_000 })
+  })
+
+  test.afterAll(async () => {
+    await transferPage.context().close()
+  })
+
+  test('each counterparty keeps its own name, with To/From taken from the sign', async () => {
+    const merchantInputs = transferPage.getByRole('textbox', { name: /^Merchant for row/ })
+    await expect(merchantInputs).toHaveCount(3)
+    const values = await merchantInputs.evaluateAll((els) =>
+      els.map((e) => (e as HTMLInputElement).value).sort(),
+    )
+    // "TRANSFER TO A/C" on a credit is money IN -> From; "TRANSFER FR A/C" on a
+    // debit is money OUT -> To. Distinct names, never one shared "Transfer ..." label.
+    expect(values).toEqual(['From Mohammad Ali', 'To Grace Wong Ling San', 'To Ranajowel'])
+  })
+
+  test('the raw narrative is still kept in the description', async () => {
+    await expect(transferPage.getByRole('textbox', { name: /^Description for row/ }).first()).toHaveValue(/TRANSFER (TO|FR) A\/C/)
+  })
 })
