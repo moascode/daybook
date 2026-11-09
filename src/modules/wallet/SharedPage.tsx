@@ -5,7 +5,6 @@ import { Users, ExternalLink, Check, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Tooltip } from '@/components/ui/Tooltip'
 import { SettleUpDialog } from './SettleUpDialog'
 import { ConfirmReceiptDialog } from './ConfirmReceiptDialog'
 import { PageComposer } from '@/modules/wallet/composer/PageComposer'
@@ -15,6 +14,7 @@ import { MarkAllSettledDialog } from './shared/MarkAllSettledDialog'
 import { SettleGroupPlan } from './shared/SettleGroupPlan'
 import { ChainSettleDialog } from './shared/ChainSettleDialog'
 import { ChainSettlements } from './shared/ChainSettlements'
+import { SplitRulesCard } from './shared/SplitRulesCard'
 import { useAppStore } from '@/stores/app.store'
 import { useWallet } from '@/hooks/useWallet'
 import { useToastStore } from '@/stores/toast.store'
@@ -462,25 +462,7 @@ export function SharedPage() {
           />
         )}
 
-        <section className="card card-pad c6" data-testid="split-rules">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Split rules</div>
-              <div className="card-sub">Applied automatically when a transaction is marked shared</div>
-            </div>
-            <Tooltip label="Split rules aren't configurable yet">
-              <span style={{ marginLeft: 'auto' }}>
-                <Button variant="secondary" size="sm" disabled>Edit</Button>
-              </span>
-            </Tooltip>
-          </div>
-          <div className="kv"><span className="k">Rent &amp; utilities</span><span className="v">By income · 45 / 35 / 20</span></div>
-          <div className="kv"><span className="k">Groceries</span><span className="v">Equal split</span></div>
-          <div className="kv"><span className="k">Subscriptions</span><span className="v">Equal split</span></div>
-          <div className="kv"><span className="k">Everything else</span><span className="v">Not shared</span></div>
-          <div className="divider" style={{ marginTop: 'auto' }} />
-          <div style={{ fontSize: 'var(--t-sm)', color: 'rgb(var(--fg-subtle))' }}>Not configurable yet — every split is set per transaction.</div>
-        </section>
+        <SplitRulesCard />
 
         {groups.map((group) => {
           const history = historyByGroup[group.id] ?? []
