@@ -13,7 +13,7 @@ import { errorMessage, formatMYR } from '@/lib/utils'
 import { resolveMerchants } from '@/lib/csv'
 import { suggestCategories, suggestCategoriesAI, suggestionFitsType } from '@/lib/merchantSuggestions'
 import { acceptCaptures, dismissCaptures, listCaptures, captureToRow, parseCardMap, CARD_MAP_KEY } from '@/lib/captures'
-import { splitShares } from '@/lib/rules'
+import { ruleSplitRequest } from '@/lib/rules'
 import { mapMember } from '@/lib/household.mappers'
 import { api } from '@/lib/api'
 import { CsvReviewTable } from './CsvReviewTable'
@@ -289,14 +289,11 @@ export function CaptureInbox() {
       const failures: { merchant: string; amount: number; message: string }[] = []
       for (const { row, transactionId } of splitTargets) {
         try {
-          const [payerShare, partnerShare] = splitShares(row.amount, row.ruleSplit!.percent)
           const ruleName = rules.find((r) => r.id === row.ruleId)?.name ?? 'rule'
-          await api.post(`/transactions/${transactionId}/split`, {
-            recipientId: row.ruleSplit!.userId,
-            splitMode: 'custom',
-            shareAmounts: [payerShare, partnerShare],
-            note: `Auto-split by rule: ${ruleName}`,
-          })
+          await api.post(
+            `/transactions/${transactionId}/split`,
+            ruleSplitRequest(row.amount, row.ruleSplit!.userId, row.ruleSplit!.percent, `Auto-split by rule: ${ruleName}`),
+          )
         } catch (err) {
           failures.push({ merchant: row.merchant || 'Unnamed', amount: row.amount, message: errorMessage(err, 'unknown error') })
         }

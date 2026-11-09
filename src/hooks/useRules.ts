@@ -9,6 +9,8 @@ export interface RuleInput {
   matchAccountId?: string | null
   matchCategoryId?: string | null
   matchMerchant?: string | null
+  matchDescription?: string | null
+  matchTags?: string[] | null
   setCategoryId?: string | null
   addTags?: string[] | null
   splitUserId?: string | null

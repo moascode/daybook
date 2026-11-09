@@ -84,7 +84,15 @@ export function CsvReviewTable({
   allowOverwrite,
 }: CsvReviewTableProps) {
   function matchContextFor(row: ImportRow) {
-    return { accountId: row.accountId ?? ruleAccountId ?? null, categoryId: row.categoryId, merchant: row.merchant }
+    return {
+      accountId: row.accountId ?? ruleAccountId ?? null,
+      categoryId: row.categoryId,
+      merchant: row.merchant,
+      description: row.description,
+      // An import row's only tags are ones a ticked rule added; matching on
+      // them would let a rule's own output pick (or keep) a rule.
+      tags: [],
+    }
   }
 
   function matchedRuleFor(row: ImportRow): TransactionRule | null {

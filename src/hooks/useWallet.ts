@@ -1,7 +1,9 @@
 import { useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useWalletStore } from '@/stores/wallet.store'
-import { todayISO } from '@/lib/utils'
+import { errorMessage, formatMYR, todayISO } from '@/lib/utils'
+import { ruleSplitRequest } from '@/lib/rules'
+import { useToastStore } from '@/stores/toast.store'
 import type { Account, Transaction, Category, TransactionType, Budget, RecurringTransaction, RecurrenceFrequency, Goal, GoalFlow } from '@/types/wallet.types'
 
 function parseTags(raw: string | null | undefined): string[] {
@@ -231,6 +233,33 @@ interface TransactionInput {
   categoryId?: string | null
   tags?: string[]
   importHash?: string
+  /** A rule's split the user chose to apply in TransactionForm — created right after the save. */
+  ruleSplit?: RuleSplitInput | null
+}
+
+export interface RuleSplitInput {
+  userId: string
+  percent: number
+  ruleName: string
+}
+
+/**
+ * Creates a rule-driven split on a just-saved transaction. Never throws: the
+ * transaction is already saved, so a failed split must not keep the form open
+ * (a retry would duplicate it) — it says so by name instead (rule 10).
+ */
+async function applyRuleSplit(transactionId: string, amount: number, merchant: string, split: RuleSplitInput) {
+  try {
+    await api.post(
+      `/transactions/${transactionId}/split`,
+      ruleSplitRequest(amount, split.userId, split.percent, `Auto-split by rule: ${split.ruleName}`),
+    )
+  } catch (err) {
+    useToastStore.getState().addToast({
+      message: `Saved, but the split for ${merchant || 'this transaction'} (${formatMYR(amount)}) couldn't be created — ${errorMessage(err, 'unknown error')}`,
+      duration: 7000,
+    })
+  }
 }
 
 export interface CategoryInput {
@@ -447,7 +476,7 @@ export function useWallet() {
 
   // ── Transaction CRUD ────────────────────────────
 
-  const addTransaction = useCallback(async (data: TransactionInput): Promise<Transaction> => {
+  const addTransaction = useCallback(async ({ ruleSplit, ...data }: TransactionInput): Promise<Transaction> => {
     const row = await api.post<TransactionRow>('/transactions', {
       ...data,
       date: data.date ?? todayISO(),
@@ -455,17 +484,20 @@ export function useWallet() {
     })
     const transaction = mapTransaction(row)
     useWalletStore.getState().addTransaction(transaction)
+    if (ruleSplit) await applyRuleSplit(transaction.id, transaction.amount, transaction.merchant, ruleSplit)
     return transaction
   }, [])
 
-  const updateTransaction = useCallback(async (id: string, data: Partial<TransactionInput>): Promise<void> => {
+  const updateTransaction = useCallback(async (id: string, { ruleSplit, ...data }: Partial<TransactionInput>): Promise<void> => {
     const payload: Record<string, unknown> = { ...data }
     if ('tags' in data) {
       payload.tag = JSON.stringify(data.tags ?? [])
       delete payload.tags
     }
     const row = await api.patch<TransactionRow>(`/transactions/${id}`, payload)
-    useWalletStore.getState().updateTransaction(id, mapTransaction(row))
+    const updated = mapTransaction(row)
+    useWalletStore.getState().updateTransaction(id, updated)
+    if (ruleSplit) await applyRuleSplit(id, updated.amount, updated.merchant, ruleSplit)
   }, [])
 
   const deleteTransaction = useCallback(async (id: string): Promise<void> => {

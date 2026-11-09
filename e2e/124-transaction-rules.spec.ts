@@ -84,7 +84,7 @@ test.describe('124 — Transaction rules (API)', () => {
   test('POST /rules rejects a rule with no condition', async () => {
     const res = await page.request.post(`${API}/rules`, { data: { name: 'No condition', setCategoryId: categoryId } })
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toBe('a rule needs at least one condition: account, category, or merchant')
+    expect((await res.json()).error).toBe('a rule needs at least one condition: account, category, merchant, description, or tags')
   })
 
   test('POST /rules rejects a rule with a condition but no action', async () => {
@@ -159,8 +159,8 @@ test.describe('124 — Transaction rules (API)', () => {
     expect(onlyPercent.status()).toBe(400)
   })
 
-  test('POST /rules rejects a splitPercent out of (0, 100)', async () => {
-    for (const bad of [0, 100, -5, 150]) {
+  test('POST /rules rejects a splitPercent out of (0, 100]', async () => {
+    for (const bad of [0, 100.5, -5, 150]) {
       const res = await page.request.post(`${API}/rules`, {
         data: { name: `Bad percent ${bad}`, matchMerchant: 'Grab', splitPercent: bad, splitUserId: 'placeholder' },
       })
@@ -289,7 +289,7 @@ test.describe('124 — Transaction rules (API)', () => {
 
     const res = await page.request.patch(`${API}/rules/${created.id}`, { data: { matchMerchant: '' } })
     expect(res.status()).toBe(400)
-    expect((await res.json()).error).toBe('a rule needs at least one condition: account, category, or merchant')
+    expect((await res.json()).error).toBe('a rule needs at least one condition: account, category, merchant, description, or tags')
   })
 
   test('PATCH /rules/:id rejects clearing the rule\'s only action', async () => {
