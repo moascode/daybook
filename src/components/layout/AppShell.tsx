@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { AppBar } from './AppBar'
 import { ModuleSidebar } from './ModuleSidebar'
@@ -6,6 +6,7 @@ import { MobileTabBar } from './MobileTabBar'
 import { useNotificationBadges } from '@/hooks/useNotificationBadges'
 import { ToastContainer } from '@/components/ui/Toast'
 import { OfflineBanner } from './OfflineBanner'
+import { useAppStore } from '@/stores/app.store'
 
 /**
  * v2 shell: a full-width AppBar on top, a module-scoped ModuleSidebar +
@@ -19,6 +20,7 @@ import { OfflineBanner } from './OfflineBanner'
  */
 export function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const quickAddVersion = useAppStore((s) => s.quickAddVersion)
 
   // Single 60s poll for every shell badge (invites, claims, bills due, tasks
   // due) — mounted once here, not per-component. See the hook for why.
@@ -34,7 +36,9 @@ export function AppShell() {
         <ModuleSidebar open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
         <div className="main-col">
           <main className="min-w-0 flex-1 p-4 md:p-6">
-            <Outlet />
+            <Fragment key={quickAddVersion}>
+              <Outlet />
+            </Fragment>
           </main>
         </div>
       </div>

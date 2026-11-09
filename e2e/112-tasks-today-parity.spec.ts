@@ -118,13 +118,13 @@ test.describe('111 — Today page parity', () => {
     await expect(composer).toHaveValue('Plan night')
   })
 
-  test('quick add Habit navigates to Habits and opens the create-habit modal', async ({ browser }) => {
+  test('quick add Habit opens the create-habit modal in place', async ({ browser }) => {
     const page = await newAppPage(browser, '/tasks')
 
     await page.getByTestId('quick-add').click()
     await page.locator('[data-testid="quick-add-item"][data-action="habit"]').click()
 
-    await expect(page).toHaveURL(/\/tasks\/habits/)
+    await expect(page).not.toHaveURL(/\/tasks\/habits/)
     await expect(page.getByTestId('habit-name-input')).toBeVisible()
   })
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { QuickAddForms, type QuickAddForm } from './QuickAddForms'
 import { Plus, TrendingDown, TrendingUp, ArrowRightLeft, CheckSquare, Repeat, Upload } from 'lucide-react'
 
 interface Action {
@@ -24,13 +25,12 @@ interface QuickAddMenuProps {
  * Quick add (R17) — the `+`, which until R17 raised a toast saying it wasn't
  * wired up.
  *
- * Every action routes to a page that already knows how to do the thing, using
- * the one-shot navigation state WalletPage established for its import modal.
- * Nothing here re-implements a form: the point of a global affordance is to be
- * a shortcut into existing paths, not a second way to write a transaction.
+ * Every action opens the page's own create form in place (QuickAddForms), so
+ * the user stays where they are. Nothing here re-implements a form.
  */
 export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
   const [open, setOpen] = useState(false)
+  const [form, setForm] = useState<QuickAddForm | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const close = useCallback(() => setOpen(false), [])
@@ -59,31 +59,16 @@ export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
     [navigate, close],
   )
 
+  // Forms open in place over the current page; only Import still navigates,
+  // because it is a multi-step flow that ends on the review page.
+  const openForm = (f: QuickAddForm) => () => { setForm(f); close() }
+
   const actions: Action[] = [
-    { key: 'expense', label: 'Expense', icon: TrendingDown, go: () => goWallet({ quickAddType: 'expense' }) },
-    { key: 'income', label: 'Income', icon: TrendingUp, go: () => goWallet({ quickAddType: 'income' }) },
-    { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, go: () => goWallet({ quickAddType: 'transfer' }) },
-    {
-      key: 'task',
-      label: 'Task',
-      icon: CheckSquare,
-      // BUG-005 made a bare navigate('/tasks') at least focus the composer,
-      // but a focused input is not a form: Expense/Income/Transfer each open
-      // their modal, so Task must too. `openTaskForm` (read by
-      // TasksTodayPage.tsx) opens the "New task" TaskFormModal, including
-      // when already on /tasks.
-      go: () => { navigate('/tasks', { state: { openTaskForm: true } }); close() },
-    },
-    {
-      key: 'habit',
-      label: 'Habit',
-      icon: Repeat,
-      // Mirrors the 'task' action above — the Habits page reads
-      // `openCreateHabit` from nav state and opens its own create modal
-      // (same one-shot nav-state pattern TaskComposer.tsx's own "Habit"
-      // composer action already uses).
-      go: () => { navigate('/tasks/habits', { state: { openCreateHabit: true } }); close() },
-    },
+    { key: 'expense', label: 'Expense', icon: TrendingDown, go: openForm('expense') },
+    { key: 'income', label: 'Income', icon: TrendingUp, go: openForm('income') },
+    { key: 'transfer', label: 'Transfer', icon: ArrowRightLeft, go: openForm('transfer') },
+    { key: 'task', label: 'Task', icon: CheckSquare, go: openForm('task') },
+    { key: 'habit', label: 'Habit', icon: Repeat, go: openForm('habit') },
     { key: 'import', label: 'Import transactions', icon: Upload, go: () => goWallet({ openImport: true }) },
   ]
 
@@ -135,6 +120,7 @@ export function QuickAddMenu({ variant = 'appbar' }: QuickAddMenuProps = {}) {
           </button>
         ))}
       </div>
+      <QuickAddForms form={form} onClose={() => setForm(null)} />
     </div>
   )
 }
