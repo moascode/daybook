@@ -9,7 +9,7 @@
 
 import { test, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { newAppPage, businessToday } from './helpers'
+import { newAppPage, businessToday, businessDatePlus } from './helpers'
 
 const API = '/api'
 
@@ -49,8 +49,10 @@ test.describe('quick add', () => {
     await seedAccount(page)
 
     await page.getByTestId('quick-add').click()
+    const startUrl = page.url()
     await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
-    await expect(page).toHaveURL(/\/tasks/)
+    // Quick add opens the form in place — it must not redirect.
+    expect(page.url()).toBe(startUrl)
     // Expense/Income/Transfer each open their form, so Task must too — a
     // focused composer (BUG-005's first fix) still read as "nothing happened".
     await expect(page.getByTestId('task-form-modal')).toBeVisible()
@@ -75,6 +77,22 @@ test.describe('quick add', () => {
       await page.keyboard.press('Escape')
       await expect(page.getByTestId('task-form-modal')).toBeHidden()
     }
+  })
+
+  test('saves a task from quick add without leaving the page', async ({ browser }) => {
+    const page = await newAppPage(browser, '/wallet')
+    const startUrl = page.url()
+
+    await page.getByTestId('quick-add').click()
+    await page.locator('[data-testid="quick-add-item"][data-action="task"]').click()
+    await page.getByTestId('task-form-content').fill('Quick add stays put')
+    await page.getByTestId('task-form-due-date').fill(businessDatePlus(0))
+    await page.getByTestId('task-form-submit').click()
+    await expect(page.getByTestId('task-form-modal')).toBeHidden()
+
+    expect(page.url()).toBe(startUrl)
+    const rows = (await (await page.request.get('/api/tasks')).json()) as { content: string }[]
+    expect(rows.some((r) => r.content === 'Quick add stays put')).toBe(true)
   })
 
   test('closes on Escape and on an outside click', async ({ browser }) => {

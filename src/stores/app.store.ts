@@ -33,6 +33,9 @@ interface AppState {
   // "Ask AI" button reacts without a reload
   // (docs/archive/ai-bulk-categorize-feature.md §3).
   hasAnthropicKey: boolean
+  // Bumped when the global quick-add saves something, so AppShell remounts the
+  // current page and it re-fetches instead of showing stale lists.
+  quickAddVersion: number
 
   setTheme: (theme: ThemePreference) => void
   setResolvedTheme: (resolved: ResolvedTheme) => void
@@ -43,6 +46,7 @@ interface AppState {
   setOnboardingDismissed: (dismissed: Record<string, boolean>) => void
   markOnboardingDismissed: (key: string) => void
   setHasAnthropicKey: (hasKey: boolean) => void
+  bumpQuickAddVersion: () => void
 }
 
 // Seeded from the localStorage mirror so the store agrees with the class the
@@ -60,6 +64,7 @@ export const useAppStore = create<AppState>((set) => ({
   user: null,
   onboardingDismissed: {},
   hasAnthropicKey: false,
+  quickAddVersion: 0,
 
   setTheme: (theme) => set({ theme }),
   setResolvedTheme: (resolved) => set({ resolvedTheme: resolved }),
@@ -71,4 +76,5 @@ export const useAppStore = create<AppState>((set) => ({
   markOnboardingDismissed: (key) =>
     set((s) => ({ onboardingDismissed: { ...s.onboardingDismissed, [key]: true } })),
   setHasAnthropicKey: (hasKey) => set({ hasAnthropicKey: hasKey }),
+  bumpQuickAddVersion: () => set((s) => ({ quickAddVersion: s.quickAddVersion + 1 })),
 }))
