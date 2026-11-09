@@ -1,4 +1,4 @@
-> **Status:** Archived · **Last verified:** 2026-09-16
+> **Status:** Archived · **Last verified:** 2026-11-09
 
 # Daybook — Project History
 
@@ -30,6 +30,8 @@ git for-each-ref --sort=-creatordate --format='%(refname:short) %(creatordate:sh
 
 | Tag | Date | What |
 |---|---|---|
+| v3.25.0 | 2026-11-09 | Split rules match on description and tags as well as merchant/category/account, and may give the other person 100% — migration 0035; TransactionForm suggests the matching rule and applies it on one click (split created after save); Settings → Rules "Apply to past" previews and applies a rule to existing transactions (#296); quick add opens its form over the current page instead of navigating away (#295) |
+| v3.24.0 | 2026-11-09 | CSV review labels a matched row "Duplicate?" and ticks "update the existing entry" by default (#293); Wallet pages share Tasks' `.content` container, so widths and left edges match (#294) |
 | v3.23.0 | 2026-11-08 | Import confirms the target account (with last-4) before saving (#290); Wallet → Imports: every import recorded as a batch, listed with its account, movable to another account in one go or undone — migration 0034; only the sidebar nav scrolls now, so Settings stays pinned (#291); a possible-duplicate row shows the matched amount and can update that entry instead of adding a second (#289) |
 | v3.22.2 | 2026-11-08 | Transfer merchant names drop the To/From prefix — the row's type already carries the direction (#288) |
 | v3.22.1 | 2026-11-08 | Transfers are named by counterparty: narratives were cut at the "/" in "A/C", so every counterparty got the same name (#287) |
@@ -1095,3 +1097,14 @@ deleted task's list/priority/due time/assignee). Shipped as **v3.13.0**.
 - **#289:** CSV review's possible-duplicate hint shows the matched entry's amount, and a checkbox updates that entry (merchant, description, amount, import hash) instead of importing a second row.
 - **#290:** "Import N transactions" opens `ImportAccountConfirm`, restating the target account (name ··last4) with a select to switch it. Motivated by statements repeatedly imported into the default (first) account. Spec: `e2e/126-import-account-confirm.spec.ts`.
 - **#291:** `import_batches` + `transactions.import_batch_id` (worker 0034 / server 0033, no FK). `POST /transactions/import` takes `{ rows, batch }`; `worker/routes/imports.ts` lists, moves (rows still in the batch's account only; 409 if a transfer would point at itself) and undoes (refused once a split is settled). Wallet → Imports and `/wallet/imports/:id`; the move dialog preselects the account named in the file. Imports from before this release have no batch. CI caught the extra nav item pushing Settings off a 600px drawer — the whole sidebar had been scrolling, so only the nav groups scroll now. Spec: `e2e/127-import-history.spec.ts`.
+
+## 2026-11-09 — CSV duplicate default and page width, shipped as v3.24.0 (PRs #293, #294)
+
+- **#293:** the possible-duplicate hint reads "Duplicate?" and its update-existing checkbox is ticked by default for non-transfer rows. Specs 80 and 81 updated.
+- **#294:** Wallet page wrappers use the shared `.content` class instead of `mx-auto max-w-5xl/6xl`. Spec: `e2e/128-page-width-parity.spec.ts`.
+
+## 2026-11-09 — Split rules on description and tags, shipped as v3.25.0 (PRs #295, #296)
+
+- **#295:** quick add Expense/Income/Transfer/Task/Habit opens over the current page; Import still navigates.
+- **#296:** `transaction_rules.match_description` and `match_tags` (worker 0035 / server 0034). `split_percent` accepts (0, 100]; a 100% split is sent as `splitMode: 'none'`. Matching lives in `src/lib/rules.ts` (`ruleChanges`, `planRuleBackfill`). Tag conditions cannot fire at import time — imported rows carry only rule-added tags — so they are reached through `RuleMatchHint` in TransactionForm (split applied by `useWallet` after save) and `ApplyRuleToPastDialog`. Rules still never apply without a click. Spec: `e2e/129-rule-description-tags.spec.ts`.
+- The first release run failed on the `wrangler dev` broken-pipe flake (CI shard 6); the shard passed locally, `rerun --failed` then a release rerun shipped it without re-tagging.

@@ -393,9 +393,9 @@ deployment target but still running: it is the rollback of last resort.
 
 ### Released
 
-**Latest tag: `v3.23.0`** (2026-11-08): Import asks which account before
-saving, and Wallet → Imports lists every import as a batch that can be moved to
-another account or undone.
+**Latest tag: `v3.25.0`** (2026-11-09): split rules match on description and
+tags, can give the other person 100%, are suggested in the transaction form, and
+can be applied to past transactions from Settings → Rules.
 The full table with dates and contents is in
 [`docs/archive/project-history.md`](docs/archive/project-history.md#release-record).
 
