@@ -25,6 +25,8 @@ interface FormState {
   matchAccountId: string
   matchCategoryId: string
   matchMerchant: string
+  matchDescription: string
+  matchTags: string[]
   setCategoryId: string
   addTags: string[]
   splitUserId: string
@@ -37,6 +39,8 @@ function initialState(rule?: TransactionRule | null): FormState {
     matchAccountId: rule?.matchAccountId ?? '',
     matchCategoryId: rule?.matchCategoryId ?? '',
     matchMerchant: rule?.matchMerchant ?? '',
+    matchDescription: rule?.matchDescription ?? '',
+    matchTags: rule?.matchTags ?? [],
     setCategoryId: rule?.setCategoryId ?? '',
     addTags: rule?.addTags ?? [],
     splitUserId: rule?.splitUserId ?? '',
@@ -66,7 +70,12 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
     }
   }
 
-  const hasCondition = !!form.matchAccountId || !!form.matchCategoryId || form.matchMerchant.trim().length > 0
+  const hasCondition =
+    !!form.matchAccountId ||
+    !!form.matchCategoryId ||
+    form.matchMerchant.trim().length > 0 ||
+    form.matchDescription.trim().length > 0 ||
+    form.matchTags.length > 0
   const hasAction = !!form.setCategoryId || form.addTags.length > 0 || splitOn
 
   function autoName(): string {
@@ -76,13 +85,15 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
     const cat = categories.find((c) => c.id === form.matchCategoryId)
     if (cat) parts.push(cat.name)
     if (form.matchMerchant.trim()) parts.push(`"${form.matchMerchant.trim()}"`)
+    if (form.matchDescription.trim()) parts.push(`"${form.matchDescription.trim()}"`)
+    for (const t of form.matchTags) parts.push(`#${t}`)
     return parts.length > 0 ? parts.join(' · ') : 'New rule'
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!hasCondition) {
-      setError('Add at least one condition: account, category, or merchant.')
+      setError('Add at least one condition: account, category, merchant, description, or tags.')
       return
     }
     if (!hasAction) {
@@ -90,8 +101,8 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
       return
     }
     const percent = splitOn ? Number(form.splitPercent) : null
-    if (splitOn && (!form.splitUserId || !Number.isFinite(percent) || (percent as number) <= 0 || (percent as number) >= 100)) {
-      setError('Pick who to split with and a share between 1% and 99%.')
+    if (splitOn && (!form.splitUserId || !Number.isFinite(percent) || (percent as number) <= 0 || (percent as number) > 100)) {
+      setError('Pick who to split with and a share between 1% and 100%.')
       return
     }
 
@@ -106,6 +117,8 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
         // match_merchant column has no "absent" representation; null used to
         // reach updateRow() unmerged and 500 (worker/routes/rules.ts PATCH).
         matchMerchant: form.matchMerchant.trim(),
+        matchDescription: form.matchDescription.trim(),
+        matchTags: form.matchTags.length > 0 ? form.matchTags : null,
         setCategoryId: form.setCategoryId || null,
         addTags: form.addTags.length > 0 ? form.addTags : null,
         splitUserId: splitOn ? form.splitUserId : null,
@@ -160,6 +173,21 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
               value={form.matchMerchant}
               maxLength={100}
               onChange={(e) => setForm((f) => ({ ...f, matchMerchant: e.target.value }))}
+            />
+            <Input
+              label="Description contains"
+              placeholder="e.g. 3523"
+              value={form.matchDescription}
+              maxLength={100}
+              onChange={(e) => setForm((f) => ({ ...f, matchDescription: e.target.value }))}
+            />
+            <TagInput
+              id="rule-match-tags"
+              label="Has any of these tags"
+              value={form.matchTags}
+              onChange={(tags) => setForm((f) => ({ ...f, matchTags: tags }))}
+              placeholder="Type a tag and press enter"
+              testId="rule-match-tags"
             />
           </div>
         </div>
@@ -216,7 +244,7 @@ export function RuleDialog({ open, onOpenChange, rule, accounts, categories, gro
                   <Input
                     type="number"
                     min="1"
-                    max="99"
+                    max="100"
                     step="1"
                     className="w-20"
                     value={form.splitPercent}

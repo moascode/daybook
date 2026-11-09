@@ -139,6 +139,10 @@ export interface TransactionRule {
   matchAccountId: string | null
   matchCategoryId: string | null
   matchMerchant: string
+  /** Case-insensitive "contains" on the transaction's description. '' = no condition. */
+  matchDescription: string
+  /** Matches when the transaction carries ANY of these tags. [] = no condition. */
+  matchTags: string[]
   setCategoryId: string | null
   addTags: string[]
   splitUserId: string | null

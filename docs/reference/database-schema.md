@@ -1,4 +1,4 @@
-> **Status:** Live · **Last verified:** 2026-11-08
+> **Status:** Live · **Last verified:** 2026-11-09
 
 # Database schema
 
@@ -564,6 +564,8 @@ CREATE TABLE IF NOT EXISTS transaction_rules (
   match_account_id  TEXT DEFAULT NULL,
   match_category_id TEXT DEFAULT NULL,
   match_merchant    TEXT NOT NULL DEFAULT '',
+  match_description TEXT NOT NULL DEFAULT '',   -- 0035: case-insensitive "contains"
+  match_tags        TEXT NOT NULL DEFAULT '[]', -- 0035: JSON array, matches ANY
   set_category_id   TEXT DEFAULT NULL,
   add_tags          TEXT NOT NULL DEFAULT '[]',
   split_user_id     TEXT DEFAULT NULL,

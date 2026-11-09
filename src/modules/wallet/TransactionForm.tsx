@@ -10,6 +10,8 @@ import { cn, todayISO } from '@/lib/utils'
 import { TransferMatchHint, type TransferMatchCandidate } from '@/modules/wallet/TransferMatchHint'
 import { TransferLinkHint } from '@/modules/wallet/TransferLinkHint'
 import { useTransferLinkCandidates } from '@/modules/wallet/transferCandidates'
+import { RuleMatchHint } from '@/modules/wallet/RuleMatchHint'
+import type { RuleSplitInput } from '@/hooks/useWallet'
 import type { Account, Transaction, Category, TransactionType } from '@/types/wallet.types'
 
 interface TransactionFormProps {
@@ -53,6 +55,8 @@ export interface TransactionFormData {
   type: TransactionType
   categoryId: string | null
   tags: string[]
+  /** Set by RuleMatchHint's Apply; useWallet creates the split after the save. */
+  ruleSplit?: RuleSplitInput | null
 }
 
 const TYPE_OPTIONS: { value: TransactionType; label: string; color: string }[] = [
@@ -191,6 +195,7 @@ export function TransactionForm({
       description: form.description.trim(),
       categoryId: form.type === 'transfer' ? null : (form.categoryId || null),
       destinationAccountId: form.type === 'transfer' ? form.destinationAccountId : null,
+      ruleSplit: form.type === 'expense' ? form.ruleSplit ?? null : null,
     }
   }
 
@@ -213,7 +218,7 @@ export function TransactionForm({
     setSaving(true)
     try {
       await onSubmit(buildSubmitData())
-      setForm((f) => ({ ...f, amount: 0, merchant: '', description: '', tags: [] }))
+      setForm((f) => ({ ...f, amount: 0, merchant: '', description: '', tags: [], ruleSplit: null }))
       setErrors({})
       amountRef.current?.focus()
     } finally {
@@ -411,6 +416,13 @@ export function TransactionForm({
             placeholder="Add tags..."
           />
         )}
+
+        <RuleMatchHint
+          form={form}
+          categories={categories}
+          allowSplit={!transaction?.hasSplits}
+          onApply={(updates) => setForm((f) => ({ ...f, ...updates }))}
+        />
 
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-2">

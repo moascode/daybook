@@ -20,6 +20,8 @@ interface RuleRow {
   match_account_id: string | null
   match_category_id: string | null
   match_merchant: string
+  match_description: string
+  match_tags: string
   set_category_id: string | null
   add_tags: string
   split_user_id: string | null
@@ -34,6 +36,8 @@ const RULE_COLS: Record<string, string> = {
   matchAccountId: 'match_account_id',
   matchCategoryId: 'match_category_id',
   matchMerchant: 'match_merchant',
+  matchDescription: 'match_description',
+  matchTags: 'match_tags',
   setCategoryId: 'set_category_id',
   addTags: 'add_tags',
   splitUserId: 'split_user_id',
@@ -87,6 +91,16 @@ function ruleFieldsError(b: Record<string, unknown>, partial: boolean): string |
       return 'matchMerchant must be at most 100 characters'
     }
   }
+  if (has('matchDescription') && b.matchDescription !== null) {
+    if (typeof b.matchDescription !== 'string' || b.matchDescription.trim().length > 100) {
+      return 'matchDescription must be at most 100 characters'
+    }
+  }
+  if (has('matchTags') && b.matchTags !== null) {
+    if (cleanRuleTags(b.matchTags) === null) {
+      return 'matchTags must be an array of 1-10 strings, each 1-40 characters'
+    }
+  }
   if (has('addTags') && b.addTags !== null) {
     if (cleanRuleTags(b.addTags) === null) {
       return 'addTags must be an array of 1-10 strings, each 1-40 characters'
@@ -94,8 +108,9 @@ function ruleFieldsError(b: Record<string, unknown>, partial: boolean): string |
   }
   if (has('splitPercent') && b.splitPercent !== null) {
     const n = typeof b.splitPercent === 'number' || typeof b.splitPercent === 'string' ? Number(b.splitPercent) : NaN
-    if (!Number.isFinite(n) || n <= 0 || n >= 100) {
-      return 'splitPercent must be greater than 0 and less than 100'
+    // 100 = the partner owes the whole amount (split mode 'none').
+    if (!Number.isFinite(n) || n <= 0 || n > 100) {
+      return 'splitPercent must be greater than 0 and at most 100'
     }
   }
   return null
@@ -108,6 +123,8 @@ interface MergedRule {
   matchAccountId: string | null
   matchCategoryId: string | null
   matchMerchant: string
+  matchDescription: string
+  matchTags: string[]
   setCategoryId: string | null
   addTags: string[]
   splitUserId: string | null
@@ -115,9 +132,14 @@ interface MergedRule {
 }
 
 function conditionsActionsError(m: MergedRule): string | null {
-  const hasCondition = !!m.matchAccountId || !!m.matchCategoryId || m.matchMerchant.trim().length > 0
+  const hasCondition =
+    !!m.matchAccountId ||
+    !!m.matchCategoryId ||
+    m.matchMerchant.trim().length > 0 ||
+    m.matchDescription.trim().length > 0 ||
+    m.matchTags.length > 0
   if (!hasCondition) {
-    return 'a rule needs at least one condition: account, category, or merchant'
+    return 'a rule needs at least one condition: account, category, merchant, description, or tags'
   }
   const hasSplit = m.splitUserId != null && m.splitPercent != null
   const hasAction = !!m.setCategoryId || m.addTags.length > 0 || hasSplit
@@ -189,6 +211,8 @@ rules.post('/rules', async (c) => {
     matchAccountId: b.matchAccountId != null ? String(b.matchAccountId) : null,
     matchCategoryId: b.matchCategoryId != null ? String(b.matchCategoryId) : null,
     matchMerchant: typeof b.matchMerchant === 'string' ? b.matchMerchant.trim() : '',
+    matchDescription: typeof b.matchDescription === 'string' ? b.matchDescription.trim() : '',
+    matchTags: b.matchTags != null ? (cleanRuleTags(b.matchTags) ?? []) : [],
     setCategoryId: b.setCategoryId != null ? String(b.setCategoryId) : null,
     addTags,
     splitUserId: b.splitUserId != null ? String(b.splitUserId) : null,
@@ -206,12 +230,13 @@ rules.post('/rules', async (c) => {
   const row = await c.env.DB.prepare(
     `INSERT INTO transaction_rules
        (id, user_id, name, position, enabled, match_account_id, match_category_id, match_merchant,
-        set_category_id, add_tags, split_user_id, split_percent, created_at, updated_at)
-     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        match_description, match_tags, set_category_id, add_tags, split_user_id, split_percent,
+        created_at, updated_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
      RETURNING *`,
   )
     // userId, name, position, enabled, matchAccountId, matchCategoryId, matchMerchant,
-    // setCategoryId, addTags, splitUserId, splitPercent
+    // matchDescription, matchTags, setCategoryId, addTags, splitUserId, splitPercent
     .bind(
       userId,
       (b.name as string).trim(),
@@ -220,6 +245,8 @@ rules.post('/rules', async (c) => {
       merged.matchAccountId,
       merged.matchCategoryId,
       merged.matchMerchant,
+      merged.matchDescription,
+      JSON.stringify(merged.matchTags),
       merged.setCategoryId,
       JSON.stringify(merged.addTags),
       merged.splitUserId,
@@ -256,6 +283,12 @@ rules.patch('/rules/:id', async (c) => {
     matchMerchant: has('matchMerchant')
       ? typeof b.matchMerchant === 'string' ? b.matchMerchant.trim() : ''
       : existing.match_merchant,
+    matchDescription: has('matchDescription')
+      ? typeof b.matchDescription === 'string' ? b.matchDescription.trim() : ''
+      : existing.match_description,
+    matchTags: has('matchTags')
+      ? b.matchTags != null ? cleanRuleTags(b.matchTags) ?? [] : []
+      : parseRuleTags(existing.match_tags),
     setCategoryId: has('setCategoryId')
       ? b.setCategoryId != null ? String(b.setCategoryId) : null
       : existing.set_category_id,
@@ -287,6 +320,8 @@ rules.patch('/rules/:id', async (c) => {
   if (has('matchAccountId')) b.matchAccountId = merged.matchAccountId
   if (has('matchCategoryId')) b.matchCategoryId = merged.matchCategoryId
   if (has('matchMerchant')) b.matchMerchant = merged.matchMerchant
+  if (has('matchDescription')) b.matchDescription = merged.matchDescription
+  if (has('matchTags')) b.matchTags = JSON.stringify(merged.matchTags)
   if (has('setCategoryId')) b.setCategoryId = merged.setCategoryId
   if (has('addTags')) b.addTags = JSON.stringify(merged.addTags)
   if (has('splitUserId')) b.splitUserId = merged.splitUserId

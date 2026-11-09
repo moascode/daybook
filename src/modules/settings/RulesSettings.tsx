@@ -10,6 +10,7 @@ import { errorMessage } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { mapMember } from '@/lib/household.mappers'
 import { RuleDialog } from './RuleDialog'
+import { ApplyRuleToPastDialog } from './ApplyRuleToPastDialog'
 import type { TransactionRule } from '@/types/wallet.types'
 import type { GroupMember } from '@/types/household.types'
 import type { RuleInput } from '@/hooks/useRules'
@@ -22,6 +23,8 @@ function ruleSentence(rule: TransactionRule, accounts: ReturnType<typeof useWall
   const matchCat = categories.find((c) => c.id === rule.matchCategoryId)
   if (matchCat) conditions.push(matchCat.name)
   if (rule.matchMerchant) conditions.push(`merchant contains "${rule.matchMerchant}"`)
+  if (rule.matchDescription) conditions.push(`description contains "${rule.matchDescription}"`)
+  if (rule.matchTags.length > 0) conditions.push(`tagged ${rule.matchTags.map((t) => `#${t}`).join(' or ')}`)
 
   const actions: string[] = []
   const setCat = categories.find((c) => c.id === rule.setCategoryId)
@@ -50,6 +53,7 @@ export function RulesSettings() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<TransactionRule | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [backfillRule, setBackfillRule] = useState<TransactionRule | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [membersError, setMembersError] = useState<string | null>(null)
 
@@ -119,7 +123,7 @@ export function RulesSettings() {
       ) : rules.length === 0 ? (
         <p className="text-sm text-fg-subtle">
           No rules yet. A rule can set a category, add tags, or split a payment automatically when a matching
-          transaction is imported or captured.
+          transaction is imported, captured, or entered by hand — and can be applied to past transactions.
         </p>
       ) : (
         <ul className="divide-y divide-line-subtle border-t border-line-subtle">
@@ -139,6 +143,9 @@ export function RulesSettings() {
                 <p className="truncate text-sm text-fg">{rule.name}</p>
                 <p className="truncate text-xs text-fg-subtle">{ruleSentence(rule, accounts, categories, members)}</p>
               </div>
+              <Button variant="ghost" size="sm" onClick={() => setBackfillRule(rule)} data-testid="rule-backfill-open">
+                Apply to past
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => { setEditing(rule); setDialogOpen(true) }}>
                 Edit
               </Button>
@@ -159,6 +166,13 @@ export function RulesSettings() {
         groupMembers={otherMembers}
         membersError={membersError}
         onSave={handleSave}
+      />
+
+      <ApplyRuleToPastDialog
+        key={backfillRule?.id ?? 'closed'}
+        rule={backfillRule}
+        categories={categories}
+        onOpenChange={(open) => { if (!open) setBackfillRule(null) }}
       />
 
       <ConfirmDeleteModal
